@@ -79,6 +79,10 @@ cd ../..
 このインストールはシステムの `isaac-ros-cli` をkart版に置き換える。
 JetPilotなど別プロジェクトと同じホストで使う場合は切替が必要になる。
 
+CLI更新は、kart本体・`packages.repos`を更新後に`./scripts/update-isaac-ros-cli.sh`を実行する。
+ビルド依存導入・固定commit取得・debビルド・インストールを行う。
+詳細は[セットアップREADME](docs/setup/README.md#cliを後から更新する)を参照。
+
 通常の起動は `./scripts/dev.sh`。コンテナ内では次の配置になる。
 
 ```text

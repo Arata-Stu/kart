@@ -25,7 +25,7 @@ sudo apt update
 sudo apt install -y software-properties-common ca-certificates curl gnupg git
 sudo add-apt-repository -y universe
 sudo apt update
-sudo apt install -y python3-vcstool build-essential dpkg-dev debhelper dh-python \
+sudo apt install -y vcstool build-essential dpkg-dev debhelper dh-python \
   python3-venv python3-click python3-pydantic python3-termcolor python3-yaml \
   git-lfs usbutils bluez
 ```
@@ -36,6 +36,19 @@ RealSenseのソースビルド、mapping依存、イメージキャッシュとr
 公式のJetson要件は128 GB以上のNVMe。初回ビルド前に空き容量を確認する。
 JetPack SDKの追加が必要なら、導入したL4Tに対応する公式JetPack手順で補う。
 GPUドライバを一般PC向け手順で置き換えない。
+
+### CLIのビルド依存（基本ツールに含む）
+
+`debhelper`は`debhelper-compat (= 13)`、`dh-python`は`dh-sequence-python3`を提供する。
+`Unmet build dependencies`が出た場合は、Jetsonホストで次を実行する。
+
+```bash
+sudo apt update
+sudo apt install -y build-essential dpkg-dev debhelper dh-python make
+```
+
+依存チェックを無視する`dpkg-buildpackage -d`は使わない。
+ビルド失敗後はinstall/initへ進まず、依存導入後にビルドから再実行する。
 
 ### UTF-8でない場合
 
@@ -63,64 +76,111 @@ sudo apt install -y nvidia-jetpack
 
 ## 2. DockerとNVIDIA Container Toolkit
 
-まず既存導入を確認する。
+### 既存Dockerの確認
+
+JetPack導入時点でDockerとToolkitが入っている場合がある。まずJetsonホストで確認する。
+一般ユーザーのsocket権限が未設定でも導入状態を調べられるよう、Server確認はsudoで行う。
 
 ```bash
 command -v docker || true
 command -v nvidia-ctk || true
-apt-cache policy docker.io nvidia-container-toolkit
+# dockerが存在する場合:
+docker --version
+sudo systemctl is-active docker
+sudo docker version
 ```
 
-Docker未導入の場合、公式Jetson Docker Setupに合わせDocker公式配布を使用する。
-既にDockerが導入済みならこのインストールは省略する。
+DockerのClient・Serverが表示されるなら、Dockerの再インストールは省略してruntime設定へ進む。
+`permission denied`だけで未導入と判断しない。`get.docker.com`のインストーラshは使用しない。
+
+### Docker未導入の場合のみ: 公式APT repositoryから導入
+
+既存Dockerを更新・置換する手順ではない。`docker.io`等が導入済みなら重ねて導入せず、
+既存Dockerの確認を先に行う。
 
 ```bash
-# JetPack repositoryからJetson向けcontainer依存を導入
-sudo apt install -y nvidia-container curl
-curl -fsSL https://get.docker.com -o /tmp/kart-install-docker.sh
-less /tmp/kart-install-docker.sh
-sh /tmp/kart-install-docker.sh
+sudo apt update
+sudo apt install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+sudo tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
+
+出典: [Docker公式Ubuntu APT手順](https://docs.docker.com/engine/install/ubuntu/#install-using-the-apt-repository)。
+
+### Toolkit・runtime設定
+
+`nvidia-ctk`がなければ、JetPack repositoryの対応パッケージを確認して導入する。
+存在する場合は再インストール不要。
 
 ```bash
-sudo systemctl enable --now docker
-sudo usermod -aG docker "$USER"
+# nvidia-ctk未導入の場合のみ
+sudo apt update
+sudo apt install -y nvidia-container
+command -v nvidia-ctk
 ```
 
-NVIDIA Container Toolkit未導入でAPTに候補がある場合:
-
-```bash
-sudo apt install -y nvidia-container-toolkit
-```
-
-候補がない場合は[NVIDIA公式のAPT導入手順](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#with-apt-ubuntu-debian)で
-production repositoryを追加してから導入する。Toolkitのバージョンはkartでは固定していない。
-導入した版は`dpkg-query -W nvidia-container-toolkit`で記録する。
-
-DockerへNVIDIA runtimeを登録する。
+候補がない場合は[NVIDIA公式のAPT導入手順](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#with-apt-ubuntu-debian)を確認する。
+Toolkitのバージョンはkartでは固定していない。
 
 ```bash
 sudo nvidia-ctk runtime configure --runtime=docker --set-as-default
+sudo systemctl enable --now docker
 sudo systemctl daemon-reload
 sudo systemctl restart docker
+sudo usermod -aG docker "$USER"
 ```
 
-**ログアウトしてログインし直す**（dockerグループを反映）。以降は一般ユーザーで実行する。
+### dockerグループを現在のセッションへ反映
+
+`usermod`を実行しても、現在のシェルの補助グループは自動更新されない。
+次のコマンドで新しいシェルへ入り、そのシェルで以降の確認を行う。
 
 ```bash
-id
-docker version
-docker run --rm hello-world
+newgrp docker
+id -nG    # dockerが含まれること
+```
+
+またはSSHを切断して再接続、デスクトップならログアウトしてログインし直す。
+`id -nG`にdockerが出ないまま検証へ進まない。
+
+```bash
 docker info --format '{{json .Runtimes}} {{.DefaultRuntime}}'
 # runtimesにnvidiaがあり、DefaultRuntimeもnvidia
+docker run --rm hello-world
 docker run --rm --gpus all ubuntu:24.04 bash -lc 'echo "NVIDIA runtime OK"'
 nvidia-ctk --version
 ```
 
-`hello-world`はDocker起動、`--gpus all`のコマンドはGPU runtimeでのコンテナ起動確認。
-CUDAの計算を実行する検証ではない。GPU可視性は第7節で別に確認する。
-既定runtimeのNVIDIA設定はJetPilotでも行っている。`nvidia-ctk`で既存daemon設定へ反映する。
+`hello-world`はDocker起動、`--gpus all`はGPU runtimeでのコンテナ起動確認。
+CUDA計算の検証ではない。GPU可視性は第7節で別に確認する。
 出典: [公式Jetson Docker Setup](https://docs.nvidia.com/jetson/agx-orin-devkit/user-guide/latest/setup_docker.html)。
+
+### APTのロックで止まった場合
+
+`Could not get lock ... held by process ... (apt-get)`は別のAPT処理がロックを保持している状態。
+その処理が進行中なら完了を待つ。ロックファイルを削除せず、プロセスを強制終了しない。
+
+```bash
+sudo fuser -v /var/lib/dpkg/lock-frontend
+ps -eo pid,ppid,etime,args | grep -E '[a]pt-get|[u]nattended-upgrade'
+```
+
+自動更新かどうかはログだけでは断定できない。確認時に出力がなければ、その時点の保持プロセスはない。
+失敗したAPT操作がまだ必要か確認してから、その操作だけ再実行する。
+Dockerが既に稼働している場合は再インストールせず、runtime設定・グループ反映・起動確認へ進む。
 
 ### 電力モード・クロック（性能確認時）
 
@@ -195,9 +255,9 @@ mkdir -p record map config
 
 ```bash
 cd ~/workspaces/kart/tools/isaac-ros-cli
-make build
-sudo make install
-sudo isaac-ros init docker
+make build &&
+sudo make install &&
+sudo isaac-ros init docker &&
 isaac-ros status
 cd ../..
 ```
@@ -207,17 +267,35 @@ cd ../..
 この操作はシステムのCLIをkart版へ置き換える。別プロジェクトとホストを共有する場合も同じCLIを使うことになる。
 `ISAAC_ROS_WS`の設定と起動は`dev.sh`が担当するため、公式例のworkspaceを別途作る必要はない。
 
+### CLIを後から更新する
+
+ホストのkart本体を更新し、`packages.repos`を新しいCLI commitへ更新した後:
+
+```bash
+cd ~/workspaces/kart
+git pull --ff-only
+./scripts/update-isaac-ros-cli.sh
+```
+
+スクリプトは不足するビルド依存をAPT導入し、manifestのURL・commitを取得して
+CLIをdetached HEADへ更新、debをビルド・インストールする。上流の最新ブランチへ自動追従しない。
+CLIに未commit変更（未追跡ファイルを含む）があれば停止し、変更を破棄しない。
+古いdebは表示される一時ディレクトリへ退避し、`make install`の複数debエラーを避ける。
+システムCLIとDocker用deb overrideも更新される。initやコンテナ停止は自動実行しない。
+初回導入にも使用でき、その場合は完了後に`sudo isaac-ros init docker`を実行する。
+Dockerイメージへの反映は走行・録画停止後、`docker stop kart_dev`、`./scripts/dev.sh --build-local`で行う。
+
 ## 5. ホスト側jtopを準備
 
 kartはホストとコンテナのjtopを固定版7.2.0＋リポジトリ内パッチへ揃える。
 通常の`pip install -U jetson-stats`ではこの構成にならない。
 
-ホストにuvがなければ、インストーラを保存して内容を確認してから導入する。
+ホストにuvがなければ、インストーラshを使わずpipxで固定版を導入する。
+既にuvがある場合は`uv --version`で確認してこの導入を省略する。
 
 ```bash
-curl -LsSf https://astral.sh/uv/0.12.0/install.sh -o /tmp/kart-uv-install.sh
-less /tmp/kart-uv-install.sh
-sh /tmp/kart-uv-install.sh
+sudo apt install -y pipx
+pipx install uv==0.12.0
 export PATH="$HOME/.local/bin:$PATH"
 uv --version
 ```
@@ -345,7 +423,8 @@ vehicle launchだけではRealSense・VSLAMを起動しない。
 
 | 症状 | 確認・対処 |
 | --- | --- |
-| Docker socketのpermission denied | ホストでdockerグループ追加後、ログインし直す。`sudo dev.sh`で回避しない |
+| Docker socketのpermission denied | `sudo usermod -aG docker "$USER"`後に`newgrp docker`または再ログイン。`id -nG`にdockerがあることを確認 |
+| APTのlock-frontendを取得できない | 第2節で保持プロセスを確認し、進行中なら待つ。ロックファイルを削除しない |
 | `dev.sh`でjtopチェック失敗 | 第5節の固定版・サービス・グループを確認。ホストとイメージの版を揃える |
 | GPU指定で起動失敗 | Toolkit導入、runtime登録、Docker再起動を確認。ホストのJetPack版も確認 |
 | apt/COPY/Git fetch失敗 | ネットワーク・空き容量・CLIの固定SHAを確認 |
@@ -364,7 +443,7 @@ Jetson＋Docker経路を対象とする。Thor、venv、baremetal、未使用セ
 | Jetson Storage Setup | NVMeへrootfsを直接配置するため移行不要。容量・配置のみ確認 |
 | UTF-8 locale | 第1節で確認し、必要時のみ設定 |
 | MAXN・最大クロック | 第2節に性能測定時の操作。機種ごとのmode IDを確認 |
-| Docker・Toolkit・runtime・pre-flight | 第2節。Docker公式配布、NVIDIA既定runtime、GPU指定の起動確認 |
+| Docker・Toolkit・runtime・pre-flight | 第2節。既存導入確認または公式APT導入、NVIDIA既定runtime、グループ反映、GPU指定の起動確認 |
 | workspace・ISAAC_ROS_WS | 第3節と`dev.sh`でkart配置へ置換 |
 | ホストのIsaac ROS APT repository・公式CLI導入 | 第4節でローカルdebへ置換。ホストのIsaac ROS APT repository登録は不要 |
 | ROS・Isaac ROS APT repository・rosdep | コンテナ基底の`Dockerfile.isaac_ros`で設定。ホストへROS導入不要 |
@@ -382,6 +461,8 @@ SilkyEvCam、CLIレイヤーや環境変数はkartへ転記していない。
 
 2026-10-09: repo内のスクリプト・Dockerfile・CLI設定・launchとの整合、リンク先ファイルの存在、
 Bashコードブロックの構文をローカルで確認。
+ユーザー提示ログではDocker CE 29.8.2（arm64）のClient・Server稼働とruntime設定書き込みを確認。
+当該セッションではdockerグループ未反映によるsocket権限エラーがあり、GPU runtime起動成功は未確認。
 JetPack導入直後の実Jetsonでの通し実行、Dockerビルド、ROS結合、GPU・USB・Bluetooth・車両動作は未確認。
 実行時はJetPack/L4T、Toolkit版、kart/CLIのcommitと失敗ログを残す。
 
