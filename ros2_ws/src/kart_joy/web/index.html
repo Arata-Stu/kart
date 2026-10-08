@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>kart · Joy configuration</title>
+<style>
+:root{color-scheme:dark;font:15px system-ui,sans-serif;background:#111820;color:#e4edf3}body{max-width:1250px;margin:auto;padding:28px}h1{font-size:28px;margin:0}h2{font-size:19px;margin-top:28px}p{color:#a9bac8;line-height:1.7}.top,.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.top{justify-content:space-between}button,input,select{font:inherit;color:inherit;background:#202d39;border:1px solid #4b5f70;border-radius:5px;padding:7px}button{cursor:pointer}button:hover{border-color:#65d9bc}button.primary{background:#236653}input[type=number]{width:76px}input[type=text]{width:220px}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:10px 5px;text-align:left;border-bottom:1px solid #2b3c49}th{color:#a9bac8}.scroll{overflow:auto}#status{padding:12px;background:#202d39;border-radius:6px;white-space:pre-wrap}#message{min-height:25px;color:#8ee1c9;white-space:pre-wrap}.raw{display:flex;gap:8px;flex-wrap:wrap}.chip{background:#202d39;padding:8px;border-radius:5px;font-family:monospace}.pressed{background:#236653}.value{font:13px monospace;min-width:70px}.small{font-size:12px}label{display:inline-flex;gap:8px;align-items:center;margin:5px}button:disabled{opacity:.4;cursor:default}
+</style>
+<header class="top"><div><h1>kart / Joy configuration</h1><p>DualSense · ROSノードの入力を使って割り当てます</p></div><span id="connection">接続待ち</span></header>
+<div id="status" role="status">ROSノードを確認しています…</div>
+<p class="small">軸はLinux ABSコード、ボタンはLinux KEYコードです。ブラウザ側のゲームパッド番号は使いません。設定中の /joy は中立になります。</p>
+<div class="actions">
+<button id="begin">編集開始 / 出力を中立にする</button>
+<button id="save" class="primary">保存して反映</button>
+<button id="resume">入力を離して出力再開</button>
+<button id="reload">ファイルから再読込</button>
+</div><p id="message" role="alert"></p>
+<h2>コントローラの識別</h2>
+<label>Vendor <input id="vendor" type="number" min="0" max="65535"></label>
+<label>Product <input id="product" type="number" min="0" max="65535"></label>
+<label>名前に含む文字 <input id="name" type="text"></label>
+<label>固有ID <input id="unique" type="text"></label>
+<button id="use-device">接続中の識別情報を取り込む</button>
+<h2>軸の割り当て</h2>
+<p class="small">「検出」を押して対象の軸だけを操作します。その後、静止・各端を保持して「取得」で校正します。反転は負端と正端を交換してください。トリガーはunipolarで静止→0、正端→1です。コード -1 は無効。</p>
+<div class="scroll"><table><thead><tr><th>出力 / index</th><th>ABSコード</th><th>形式</th><th>負端 (-1)</th><th>静止 (0)</th><th>正端 (+1)</th><th>deadzone</th><th>生入力</th></tr></thead><tbody id="axes"></tbody></table></div>
+<h2>ボタンの割り当て</h2>
+<p class="small">「検出」の後にボタンを押します。十字キー等の軸にも対応します。軸から割り当てる場合は direction × 生入力 ≥ threshold で押下になります。</p>
+<div class="scroll"><table><thead><tr><th>出力 / index</th><th>入力種別</th><th>コード</th><th>direction</th><th>threshold</th><th>生入力</th></tr></thead><tbody id="buttons"></tbody></table></div>
+<h2>生入力モニター</h2><div id="raw" class="raw"></div>
+<script>
+'use strict';
+const token='__TOKEN__';
+let profile=null, state=null, capturing=null, dirty=false;
+const $=id=>document.getElementById(id);
+function message(text,error=false){$('message').textContent=text;$('message').style.color=error?'#ffadad':'#8ee1c9';}
+async function api(path,data){const options=data===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-Kart-Token':token},body:JSON.stringify(data)};const response=await fetch('/api/'+path,options);const body=await response.json();if(!response.ok)throw Error(body.error);return body;}
+function fresh(){if(!state?.connected)throw Error('接続されたコントローラの新しい入力が必要です');return state;}
+function numberInput(value,onChange){const input=document.createElement('input');input.type='number';input.step='any';input.value=value;input.onchange=()=>{onChange(Number(input.value));dirty=true;};return input;}
+function select(value,options,onChange){const el=document.createElement('select');for(const option of options){const o=document.createElement('option');o.value=option;o.textContent=option;el.append(o);}el.value=value;el.onchange=()=>{onChange(el.value);dirty=true;};return el;}
+function button(label,action){const b=document.createElement('button');b.textContent=label;b.onclick=()=>Promise.resolve().then(action).catch(e=>message(e.message,true));return b;}
+function cell(row,...elements){const td=document.createElement('td');for(const el of elements)td.append(typeof el==='string'?document.createTextNode(el):el);row.append(td);return td;}
+async function beginCapture(kind,name){fresh();await api('configure',{enabled:true});capturing={kind,name,baseline:structuredClone(fresh()),deadline:Date.now()+10000};message(`${name}: 対象の入力だけを操作してください（10秒）`);}
+function setCalibration(name,key,input){const current=fresh();const code=profile.axes[name].code;if(code<0||!current.axes.some(a=>a.code===code))throw Error('先に軸を検出してください');const value=current.raw_axes[code];profile.axes[name][key]=value;input.value=value.toFixed(5);dirty=true;}
+function render(){
+  for(const key of ['vendor','product','name','unique']){$(key).value=profile.device[key];$(key).onchange=()=>{profile.device[key]=['vendor','product'].includes(key)?Number($(key).value):$(key).value;dirty=true;};}
+  $('axes').replaceChildren();$('buttons').replaceChildren();
+  Object.entries(profile.axes).forEach(([name,item],index)=>{const row=document.createElement('tr');cell(row,`${name} / ${index}`);cell(row,numberInput(item.code,v=>item.code=v),button('検出',()=>beginCapture('axes',name)));cell(row,select(item.mode,['bipolar','unipolar'],v=>item.mode=v));
+    for(const key of ['negative','center','positive']){const input=numberInput(item[key],v=>item[key]=v);cell(row,input,button('取得',()=>setCalibration(name,key,input)));}
+    cell(row,numberInput(item.deadzone,v=>item.deadzone=v));const out=cell(row,'—');out.className='value';out.id='axis-'+name;$('axes').append(row);
+  });
+  Object.entries(profile.buttons).forEach(([name,item],index)=>{const row=document.createElement('tr');cell(row,`${name} / ${index}`);cell(row,select(item.source,['button','axis'],v=>item.source=v));cell(row,numberInput(item.code,v=>item.code=v),button('検出',()=>beginCapture('buttons',name)));cell(row,numberInput(item.direction,v=>item.direction=v));cell(row,numberInput(item.threshold,v=>item.threshold=v));const out=cell(row,'—');out.className='value';out.id='button-'+name;$('buttons').append(row);});
+}
+function updateCapture(){
+  if(!capturing)return;
+  const {kind,name,baseline,deadline}=capturing;
+  if(!state.connected||state.generation!==baseline.generation){capturing=null;message('切断・再接続を検出しました。検出をやり直してください。',true);return;}
+  if(Date.now()>deadline){capturing=null;message('検出がタイムアウトしました',true);return;}
+  let found=null;
+  if(kind==='buttons'){for(const item of state.buttons){if(state.raw_buttons[item.code]&&!baseline.raw_buttons[item.code]){found={source:'button',code:item.code,direction:1,threshold:.5};break;}}}
+  if(!found){const moved=state.axes.map(a=>({code:a.code,delta:Math.abs(state.raw_axes[a.code]-baseline.raw_axes[a.code])})).sort((a,b)=>b.delta-a.delta);if(moved[0]?.delta>=.5){const code=moved[0].code;const v=state.raw_axes[code];if(kind==='axes')found={code};else if(Math.abs(v)>=.5)found={source:'axis',code,direction:v>0?1:-1,threshold:.5};}}
+  if(found){Object.assign(profile[kind][name],found);dirty=true;capturing=null;render();message(`${name} をコード ${found.code} に割り当てました。必要に応じて校正後、保存してください。`);}
+}
+async function poll(){
+  try{state=await api('state');$('connection').textContent=state.connected?'● Controller connected':'○ Controller disconnected';$('status').textContent=`${state.device?.name||'未接続'}  ${state.device?.path||''}\n${state.configuring?'設定モード / 出力中立':state.ready?'出力中':'出力待機'} · ${state.profile_path||''}\n${state.error||''}`;
+    if(profile){updateCapture();for(const [name,item] of Object.entries(profile.axes))$('axis-'+name).textContent=state.connected&&item.code>=0?state.raw_axes[item.code]?.toFixed(3):'—';for(const [name,item] of Object.entries(profile.buttons))$('button-'+name).textContent=state.connected&&item.code>=0?(item.source==='axis'?state.raw_axes[item.code]?.toFixed(3):state.raw_buttons[item.code]):'—';}
+    $('raw').replaceChildren();if(state.connected){for(const item of state.axes){const el=document.createElement('span');el.className='chip';el.textContent=`${item.name} (${item.code}) ${state.raw_axes[item.code].toFixed(3)}`;$('raw').append(el);}for(const item of state.buttons){if(state.raw_buttons[item.code]){const el=document.createElement('span');el.className='chip pressed';el.textContent=`${item.name} (${item.code})`;$('raw').append(el);}}}
+  }catch(e){state=null;$('connection').textContent='○ ROS bridge offline';message(e.message,true);}finally{setTimeout(poll,100);}
+}
+async function load(){profile=await api('profile');dirty=false;capturing=null;render();}
+$('begin').onclick=()=>api('configure',{enabled:true}).then(v=>message(v.message)).catch(e=>message(e.message,true));
+$('save').onclick=()=>api('save',profile).then(v=>{dirty=false;capturing=null;message(v.message);}).catch(e=>message(e.message,true));
+$('resume').onclick=()=>{if(dirty){message('未保存の編集があります。保存してから再開してください。',true);return;}api('configure',{enabled:false}).then(v=>message(v.message)).catch(e=>message(e.message,true));};
+$('reload').onclick=()=>{if(!dirty||confirm('未保存の編集を破棄しますか？'))load().then(()=>message('読込済み')).catch(e=>message(e.message,true));};
+$('use-device').onclick=()=>{try{profile.device={...fresh().device};delete profile.device.path;dirty=true;render();message('識別情報を取り込みました');}catch(e){message(e.message,true);}};
+window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
+load().then(()=>poll()).catch(e=>{message(e.message,true);poll();});
+</script>
+</html>

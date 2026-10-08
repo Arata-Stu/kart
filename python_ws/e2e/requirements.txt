@@ -1,0 +1,9 @@
+# Notebook training environment only. Select the torch CUDA wheel/index for the PC.
+# Do not apply this file to Jetson: ROS inference uses native TensorRT, without torch.
+torch>=2.8,<3
+numpy>=2,<3
+Pillow>=11,<12
+
+# Offline ONNX export + parity check, not used by ROS inference.
+onnx>=1.19,<2
+onnxruntime>=1.23,<2

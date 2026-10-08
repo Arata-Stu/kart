@@ -1,0 +1,98 @@
+ARG BASE_IMAGE
+ARG UV_VERSION=0.12.0
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+FROM ${BASE_IMAGE}
+
+USER root
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy
+COPY --from=uv /uv /usr/local/bin/uv
+
+# Project dependencies follow the expensive RealSense build. Isaac ROS 5.0
+# publishes these mapping packages for both noble and noble-jetpack.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git python3-venv python3-dev build-essential \
+        tensorrt python3-libnvinfer \
+        ros-lyrical-rmw-cyclonedds-cpp \
+        ros-lyrical-isaac-ros-cuvslam \
+        ros-lyrical-isaac-ros-visual-global-localization \
+        ros-lyrical-isaac-ros-visual-mapping \
+        ros-lyrical-isaac-mapping-ros \
+        ros-lyrical-isaac-ros-launch-utils \
+        ros-lyrical-isaac-ros-dnn-image-encoder \
+        ros-lyrical-isaac-ros-tensor-rt \
+    && if [ "$(dpkg --print-architecture)" = arm64 ]; then \
+        apt-get install -y --no-install-recommends ros-lyrical-isaac-ros-jetson-stats; \
+    fi \
+    && rm -rf /var/lib/apt/lists/*
+
+# jtop uses the system Python so isaac_ros_jetson_stats can import it.
+# The host service is installed separately with the same pin (see README).
+COPY jetson-stats.env /etc/kart/jetson-stats.env
+COPY patches/jetson-stats-7.2.0-library-probe.patch /tmp/jetson-stats.patch
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    set -eux; \
+    if [ "$(dpkg --print-architecture)" = arm64 ]; then \
+        source /etc/kart/jetson-stats.env; \
+        git init /tmp/jetson_stats; \
+        git -C /tmp/jetson_stats remote add origin https://github.com/rbonghi/jetson_stats.git; \
+        git -C /tmp/jetson_stats fetch --depth 1 origin "${JETSON_STATS_REF}"; \
+        git -C /tmp/jetson_stats checkout --detach FETCH_HEAD; \
+        test "$(git -C /tmp/jetson_stats rev-parse HEAD)" = "${JETSON_STATS_REF}"; \
+        git -C /tmp/jetson_stats apply /tmp/jetson-stats.patch; \
+        uv pip install --python /usr/bin/python3 --break-system-packages \
+            --reinstall-package jetson-stats /tmp/jetson_stats; \
+        test "$(/usr/bin/python3 -c 'import jtop; print(jtop.__version__)')" = "${JETSON_STATS_VERSION}"; \
+        rm -rf /tmp/jetson_stats; \
+    fi; \
+    rm -f /tmp/jetson-stats.patch
+
+# Keep Python projects independent: editing raceline dependencies does not
+# invalidate the inference environment. TensorRT stays supplied by APT.
+COPY python/inference/pyproject.toml python/inference/uv.lock /opt/kart/python/inference/
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv venv --python /usr/bin/python3 --system-site-packages /opt/inference \
+    && UV_PROJECT_ENVIRONMENT=/opt/inference uv sync \
+        --project /opt/kart/python/inference --python /usr/bin/python3 --locked --no-dev \
+    && /opt/inference/bin/python -c 'import tensorrt, onnx, onnxruntime; from onnxruntime.quantization import quantize_static, CalibrationDataReader' \
+    && test -x /usr/src/tensorrt/bin/trtexec
+
+# Offline raceline optimization runs on the x86_64 notebook only.
+# Check the image's Debian architecture (also correct for cross-builds), not
+# the build host's uname. Jetson/arm64 must not create the raceline environment.
+COPY python/raceline/pyproject.toml python/raceline/uv.lock /opt/kart/python/raceline/
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    set -eux; \
+    if [ "$(dpkg --print-architecture)" = amd64 ]; then \
+        UV_PROJECT_ENVIRONMENT=/opt/env uv sync \
+            --project /opt/kart/python/raceline --python /usr/bin/python3 --locked --no-dev; \
+        /opt/env/bin/python -c 'import numpy, scipy, matplotlib, quadprog, trajectory_planning_helpers'; \
+    else \
+        echo "Skipping notebook-only raceline dependencies on $(dpkg --print-architecture)"; \
+    fi
+
+# Everyday development tools are deliberately late: changing this list should
+# reuse the ROS, RealSense and Python environment build cache.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        bash-completion tmux vim nano less man-db \
+        file tree ripgrep jq zip unzip xz-utils \
+        rsync openssh-client git-lfs \
+        htop procps psmisc lsof strace gdb \
+        iproute2 iputils-ping dnsutils netcat-openbsd socat tcpdump iperf3 \
+        usbutils v4l-utils \
+        cmake ninja-build pkg-config libevdev-dev libyaml-cpp-dev python3-yaml python3-pytest \
+        ros-lyrical-ament-cmake-auto ros-lyrical-ament-cmake-python \
+        ros-lyrical-ament-cmake-pytest ros-lyrical-rclcpp-components \
+        ros-lyrical-rosidl-default-generators ros-lyrical-diagnostic-msgs \
+        ros-lyrical-ros2bag ros-lyrical-rosbag2-storage-mcap \
+        ros-lyrical-rosbag2-py ros-lyrical-sensor-msgs-py \
+    && rm -rf /var/lib/apt/lists/*
+
+# DDS XML is read at runtime from the project-root mount (not baked in).
+COPY scripts/kart-ros.bash /etc/kart/ros.bash
+RUN printf '\nsource /etc/kart/ros.bash\n' >> /etc/bash.bashrc
+WORKDIR /workspaces/ros2_ws

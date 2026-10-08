@@ -1,0 +1,8 @@
+{
+  "container_name": "kart_e2e_container",
+  "container_type": "multithreaded",
+  "create_container": true,
+  "model_dir": "",
+  "image_topic": "/realsense/color/image_raw",
+  "camera_info_topic": "/realsense/color/camera_info"
+}

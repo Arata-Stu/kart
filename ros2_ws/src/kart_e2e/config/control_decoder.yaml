@@ -1,0 +1,11 @@
+/**:
+  ros__parameters:
+    use_sim_time: false
+    output_mode: steer_throttle # launch resolves from ONNX metadata
+    output_tensor_name: control
+    fixed_throttle: 0.0
+    max_throttle: 0.2
+    input_timeout_s: 0.15
+    mode_timeout_s: 0.3
+    control_rate_hz: 50.0
+    drive_enabled: false

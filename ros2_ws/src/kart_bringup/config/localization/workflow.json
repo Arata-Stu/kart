@@ -1,0 +1,10 @@
+{
+  "left_image": "/realsense/infra1/image_rect_raw",
+  "right_image": "/realsense/infra2/image_rect_raw",
+  "left_info": "/realsense/infra1/camera_info",
+  "right_info": "/realsense/infra2/camera_info",
+  "pose_hint": "/localization/pose_hint",
+  "request_hint": "/visual_localization/trigger_localization",
+  "vslam_diagnostics": "/localization/vslam/diagnostics",
+  "vgl_diagnostics": "/localization/vgl/diagnostics"
+}

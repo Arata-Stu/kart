@@ -1,0 +1,11 @@
+/**/hdmap_server:
+  ros__parameters:
+    map_file: ""  # Required absolute map.json or exported hd_map.yaml
+    frame_id: map  # Must match file. Never relabel or transform coordinates.
+    lane_id: ""  # Empty: all markers, no selected paths
+    line_type: centerline  # Initial selection; dynamically changeable via ROS parameter
+    centerline_speed_mps: 0.0  # Explicitly set a speed before tracking
+    publish_rate_hz: 1.0
+    line_width_m: 0.04
+    label_height_m: 0.25
+    use_sim_time: false

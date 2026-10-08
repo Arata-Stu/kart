@@ -1,0 +1,8 @@
+docker:
+  image:
+    additional_image_keys:
+      - realsense
+      - kart
+    push: false
+  run:
+    container_name: kart_dev

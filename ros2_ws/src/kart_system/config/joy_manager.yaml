@@ -1,0 +1,22 @@
+/**/kart_joy_manager:
+  ros__parameters:
+    use_sim_time: false
+    steering_axis: 0
+    throttle_axis: 5
+    reverse_axis: 4
+    bag_start_button: 4
+    bag_stop_button: 5
+    deadman_button: -1
+    brake_button: 1
+    stop_button: 0
+    manual_button: 2
+    auto_button: 3
+    steering_trim_left_button: 15
+    steering_trim_right_button: 16
+    throttle_trim_up_button: 13
+    throttle_trim_down_button: 14
+    steering_trim_step: 0.001
+    throttle_trim_step: 0.001
+    deadzone: 0.08
+    steering_scale: 1.0
+    speed_scale: 0.3

@@ -1,0 +1,44 @@
+diff --git a/jtop/core/jetson_libraries.py b/jtop/core/jetson_libraries.py
+index 5e8db2a..64dd2bf 100644
+--- a/jtop/core/jetson_libraries.py
++++ b/jtop/core/jetson_libraries.py
+@@ -32,8 +32,20 @@ CUDA_FILE_RE = re.compile(r'CUDA Version (.*)')
+ CUDA_NVCC_RE = re.compile(r'V([0-9]+.[0-9]+.[0-9]+)')
+ 
+ 
++def load_library(name):
++    library_path = find_library(name)
++    if not library_path:
++        return None
++    try:
++        return CDLL(library_path)
++    except OSError:
++        # Fall back to package metadata when an optional transitive dependency
++        # is not present in the container.
++        return None
++
++
+ def get_cudnn():
+-    if dnn := CDLL(find_library('cudnn')):
++    if dnn := load_library('cudnn'):
+         try:
+             dnn_vers = dnn.cudnnGetVersion()
+             return f"{dnn_vers // 10000}.{(dnn_vers % 10000) // 100}.{dnn_vers % 100}"
+@@ -43,7 +55,7 @@ def get_cudnn():
+ 
+ 
+ def get_tensorrt():
+-    if trt := CDLL(find_library('nvinfer')):
++    if trt := load_library('nvinfer'):
+         try:
+             major = trt.getInferLibMajorVersion()
+             minor = trt.getInferLibMinorVersion()
+@@ -57,7 +69,7 @@ def get_tensorrt():
+ 
+ 
+ def get_vpi():
+-    if vpi := CDLL(find_library('nvvpi')):
++    if vpi := load_library('nvvpi'):
+         try:
+             vpi_vers = vpi.vpiGetVersion()
+             return f"{vpi_vers // 1000000}.{(vpi_vers % 1000000) // 10000}.{(vpi_vers % 10000) // 100}.{vpi_vers % 100}"

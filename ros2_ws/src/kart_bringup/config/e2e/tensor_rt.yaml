@@ -1,0 +1,30 @@
+# Isaac ROS isaac_ros_tensor_rt 5.0.0; apt ros-lyrical-isaac-ros-tensor-rt.
+# Installed apt revision not verified. Source verified 2026-10-09:
+# https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_dnn_inference/blob/c16ac2c8669051ae1f3c6d77684f91fb25756f21/isaac_ros_tensor_rt/src/tensor_rt_node.cpp
+# All declared independent parameters included; ROS infrastructure parameters omitted.
+# model/engine paths are resolved from model_dir and ONNX SHA at launch.
+# kart changes: names/shape fixed by exported metadata, strict dimensions, 1GiB workspace,
+# verbosity off and FP32 bindings. Source's enable_fp16 currently sets kTF32, NOT kFP16.
+# Force rebuilding by default avoids silently reusing an incompatible GPU/TRT engine.
+# No old input_tensor_formats/output_tensor_formats: not present in this release.
+/**:
+  ros__parameters:
+    use_sim_time: false
+    model_file_path: ""
+    engine_file_path: ""
+    custom_plugin_lib: ""
+    input_tensor_names: [image]
+    input_binding_names: [image]
+    output_tensor_names: [control]
+    output_binding_names: [control]
+    force_engine_update: true
+    verbose: false
+    max_workspace_size: 1073741824
+    dla_core: -1
+    max_batch_size: 1
+    enable_fp16: false
+    relaxed_dimension_check: false
+    input_queue_size: 1
+    output_queue_size: 1
+    input_qos: DEFAULT
+    output_qos: DEFAULT

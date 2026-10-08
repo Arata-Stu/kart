@@ -1,0 +1,7 @@
+/**/kart_joy_node:
+  ros__parameters:
+    use_sim_time: false
+    profile_path: ''
+    input_dir: /dev/input
+    publish_rate_hz: 100.0
+    scan_period_ms: 1000

@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>kart_bag_manager</name><version>0.1.0</version>
+  <description>Supervised rosbag recording controlled by kart requests.</description>
+  <maintainer email="carbuncle01@users.noreply.github.com">carbuncle01</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+  <depend>std_srvs</depend><depend>diagnostic_msgs</depend>
+  <depend>rclpy</depend><depend>rcl_interfaces</depend><depend>kart_interfaces</depend>
+  <exec_depend>ros2bag</exec_depend><exec_depend>rosbag2_transport</exec_depend>
+  <exec_depend>rosbag2_storage_mcap</exec_depend>
+  <exec_depend>launch</exec_depend><exec_depend>launch_ros</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

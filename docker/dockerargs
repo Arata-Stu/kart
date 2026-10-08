@@ -1,0 +1,8 @@
+# Additional project-specific Docker arguments, one per line.
+# Sensor devices are added here once the hardware is selected.
+
+# ROS middleware policy for all processes in this container, including docker exec.
+-e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+-e CYCLONEDDS_URI=file:///workspaces/docker/middleware_profiles/cyclonedds.xml
+-e ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+-e ROS_STATIC_PEERS=

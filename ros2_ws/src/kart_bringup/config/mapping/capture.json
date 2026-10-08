@@ -1,0 +1,7 @@
+{
+  "replay_rate": 1.0,
+  "ready_timeout_s": 120.0,
+  "drain_timeout_s": 30.0,
+  "settle_s": 3.0,
+  "tail_tolerance_s": 0.5
+}

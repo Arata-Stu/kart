@@ -1,0 +1,16 @@
+{
+  "ros_domain_id": 92,
+  "left_image": "/realsense/infra1/image_rect_raw",
+  "right_image": "/realsense/infra2/image_rect_raw",
+  "left_info": "/realsense/infra1/camera_info",
+  "right_info": "/realsense/infra2/camera_info",
+  "tf_static": "/tf_static",
+  "overrides": {
+    "tracking_mode": 0,
+    "base_frame": "camera_link",
+    "camera_optical_frames": [
+      "camera_infra1_optical_frame",
+      "camera_infra2_optical_frame"
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+image_key_order:
+  - isaac_ros.realsense.kart
+context_overrides:
+  isaac_ros: ..
+  # Reuse helpers and the Lyrical patch from the commit pinned in packages.repos.
+  realsense: ../tools/isaac-ros-cli/docker
+cache_to_registry_names: []
+cache_from_registry_names:
+  - nvcr.io/nvidia/isaac/ros
+remote_builder: {}

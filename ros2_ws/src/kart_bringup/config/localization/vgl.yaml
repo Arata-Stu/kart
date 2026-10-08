@@ -1,0 +1,45 @@
+# ROS package: isaac_ros_visual_global_localization
+# APT: ros-lyrical-isaac-ros-visual-global-localization; installed version not verified on macOS.
+# Upstream: NVIDIA-ISAAC-ROS/isaac_ros_mapping_and_localization release-5.0
+# Commit: 63cbbc20c0db49500107121f66d32b943f81bd99, inspected 2026-10-08.
+# Source: isaac_ros_visual_global_localization/src/visual_global_localization_node.cpp
+# Plus transform_manager.cpp and common AddQosParameter(input_qos).
+# All declared node parameters explicit. ROS-managed common params omitted except use_sim_time.
+# Changes: event/bootstrap localization, SENSOR_DATA input, no TF or image visualization.
+# Textproto algorithm config is supplied in the map bundle, matched to its feature model.
+/**/visual_global_localization:
+  ros__parameters:
+    use_sim_time: false
+    map_dir: ''  # Required bundle/cuvgl_map; launch override
+    config_dir: ''  # Required bundle/vgl_runtime_config; launch override
+    model_dir: ''  # Required explicitly selected local GPU engines; no large fallback
+    debug_dir: ''
+    debug_map_raw_dir: ''
+    num_cameras: 2
+    stereo_localizer_cam_ids: '0,1'
+    enable_rectify_images: false  # Same rectified stereo stream as VSLAM
+    publish_rectified_images: false
+    enable_continuous_localization: false  # Stops after a successful VGL pose, not after service acceptance
+    use_initial_guess: false  # Global retrieval rather than TF-based local cuSFM query
+    image_qos_profile: SENSOR_DATA
+    input_qos: SENSOR_DATA
+    input_qos_depth: 5  # Explicit sensor queue size
+    image_sync_match_threshold_ms: 5.0  # Software tolerance, NOT the camera's required synchronization accuracy
+    image_buffer_size: 10
+    input_image_topic_name: visual_localization/image
+    input_camera_info_topic_name: visual_localization/camera_info
+    camera_optical_frames: [camera_infra1_optical_frame, camera_infra2_optical_frame]
+    base_frame: base_link
+    map_frame: map
+    odom_frame: odom
+    publish_map_to_base_tf: false  # VSLAM owns dynamic TF
+    invert_map_to_base_tf: false
+    publish_map_to_odom_tf: false
+    use_tf_transforms: true
+    use_topic_transforms: false
+    verbose_logging: false
+    vgl_enable_debug: false  # No debug images
+    init_glog: false
+    glog_v: 0
+    localization_precision_level: 2
+    vgl_frequency: 1.0  # Max query frequency while searching, not camera FPS

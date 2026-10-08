@@ -1,0 +1,70 @@
+# Official Isaac ROS 5.0.0; apt binary versions on target remain unverified.
+# apt: ros-lyrical-isaac-ros-image-proc, ros-lyrical-isaac-ros-tensor-proc
+# Sources (verified 2026-10-09):
+# https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_dnn_inference/tree/c16ac2c8669051ae1f3c6d77684f91fb25756f21
+# isaac_ros_dnn_image_encoder/launch/dnn_image_encoder.launch.py and tensor_proc/src/*_node.cpp
+# https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_image_pipeline/tree/375311f26670455843a3b1f690a1ad54079c6be0
+# isaac_ros_image_proc/src/{resize_node,image_format_converter_node}.cpp
+# kart: load official encoder components explicitly so every node config is visible.
+# No crop/letterbox; resize 212x120. Patch padding belongs inside ONNX after normalization.
+# All independent declared parameters included. ROS infrastructure parameters omitted.
+# Legacy num_blocks/encoding_desired on ResizeNode and NITROS format strings are no longer
+# declared by release-5.0; intentionally omitted. No DnnImageEncoderNode plugin in this release.
+# Input best effort matches RealSense; internal pipeline DEFAULT = reliable/depth 10
+# except ResizeNode's explicit queue sizes. Header stamps are preserved by all nodes.
+/**/e2e_resize:
+  ros__parameters:
+    use_sim_time: false
+    output_width: 212
+    output_height: 120
+    interp_type: linear
+    border_type: zero
+    keep_aspect_ratio: false
+    disable_padding: true
+    input_queue_size: 2
+    output_queue_size: 1
+    input_qos: SENSOR_DATA
+    output_qos: DEFAULT
+/**/e2e_format:
+  ros__parameters:
+    use_sim_time: false
+    encoding_desired: rgb8
+    image_width: 212
+    image_height: 120
+    yuv_color_spec: bt601
+    input_qos: DEFAULT
+    output_qos: DEFAULT
+/**/e2e_to_tensor:
+  ros__parameters:
+    use_sim_time: false
+    scale: true
+    tensor_name: image
+    input_qos: DEFAULT
+    output_qos: DEFAULT
+/**/e2e_normalize:
+  ros__parameters:
+    use_sim_time: false
+    mean: [0.485, 0.456, 0.406]
+    stddev: [0.229, 0.224, 0.225]
+    input_tensor_name: image
+    output_tensor_name: image
+    input_qos: DEFAULT
+    output_qos: DEFAULT
+/**/e2e_planar:
+  ros__parameters:
+    use_sim_time: false
+    input_tensor_shape: [120, 212, 3]
+    output_tensor_name: image
+    input_qos: DEFAULT
+    output_qos: DEFAULT
+/**/e2e_reshape:
+  ros__parameters:
+    use_sim_time: false
+    input_tensor_layout: NCHW
+    output_tensor_layout: NCHW
+    input_tensor_shape: [1, 3, 120, 212]
+    output_tensor_shape: [1, 3, 120, 212]
+    output_tensor_name: image
+    batch: 1
+    input_qos: DEFAULT
+    output_qos: DEFAULT

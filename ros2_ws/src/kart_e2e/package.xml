@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>kart_e2e</name><version>0.1.0</version>
+  <description>DINOv3 behavior cloning, bag extraction and ROS inference.</description>
+  <maintainer email="carbuncle01@users.noreply.github.com">carbuncle01</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend><depend>rcl_interfaces</depend>
+  <depend>kart_interfaces</depend><exec_depend>sensor_msgs</exec_depend>
+  <depend>std_msgs</depend><exec_depend>rosbag2_py</exec_depend>
+  <exec_depend>rosidl_runtime_py</exec_depend>
+  <exec_depend>python3-numpy</exec_depend><exec_depend>python3-pil</exec_depend>
+  <depend>rclcpp</depend><depend>rclcpp_components</depend>
+  <depend>isaac_ros_tensor_msgs</depend><depend>tensor_msgs</depend>
+  <depend>builtin_interfaces</depend><depend>cuda_buffer</depend>
+  <depend>isaac_ros_common</depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

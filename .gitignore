@@ -1,0 +1,29 @@
+/tools/isaac-ros-cli/
+/ros2_ws/build/
+/ros2_ws/install/
+/ros2_ws/log/
+/ros2_ws/isaac_ros_assets
+__pycache__/
+.DS_Store
+
+# Recorded data and generated maps stay local.
+/record/*
+!/record/.gitkeep
+/map/*
+!/map/.gitkeep
+.venv/
+
+# Local UI connection profiles and job logs.
+/.kart-studio/
+
+# Optional E2E encoder, datasets and learned artifacts.
+/python_ws/dinov3/
+/datasets/
+/runs/
+/weights/*
+!/weights/dinov3/
+/weights/dinov3/*
+!/weights/dinov3/README.md
+
+# Learning UI generated datasets, checkpoints and ONNX bundles.
+/e2e/

@@ -1,0 +1,17 @@
+[project]
+name = "kart-raceline-env"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy==2.4.6",
+    "scipy==1.17.1",
+    "matplotlib==3.11.0",
+    "quadprog==0.1.13",
+    "trajectory-planning-helpers==0.80",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+trajectory-planning-helpers = { git = "https://github.com/carbuncle01/trajectory_planning_helpers.git", rev = "aa950f6045680366b789dbb855db8d59d54b1db5" }

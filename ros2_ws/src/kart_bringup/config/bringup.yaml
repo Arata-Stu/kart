@@ -1,0 +1,19 @@
+# Operational defaults. CLI overrides apply only when explicitly supplied.
+launch:
+  container_name: vehicle_container
+  namespace: ''
+  composed: true
+  enable_joy: true
+  enable_control: true
+  enable_bridge: false
+  enable_bag_manager: true
+  enable_jetson_stats: true  # Auto-detect Jetson in monitoring module
+  bag_shutdown_timeout: 20.0
+  bag_sigkill_timeout: 5.0
+parameters:
+  joy: input/joy.yaml
+  joy_manager: input/joy_manager.yaml
+  mode_manager: system/operation_mode_manager.yaml
+  command_mux: system/command_mux.yaml
+  bridge: vehicle/bridge.yaml
+  bag_manager: recording/bag_manager.yaml

@@ -1,0 +1,6 @@
+# Optional encoder source, separate from ROS packages and notebook raceline dependencies.
+repositories:
+  python_ws/dinov3:
+    type: git
+    url: https://github.com/facebookresearch/dinov3.git
+    version: 6876159a11b4df116f30f667f8c9888617df0751

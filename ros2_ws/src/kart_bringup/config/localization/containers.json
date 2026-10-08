@@ -1,0 +1,4 @@
+{
+  "vslam": {"name": "kart_vslam_container", "create": true, "type": "multithreaded"},
+  "vgl": {"name": "kart_vgl_container", "create": true, "type": "multithreaded"}
+}

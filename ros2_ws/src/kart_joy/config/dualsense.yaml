@@ -1,0 +1,149 @@
+version: 1
+device:
+  vendor: 1356
+  product: 3302
+  name: ''
+  unique: ''
+axes:
+  left_x:
+    code: 0
+    mode: bipolar
+    negative: -1.0
+    center: 0.0
+    positive: 1.0
+    deadzone: 0.05
+  left_y:
+    code: 1
+    mode: bipolar
+    negative: -1.0
+    center: 0.0
+    positive: 1.0
+    deadzone: 0.05
+  right_x:
+    code: 3
+    mode: bipolar
+    negative: -1.0
+    center: 0.0
+    positive: 1.0
+    deadzone: 0.05
+  right_y:
+    code: 4
+    mode: bipolar
+    negative: -1.0
+    center: 0.0
+    positive: 1.0
+    deadzone: 0.05
+  l2:
+    code: 2
+    mode: unipolar
+    negative: -1.0
+    center: -1.0
+    positive: 1.0
+    deadzone: 0.02
+  r2:
+    code: 5
+    mode: unipolar
+    negative: -1.0
+    center: -1.0
+    positive: 1.0
+    deadzone: 0.02
+  dpad_x:
+    code: 16
+    mode: bipolar
+    negative: -1.0
+    center: 0.0
+    positive: 1.0
+    deadzone: 0.05
+  dpad_y:
+    code: 17
+    mode: bipolar
+    negative: -1.0
+    center: 0.0
+    positive: 1.0
+    deadzone: 0.05
+buttons:
+  cross:
+    source: button
+    code: 304
+    direction: 1
+    threshold: 0.5
+  circle:
+    source: button
+    code: 305
+    direction: 1
+    threshold: 0.5
+  triangle:
+    source: button
+    code: 307
+    direction: 1
+    threshold: 0.5
+  square:
+    source: button
+    code: 308
+    direction: 1
+    threshold: 0.5
+  l1:
+    source: button
+    code: 310
+    direction: 1
+    threshold: 0.5
+  r1:
+    source: button
+    code: 311
+    direction: 1
+    threshold: 0.5
+  l2:
+    source: button
+    code: 312
+    direction: 1
+    threshold: 0.5
+  r2:
+    source: button
+    code: 313
+    direction: 1
+    threshold: 0.5
+  create:
+    source: button
+    code: 314
+    direction: 1
+    threshold: 0.5
+  options:
+    source: button
+    code: 315
+    direction: 1
+    threshold: 0.5
+  ps:
+    source: button
+    code: 316
+    direction: 1
+    threshold: 0.5
+  l3:
+    source: button
+    code: 317
+    direction: 1
+    threshold: 0.5
+  r3:
+    source: button
+    code: 318
+    direction: 1
+    threshold: 0.5
+  dpad_up:
+    source: axis
+    code: 17
+    direction: -1
+    threshold: 0.5
+  dpad_down:
+    source: axis
+    code: 17
+    direction: 1
+    threshold: 0.5
+  dpad_left:
+    source: axis
+    code: 16
+    direction: -1
+    threshold: 0.5
+  dpad_right:
+    source: axis
+    code: 16
+    direction: 1
+    threshold: 0.5

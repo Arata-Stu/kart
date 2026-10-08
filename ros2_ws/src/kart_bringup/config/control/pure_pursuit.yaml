@@ -1,0 +1,16 @@
+/**/pure_pursuit:
+  ros__parameters:
+    use_sim_time: false
+    tracking_frame: rear_axle
+    map_frame: map
+    wheelbase_m: 0.257  # Tamiya TT-02 standard wheelbase; verify actual chassis setting.
+    max_steering_rad: 0.0  # Required calibration, front wheel angle, left positive.
+    lookahead_m: 0.8
+    max_speed_mps: 1.0
+    max_cross_track_m: 1.0
+    goal_tolerance_m: 0.1
+    deceleration_mps2: 1.0
+    pose_timeout_s: 0.2
+    line_timeout_s: 2.5
+    localization_timeout_s: 2.5
+    control_rate_hz: 30.0

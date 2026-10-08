@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Kart Map Studio</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css?v=20261008-paired" />
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/">kart<span>MAP STUDIO</span></a>
+      <nav aria-label="作業">
+        <button class="nav active" id="nav-map">地図</button
+        ><button class="nav" id="nav-transfer">転送</button
+        ><button class="nav" id="nav-learning">学習</button>
+      </nav>
+      <span class="local-tag"><i></i> Notebook · Local</span
+      ><button class="quiet" id="connection-open">接続設定</button>
+    </header>
+    <main id="map-page">
+      <aside class="library">
+        <div class="section-title">
+          <span>地図ライブラリ</span
+          ><button id="refresh-maps" class="icon" title="地図を更新">↻</button>
+        </div>
+        <button class="primary full" id="build-open">
+          ＋ bagから地図を作成</button
+        ><button class="quiet full" id="import-open">
+          点群snapshotを読み込む
+        </button>
+        <div id="map-list" class="scroll list"></div>
+        <button id="trash-open" class="quiet full">ごみ箱・復元</button>
+        <div class="library-foot">
+          記録 → 点群 → 境界 → ライン<br /><span
+            >学習は上部の「学習」タブから</span
+          >
+        </div>
+      </aside>
+      <section class="workspace">
+        <div class="workspace-toolbar">
+          <div>
+            <strong id="map-title">地図を選択</strong
+            ><span id="save-state" class="small"></span>
+          </div>
+          <div class="actions">
+            <button
+              id="copy-map"
+              disabled
+              title="VSLAMを再実行せず別の地図として複製"
+            >
+              複製
+            </button>
+            <button id="delete-map" disabled title="選択中の地図をごみ箱へ移動">
+              削除</button
+            ><button id="undo" title="元に戻す（Ctrl/Cmd+Z）">↶</button
+            ><button id="redo" title="やり直す">↷</button
+            ><button id="fit">全体表示</button
+            ><button id="save" class="primary" disabled>保存</button>
+          </div>
+        </div>
+        <div class="canvas-wrap">
+          <canvas
+            id="map-canvas"
+            aria-label="点群とHDMap編集キャンバス"
+            tabindex="0"
+          ></canvas>
+          <div id="empty-canvas" class="canvas-empty">
+            <div class="empty-symbol">⌖</div>
+            <h1>点群から、走れる地図へ。</h1>
+            <p>左から地図を開くか、走行記録から作成してください。</p>
+            <p class="muted">
+              点群の高さを絞り、左右の境界を描いてラインを生成します。
+            </p>
+          </div>
+          <div class="canvas-legend">
+            <span class="dot cloud"></span>点群
+            <span class="dot left"></span>左境界
+            <span class="dot right"></span>右境界
+            <span class="dot center"></span>Center
+            <span class="dot race"></span>Race
+            <span class="dot custom"></span>Custom
+          </div>
+        </div>
+        <div class="canvas-status">
+          <span id="canvas-hint">ホイール: 拡大 · 右ドラッグ: 移動</span
+          ><span id="coordinates">map · m</span>
+        </div>
+      </section>
+      <aside class="inspector">
+        <div class="lane-selector">
+          <select id="lane-select" aria-label="編集するlane ID"></select
+          ><button id="lane-add" title="laneを追加">＋</button
+          ><button id="lane-remove" title="選択laneを削除">−</button>
+        </div>
+        <div class="step-tabs" role="tablist" aria-label="地図編集の工程">
+          <button id="step-cloud" class="active">1 点群</button
+          ><button id="step-bounds">2 境界</button
+          ><button id="step-lines">3 ライン</button>
+        </div>
+        <div id="inspector-body" class="scroll">
+          <section id="panel-cloud">
+            <button id="capture-open" hidden>保存地図から点群を取得</button>
+            <div class="eyebrow">POINT CLOUD</div>
+            <h2>必要な高さだけ見る</h2>
+            <button id="registration-open" class="quiet full">
+              別の地図のHDMapを位置合わせ
+            </button>
+            <p class="help">
+              高さはmap座標のZ。表示だけを選別し、元の点群は保持します。
+            </p>
+            <div class="stat">
+              <strong id="point-count">—</strong><span>表示点 / 元点数</span>
+            </div>
+            <label
+              >下限 <output id="z-min-value">—</output
+              ><input
+                type="range"
+                id="z-min"
+                min="-2"
+                max="3"
+                step="0.01"
+                value="-2" /></label
+            ><label
+              >上限 <output id="z-max-value">—</output
+              ><input
+                type="range"
+                id="z-max"
+                min="-2"
+                max="3"
+                step="0.01"
+                value="3" /></label
+            ><button id="z-reset" class="full">全高さに戻す</button
+            ><label class="check"
+              ><input
+                type="checkbox"
+                id="show-path"
+                checked
+              />最終SLAM軌跡を表示</label
+            >
+            <div class="note" id="tf-note">
+              地図を開くと採用TF情報を表示します。
+            </div>
+          </section>
+          <section id="panel-bounds" hidden>
+            <div class="eyebrow">HD MAP</div>
+            <h2>左右の境界を描く</h2>
+            <div class="choice">
+              <button id="edit-pair">セット</button
+              ><button id="edit-left" class="active">左境界</button
+              ><button id="edit-right">右境界</button>
+            </div>
+            <div class="actions">
+              <label
+                >幅 m
+                <input
+                  id="pair-width"
+                  type="number"
+                  value="1"
+                  min="0.05"
+                  max="100"
+                  step="0.05"
+                  style="width: 80px" /></label
+              ><button id="pair-resize">幅を適用</button
+              ><button id="pair-align">対応を揃える</button>
+            </div>
+            <p class="help">
+              中点ドラッグで左右を移動。幅は選択点へ、未選択なら全点へ適用。
+            </p>
+            <label class="check"
+              ><input type="checkbox" id="closed" checked />閉じたコース</label
+            >
+            <div class="stat">
+              <strong id="boundary-count">左 0 / 右 0</strong
+              ><span>制御点</span>
+            </div>
+            <div class="actions">
+              <button id="delete-point">選択点を削除</button
+              ><button id="clear-line">この境界をクリア</button>
+            </div>
+            <details>
+              <summary>走行不可能領域</summary>
+              <div class="actions">
+                <select
+                  id="obstacle-select"
+                  aria-label="走行不可能領域ID"
+                ></select
+                ><button id="obstacle-add">＋</button
+                ><button id="obstacle-remove">−</button
+                ><button id="edit-obstacle">編集</button>
+              </div>
+              <p class="help">
+                クリックで頂点を追加。3点以上で囲み、保存します。全lane共通の禁止領域です。
+              </p>
+            </details>
+            <button class="primary full" id="bounds-next">
+              ライン生成へ →
+            </button>
+          </section>
+          <section id="panel-lines" hidden>
+            <div class="eyebrow">PATH DESIGN</div>
+            <h2>ラインを生成</h2>
+            <div class="line-card">
+              <div>
+                <strong>Centerline</strong
+                ><span id="centerline-status">未生成</span>
+              </div>
+              <p>左右境界の中間から生成</p>
+              <button id="generate-centerline" class="full">
+                Centerlineを生成
+              </button>
+            </div>
+            <div class="line-card">
+              <div>
+                <strong>Raceline</strong
+                ><span id="raceline-status">未生成</span>
+              </div>
+              <select id="raceline-method" aria-label="Raceline最適化方式">
+                <option value="local">簡易・局所曲率低減</option>
+                <option value="mincurv">最小曲率（helper・閉路）</option>
+                <option value="mincurv_iqp">
+                  反復最小曲率（helper・閉路）
+                </option>
+              </select>
+              <button id="generate-raceline" class="full">
+                Racelineを生成
+              </button>
+            </div>
+            <div class="line-card">
+              <div>
+                <strong>Customline</strong
+                ><span id="customline-status">未生成</span>
+              </div>
+              <p>自分で描いた点列に速度を付与</p>
+              <div class="actions">
+                <button id="edit-custom">点を編集</button
+                ><button id="custom-speeds-open">区間速度</button
+                ><button id="generate-customline">生成</button>
+              </div>
+            </div>
+            <button id="line-settings-open" class="quiet full">
+              車幅・速度などの生成設定</button
+            ><button id="export" class="primary full">
+              HDMap・CSVを書き出す
+            </button>
+            <p class="help">
+              helper方式は専用Python環境が必要です。実車での追従は別途確認してください。
+            </p>
+          </section>
+        </div>
+      </aside>
+    </main>
+    <main id="transfer-page" hidden>
+      <div class="transfer-heading">
+        <div class="eyebrow">DATA TRANSFER</div>
+        <h1>記録を受け取り、地図を届ける。</h1>
+        <p id="connection-summary">
+          接続設定を入力してください。SSH鍵認証を使用します。
+        </p>
+      </div>
+      <div class="transfer-grid">
+        <section class="transfer-panel">
+          <div class="section-title">
+            <h2>Jetson · 走行記録</h2>
+            <button id="browse-remote" class="primary">探索する</button>
+          </div>
+          <div class="breadcrumb">
+            <button id="remote-up">↑ 上へ</button
+            ><span id="remote-path">record /</span>
+          </div>
+          <div id="remote-list" class="scroll list">
+            <p class="empty">「探索する」でJetsonのrecordを読み込みます。</p>
+          </div>
+          <div class="transfer-controls">
+            <label
+              >Notebookの保存名<input
+                id="pull-name"
+                placeholder="例: drive_20261007" /></label
+            ><button id="pull" class="primary full" disabled>
+              選択bagを受信 ↓
+            </button>
+            <p class="help">SCPで取得。既存bagは上書きしません。</p>
+          </div>
+        </section>
+        <section class="transfer-panel">
+          <div class="section-title">
+            <h2>Notebook · 受信済み</h2>
+            <button id="refresh-records">↻ 更新</button>
+          </div>
+          <div id="local-path" class="breadcrumb"></div>
+          <div id="local-records" class="scroll list"></div>
+          <div class="transfer-controls">
+            <label
+              >Jetsonへ送る地図<select id="push-map">
+                <option value="">地図を選択</option>
+              </select></label
+            ><button id="push" class="primary full">地図を送信 ↑</button>
+            <p class="help">
+              最新のHDMap・ラインとVSLAM成果物を、新規フォルダへ送ります。
+            </p>
+          </div>
+        </section>
+      </div>
+    </main>
+    <main id="learning-page" hidden>
+      <div class="learning-heading">
+        <div>
+          <h1>E2E Learning</h1>
+          <p>DINOv3 · データからJetsonで使うモデルへ</p>
+        </div>
+        <div class="actions">
+          <span id="e2e-device" class="small"></span
+          ><button id="e2e-refresh">↻ 更新</button
+          ><button id="e2e-settings-open">学習環境</button>
+        </div>
+      </div>
+      <nav class="learning-steps" aria-label="学習工程">
+        <button id="e2e-tab-dataset" class="active">
+          1 データセット <small id="e2e-count-datasets">0</small>
+        </button>
+        <button id="e2e-tab-train">
+          2 学習 <small id="e2e-count-runs">0</small>
+        </button>
+        <button id="e2e-tab-export">3 ONNX export</button>
+        <button id="e2e-tab-push">
+          4 Jetson転送 <small id="e2e-count-models">0</small>
+        </button>
+      </nav>
+      <div class="learning-body">
+        <section id="e2e-pane-dataset" class="learning-form">
+          <h2>走行記録から教師データを作成</h2>
+          <label>Notebookのrosbag<select id="e2e-bag"></select></label>
+          <label
+            >データセット名<input
+              id="e2e-dataset-name"
+              placeholder="例: session01"
+              maxlength="64"
+          /></label>
+          <div class="form-grid">
+            <label
+              >時刻の基準<select id="e2e-clock">
+                <option value="bag">bag受信時刻</option>
+                <option value="header">header時刻（同期済み）</option>
+              </select></label
+            ><label
+              >教師の最大時間差 ms<input
+                id="e2e-skew"
+                type="number"
+                value="100"
+                min="1"
+                max="1000"
+            /></label>
+          </div>
+          <details>
+            <summary>入力topic</summary>
+            <label
+              >画像<input
+                id="e2e-image-topic"
+                value="/realsense/color/image_raw" /></label
+            ><label
+              >操作教師<input
+                id="e2e-command-topic"
+                value="/teleop/control_cmd" /></label
+            ><label
+              >走行モード<input
+                id="e2e-mode-topic"
+                value="/operation_mode/state"
+            /></label>
+          </details>
+          <p class="help">
+            MANUAL走行のみ採用。ブレーキ・後退は除外します。Jetson内のbagは「転送」で先に受信してください。
+          </p>
+          <button id="e2e-create-dataset" class="primary full">
+            データセットを作成
+          </button>
+        </section>
+        <section id="e2e-pane-train" class="learning-form" hidden>
+          <h2>学習・検証データと条件を選択</h2>
+          <div class="form-grid">
+            <label
+              >学習用<select
+                id="e2e-train-data"
+                multiple
+                size="4"
+              ></select></label
+            ><label
+              >検証用<select id="e2e-validation-data" multiple size="4"></select
+            ></label>
+          </div>
+          <p class="help">
+            複数選択はCtrl / ⌘＋クリック。同じbag・データセットも選択できます。
+          </p>
+          <div class="form-grid">
+            <label
+              >実験名<input
+                id="e2e-run-name"
+                placeholder="例: dino_v1"
+                maxlength="64" /></label
+            ><label
+              >予測対象<select id="e2e-mode">
+                <option value="steer_throttle">ステア＋スロットル</option>
+                <option value="steer_only">ステアのみ</option>
+              </select></label
+            >
+          </div>
+          <div class="e2e-three">
+            <label
+              >Epoch<input
+                id="e2e-epochs"
+                type="number"
+                value="20"
+                min="1" /></label
+            ><label
+              >Batch<input
+                id="e2e-batch"
+                type="number"
+                value="32"
+                min="1" /></label
+            ><label
+              >学習率<input
+                id="e2e-lr"
+                type="number"
+                value="0.0001"
+                step="0.00001"
+                min="0.000000001"
+            /></label>
+          </div>
+          <label class="check"
+            ><input
+              id="e2e-finetune"
+              type="checkbox"
+            />encoderも更新する（未選択は凍結）</label
+          >
+          <p class="help">
+            steer-onlyの固定スロットルは走行時に設定します。学習はNotebookの設定済み環境で実行します。
+          </p>
+          <button id="e2e-start-train" class="primary full">学習を開始</button>
+        </section>
+        <section id="e2e-pane-export" class="learning-form" hidden>
+          <h2>最良checkpointをONNXへ変換</h2>
+          <label>学習済み実験<select id="e2e-export-run"></select></label>
+          <label
+            >モデル名<input
+              id="e2e-model-name"
+              placeholder="例: dino_v1_onnx"
+              maxlength="64"
+          /></label>
+          <div class="e2e-note">
+            <strong>変換時に出力を検証</strong>
+            <p>
+              ONNX checkerとONNX
+              Runtimeで数値を比較し、成功したモデルだけをライブラリへ追加します。
+            </p>
+            <p>前処理・出力モード・SHA256をmetadataに保存します。</p>
+          </div>
+          <button id="e2e-start-export" class="primary full">
+            ONNXをexport
+          </button>
+        </section>
+        <section id="e2e-pane-push" class="learning-form" hidden>
+          <h2>検証済みモデルをJetsonへ送信</h2>
+          <label>ONNXモデル<select id="e2e-push-model"></select></label>
+          <div class="e2e-note">
+            <strong id="e2e-remote">Jetson接続未設定</strong>
+            <p id="e2e-model-root"></p>
+            <p>
+              ONNXとmetadataをSCPで送信し、転送先でSHA256を検証。新規フォルダへ保存します。
+            </p>
+          </div>
+          <p class="help">
+            保存先は既存のディレクトリを指定してください。TensorRT
+            engineはJetsonで生成します。転送だけでは走行を開始しません。
+          </p>
+          <button id="e2e-start-push" class="primary full">
+            Jetsonへ転送 ↑
+          </button>
+          <button id="e2e-connection" class="quiet full">Jetson接続設定</button>
+        </section>
+        <aside class="learning-library">
+          <div class="section-title">
+            <strong id="e2e-library-title">データセット</strong>
+          </div>
+          <div id="e2e-library" class="scroll list"></div>
+          <div class="library-foot">
+            実行中の進捗・ログ・中止は下部の「ログ・履歴」から確認できます。<br /><span
+              id="e2e-storage"
+            ></span>
+          </div>
+        </aside>
+      </div>
+    </main>
+    <dialog id="e2e-settings-dialog">
+      <div class="dialog-heading">
+        <h2>学習環境 · Notebook</h2>
+        <button id="e2e-settings-close">×</button>
+      </div>
+      <label
+        >Python実行ファイル<input
+          id="e2e-setting-python"
+          placeholder="/workspaces/.venv/e2e/bin/python3"
+      /></label>
+      <label
+        >DINOv3ソース<input
+          id="e2e-setting-encoder_repo"
+          placeholder="/workspaces/python_ws/dinov3"
+      /></label>
+      <label
+        >公式事前学習重み<input
+          id="e2e-setting-weights"
+          placeholder="/workspaces/weights/dinov3/dinov3_vits16_pretrain_lvd1689m-08c60483.pth"
+      /></label>
+      <div class="form-grid">
+        <label
+          >学習device<select id="e2e-setting-device">
+            <option value="cuda">cuda</option>
+            <option value="cpu">cpu</option>
+          </select></label
+        >
+      </div>
+      <label
+        >Jetsonモデル保存先<input
+          id="e2e-setting-model_root"
+          placeholder="/home/tamiya/workspaces/kart/models"
+      /></label>
+      <p class="help">
+        ROSをsourceしたNotebookの環境でUIを起動します。Pythonには学習・ONNX変換の依存を導入してください。入力するパスはUIサーバー側のパスです。
+      </p>
+      <button id="e2e-settings-save" class="primary full">設定を保存</button>
+    </dialog>
+
+    <footer>
+      <button id="jobs-toggle">
+        <span id="job-dot"></span
+        ><span id="job-summary">処理は実行されていません</span
+        ><span class="muted">ログ・履歴 ↑</span></button
+      ><span>Kart Map Studio</span>
+    </footer>
+    <section id="jobs-drawer" hidden>
+      <div class="section-title">
+        <strong>処理とログ</strong><button id="jobs-close">閉じる</button>
+      </div>
+      <div class="job-columns">
+        <div id="job-list" class="scroll"></div>
+        <pre id="job-log">処理を選ぶとログを表示します。</pre>
+      </div>
+    </section>
+    <div id="toast" role="status" hidden></div>
+    <dialog id="connection-dialog">
+      <form id="connection-form">
+        <div class="dialog-title">
+          <h2>Jetson接続設定</h2>
+          <button type="button" data-close="connection-dialog">×</button>
+        </div>
+        <p class="help">NotebookでSSH鍵とknown_hostsを準備してください。</p>
+        <div class="form-grid">
+          <label
+            >ユーザー<input name="user" required placeholder="tamiya" /></label
+          ><label
+            >ホスト<input
+              name="host"
+              required
+              placeholder="192.168.11.190" /></label
+          ><label
+            >SSHポート<input
+              name="port"
+              type="number"
+              value="22"
+              min="1"
+              max="65535"
+          /></label>
+        </div>
+        <label>Jetsonのrecordルート<input name="record_root" required /></label
+        ><label>Jetsonのmapルート<input name="map_root" required /></label>
+        <div class="dialog-actions">
+          <button class="primary">設定を保存</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="build-dialog">
+      <form id="build-form">
+        <div class="dialog-title">
+          <h2>bagからVSLAM地図を作成</h2>
+          <button type="button" data-close="build-dialog">×</button>
+        </div>
+        <p class="help" id="build-environment"></p>
+        <div class="form-grid">
+          <label
+            >地図名<input
+              name="name"
+              required
+              pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}"
+              placeholder="course_01" /></label
+          ><label>走行記録<select name="bag" required></select></label>
+        </div>
+        <p class="note">
+          NVIDIA公式offline処理（Stereo）でVSLAM地図を保存します。点群取得・HDMap編集は後続工程です。
+        </p>
+        <details>
+          <summary>カメラtopic・TF・ROS domain</summary>
+          <div class="form-grid" id="build-detail-fields"></div>
+        </details>
+        <div class="note">
+          画像はrectified入力として扱います。深度・占有地図・cuVGL生成は実行しません。
+        </div>
+        <div class="dialog-actions">
+          <button class="primary" id="build-submit">地図作成を開始</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="import-dialog">
+      <form id="import-form">
+        <div class="dialog-title">
+          <h2>点群snapshotを読み込む</h2>
+          <button type="button" data-close="import-dialog">×</button>
+        </div>
+        <label
+          >地図名<input
+            name="name"
+            required
+            pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,63}"
+            placeholder="course_01" /></label
+        ><label
+          >このサーバー上のJSON絶対パス<input
+            name="path"
+            required
+            placeholder="/path/to/snapshot.json"
+        /></label>
+        <p class="help">
+          Kart snapshot、またはlandmarksと必要なTFを含むJetPilot reference
+          snapshotに対応します。
+        </p>
+        <div class="dialog-actions">
+          <button class="primary">読み込む</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="line-settings-dialog">
+      <form id="line-settings-form">
+        <div class="dialog-title">
+          <h2>ライン生成設定</h2>
+          <button type="button" data-close="line-settings-dialog">×</button>
+        </div>
+        <div class="form-grid" id="line-setting-fields"></div>
+        <p class="help">
+          開路の始終点は速度0。曲率・加速・減速の上限から速度を計算します。
+        </p>
+        <div class="dialog-actions">
+          <button class="primary">設定を適用</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="speed-dialog">
+      <form id="speed-form">
+        <div class="dialog-heading">
+          <h2>Customlineの区間速度</h2>
+          <button type="button" data-close="speed-dialog">×</button>
+        </div>
+        <p id="speed-length" class="help"></p>
+        <p class="help">
+          始点からの距離で指定。重なった区間は低い上限を採用します。閉路は開始
+          &gt; 終了で始点を跨げます。
+        </p>
+        <div class="speed-columns">
+          <span>開始 m</span><span>終了 m</span><span>上限 m/s</span
+          ><span></span>
+        </div>
+        <div id="speed-rows" class="scroll"></div>
+        <button id="speed-add" type="button" class="quiet">
+          ＋ 区間を追加
+        </button>
+        <p class="help">
+          区間の前から減速します。点を編集しても指定距離は維持されます。適用後にCustomlineを再生成してください。
+        </p>
+        <button type="submit" class="primary full">区間設定を適用</button>
+      </form>
+    </dialog>
+    <dialog id="registration-dialog">
+      <form id="registration-form">
+        <div class="dialog-heading">
+          <h2>HDMapの位置合わせ</h2>
+          <button type="button" data-close="registration-dialog">×</button>
+        </div>
+        <p class="help">
+          選択中の地図を適用先にします。元地図の全lane・全ライン・区間速度を取り込み、現在の編集内容を置き換えます。
+        </p>
+        <label
+          >元のHDMap<select
+            name="source"
+            id="registration-source"
+            required
+          ></select
+        ></label>
+        <div class="form-grid">
+          <label
+            >X移動 (m)<input
+              name="x"
+              type="number"
+              value="0"
+              step="0.01"
+              required /></label
+          ><label
+            >Y移動 (m)<input
+              name="y"
+              type="number"
+              value="0"
+              step="0.01"
+              required /></label
+          ><label
+            >ヨー回転 (度)<input
+              name="yaw"
+              type="number"
+              value="0"
+              min="-360"
+              max="360"
+              step="0.1"
+              required
+          /></label>
+        </div>
+        <p class="help">
+          元地図の原点を中心に反時計回りに回転し、その後XY移動します。適用先の点群・VSLAM地図は保持します。
+        </p>
+        <button class="primary full" type="submit">点群上でプレビュー</button>
+      </form>
+    </dialog>
+    <div id="registration-preview-bar" hidden>
+      <strong>水色: 位置合わせプレビュー</strong
+      ><button id="registration-adjust">調整</button
+      ><button id="registration-cancel">戻る</button
+      ><button id="registration-apply" class="primary">この位置で保存</button>
+    </div>
+    <dialog id="delete-map-dialog">
+      <h2>地図をごみ箱へ移動</h2>
+      <p id="delete-map-description"></p>
+      <p class="help">
+        点群・VSLAM地図・HDMap・各ライン・exportをまとめて移動します。元のbagとJetson側データは残ります。
+      </p>
+      <div class="actions">
+        <button data-close="delete-map-dialog">キャンセル</button
+        ><button id="delete-map-confirm">ごみ箱へ移動</button>
+      </div>
+    </dialog>
+    <dialog id="lane-dialog">
+      <form id="lane-form">
+        <div class="dialog-heading">
+          <h2>laneを追加</h2>
+          <button type="button" data-close="lane-dialog">×</button>
+        </div>
+        <label
+          >lane ID<input
+            name="lane_id"
+            required
+            maxlength="64"
+            pattern="[A-Za-z0-9][A-Za-z0-9_-]*"
+            placeholder="例: main / shortcut" /></label
+        ><label
+          ><input
+            type="checkbox"
+            name="duplicate"
+          />選択中のlaneの境界・Custom編集点をコピー</label
+        >
+        <p class="help">
+          IDは地図内で一意。英数字・_・-を使用します。生成ラインは各laneで生成します。
+        </p>
+        <button class="primary" type="submit">追加</button>
+      </form>
+    </dialog>
+    <dialog id="lane-remove-dialog">
+      <h2>laneを削除</h2>
+      <p id="lane-remove-description"></p>
+      <p class="help">
+        このlaneの境界・オフラインラインを削除します。保存前のUndoで戻せます。
+      </p>
+      <div class="actions">
+        <button data-close="lane-remove-dialog">キャンセル</button
+        ><button id="lane-remove-confirm">laneを削除</button>
+      </div>
+    </dialog>
+    <dialog id="copy-map-dialog">
+      <div class="dialog-heading">
+        <h2>地図を複製</h2>
+        <button data-close="copy-map-dialog">×</button>
+      </div>
+      <p id="copy-map-source"></p>
+      <p class="muted">
+        点群・VSLAM地図と全lane・生成ラインを引き継ぎます。VSLAMの再実行は不要です。
+      </p>
+      <label
+        >新しい地図名<input
+          id="copy-map-name"
+          maxlength="64"
+          placeholder="course_v2"
+      /></label>
+      <p class="muted">
+        未保存の編集は元地図に保存してから複製します。ファイルを独立してコピーするため、その分の空き容量が必要です。
+      </p>
+      <div class="dialog-actions">
+        <button data-close="copy-map-dialog">キャンセル</button
+        ><button id="copy-map-confirm" class="primary">保存して複製</button>
+      </div>
+    </dialog>
+    <dialog id="capture-dialog">
+      <div class="dialog-heading">
+        <h2>HDMap用点群を取得</h2>
+        <button data-close="capture-dialog">×</button>
+      </div>
+      <p>
+        保存済みVSLAM地図を可視化ありで読み込み、地図生成に使ったbagを再生します（既定1倍）。
+      </p>
+      <label>地図生成に使ったbag<select id="capture-bag"></select></label>
+      <p class="note">
+        原点付近からの自己位置合わせ成功と末尾TFを確認して保存します。元のVSLAM地図は変更しません。CUDA対応Linuxが必要です。
+      </p>
+      <div class="dialog-actions">
+        <button data-close="capture-dialog">キャンセル</button
+        ><button id="capture-start" class="primary">点群取得を開始</button>
+      </div>
+    </dialog>
+    <dialog id="trash-dialog">
+      <div class="dialog-heading">
+        <h2>地図のごみ箱</h2>
+        <button data-close="trash-dialog">×</button>
+      </div>
+      <p class="help">
+        地図フォルダ一式を保持しています。復元は同名地図を上書きしません。
+      </p>
+      <div id="trash-list" class="scroll"></div>
+    </dialog>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

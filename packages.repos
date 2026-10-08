@@ -1,0 +1,6 @@
+repositories:
+  tools/isaac-ros-cli:
+    type: git
+    url: https://github.com/carbuncle01/isaac-ros-cli.git
+    # Development branch: kart (Isaac ROS 5.0 base)
+    version: dff97a3af51ec40f8d0a92e65220391ec735a041

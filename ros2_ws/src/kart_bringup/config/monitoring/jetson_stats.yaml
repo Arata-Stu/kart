@@ -1,0 +1,10 @@
+# ROS package: isaac_ros_jetson_stats / executable: jtop
+# APT: ros-lyrical-isaac-ros-jetson-stats; installed version unverified on macOS.
+# Isaac ROS release-5.0 commit 0f311a1dcd1164aec7b75648df336e45fb53ffa2, checked 2026-10-08.
+# Source: https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_jetson/blob/0f311a1dcd1164aec7b75648df336e45fb53ffa2/isaac_ros_jetson_stats/isaac_ros_jetson_stats/ros2_jtop_node.py
+# All independent node parameters: interval. Common ROS parameters omitted except use_sim_time.
+# kart: dedicated diagnostics remap in module launch; no aggregator or hardware-control calls.
+/**/jtop:
+  ros__parameters:
+    interval: 0.5  # Seconds; actual jtop server sampling interval may differ.
+    use_sim_time: false  # Live hardware measurements, even while replaying a bag.
