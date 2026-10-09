@@ -181,8 +181,11 @@ kart CLIの既存設定は`/dev/input`ディレクトリをマウントする。
 既存のDocker設定を利用し、新たな`/dev`全体のマウントは追加していない。
 USB/ Bluetoothの接続・ペアリングはJetsonホスト側で行う。
 コンテナの実行ユーザーに対象デバイスの読み取り権限が必要。
-`ls -ln /dev/input/event*` と `id`で確認し、必要なinputグループの数値GIDをDockerの
-`--group-add`で渡す。権限不足はノードのstatusに表示する。
+`scripts/dev.sh`はホストのinputグループと`/dev/input/event*`の所有GIDを取得し、
+`--group-add`を実行時に追加する。x86_64では存在する`/dev/input`もマウントする。
+変更の反映には既存コンテナを停止して`dev.sh`で再作成する。イメージ再ビルドは不要。
+`isaac-ros activate`を直接実行すると、この自動設定は適用されない。
+`ls -ln /dev/input/event*` と `id`で確認できる。権限不足はノードのstatusに表示する。
 
 ## 検証
 

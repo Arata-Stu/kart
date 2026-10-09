@@ -420,9 +420,9 @@ ros2 topic echo /joy
 ros2 run kart_joy kart_joy_config cui
 ```
 
-入力権限が不足する場合は、ホストで`getent group input`と対象eventの数値GIDを確認し、
-`docker/dockerargs`へ`--group-add 数値GID`を追加してコンテナを再作成する。
-CLIは`/dev/input`をマウントするが、ホストユーザーの補助グループをすべて自動継承するわけではない。
+`dev.sh`がホストのinputグループとeventデバイスの所有GIDを読み、補助グループへ自動追加する。
+古いコンテナはホストで`docker stop kart_dev`後、`./scripts/dev.sh`で再作成する。
+イメージ再ビルドや固定GIDの手動記載は不要。新たなデバイスが別GIDで作成された場合も再作成する。
 詳細・GUI・入力確認は[kart_joy README](../../ros2_ws/src/kart_joy/README.md)を参照。
 
 ## 9. USB bridge・RealSenseの確認へ進む

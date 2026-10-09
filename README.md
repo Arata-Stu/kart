@@ -86,7 +86,8 @@ CLI更新は、kart本体・`packages.repos`を更新後に`./scripts/update-isa
 ビルド依存導入・固定commit取得・debビルド・インストールを行う。
 詳細は[セットアップREADME](docs/setup/jetson.md#cliを後から更新する)を参照。
 
-通常の起動は `./scripts/dev.sh`。コンテナ内では次の配置になる。
+通常の起動は `./scripts/dev.sh`。ホストのinputグループ・evdev所有GIDを補助グループへ自動追加する。
+既存コンテナへのattachでは反映されないため、初回反映は停止後に再作成する。コンテナ内では次の配置になる。
 
 ```text
 /workspaces/                # ホストのkart全体を1回だけマウント
@@ -279,6 +280,7 @@ CycloneDDS (`rmw_cyclonedds_cpp`) を最後のkartレイヤーで導入する。
 XMLはDockerfileへCOPYしないため、値だけの変更ではイメージ再ビルド不要。
 
 - `lo` / IPv4のみで通信し、探索先は127.0.0.1。multicastは使わない。
+  CycloneDDSの`Transport`には`udp`を指定する（`udp4`は無効）。
 - `ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST`。外部static peerは指定しない。
 - `ParticipantIndex=auto`。多数のプロセスで探索上限に当たる場合は実測して調整する。
 - `MaxMessageSize`・送受信バッファ・WHCはCycloneDDS既定値。

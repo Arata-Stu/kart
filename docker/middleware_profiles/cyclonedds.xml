@@ -7,7 +7,8 @@
       </Interfaces>
       <!-- Use loopback unicast; no host multicast or sysctl changes needed. -->
       <AllowMulticast>false</AllowMulticast>
-      <Transport>udp4</Transport>
+      <!-- CycloneDDS uses udp for IPv4 and udp6 for IPv6. -->
+      <Transport>udp</Transport>
     </General>
     <Discovery>
       <ParticipantIndex>auto</ParticipantIndex>
