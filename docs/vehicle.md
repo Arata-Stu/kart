@@ -85,7 +85,6 @@ colcon再ビルドとノード再起動、YAML変更はノード再起動で反�
 
 ```bash
 cd /workspaces/ros2_ws
-rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install --packages-up-to kart_bringup
 source install/setup.bash
 colcon test --packages-select kart_system kart_vehicle kart_joy

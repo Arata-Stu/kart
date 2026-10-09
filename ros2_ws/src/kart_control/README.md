@@ -69,9 +69,15 @@ package configは単独起動用。use_sim_timeのみROS共通。
 
 ## 起動・container
 
+`ackermann_msgs`が必須。`package.xml`の依存に加え、CMakeでもComponentライブラリへ
+明示的に依存を設定する。kartのDockerイメージには`ros-lyrical-ackermann-msgs`を導入する。
+通常はDockerイメージに依存を導入済みのため、`rosdep install`は不要。
+依存導入前の既存コンテナで一時的に補完する場合だけ`rosdep install --from-paths src --ignore-src -r -y`を使う。
+ヘッダー未検出が続く場合は`ros2 pkg prefix ackermann_msgs`で参照先を確認し、
+`/workspaces/scripts/build.sh --packages-select kart_control --cmake-clean-cache`でCMake設定を再生成する。
+
 ```bash
 cd ros2_ws
-rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install --packages-up-to kart_control kart_hdmap kart_bringup
 source install/setup.bash
 ros2 launch kart_bringup tracking.launch.py map_file:=/data/maps/course/map.json lane_id:=main

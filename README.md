@@ -116,7 +116,8 @@ source /workspaces/ros2_ws/install/setup.bash
 ```
 
 プロジェクトルートからは`./scripts/build.sh`、`ros2_ws`からは`../scripts/build.sh`でも実行できる。
-初回や依存追加時は、先に`ros2_ws`で`rosdep install --from-paths src --ignore-src -r -y`を実行する。
+ROSワークスペースの外部依存はDockerfileで導入するため、通常はコンテナ内の`rosdep install`は不要。
+依存追加時は`package.xml`と`docker/Dockerfile.kart`を更新し、Dockerイメージを再ビルドする。
 
 ## カスタマイズの分担
 

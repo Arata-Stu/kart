@@ -355,14 +355,14 @@ ros2 pkg prefix realsense2_camera
 /usr/bin/python3 -c 'import tensorrt; print(tensorrt.__version__)'
 nvidia-smi
 
-rosdep install --from-paths src --ignore-src -r -y
-colcon build --symlink-install
+/workspaces/scripts/build.sh
 source install/setup.bash
 colcon test --packages-select kart_system kart_vehicle kart_joy
 colcon test-result --verbose
 ```
 
-`rosdep`が未初期化と表示された場合だけ、コンテナ内で`sudo rosdep init`、`rosdep update`を実行して再試行する。
+ワークスペースの外部依存はDockerイメージへ導入済みとする。通常は`rosdep install`不要。
+依存を追加した場合は`package.xml`と`docker/Dockerfile.kart`を更新してイメージを再ビルドする。
 TensorRTのimportはPython依存確認、`nvidia-smi`はGPU可視性確認であり、実際のcuVSLAM・推論実行成功とは別。
 ROSノードはシステムPythonで起動する。`/opt/inference`は推論用で、自動activateしない。
 
