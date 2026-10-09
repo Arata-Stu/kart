@@ -13,7 +13,7 @@ COPY --from=uv /uv /usr/local/bin/uv
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update \
     && apt-get install -y --no-install-recommends \
-        git python3-venv python3-dev build-essential \
+        git python3-venv python3-dev build-essential bluez \
         tensorrt python3-libnvinfer \
         ros-lyrical-rmw-cyclonedds-cpp \
         ros-lyrical-foxglove-bridge \

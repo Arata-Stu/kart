@@ -6,3 +6,9 @@
 -e CYCLONEDDS_URI=file:///workspaces/docker/middleware_profiles/cyclonedds.xml
 -e ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
 -e ROS_STATIC_PEERS=
+
+# Bluetooth client talks to the Linux host's bluetoothd through its system bus.
+# A directory bind survives socket recreation. Read-only protects filesystem
+# entries, NOT D-Bus method calls; this exposes the host system bus to the dev container.
+--mount type=bind,source=/run/dbus,target=/run/dbus,readonly
+-e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket

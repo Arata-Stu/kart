@@ -368,24 +368,36 @@ ROSノードはシステムPythonで起動する。`/opt/inference`は推論用�
 
 ## 8. DualSense接続・初回profile
 
-USB接続またはBluetoothペアリングはJetsonホスト側で行う。
+Bluetoothを管理するbluetoothdはJetsonホスト側で動かす。
+kart Dockerからも共有D-Bus経由で同じサービスを操作できる。
 Bluetoothの場合はDualSenseのCreate＋PSを長押ししてペアリングモードにし、UbuntuのBluetooth設定から接続する。
-CLIを使う場合はホストのkartルートで以下を実行する。`bluetoothctl`がなければ
+CLIを使う場合はホストのkartルート、またはkart Dockerの`/workspaces`で以下を実行する。`bluetoothctl`がなければ
 ホストに`sudo apt install bluez`で導入する。
 
 ```bash
 ./scripts/bluetooth.sh --scan
-# 検出したDualSenseのMACへ置き換える
-./scripts/bluetooth.sh --pair AA:BB:CC:DD:EE:FF
+# JetPilotで使用していたPS5: 4C:B9:9B:E0:EF:24
+./scripts/bluetooth.sh --pair
 # 次回以降はPSボタンを押して再接続
+./scripts/bluetooth.sh --connect
+./scripts/bluetooth.sh --status
+# 別個体ならMACを明示（またはKART_PS5_MACで既定値を変更）
 ./scripts/bluetooth.sh --connect AA:BB:CC:DD:EE:FF
-./scripts/bluetooth.sh --status AA:BB:CC:DD:EE:FF
 ```
 
 引数なしでは操作手順を表示して`bluetoothctl`の対話モードへ入る。
 `--pair`は選択したMACをペアリングし、trustを設定して接続する。
 `--connect`は接続後の`Connected: yes`を確認する。接続表示は入力の遅延・鮮度の保証ではない。
-このスクリプトのBluetooth実機動作は未確認。
+Docker利用時は更新したimageを`./scripts/dev.sh --build-local`でbuildし、既存コンテナも再作成する。
+`docker/dockerargs`はホストの`/run/dbus`を共有し、image内の`bluetoothctl`からホストのBlueZを操作する。
+ホストで`systemctl is-active bluetooth`がactiveであることを確認する。
+未起動ならホストで`sudo systemctl start bluetooth`。コンテナ内にbluetoothdを二重起動しない。
+`AccessDenied`等の権限エラー時は、同じkartコンテナ内で`sudo ./scripts/bluetooth.sh --connect`を試す。
+ペアリング情報はホスト側へ保存され、コンテナ再作成後も保持される。
+D-Bus directoryはread-only mountだが、APIによるホスト状態の変更は可能。Bluetooth専用の隔離ではない。
+接続後のROS Joy入力には`/dev/input`の共有・権限も必要（現行Jetson CLIで共有済み）。
+macOS Docker DesktopのBluetooth対応は対象外。
+このスクリプトのホスト／Docker Bluetooth実機動作は未確認。
 接続後、ホストとコンテナ双方で`ls -ln /dev/input/event*`を確認する。
 
 コンテナ内:
