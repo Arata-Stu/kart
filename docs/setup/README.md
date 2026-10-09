@@ -370,6 +370,22 @@ ROSノードはシステムPythonで起動する。`/opt/inference`は推論用�
 
 USB接続またはBluetoothペアリングはJetsonホスト側で行う。
 Bluetoothの場合はDualSenseのCreate＋PSを長押ししてペアリングモードにし、UbuntuのBluetooth設定から接続する。
+CLIを使う場合はホストのkartルートで以下を実行する。`bluetoothctl`がなければ
+ホストに`sudo apt install bluez`で導入する。
+
+```bash
+./scripts/bluetooth.sh --scan
+# 検出したDualSenseのMACへ置き換える
+./scripts/bluetooth.sh --pair AA:BB:CC:DD:EE:FF
+# 次回以降はPSボタンを押して再接続
+./scripts/bluetooth.sh --connect AA:BB:CC:DD:EE:FF
+./scripts/bluetooth.sh --status AA:BB:CC:DD:EE:FF
+```
+
+引数なしでは操作手順を表示して`bluetoothctl`の対話モードへ入る。
+`--pair`は選択したMACをペアリングし、trustを設定して接続する。
+`--connect`は接続後の`Connected: yes`を確認する。接続表示は入力の遅延・鮮度の保証ではない。
+このスクリプトのBluetooth実機動作は未確認。
 接続後、ホストとコンテナ双方で`ls -ln /dev/input/event*`を確認する。
 
 コンテナ内:

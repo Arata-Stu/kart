@@ -25,6 +25,8 @@ ROSを使う場合は`colcon build --symlink-install --packages-up-to kart_mappi
 自動運転アルゴリズムは未実装。ROS結合ビルドおよびRealSense・Joy・車両の実機動作は未検証。
 
 Joyノードのビルド・GUI/CUI設定手順は [kart_joy README](ros2_ws/src/kart_joy/README.md) を参照。
+DualSenseのBluetooth接続はLinuxホスト側の`./scripts/bluetooth.sh`を使う。
+検索・ペアリング・再接続は[セットアップ手順](docs/setup/README.md#8-dualsense接続初回profile)を参照。
 
 車両連携の構成・ビルド・起動・操作は [vehicle基盤](docs/vehicle.md) を参照。
 
