@@ -375,9 +375,9 @@ CLIを使う場合はホストのkartルート、またはkart Dockerの`/worksp
 ホストに`sudo apt install bluez`で導入する。
 
 ```bash
-./scripts/bluetooth.sh --scan
 # JetPilotで使用していたPS5: 4C:B9:9B:E0:EF:24
-./scripts/bluetooth.sh --pair
+# 初回はCreate＋PS長押し、次回はPSで電源ON
+./scripts/bluetooth.sh
 # 次回以降はPSボタンを押して再接続
 ./scripts/bluetooth.sh --connect
 ./scripts/bluetooth.sh --status
@@ -385,8 +385,10 @@ CLIを使う場合はホストのkartルート、またはkart Dockerの`/worksp
 ./scripts/bluetooth.sh --connect AA:BB:CC:DD:EE:FF
 ```
 
-引数なしでは操作手順を表示して`bluetoothctl`の対話モードへ入る。
-`--pair`は選択したMACをペアリングし、trustを設定して接続する。
+引数なしは既定PS5へ自動接続する。登録済みは再接続を優先し、未登録／再接続失敗時は
+15秒検索→必要な場合だけpair→trust→connectを行い、接続を確認する。
+既存bondは削除しない。任意MACは`--auto MAC`、手動対話は`--interactive`。
+`--pair`は検索し、未ペアリングの場合だけpairしてtrust・接続する。
 `--connect`は接続後の`Connected: yes`を確認する。接続表示は入力の遅延・鮮度の保証ではない。
 Docker利用時は更新したimageを`./scripts/dev.sh --build-local`でbuildし、既存コンテナも再作成する。
 `docker/dockerargs`はホストの`/run/dbus`を共有し、image内の`bluetoothctl`からホストのBlueZを操作する。
