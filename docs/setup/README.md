@@ -375,29 +375,24 @@ CLIを使う場合はホストのkartルート、またはkart Dockerの`/worksp
 ホストに`sudo apt install bluez`で導入する。
 
 ```bash
-# JetPilotで使用していたPS5: 4C:B9:9B:E0:EF:24
-# 初回はCreate＋PS長押し、次回はPSで電源ON
-./scripts/bluetooth.sh
-# 次回以降はPSボタンを押して再接続
-./scripts/bluetooth.sh --connect
-./scripts/bluetooth.sh --status
-# 別個体ならMACを明示（またはKART_PS5_MACで既定値を変更）
-./scripts/bluetooth.sh --connect AA:BB:CC:DD:EE:FF
+bash ./scripts/bluetooth.sh
 ```
 
-引数なしは既定PS5へ自動接続する。端末では準備後Enterを押す。
-JetPilot同様、1つのbluetoothctlセッションでagent・15秒検索・trust・必要な場合だけpair・connectを行う。
-pairの待機30秒、connectの待機10秒を含み、初回は約1分かかる。登録済みはpairを省略する。
-工程ごとにbluetoothctlを終了しない。最後に別のinfo要求でPaired/Trusted/Connectedを確認し、揃わなければ失敗とする。
-固定待機は非同期処理の完了を保証しない。実機の処理が待機時間を超える場合はログで切り分ける。
-既存bondは削除しない。任意MACは`--auto MAC`、手動対話は`--interactive`。
-`--pair`は検索し、未ペアリングの場合だけpairしてtrust・接続する。
-`--connect`は接続後の`Connected: yes`を確認する。接続表示は入力の遅延・鮮度の保証ではない。
+JetPilotの`scripts/bluetooth.sh`を変更せずコピーして使用する。
+メニューで`2`を選ぶとPS5 DualSense（`4C:B9:9B:E0:EF:24`）、
+`1`はPS4、`3`はMAC手入力。DualSenseはCreate＋PS長押しでペアリングモードにし、Enterを押す。
+元スクリプトどおり、選択したMACの登録をremoveしてからscan→pair→trust→connectを行う。
+`sudo bluetoothctl`を使用する。旧kart版の`--connect`・`--status`等の引数には対応しない。
+完了表示は接続状態の自動検証ではない。必要に応じて次で確認する。
+
+```bash
+bluetoothctl info 4C:B9:9B:E0:EF:24
+```
+
 Docker利用時は更新したimageを`./scripts/dev.sh --build-local`でbuildし、既存コンテナも再作成する。
 `docker/dockerargs`はホストの`/run/dbus`を共有し、image内の`bluetoothctl`からホストのBlueZを操作する。
 ホストで`systemctl is-active bluetooth`がactiveであることを確認する。
 未起動ならホストで`sudo systemctl start bluetooth`。コンテナ内にbluetoothdを二重起動しない。
-`AccessDenied`等の権限エラー時は、同じkartコンテナ内で`sudo ./scripts/bluetooth.sh --connect`を試す。
 ペアリング情報はホスト側へ保存され、コンテナ再作成後も保持される。
 D-Bus directoryはread-only mountだが、APIによるホスト状態の変更は可能。Bluetooth専用の隔離ではない。
 接続後のROS Joy入力には`/dev/input`の共有・権限も必要（現行Jetson CLIで共有済み）。
