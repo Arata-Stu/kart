@@ -385,8 +385,11 @@ CLIを使う場合はホストのkartルート、またはkart Dockerの`/worksp
 ./scripts/bluetooth.sh --connect AA:BB:CC:DD:EE:FF
 ```
 
-引数なしは既定PS5へ自動接続する。登録済みは再接続を優先し、未登録／再接続失敗時は
-15秒検索→必要な場合だけpair→trust→connectを行い、接続を確認する。
+引数なしは既定PS5へ自動接続する。端末では準備後Enterを押す。
+JetPilot同様、1つのbluetoothctlセッションでagent・15秒検索・trust・必要な場合だけpair・connectを行う。
+pairの待機30秒、connectの待機10秒を含み、初回は約1分かかる。登録済みはpairを省略する。
+工程ごとにbluetoothctlを終了しない。最後に別のinfo要求でPaired/Trusted/Connectedを確認し、揃わなければ失敗とする。
+固定待機は非同期処理の完了を保証しない。実機の処理が待機時間を超える場合はログで切り分ける。
 既存bondは削除しない。任意MACは`--auto MAC`、手動対話は`--interactive`。
 `--pair`は検索し、未ペアリングの場合だけpairしてtrust・接続する。
 `--connect`は接続後の`Connected: yes`を確認する。接続表示は入力の遅延・鮮度の保証ではない。

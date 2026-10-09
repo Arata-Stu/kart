@@ -15,7 +15,7 @@ Dockerではホストの/run/dbus共有とbluez導入が必要（kart Docker設�
   --auto [MAC]   指定MACへ自動接続
   --interactive bluetoothctlの対話モードを開く
   --scan         15秒間デバイスを検索する
-  --pair [MAC]    ペアリング・trust・接続（各操作最大30秒）
+  --pair [MAC]    検索・ペアリング・trust・接続
   --connect [MAC] 登録済みデバイスへ再接続
   --status [MAC]  デバイス情報を表示
   -h, --help     このヘルプを表示
@@ -82,41 +82,48 @@ HELP
   --status) exec bluetoothctl --timeout 10 info "$kart_controller_mac" ;;
   --auto|--pair|--connect)
     printf "DualSense: %s\n" "$kart_controller_mac"
-    bluetoothctl --timeout 10 power on
     kart_info=$(bluetoothctl --timeout 10 info "$kart_controller_mac" || true)
     if [[ "$kart_info" == *'Connected: yes'* ]]; then
       printf '%s\n接続済みです。\n' "$kart_info"
       exit 0
     fi
-    if [[ "$kart_mode" == --auto && "$kart_info" == *'Paired: yes'* ]]; then
-      echo '登録済みPS5へ再接続します。PSボタンで電源を入れてください。'
-      bluetoothctl --timeout 30 connect "$kart_controller_mac" || true
-      kart_info=$(bluetoothctl --timeout 10 info "$kart_controller_mac" || true)
-      if [[ "$kart_info" == *'Connected: yes'* ]]; then
-        printf '%s\n接続を確認しました。\n' "$kart_info"
-        exit 0
-      fi
+    echo '初回はCreate＋PS長押し、登録済みならPSボタンで電源を入れてください。'
+    if [[ -t 0 ]]; then
+      read -r -p '準備ができたらEnterを押してください: ' _
     fi
-    if [[ "$kart_mode" != --connect ]]; then
-      echo '15秒間検索します。初回はCreate＋PSを長押ししてライトを点滅させてください。'
-      bluetoothctl --timeout 15 scan on
-      kart_info=$(bluetoothctl --timeout 10 info "$kart_controller_mac" || true)
-      # Do not pair an already paired device: some BlueZ versions remove its old bond.
-      if [[ "$kart_info" != *'Paired: yes'* ]]; then
-        bluetoothctl --agent NoInputNoOutput --timeout 30 pair "$kart_controller_mac"
-        kart_info=$(bluetoothctl --timeout 10 info "$kart_controller_mac" || true)
+    # JetPilot's single-session command stream keeps the discovery client and
+    # pairing agent alive through trust/connect. Do not remove an existing bond.
+    # Waits allow asynchronous bluetoothctl commands to complete; only the final
+    # device state below determines success, not pipeline exit status.
+    if ! {
+      printf 'power on\nagent NoInputNoOutput\ndefault-agent\n'
+      sleep 2
+      if [[ "$kart_mode" != --connect ]]; then
+        printf 'scan on\n'
+        sleep 15
+        printf 'scan off\n'
+        sleep 1
+        # Trust while the discovered device is available, before HID reconnects.
+        printf 'trust %s\n' "$kart_controller_mac"
+        sleep 2
         if [[ "$kart_info" != *'Paired: yes'* ]]; then
-          echo 'ペアリングを確認できません。Create＋PSでペアリングモードにして再実行してください。' >&2
-          exit 1
+          printf 'pair %s\n' "$kart_controller_mac"
+          sleep 30
         fi
       fi
-      bluetoothctl --timeout 10 trust "$kart_controller_mac"
+      printf 'trust %s\n' "$kart_controller_mac"
+      sleep 2
+      printf 'connect %s\n' "$kart_controller_mac"
+      sleep 10
+      printf 'info %s\nquit\n' "$kart_controller_mac"
+    } | bluetoothctl; then
+      echo 'bluetoothctlセッションが終了しました。最終状態を確認します。' >&2
     fi
-    bluetoothctl --timeout 30 connect "$kart_controller_mac"
-    kart_info=$(bluetoothctl --timeout 10 info "$kart_controller_mac")
+    kart_info=$(bluetoothctl --timeout 10 info "$kart_controller_mac" || true)
     printf '%s\n' "$kart_info"
-    if [[ "$kart_info" != *'Connected: yes'* ]]; then
-      echo '接続を確認できません。PSボタン・ホストのBluetoothサービス・rfkill状態を確認してください。' >&2
+    if [[ "$kart_info" != *'Connected: yes'* || "$kart_info" != *'Paired: yes'* || "$kart_info" != *'Trusted: yes'* ]]; then
+      echo 'Paired / Trusted / Connectedの全てを確認できませんでした。上のログを確認してください。' >&2
+      echo '状態確認: ./scripts/bluetooth.sh --status' >&2
       exit 1
     fi
     echo '接続を確認しました。'
