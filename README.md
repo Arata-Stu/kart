@@ -1,6 +1,6 @@
 # kart
 
-JetPack導入直後の初回準備は [JetsonセットアップREADME](docs/setup/README.md) を参照。
+初回準備: [セットアップ一覧](docs/setup/README.md) / [Jetsonセットアップ](docs/setup/jetson.md) / [x86_64 Ubuntuセットアップ](docs/setup/x86_64.md)。
 
 ## 地図UI: Kart Map Studio
 
@@ -27,7 +27,7 @@ ROSを使う場合は`colcon build --symlink-install --packages-up-to kart_mappi
 Joyノードのビルド・GUI/CUI設定手順は [kart_joy README](ros2_ws/src/kart_joy/README.md) を参照。
 DualSenseのBluetooth接続はLinuxホストまたはkart Docker内の`./scripts/bluetooth.sh`を使う。
 Dockerからは共有D-Bus経由でホストのBlueZを操作する。
-検索・ペアリング・再接続は[セットアップ手順](docs/setup/README.md#8-dualsense接続初回profile)を参照。
+検索・ペアリング・再接続は[セットアップ手順](docs/setup/jetson.md#8-dualsense接続初回profile)を参照。
 
 車両連携の構成・ビルド・起動・操作は [vehicle基盤](docs/vehicle.md) を参照。
 
@@ -84,7 +84,7 @@ JetPilotなど別プロジェクトと同じホストで使う場合は切替が
 
 CLI更新は、kart本体・`packages.repos`を更新後に`./scripts/update-isaac-ros-cli.sh`を実行する。
 ビルド依存導入・固定commit取得・debビルド・インストールを行う。
-詳細は[セットアップREADME](docs/setup/README.md#cliを後から更新する)を参照。
+詳細は[セットアップREADME](docs/setup/jetson.md#cliを後から更新する)を参照。
 
 通常の起動は `./scripts/dev.sh`。コンテナ内では次の配置になる。
 
