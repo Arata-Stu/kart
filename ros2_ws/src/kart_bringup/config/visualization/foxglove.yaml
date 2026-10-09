@@ -1,0 +1,63 @@
+# ROS package: foxglove_bridge; APT: ros-lyrical-foxglove-bridge.
+# Corresponding ROS release: 3.6.0-1 (Lyrical rosdistro, checked 2026-10-09).
+# Installed APT version / ROS integration unverified on macOS.
+# Source: https://github.com/ros2-gbp/foxglove_bridge-release/tree/release/lyrical/foxglove_bridge/3.6.0-1
+# Complete parameters from src/param_utils.cpp and include/foxglove_bridge/param_utils.hpp.
+# kart: exact telemetry allowlist, two client topics, VGL service only; no graph,
+# parameters, assets, images, feature clouds, tensors, cloud remote access or sysinfo.
+# Standard ROS-managed parameters omitted except use_sim_time. num_threads is not
+# declared by this release. Empty string arrays use the upstream never-match idiom.
+/**/foxglove_bridge:
+  ros__parameters:
+    use_sim_time: false
+    port: 8765  # WebSocket TCP port
+    address: '0.0.0.0'  # Notebook connects to Jetson's LAN address; no cloud gateway
+    debug: false
+    tls: false  # Local robot LAN; WSS requires certfile/keyfile
+    certfile: ''
+    keyfile: ''
+    topic_whitelist:
+      - '^/tf$'
+      - '^/tf_static$'
+      - '^/clock$'
+      - '^/hdmap/(markers|centerline|raceline|customline|selected_lane)$'
+      - '^/planning/reference_line$'
+      - '^/visual_slam/tracking/(odometry|vo_pose|vo_pose_covariance|vo_path|slam_path)$'
+      - '^/localization/(pose_hint|vslam/diagnostics|vgl/diagnostics)$'
+      - '^/visual_localization/trigger_localization$'
+      - '^/operation_mode/state$'
+      - '^/bag/status$'
+      - '^/system/jetson/diagnostics$'
+      - '^/control/(tracking_cmd|tracking_status|lookahead|speed_diagnostics)$'
+      - '^/e2e/(control_cmd|status)$'
+      - '^/auto/control_cmd$'
+      - '^/vehicle/(control_cmd|trim/state|rc_channels|output_channels|vbec|active_path)$'
+    client_topic_whitelist:  # Client -> ROS. No vehicle commands/mode/TF/bag writes.
+      - '^/localization/pose_hint$'
+      - '^/visual_localization/trigger_localization$'
+    service_whitelist: ['^/visual_localization/trigger_localization$']
+    param_whitelist: ['(?!)']
+    capabilities: [clientPublish, services]  # No graph discovery/parameter access/assets
+    include_hidden: false
+    min_qos_depth: 1
+    max_qos_depth: 10  # Bounded telemetry subscription queue (upstream default 25)
+    best_effort_qos_topic_whitelist: ['(?!)']  # Negotiate from publishers, preserve static TF
+    send_buffer_limit: 10000000  # Bytes; slow-client policy is upstream version dependent
+    message_backlog_size: 128  # Bounded outgoing queue (upstream default 1024)
+    use_compression: false  # Avoid CPU compression overhead
+    disable_load_message: true  # Upstream spelling: disable loaned client messages
+    asset_uri_allowlist: ['(?!)']
+    ignore_unresponsive_param_nodes: true
+    publish_client_count: false
+    sysinfo: false  # Use jtop diagnostics instead of a second system monitor
+    sysinfo_topic: /foxglove_bridge/sysinfo
+    sysinfo_refresh_interval: 500  # ms, inactive while sysinfo=false
+    remote_access: false
+    device_token: ''
+    foxglove_api_url: ''
+    video_encoder: auto  # Inactive with remote_access=false and no image topics
+    max_data_track_message_size: 102400  # Bytes; remote access only
+    video_transcode_topic_denylist: ['.*']
+    point_cloud_compression_topic_denylist: ['.*']
+    point_cloud_compression_quantization_bits: 12  # Inactive; compression disabled above
+    point_cloud_compression_method: kd-tree

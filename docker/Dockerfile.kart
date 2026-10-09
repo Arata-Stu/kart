@@ -16,6 +16,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         git python3-venv python3-dev build-essential \
         tensorrt python3-libnvinfer \
         ros-lyrical-rmw-cyclonedds-cpp \
+        ros-lyrical-foxglove-bridge \
         ros-lyrical-isaac-ros-cuvslam \
         ros-lyrical-isaac-ros-visual-global-localization \
         ros-lyrical-isaac-ros-visual-mapping \

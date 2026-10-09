@@ -28,7 +28,24 @@ function form(id, submit) {
 action("connection-open", () => {
   for (const [k, v] of Object.entries(state.config.connection))
     $("connection-form").elements[k].value = v;
+  const preset = $("connection-preset");
+  preset.replaceChildren(new Option("カスタム", ""));
+  for (const row of state.config.jetson_hosts.presets)
+    preset.add(new Option(row.label, row.host));
+  preset.value = state.config.connection.host;
   open("connection-dialog");
+});
+$("connection-preset").addEventListener("change", () => {
+  if ($("connection-preset").value)
+    $("connection-form").elements.host.value = $("connection-preset").value;
+});
+$("connection-form").elements.host.addEventListener("input", () => {
+  const host = $("connection-form").elements.host.value;
+  $("connection-preset").value = state.config.jetson_hosts.presets.some(
+    (p) => p.host === host,
+  )
+    ? host
+    : "";
 });
 form("connection-form", async (data) => {
   state.config.connection = await api("connection", data);

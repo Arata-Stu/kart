@@ -10,6 +10,7 @@
   <test_depend>ament_cmake_pytest</test_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>foxglove_bridge</exec_depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>kart_hdmap</exec_depend>
   <exec_depend>kart_control</exec_depend>

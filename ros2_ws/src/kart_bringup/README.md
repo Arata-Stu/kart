@@ -246,3 +246,13 @@ RAW記録はnative OpenEB writer、rosbagはMCAP writerとして独立する。
 イベントpacketとGPU tensor payloadは除外し、可視化Imageと診断を対象に加える。
 通常profileはRAW連携無効のまま。実カメラ・サービス結合は未確認。
 詳細は[kart_bag_manager README](../kart_bag_manager/README.md)を参照。
+
+## Foxglove Bridge
+
+`ros2 launch kart_bringup foxglove.launch.py`で独立プロセス`/foxglove_bridge`を一度起動する。
+vehicle/localization/e2eはBridgeを自動起動しない。コンテナの生成・loadは行わない。
+Docker依存へ`ros-lyrical-foxglove-bridge`を追加したためimage再buildが必要。
+接続は`ws://<Jetson IP>:8765`。地図・TF・軌跡・走行／録画状態・jtopのみ公開する。
+Foxgloveからの操作は`/localization/pose_hint`とVGL検索要求だけに限定する。
+ノードの全parameter既定値、入出力topic名・型、Foxglove操作、対応版・検証範囲は
+[visualization設定](config/visualization/README.md)と[全parameter YAML](config/visualization/foxglove.yaml)参照。

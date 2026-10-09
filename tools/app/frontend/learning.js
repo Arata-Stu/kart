@@ -161,7 +161,7 @@ action("e2e-start-export", () =>
   }),
 );
 action("e2e-start-push", async () => {
-  if (!state.config.connection.host) {
+  if (!state.config.connection.host || !state.config.connection.user) {
     $("connection-open").click();
     return;
   }

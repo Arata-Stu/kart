@@ -105,7 +105,18 @@ SSH/HTTPS認証は別途用意する必要がある。git worktreeで`.git`が�
 この作業時点のローカルkartには`.git`とremoteがなく、Git操作の実行確認はまだ行っていない。
 
 コンテナ内の対話BashはLyricalと、存在する場合はワークスペースのinstallをsourceする。
-パッケージ追加後はコンテナ内で `colcon build --symlink-install` を実行する。
+ワークスペースのビルドはコンテナ内で次を実行する。スクリプトが`ros2_ws`へ移動し、
+`colcon build --symlink-install`を実行する。追加引数はそのままcolconへ渡す。
+
+```bash
+/workspaces/scripts/build.sh
+# 車両関連だけビルドする場合
+/workspaces/scripts/build.sh --packages-up-to kart_bringup
+source /workspaces/ros2_ws/install/setup.bash
+```
+
+プロジェクトルートからは`./scripts/build.sh`、`ros2_ws`からは`../scripts/build.sh`でも実行できる。
+初回や依存追加時は、先に`ros2_ws`で`rosdep install --from-paths src --ignore-src -r -y`を実行する。
 
 ## カスタマイズの分担
 

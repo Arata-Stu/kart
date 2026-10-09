@@ -552,14 +552,12 @@
           <button type="button" data-close="connection-dialog">×</button>
         </div>
         <p class="help">NotebookでSSH鍵とknown_hostsを準備してください。</p>
+        <label>IPプリセット<select id="connection-preset"></select></label>
         <div class="form-grid">
           <label
             >ユーザー<input name="user" required placeholder="tamiya" /></label
           ><label
-            >ホスト<input
-              name="host"
-              required
-              placeholder="192.168.11.190" /></label
+            >ホスト<input name="host" required placeholder="10.42.0.1" /></label
           ><label
             >SSHポート<input
               name="port"

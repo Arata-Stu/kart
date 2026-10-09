@@ -44,12 +44,16 @@ class Studio:
     def get(self, path, q):
         key = q.get("id", "")
         if path == "/api/config":
+            hosts = read_json(self.repo / "config/jetson_hosts.json")
+            default_host = next(
+                p["host"] for p in hosts["presets"] if p["id"] == hosts["default"]
+            )
             connection = (
                 read_json(self.profile_file)
                 if self.profile_file.exists()
                 else dict(
                     user="",
-                    host="",
+                    host=default_host,
                     port=22,
                     record_root="/home/tamiya/workspaces/kart/record",
                     map_root="/home/tamiya/workspaces/kart/map",
@@ -57,6 +61,7 @@ class Studio:
             )
             return dict(
                 connection=connection,
+                jetson_hosts=hosts,
                 environment=self.mapping.environment(),
                 records=str(self.records),
                 maps=str(self.maps.root),

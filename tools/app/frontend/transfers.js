@@ -25,7 +25,7 @@ function connection() {
     : "接続設定を入力してください。SSH鍵認証を使用します。";
 }
 async function browse(path = "") {
-  if (!state.config.connection.host) {
+  if (!state.config.connection.host || !state.config.connection.user) {
     $("connection-open").click();
     return;
   }
@@ -80,7 +80,7 @@ action("pull", async () => {
 action("push", async () => {
   const id = $("push-map").value;
   if (!id) throw new Error("送信する地図を選択してください");
-  if (!state.config.connection.host) {
+  if (!state.config.connection.host || !state.config.connection.user) {
     $("connection-open").click();
     return;
   }
