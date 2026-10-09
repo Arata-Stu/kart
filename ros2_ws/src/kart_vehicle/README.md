@@ -111,9 +111,10 @@ Trim updated: steering=+0.000 -> +0.001, throttle=+0.000 -> +0.000
 
 ## 動作と起動
 
-Lyricalでのテスト依存は`kart_system`のexportされたCMakeターゲットを
-`target_link_libraries(... PRIVATE ...)`で指定する。非推奨の`ament_target_dependencies`は使わず、
-同一ターゲットでplain形式とkeyword形式のリンク指定を混在させない。
+テストで使用する`kart_system/control_core.hpp`はヘッダーのみで実装されている。
+`kart_system_INCLUDE_DIRS`を両テストの`target_include_directories`へ明示的に渡し、
+ROS Componentライブラリはリンクしない。`test_bridge_core`には`Threads::Threads`をリンクする。
+非推奨の`ament_target_dependencies`は使わない。
 
 起動・異常後はSTOPの観測、新しいHOST要求、健全なdisarm済み基板、中立指令が必要。
 ニュートラルHOST要求の後、新しいstatusでHOST経路を確認して操作を通す。
