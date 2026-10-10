@@ -39,3 +39,12 @@ commit固定のdetached HEADは追従ブランチがないためpullで更新で
 
 `dev.sh`はinput/dialout/plugdevと接続中のevent/ttyACM/ttyUSBデバイスの所有GIDを
 Docker補助グループへ追加します。反映はコンテナ作成時のため、既存コンテナへのattachでは変わりません。
+
+fzfによる選択は上下キーで移動、文字入力で絞り込み、Enterで確定、Esc/Ctrl-Cで中止。
+既定候補を先頭に表示します。run_nameは自由入力です。
+fzfはDockerfile.kartで導入します。既存コンテナでは一時的に
+`sudo apt-get install -y fzf`で追加可能。非対話の`--mode`指定ではfzfは不要です。
+
+Dockerから渡した補助GIDは、image内のroot entrypoint extension
+`docker/scripts/kart-device-groups.sh`がadminの所属グループへ登録してからgosuへ切り替えます。
+このextensionを追加・変更した場合はイメージ再ビルドが必要です。

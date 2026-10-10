@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Numbered terminal selector; exec ROS directly so Ctrl-C reaches ros2 launch."""
+"""Searchable fzf terminal selector; exec ROS directly so Ctrl-C reaches ros2 launch."""
 
 import argparse
 import glob
 import os
 import shlex
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -23,18 +24,42 @@ def choose(title, values, label=str, default=0):
         raise ValueError(
             f"{title}: 候補がありません。探索先や地図/モデルの準備状態を確認してください"
         )
-    print(f"\n{title}")
-    for i, value in enumerate(values, 1):
-        print(f"  {i}. {label(value)}" + (" [既定]" if i - 1 == default else ""))
-    while True:
-        answer = input("番号 / Enter=既定 / q=終了 > ").strip()
-        if answer.lower() == "q":
-            raise KeyboardInterrupt
-        if not answer:
-            return values[default]
-        if answer.isdigit() and 1 <= int(answer) <= len(values):
-            return values[int(answer) - 1]
-        print("一覧の番号を入力してください")
+    if not 0 <= default < len(values):
+        raise ValueError("選択肢の既定値が範囲外です")
+    executable = shutil.which("fzf")
+    if not executable:
+        raise ValueError(
+            "fzfがありません。Dockerイメージを再ビルドするか、"
+            "コンテナ内で sudo apt-get install -y fzf を実行してください"
+        )
+    # Keep IDs separate from labels: duplicate names and paths with whitespace are valid.
+    order = [default] + [i for i in range(len(values)) if i != default]
+    rows = {}
+    for i in order:
+        display = "".join(c if c.isprintable() else " " for c in str(label(values[i])))
+        row = f"{i}\t{display}" + (" [既定]" if i == default else "")
+        rows[row] = values[i]
+    env = dict(os.environ)
+    # User fzf bindings/commands must not alter selection or execute unrelated actions.
+    for key in ("FZF_DEFAULT_OPTS", "FZF_DEFAULT_OPTS_FILE", "FZF_DEFAULT_COMMAND"):
+        env.pop(key, None)
+    result = subprocess.run(
+        [executable, "--read0", "--print0", "--delimiter=\t", "--with-nth=2..",
+         "--no-multi", "--no-sort", "--layout=reverse", "--height=60%", "--border",
+         "--prompt", f"{title} > ",
+         "--header", "↑↓ 選択 / 文字入力で検索 / Enter 決定 / Esc・Ctrl-C 中止"],
+        input="\0".join(rows) + "\0", stdout=subprocess.PIPE,
+        text=True, encoding="utf-8", env=env, check=False,
+    )
+    if result.returncode in (1, 130, -2):
+        raise KeyboardInterrupt
+    if result.returncode != 0:
+        raise ValueError(f"fzfの実行に失敗しました（exit={result.returncode}）")
+    selected = result.stdout.removesuffix("\0")
+    if selected not in rows:
+        raise ValueError("fzfが不正な選択結果を返しました")
+    print(f"{title}: {selected.split(chr(9), 1)[1]}")
+    return rows[selected]
 
 
 def main():

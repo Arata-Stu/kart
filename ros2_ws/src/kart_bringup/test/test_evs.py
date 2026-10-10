@@ -75,12 +75,15 @@ class EvsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             bias = Path(folder).resolve() / "indoor.bias"
             bias.write_text("178 % bias_diff_off\n")
-            answers = iter(("1", "", "", "2", "1", "2", ""))
+            answers = iter(("collect", "30", "60", True, "cpu", bias, False))
+            def choose(title, values, label=str, default=0):
+                print(title)
+                return next(answers)
             output = io.StringIO()
             with patch.object(sys, "argv", ["bringup.py", "--no-bridge", "--dry-run",
                                             "--run-name", "trial", "--bias-root", folder]), \
                  patch.object(sys.stdin, "isatty", return_value=True), \
-                 patch("builtins.input", side_effect=lambda _: next(answers)), \
+                 patch.object(module, "choose", side_effect=choose), \
                  contextlib.redirect_stdout(output):
                 module.main()
             self.assertIn("EVS decoder", output.getvalue())

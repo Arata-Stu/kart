@@ -261,7 +261,7 @@ Foxgloveからの操作は`/localization/pose_hint`とVGL検索要求だけに�
 
 ROS開発コンテナ内で、リポジトリルートから`bash scripts/bringup.sh`を実行する。
 補助実装は`scripts/lib/bringup.py`。通常はshの入口を使う。
-番号選択とEnterで用途、RGB/InfraのHz、EVS、Foxglove、USB車両基板を選ぶ。
+fzfの上下キー・文字検索・Enterで用途、RGB/InfraのHz、EVS、Foxglove、USB車両基板を選ぶ。
 地図走行ではmap/を深さ6まで探索し、HDMap、lane＋line、対応するVSLAM/VGL bundleを選択する。
 モデルはmodels/およびmap/からALIKED/LightGlue資産を検出する。ごみ箱・隠しdirectory・
 symlink directoryは探索しない。HDMapとbundleが同じ座標系であることは操作者が確認する。
@@ -295,7 +295,7 @@ bash scripts/bringup.sh --mode collect --no-bridge --dry-run
 bash scripts/bringup.sh --map-root /workspaces/map --model-root /workspaces/models
 ```
 
-TUIは標準入力の端末を使う。`q`/Ctrl-Cで終了。`--mode`指定時は非対話となり、
+TUIは標準入力の端末を使う。Esc/Ctrl-Cで中止。`--mode`指定時は非対話となり、
 driveには`--map-file`、`--map-dir`、`--model-dir`、`--lane-id`、`--line-type`を指定する。
 `--evs`、`--foxglove`で追加機能、`--no-bridge`で車両基板なし。
 `--record-dir`の既定はリポジトリのrecord/。`KART_BRINGUP_PYTHON`でPython実行系を指定できる。
@@ -359,7 +359,7 @@ runtime metadataのない旧exportは選択候補外とし、学習checkpointか
 
 ### Notebookでbagのlocalization確認
 
-TUIの4番evalでHDMap、lane/line、対応bundle、Notebook GPU用VGLモデル、bagを選ぶ。
+TUIのevalでHDMap、lane/line、対応bundle、Notebook GPU用VGLモデル、bagを選ぶ。
 `--record-dir`がbag探索ルート。既定1倍速、CLI `--rate`で変更可能。
 RVizはNVIDIA公式cuVSLAM default.cfg.rvizを基に、画像displayを除き、
 HDMapとVGL poseを追加。Fixed Frameはmap。2D Pose Estimateは/localization/pose_hintへ送る。
@@ -418,3 +418,8 @@ RAWの相対時刻には各RAWのSDK timestamp shiftを足し、そのoffsetでR
 録画開始ROS時刻をRAWの0へ直接対応させない。
 RAW shift取得ツールはtools/evs_raw_timing（scripts/sensors/evs-raw-timing.sh）。
 USB遅延を含む推定なので、実機で同期精度を確認する。
+
+fzfによる選択は上下キーで移動、文字入力で絞り込み、Enterで確定、Esc/Ctrl-Cで中止。
+既定候補を先頭に表示します。run_nameは自由入力です。
+fzfはDockerfile.kartで導入します。既存コンテナでは一時的に
+`sudo apt-get install -y fzf`で追加可能。非対話の`--mode`指定ではfzfは不要です。

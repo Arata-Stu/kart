@@ -253,6 +253,8 @@ containerへloadせず別processで起動する。notepcでは自動skipし、Je
 
 通常実行する入口は`scripts/bringup.sh`、Python補助実装は`scripts/lib/bringup.py`へ置き、
 Tab補完のため直下に同名stemのファイルを並べない。
+対話選択はfzfで検索・上下キー選択を提供し、Esc/Ctrl-Cでは起動せず中止する。
+非対話CLIはfzfに依存しない。fzf依存はDockerに含める。
 `scripts/bringup.sh`のTUIは選択と`mission.launch.py` / `evaluation.launch.py`呼出しに限定する。
 collectはセンサ・手動vehicle・録画管理・監視のみ、driveは地図localization・offline参照ライン追従を追加。
 構成の正本はbringup/config/mission.yaml。ROS nodeの静的値は各module YAMLに置く。

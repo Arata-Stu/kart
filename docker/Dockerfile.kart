@@ -85,7 +85,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         htop procps psmisc lsof strace gdb \
         iproute2 iputils-ping dnsutils netcat-openbsd socat tcpdump iperf3 \
         usbutils v4l-utils \
-        cmake ninja-build pkg-config libevdev-dev libyaml-cpp-dev python3-yaml python3-pytest python3-numpy python3-pil \
+        fzf cmake ninja-build pkg-config libevdev-dev libyaml-cpp-dev python3-yaml python3-pytest python3-numpy python3-pil \
         ros-lyrical-event-camera-codecs ros-lyrical-event-camera-msgs \
         ros-lyrical-ament-cmake-auto ros-lyrical-ament-cmake-python \
         ros-lyrical-ament-cmake-pytest ros-lyrical-rclcpp-components \
@@ -104,6 +104,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ros-lyrical-isaac-ros-tensor-msgs ros-lyrical-isaac-ros-tensor-proc \
         ros-lyrical-isaac-ros-visual-slam-interfaces \
     && rm -rf /var/lib/apt/lists/*
+
+# Register Docker supplementary GIDs in admin's account before gosu drops root.
+COPY scripts/kart-device-groups.sh /usr/local/bin/scripts/entrypoint_additions/50-kart-device-groups.sh
 
 # DDS XML is read at runtime from the project-root mount (not baked in).
 COPY scripts/kart-ros.bash /etc/kart/ros.bash

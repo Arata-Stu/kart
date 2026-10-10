@@ -507,3 +507,23 @@ JetPack導入直後の実Jetsonでの通し実行、Dockerビルド、ROS結合�
 
 kart固有の版・マウント・依存は[ルートREADME](../../README.md)、`packages.repos`、
 `docker/`、`scripts/`が基準。ここでは公式CLIのAPT導入をkart版CLIのビルド・導入に置き換えている。
+
+### Dockerのgroup-addがadminに残らない場合
+
+ホストのGIDをDockerへ渡すだけでは、entrypointのgosuによるユーザー切替で失われる。
+Dockerfile.kartはroot用entrypoint extension
+`docker/scripts/kart-device-groups.sh`を導入し、Dockerから渡された非0のGIDを
+adminの所属グループへ登録してからgosuへ進む。グループ名が異なっても数値GIDで対応する。
+rootグループは追加せず、デバイスのchmodも行わない。docker execのadminにも登録が適用される。
+
+この修正はimage内の変更なので、対象imageの再ビルドとコンテナ再作成が必要。
+現在のコンテナだけを復旧する場合、デバイスGIDが20と確認できたケースでは以下を実行し、
+新しいshellでidのgroupsに20が含まれることを確認する:
+
+```bash
+sudo usermod -aG 20 admin
+exec sudo -iu admin
+```
+
+ホスト側の検出/GID転送テストとentrypointのコマンド検証は実施。
+実際のDocker/gosu/シリアル接続はJetsonでの確認が必要。
