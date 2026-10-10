@@ -113,3 +113,5 @@ python3 -c 'import ctypes; print(ctypes.CDLL("libcuda.so.1").cuInit(0))'
 0を確認してから通常ユーザーで`bash scripts/vgl_build.sh 424x240 --retry`を実行する。rootでのモデルbuildや全デバイスのchmodは不要。
 
 追加のstraceでは`libcuda.so.1`読込みとnvmapのO_RDONLY openは成功し、`/dev/nvgpu/igpu0/power`のO_RDWR openがEACCESになった。既存コンテナではこのパスにも`sudo chgrp video`と`sudo chmod 0660`を実行してcuInitを再確認する。ほかのnvhost debug/profiler等を一括で権限変更しない。
+
+続くフルトレースではpowerへの書込みは成功し、`faccessat(..., "/dev/nvgpu/igpu0/ctrl", R_OK|W_OK)`でEACCESを確認した。ctrlも同じvideo 0660の対象へ追加。旧nvhost-ctrl-gpuとは別パスなので一方の変更だけでは足りない。診断時はopenat/access/ioctlだけの絞り込みではfaccessatを見落とすため、全syscallをファイルへ記録してEACCES/EPERMを検索する。
