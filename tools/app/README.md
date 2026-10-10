@@ -474,3 +474,7 @@ ONNX評価はCUDAExecutionProviderを優先し、利用不可・初期化失敗�
 既存地図を開き「VGL地図を追加生成」を選択する。ALIKED/LightGlueモデルはmodelsとmap以下の候補から選ぶかパスを入力し、画像サイズ（既定424×240）と保存名（地図名-vgl-vN）を指定する。実行GPUでbuild済みのengineが必要で、download/buildは自動実行しない。公式offline処理の保存画像・posesがない場合は生成できない理由を表示する。
 
 `POST /api/vgl`はinstalled `ros2 run kart_bringup prepare_vgl_map`をジョブ実行し、検証済みbundleを`map/vgl/<保存名>`へ公開する。既存VSLAM地図・HDMapは変更しない。ログ・中止は既存ジョブ画面を使い、失敗・中止時の一時成果物は公開しない。成功後はbringupで「VSLAM＋VGL」を選び生成bundleを指定する。実走行GPUがNotebookと異なる場合は実走行GPU用モデルengineを別途準備する。UIサーバー再起動とkart_bringupのbuild/sourceが必要。
+
+VGL用モデルがない場合は[kart VGLモデル生成](../vgl/README.md)の`scripts/vgl_model.sh`で
+424×240のONNXを再exportし、このGPU用のengineをbuildする。
+`models/vgl/424x240/runtime_models`が完成するとVGL追加生成画面の候補へ入る。

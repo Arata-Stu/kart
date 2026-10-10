@@ -111,3 +111,11 @@ E2E launchは有効なmanifestとハッシュ・ハードウェア一致、お�
 bringup.shのevalでは「VSLAMのみ」（既定）と「VSLAM＋VGL」を選択する。VSLAMのみはMap Studio出力の`cuvslam_map/*.mdb`が非空の地図を探索し、VGLモデル・vgl_profile.jsonを要求しない。VGL併用は従来通りprepare_vgl_map済みbundleと実行GPU用モデルが必要。非対話CLIは`--eval-localization vslam|vgl`。
 
 evaluation.launch.pyの`enable_vgl`既定はfalse、localization.launch.pyでは互換性のためtrue。false時は`model_dir`不要、VGL node/専用containerを起動せず、VSLAMのみ`localize_on_startup=true`・`enable_request_hint=false`で起動する。map_dirは地図ルートまたはcuvslam_map自体。TFのpublisherはVSLAMのみ、bagの古いTFは再生しない。HDMapと同じ地図座標系を選ぶ。初期探索範囲内に位置がない場合はlocalizationが成立しないことがあり、実際の一致をRVizで確認する。
+
+## VGLモデルをkartで生成
+
+`scripts/vgl_model.sh`は424×240 ALIKEDのソース取得・ONNX再export・公式TensorRT engine生成の入口。
+`prepare --source-only` → `doctor --stage export` → `export --name 424x240` → `build --name 424x240`。
+完成モデルは`models/vgl/424x240/runtime_models`でWeb UIから選択できる。
+Pythonは`KART_VGL_PYTHON`（既定`/opt/inference/bin/python`）。既存成果物は上書きしない。
+GPUごとにbuildが必要。詳細と依存・検証範囲は[tools/vgl](../tools/vgl/README.md)。

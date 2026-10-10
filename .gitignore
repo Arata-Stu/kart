@@ -38,3 +38,9 @@ __pycache__/
 /.kart-dev-profile
 
 /tools/evs_raw_timing/build/
+
+# Local VGL source, weights, references and generated model bundles.
+/tools/vgl/vendor/
+/tools/vgl/reference/
+/tools/vgl/inputs/
+/models/vgl/
