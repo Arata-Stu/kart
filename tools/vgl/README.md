@@ -102,7 +102,7 @@ GPU事前検査でcuInit/GPU UUID取得に失敗した場合は、出力フォ�
 
 ### JetsonでadminだけcuInit=100、rootでは0
 
-コンテナ内のnvhost-gpu/nvhost-ctrl-gpuがroot:root 0600、ホスト側がroot:video 0660だった実例に対応し、root entrypointでこの2つの文字デバイスだけvideo 0660へ揃える。adminをvideoへ追加してから権限を落とす。イメージを再buildしてコンテナを再作成すると適用される。既存コンテナの応急処置は以下（adminがvideo所属の場合）。
+コンテナ内のnvhost-gpu/nvhost-ctrl-gpuがroot:root 0600、ホスト側がroot:video 0660だった実例に対応し、root entrypointでこの2つに加え、cuInitでEACCESを確認したnvhost-power-gpu / nvgpu/igpu0/powerの実体文字デバイスをvideo 0660へ揃える。adminをvideoへ追加してから権限を落とす。イメージを再buildしてコンテナを再作成すると適用される。既存コンテナの応急処置は以下（adminがvideo所属の場合）。
 
 ```bash
 sudo chgrp video /dev/nvhost-gpu /dev/nvhost-ctrl-gpu
@@ -111,3 +111,5 @@ python3 -c 'import ctypes; print(ctypes.CDLL("libcuda.so.1").cuInit(0))'
 ```
 
 0を確認してから通常ユーザーで`bash scripts/vgl_build.sh 424x240 --retry`を実行する。rootでのモデルbuildや全デバイスのchmodは不要。
+
+追加のstraceでは`libcuda.so.1`読込みとnvmapのO_RDONLY openは成功し、`/dev/nvgpu/igpu0/power`のO_RDWR openがEACCESになった。既存コンテナではこのパスにも`sudo chgrp video`と`sudo chmod 0660`を実行してcuInitを再確認する。ほかのnvhost debug/profiler等を一括で権限変更しない。

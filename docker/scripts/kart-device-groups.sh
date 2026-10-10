@@ -19,9 +19,12 @@
         usermod --append --groups "$kart_device_gid" "$USERNAME" || exit 1
     done
     # The NVIDIA runtime can recreate Jetson GPU nodes as root:root 0600,
-    # even when the host nodes are root:video 0660. Restore only these two
+    # even when the host nodes are root:video 0660. Restore these known GPU
     # character devices before dropping privileges; never chmod all of /dev.
-    for kart_gpu_device in /dev/nvhost-gpu /dev/nvhost-ctrl-gpu; do
+    # Newer Jetson drivers open igpu0/power during cuInit (observed EACCES).
+    # Include both naming layouts; symbolic aliases are skipped, real nodes only.
+    for kart_gpu_device in /dev/nvhost-gpu /dev/nvhost-ctrl-gpu \
+        /dev/nvhost-power-gpu /dev/nvgpu/igpu0/power; do
         [[ -c "$kart_gpu_device" && ! -L "$kart_gpu_device" ]] || continue
         getent group video >/dev/null || { echo 'Missing video group' >&2; exit 1; }
         chgrp video "$kart_gpu_device" || exit 1

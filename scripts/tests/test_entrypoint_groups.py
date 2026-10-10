@@ -31,7 +31,7 @@ class EntrypointGroupsTests(unittest.TestCase):
             script = SCRIPT
             if gpu:
                 script = root / "extension.sh"
-                script.write_text(SCRIPT.read_text().replace("/dev/nvhost-gpu", "/dev/null").replace("/dev/nvhost-ctrl-gpu", "/dev/zero"))
+                script.write_text(SCRIPT.read_text().replace("/dev/nvhost-gpu", "/dev/null").replace("/dev/nvhost-ctrl-gpu", "/dev/zero").replace("/dev/nvhost-power-gpu", "/dev/null").replace("/dev/nvgpu/igpu0/power", "/dev/zero"))
             result = subprocess.run(["bash", "-c", 'source "$1"; echo CONTINUED', "_", str(script)],
                                     env=env, capture_output=True, text=True)
             return result, log.read_text() if log.exists() else ""
@@ -56,6 +56,8 @@ class EntrypointGroupsTests(unittest.TestCase):
         result, calls = self.run_extension("0", gpu=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(calls.splitlines(), [
+            "chgrp video /dev/null", "chmod 0660 /dev/null", "usermod --append --groups video admin",
+            "chgrp video /dev/zero", "chmod 0660 /dev/zero", "usermod --append --groups video admin",
             "chgrp video /dev/null", "chmod 0660 /dev/null", "usermod --append --groups video admin",
             "chgrp video /dev/zero", "chmod 0660 /dev/zero", "usermod --append --groups video admin",
         ])
