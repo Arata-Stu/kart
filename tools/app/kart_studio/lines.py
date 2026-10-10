@@ -7,7 +7,7 @@ from .geometry import centerline, edges, number, points
 from .speed_sections import sample, sections, speed_cap
 
 DEFAULTS = dict(
-    spacing=0.15,
+    spacing=0.10,
     vehicle_width=0.19,
     vehicle_length=0.47,
     rear_axle_to_rear=0.1065,
@@ -16,7 +16,7 @@ DEFAULTS = dict(
     lateral_accel=2.5,
     accel=1.5,
     decel=2.5,
-    curvature_limit=2.0,
+    curvature_limit=1.0,
 )
 
 

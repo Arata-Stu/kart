@@ -53,6 +53,7 @@
             </button>
             <button id="delete-map" disabled title="選択中の地図をごみ箱へ移動">
               削除</button
+            ><button id="hdmap-reset" disabled>HDMapリセット</button
             ><button id="undo" title="元に戻す（Ctrl/Cmd+Z）">↶</button
             ><button id="redo" title="やり直す">↷</button
             ><button id="fit">全体表示</button
@@ -601,7 +602,9 @@
         <label>Jetsonのrecordルート<input name="record_root" required /></label
         ><label>Jetsonのmapルート<input name="map_root" required /></label>
         <div class="dialog-actions">
-          <button type="button" id="connection-reset">初期値に戻す（保存）</button>
+          <button type="button" id="connection-reset">
+            初期値に戻す（保存）
+          </button>
           <button class="primary">設定を保存</button>
         </div>
       </form>
@@ -687,11 +690,17 @@
         </div>
         <p id="speed-length" class="help"></p>
         <p class="help">
-          始点からの距離で指定。重なった区間は低い上限を採用します。閉路は開始
+          下の図で開始→終了のwaypointを選択。重なった区間は低い上限を採用します。閉路は開始
           &gt; 終了で始点を跨げます。
         </p>
+        <svg
+          id="speed-waypoints"
+          viewBox="0 0 520 240"
+          aria-label="Customlineのwaypoint区間選択"
+        ></svg>
+        <p id="speed-pick-status" class="help"></p>
         <div class="speed-columns">
-          <span>開始 m</span><span>終了 m</span><span>上限 m/s</span
+          <span>開始WP</span><span>終了WP</span><span>上限 m/s</span
           ><span></span>
         </div>
         <div id="speed-rows" class="scroll"></div>
@@ -699,7 +708,7 @@
           ＋ 区間を追加
         </button>
         <p class="help">
-          区間の前から減速します。点を編集しても指定距離は維持されます。適用後にCustomlineを再生成してください。
+          開始・終了欄を選んでから図の点をクリックできます。区間の前から減速します。保存は距離基準のため、点を編集した場合は区間を選び直してください。適用後にCustomlineを再生成してください。
         </p>
         <button type="submit" class="primary full">区間設定を適用</button>
       </form>
@@ -767,6 +776,19 @@
       <div class="actions">
         <button data-close="delete-map-dialog">キャンセル</button
         ><button id="delete-map-confirm">ごみ箱へ移動</button>
+      </div>
+    </dialog>
+    <dialog id="hdmap-reset-dialog">
+      <h2>HDMapを最初から作り直す</h2>
+      <p>
+        全lane・障害物・生成ライン・区間速度を空にします。点群とVSLAM地図は残ります。
+      </p>
+      <p class="help">
+        Undoで戻せます。変更を確定するには地図の「保存」を押してください。
+      </p>
+      <div class="actions">
+        <button data-close="hdmap-reset-dialog">キャンセル</button
+        ><button id="hdmap-reset-confirm">HDMapをリセット</button>
       </div>
     </dialog>
     <dialog id="lane-dialog">

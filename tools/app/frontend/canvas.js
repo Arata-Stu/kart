@@ -1,3 +1,4 @@
+import { placementPreview } from "./placement.js";
 import { centers, compatible, movePair, appendPair } from "./paired.js";
 import { $, state, on, emit, remember, edited, undo } from "./api.js";
 const canvas = $("map-canvas"),
@@ -7,6 +8,7 @@ let width = 1,
   scale = 25,
   origin = [0, 0],
   drag = null,
+  hover = null,
   frame = 0;
 let cloudLayer = document.createElement("canvas"),
   cloudDirty = true;
@@ -38,6 +40,119 @@ function editPoints() {
     : state.target === "obstacle"
       ? state.obstacle?.polygon || []
       : state.lane[state.target];
+}
+function nearestPoint(x, y) {
+  let index = -1,
+    best = 12;
+  editPoints().forEach((p, i) => {
+    const q = project(p),
+      distance = Math.hypot(q[0] - x, q[1] - y);
+    if (distance < best) {
+      best = distance;
+      index = i;
+    }
+  });
+  return index;
+}
+function paintPlacement() {
+  if (
+    !hover ||
+    hover.alt ||
+    drag ||
+    !state.lane ||
+    state.doc?.snapshot_status === "pending" ||
+    state.registrationPreview
+  )
+    return;
+  if (
+    !(
+      state.step === "bounds" ||
+      (state.step === "lines" && state.target === "custom")
+    )
+  )
+    return;
+  if (state.target === "pair" && !compatible(state.lane)) return;
+  const [x, y] = hover.xy;
+  const near = nearestPoint(x, y);
+  let label = "ドラッグで点を移動";
+  ctx.save();
+  if (near >= 0) {
+    const q = project(editPoints()[near]);
+    ctx.beginPath();
+    ctx.arc(q[0], q[1], 10, 0, Math.PI * 2);
+    ctx.strokeStyle = colors[state.target];
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  } else {
+    const preview = placementPreview(
+      state.lane,
+      state.target,
+      world(x, y),
+      Number($("pair-width").value),
+      state.obstacle,
+    );
+    if (!preview) {
+      ctx.restore();
+      return;
+    }
+    if (state.target === "pair") {
+      // Fill only the prospective section, keeping the cloud readable.
+      const start = Math.max(0, preview.left.length - 2);
+      const polygon = [
+        ...preview.left.slice(start),
+        ...preview.right.slice(start).reverse(),
+      ];
+      line(polygon, "#33967566", true, true, 1);
+      ctx.fillStyle = "#33967522";
+      ctx.fill();
+      line(preview.left, colors.left, preview.closed, true, 2);
+      line(preview.right, colors.right, preview.closed, true, 2);
+      line(
+        [preview.left.at(-1), preview.right.at(-1)],
+        colors.pair,
+        false,
+        true,
+      );
+      for (const p of [preview.left.at(-1), preview.right.at(-1)]) {
+        const q = project(p);
+        ctx.beginPath();
+        ctx.arc(...q, 5, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.stroke();
+      }
+      label = `クリックでlane追加 · 幅 ${preview.width.toFixed(2)} m`;
+      if (!state.lane.left.length) label += "（向きは2点目で決定）";
+    } else {
+      line(preview.points.slice(-2), colors[state.target], false, true);
+      if (preview.closed && preview.points.length >= 3)
+        line(
+          [preview.point, preview.points[0]],
+          colors[state.target],
+          false,
+          true,
+          1,
+        );
+      label = "クリックで点を追加";
+    }
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.strokeStyle = colors[state.target];
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  ctx.font = "12px sans-serif";
+  ctx.textAlign = "left";
+  const textWidth = ctx.measureText(label).width;
+  const tx = Math.max(8, Math.min(x + 14, width - textWidth - 16));
+  const ty = Math.max(22, y - 16);
+  ctx.fillStyle = "#fffffff0";
+  ctx.fillRect(tx - 5, ty - 15, textWidth + 10, 22);
+  ctx.fillStyle = "#254455";
+  ctx.fillText(label, tx, ty);
+  ctx.restore();
 }
 function invalidate() {
   cloudDirty = true;
@@ -79,13 +194,26 @@ function line(points, color, closed = false, dashed = false, lineWidth = 2) {
 }
 function directionArrows(points, color, closed) {
   if (!points || points.length < 2) return;
-  for (let i = 0; i < points.length - (closed ? 0 : 1); i += Math.max(1, Math.floor(points.length / 12))) {
-    const a = project(points[i]), b = project(points[(i + 1) % points.length]);
+  for (
+    let i = 0;
+    i < points.length - (closed ? 0 : 1);
+    i += Math.max(1, Math.floor(points.length / 12))
+  ) {
+    const a = project(points[i]),
+      b = project(points[(i + 1) % points.length]);
     const angle = Math.atan2(b[1] - a[1], b[0] - a[0]);
-    if (Math.hypot(b[0]-a[0], b[1]-a[1]) < 1) continue;
-    ctx.save(); ctx.translate(a[0], a[1]); ctx.rotate(angle);
-    ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(-4, -4); ctx.lineTo(-4, 4); ctx.closePath();
-    ctx.fillStyle = color; ctx.fill(); ctx.restore();
+    if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 1) continue;
+    ctx.save();
+    ctx.translate(a[0], a[1]);
+    ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.moveTo(5, 0);
+    ctx.lineTo(-4, -4);
+    ctx.lineTo(-4, 4);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
   }
 }
 function paintCloud() {
@@ -184,7 +312,8 @@ export function draw() {
         line(data.points, colors[kind], d.closed, false, 2.5);
         directionArrows(data.points, colors[kind], d.closed);
       }
-      if (!Object.keys(d.lines).length) directionArrows(d.left, colors.left, d.closed);
+      if (!Object.keys(d.lines).length)
+        directionArrows(d.left, colors.left, d.closed);
       if (state.step === "lines") {
         if (state.target === "custom")
           line(d.custom, colors.custom, d.closed, true);
@@ -256,6 +385,7 @@ export function draw() {
           ctx.stroke();
         }
     }
+    paintPlacement();
     const bar = spacing * scale;
     ctx.strokeStyle = "#647c8c";
     ctx.lineWidth = 2;
@@ -312,17 +442,7 @@ canvas.addEventListener("pointerdown", (e) => {
   }
   if (state.target === "pair" && !compatible(state.lane)) return;
   if (state.target === "obstacle" && !state.obstacle) return;
-  const pts = editPoints();
-  let index = -1,
-    best = 12;
-  pts.forEach((p, i) => {
-    const q = project(p),
-      d = Math.hypot(q[0] - x, q[1] - y);
-    if (d < best) {
-      best = d;
-      index = i;
-    }
-  });
+  const index = nearestPoint(x, y);
   remember();
   state.selected = index;
   drag = { mode: "edit", x, y, index, moved: false };
@@ -334,7 +454,11 @@ canvas.addEventListener("pointermove", (e) => {
     p = world(x, y);
   $("coordinates").textContent =
     `X ${p[0].toFixed(2)} · Y ${p[1].toFixed(2)} m`;
-  if (!drag) return;
+  hover = { xy: [x, y], alt: e.altKey };
+  if (!drag) {
+    draw();
+    return;
+  }
   if (drag.mode === "pan") {
     origin = [
       drag.origin[0] - (x - drag.x) / scale,
@@ -375,8 +499,15 @@ canvas.addEventListener("pointerup", (e) => {
   drag = null;
   draw();
 });
+canvas.addEventListener("pointerleave", () => {
+  hover = null;
+  draw();
+});
+$("pair-width").addEventListener("input", draw);
 canvas.addEventListener("pointercancel", () => {
+  hover = null;
   drag = null;
+  draw();
 });
 canvas.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
@@ -405,4 +536,7 @@ on("document", () => {
   draw();
 });
 on("view", invalidate);
-on("loaded", fit);
+on("loaded", () => {
+  hover = null;
+  fit();
+});

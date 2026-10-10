@@ -1,3 +1,9 @@
+import {
+  waypointStations,
+  waypointSelect,
+  renderWaypointPicker,
+  resetWaypointPicker,
+} from "./waypoint_sections.js";
 import { $, state, api, action, toast, emit, remember, on } from "./api.js";
 import { save, loadMap } from "./maps.js";
 
@@ -8,11 +14,21 @@ function length() {
     return total + Math.hypot(q[0] - p[0], q[1] - p[1]);
   }, 0);
 }
-function addRow(value = { start: 0, end: Math.min(1, length()), speed: 1 }) {
+function addRow(
+  value = {
+    start: 0,
+    end: waypointStations(state.lane.custom, state.lane.closed)[1],
+    speed: 1,
+  },
+) {
   if ($("speed-rows").children.length >= 40) return;
   const row = document.createElement("div");
   row.className = "speed-row";
   for (const key of ["start", "end", "speed"]) {
+    if (key !== "speed") {
+      row.append(waypointSelect(key, value[key]));
+      continue;
+    }
     const input = document.createElement("input");
     Object.assign(input, {
       type: "number",
@@ -33,25 +49,32 @@ function addRow(value = { start: 0, end: Math.min(1, length()), speed: 1 }) {
   remove.type = "button";
   remove.textContent = "×";
   remove.setAttribute("aria-label", "区間を削除");
-  remove.onclick = () => row.remove();
+  remove.onclick = () => {
+    row.remove();
+    renderWaypointPicker();
+  };
   row.append(remove);
   $("speed-rows").append(row);
+  row.querySelector("select").focus();
+  renderWaypointPicker();
 }
 action("custom-speeds-open", () => {
   if (state.lane.custom.length < (state.lane.closed ? 3 : 2))
     throw Error("先にCustomlineの点を描いてください");
   $("speed-length").textContent =
-    `全長 ${length().toFixed(2)} m / 紫の○が始点、数字は始点からの距離 (m)`;
+    `全長 ${length().toFixed(2)} m / ${state.lane.custom.length} waypoints · 緑＝開始、橙＝終了、紫＝区間`;
+  resetWaypointPicker();
   $("speed-rows").replaceChildren();
   for (const row of state.lane.custom_speeds || []) addRow(row);
   $("speed-dialog").showModal();
+  renderWaypointPicker();
 });
 action("speed-add", () => addRow());
 $("speed-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const limits = [...$("speed-rows").children].map((row) =>
     Object.fromEntries(
-      [...row.querySelectorAll("input")].map((el) => [
+      [...row.querySelectorAll("input, select")].map((el) => [
         el.dataset.key,
         Number(el.value),
       ]),

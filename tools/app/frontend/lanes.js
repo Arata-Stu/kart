@@ -84,3 +84,38 @@ action("lane-remove-confirm", () => {
 });
 on("document", update);
 on("status", update);
+
+let resetting = null;
+action("hdmap-reset", () => {
+  resetting = state.id;
+  $("hdmap-reset-dialog").showModal();
+});
+action("hdmap-reset-confirm", () => {
+  if (
+    resetting !== state.id ||
+    !state.lane ||
+    state.doc.snapshot_status === "pending"
+  )
+    throw Error("対象地図を確認してください");
+  remember();
+  state.doc.lanes = [
+    {
+      id: state.laneId,
+      closed: true,
+      left: [],
+      right: [],
+      custom: [],
+      custom_speeds: [],
+      lines: {},
+    },
+  ];
+  state.doc.obstacles = [];
+  state.obstacleId = null;
+  state.selected = -1;
+  state.target = "pair";
+  state.dirty = true;
+  $("hdmap-reset-dialog").close();
+  $("step-bounds").click();
+  emit("document");
+  toast("HDMapをリセットしました。保存で確定、Undoで元に戻せます");
+});

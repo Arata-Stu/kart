@@ -138,6 +138,7 @@ function status() {
   $("lane-reverse").disabled = !d || busy;
   $("simulation-open").disabled = !d || busy || !Object.keys(d.lines).length;
   $("delete-map").disabled = !state.doc || busy;
+  $("hdmap-reset").disabled = !d || busy;
   $("copy-map").disabled = !state.doc || busy;
   $("capture-open").disabled =
     !pending || busy || !state.config?.environment.ros;
