@@ -36,3 +36,5 @@ __pycache__/
 
 # Checkout-local remembered Docker profile.
 /.kart-dev-profile
+
+/tools/evs_raw_timing/build/

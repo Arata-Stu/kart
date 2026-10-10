@@ -9,7 +9,7 @@
 | bringup.sh | 起動構成のTUI／CLI | ROSコンテナ |
 | open-foxglove.sh | Foxgloveを開く | ホスト |
 | jetson_max_performance.sh | Jetson性能設定・確認 | Jetsonホスト |
-| workspace/build.sh | colcon build | ROSコンテナ |
+| build.sh | colcon build | ROSコンテナ |
 | repos.sh | vcs import／status | ホスト |
 | setup/bluetooth.sh | コントローラーのBluetooth接続 | Linuxホスト／Docker |
 | setup/setup-jtop.sh | jtopの初期導入 | Jetsonホスト |
@@ -21,7 +21,7 @@ bringup.py、check-jtop.py、input-dockerargs.pyは入口から呼ぶ補助実�
 
 ```bash
 ./scripts/dev.sh
-bash scripts/workspace/build.sh --packages-up-to kart_bringup
+bash scripts/build.sh --packages-up-to kart_bringup
 bash scripts/sensors/evs-bias.sh --build
 bash scripts/tests/test-vehicle.sh
 ```

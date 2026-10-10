@@ -307,7 +307,7 @@ def main():
         ) or sys.exit(0)
     if not shutil.which("ros2"):
         raise ValueError(
-            "ros2がありません。scripts/dev.shでROSコンテナへ入り、scripts/workspace/build.shでビルドしてください"
+            "ros2がありません。scripts/dev.shでROSコンテナへ入り、scripts/build.shでビルドしてください"
         )
     os.execvp(command[0], command)
 

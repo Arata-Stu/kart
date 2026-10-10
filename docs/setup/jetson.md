@@ -357,7 +357,7 @@ ros2 pkg prefix realsense2_camera
 /usr/bin/python3 -c 'import tensorrt; print(tensorrt.__version__)'
 nvidia-smi
 
-/workspaces/scripts/workspace/build.sh
+/workspaces/scripts/build.sh
 source install/setup.bash
 colcon test --packages-select kart_system kart_vehicle kart_joy
 colcon test-result --verbose

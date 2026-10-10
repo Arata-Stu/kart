@@ -37,7 +37,7 @@ USBアクセスは既存CLIの/devマウントを利用。ホスト側の認識�
 
 ```bash
 cd /workspaces
-bash scripts/workspace/build.sh --packages-up-to kart_bringup openeb_ros2
+bash scripts/build.sh --packages-up-to kart_bringup openeb_ros2
 source /workspaces/ros2_ws/install/setup.bash
 ros2 launch kart_bringup mission.launch.py mode:=collect enable_evs:=true
 ```

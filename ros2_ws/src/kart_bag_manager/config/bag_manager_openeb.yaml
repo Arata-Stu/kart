@@ -29,6 +29,7 @@
     - /system/jetson/diagnostics
     - /event_camera/event_image
     - /event_camera/diagnostics
+    - /event_camera/tensor_timing
     - /event_camera/tensor_diagnostics
     - /tf
     - /tf_static

@@ -123,13 +123,13 @@ SSH/HTTPS認証は別途用意する必要がある。git worktreeで`.git`が�
 `colcon build --symlink-install`を実行する。追加引数はそのままcolconへ渡す。
 
 ```bash
-/workspaces/scripts/workspace/build.sh
+/workspaces/scripts/build.sh
 # 車両関連だけビルドする場合
-/workspaces/scripts/workspace/build.sh --packages-up-to kart_bringup
+/workspaces/scripts/build.sh --packages-up-to kart_bringup
 source /workspaces/ros2_ws/install/setup.bash
 ```
 
-プロジェクトルートからは`./scripts/workspace/build.sh`、`ros2_ws`からは`../scripts/workspace/build.sh`でも実行できる。
+プロジェクトルートからは`./scripts/build.sh`、`ros2_ws`からは`../scripts/build.sh`でも実行できる。
 ROSワークスペースの外部依存はDockerfileで導入するため、通常はコンテナ内の`rosdep install`は不要。
 依存追加時は`package.xml`と`docker/Dockerfile.kart`を更新し、Dockerイメージを再ビルドする。
 
