@@ -37,7 +37,7 @@ cuVSLAM内部の設定はインストールされた公式map_creation_configの
 
 ## 成果物・成功条件
 
-公式コマンドの終了コード0、出力ディレクトリが一つ、`cuvslam_map/*.mdb`が非空であることを確認する。
+公式コマンドの終了コード0、`latest`等のリンクを実体パスで重複除去して出力ディレクトリが一つ、`cuvslam_map/*.mdb`が非空であることを確認する。
 `cuvslam_map/`を地図直下へ配置し、軌跡・中間データ・ログは`official/`配下に保持。
 `mapping_result.json`に実行引数・APT版・bag metadata hash・点群未取得状態を保存する。
 UIは`map.json`を`revision=1, snapshot_status=pending`で作成する。空のsnapshotを成功成果物として作らない。

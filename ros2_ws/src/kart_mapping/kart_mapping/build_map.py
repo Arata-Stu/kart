@@ -11,7 +11,7 @@ from pathlib import Path
 
 def run(job):
     workflow = job["workflow"]
-    output, bag = Path(job["output"]), Path(job["bag"])
+    output, bag = Path(job["output"]).resolve(), Path(job["bag"])
     if int(os.environ.get("ROS_DOMAIN_ID", "0")) != workflow["ros_domain_id"]:
         raise ValueError("ROS_DOMAIN_ID must match workflow.ros_domain_id")
     if workflow["overrides"].get("tracking_mode", 0) != 0:
@@ -62,7 +62,11 @@ def run(job):
     ]
     print("Official offline mapping: " + " ".join(command), flush=True)
     subprocess.run(command, check=True)
-    outputs = list(official.glob("*/cuvslam_map"))
+    # NVIDIA also exposes the timestamped run through official/latest.
+    # Count actual map directories, not aliases of the same directory.
+    outputs = sorted({p.resolve() for p in official.glob("*/cuvslam_map")})
+    if any(not p.is_relative_to(official) for p in outputs):
+        raise ValueError("公式地図の参照先が出力ディレクトリ外です")
     print(f"cuVSLAM map directories: {[str(p) for p in outputs]}", flush=True)
     for folder in outputs:
         for index, path in enumerate(sorted(folder.rglob("*"))):
@@ -74,12 +78,17 @@ def run(job):
                     f"  {path.relative_to(official)}: {path.stat().st_size} bytes",
                     flush=True,
                 )
-    if len(outputs) != 1 or not any(
-        p.is_file() and p.stat().st_size > 0 for p in outputs[0].glob("*.mdb")
-    ):
+    if len(outputs) != 1:
+        raise ValueError(f"公式地図の実体が1件ではありません: {len(outputs)}件")
+    if not any(p.is_file() and p.stat().st_size > 0 for p in outputs[0].glob("*.mdb")):
         raise ValueError(
             "公式処理後に非空のcuVSLAM .mdb地図を確認できません。直前のファイル一覧とofficial配下のrun_cuvslam_api_launcher.logを確認してください"
         )
+    # Keep the official shortcut valid when the staging directory is published.
+    latest = official / "latest"
+    if latest.is_symlink() and latest.resolve() == outputs[0].parent:
+        latest.unlink()
+        latest.symlink_to(outputs[0].parent.name, target_is_directory=True)
     shutil.move(str(outputs[0]), str(output / "cuvslam_map"))
     version = subprocess.run(
         ["dpkg-query", "-W", "-f=${Version}", "ros-lyrical-isaac-mapping-ros"],

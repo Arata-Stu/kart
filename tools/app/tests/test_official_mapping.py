@@ -43,6 +43,9 @@ class OfficialMappingTests(unittest.TestCase):
                 artifact = self.output / "official/run/cuvslam_map"
                 artifact.mkdir(parents=True)
                 (artifact / "map.mdb").write_bytes(b"test map")
+                (self.output / "official/latest").symlink_to(
+                    artifact.parent, target_is_directory=True
+                )
             return SimpleNamespace(stdout="5.0", returncode=0)
 
         with (
@@ -62,6 +65,11 @@ class OfficialMappingTests(unittest.TestCase):
         self.assertFalse((self.output / "snapshot.json").exists())
         result = json.loads((self.output / "mapping_result.json").read_text())
         self.assertEqual(result["snapshot_status"], "pending")
+        self.assertEqual(result["official_output"], "official/run")
+        self.assertEqual(os.readlink(self.output / "official/latest"), "run")
+        renamed = self.root / "published"
+        self.output.rename(renamed)
+        self.assertTrue((renamed / "official/latest").is_dir())
 
     def test_missing_official_map_is_failure(self):
         with (
