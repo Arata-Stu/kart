@@ -7,9 +7,11 @@
 | dev.sh | 開発Dockerへ入る（--evs/--no-evsの選択を保存） | Linuxホスト |
 | screen.sh | SSH用screenの作成／再接続／デタッチ | Linuxホスト |
 | update-isaac-ros-cli.sh | Isaac ROS CLI更新 | Linuxホスト |
+| webui.sh | Map Studio起動（ros2_wsから../scripts/webui.sh） | Notebook／ROSコンテナ |
 | bringup.sh | 起動構成のTUI／CLI | ROSコンテナ |
 | open-foxglove.sh | Foxgloveを開く | ホスト |
 | jetson_max_performance.sh | Jetson性能設定・確認 | Jetsonホスト |
+| jetson_display_mode.sh | GUI/CUIの起動モード切替（status/cui/gui、--nowで即時反映） | Jetsonホスト |
 | build.sh | colcon build | ROSコンテナ |
 | repos.sh | vcs import／status／pull | ホスト |
 | setup/bluetooth.sh | コントローラーのBluetooth接続 | Linuxホスト／Docker |
@@ -32,6 +34,13 @@ bash scripts/tests/test-vehicle.sh
 選択はGit対象外の`.kart-dev-profile`へ保存。`--no-evs`で通常環境へ戻し、その選択を保存します。
 
 ## SSHとDocker内のセッション維持
+
+JetsonのGUIを停止するには、SSH接続したホストで`./scripts/jetson_display_mode.sh cui --now`。
+次回起動もCUIになる。GUIへ戻すには`./scripts/jetson_display_mode.sh gui --now`。
+`--now`なしでは次回起動設定だけを変更する。`status`は設定された起動モードを表示する。
+CUIへ即時移行するとGUIセッションとその配下の作業は終了するため、SSH側から実行する。
+このスクリプトはJetPilotの同名スクリプトを基にし、Jetsonホスト限定の実行ガードを追加した。
+構文とヘルプは確認済み。実機のGUI/CUI切替は未確認。
 
 SSH接続先のLinuxホストでscreenを使い、その中からDockerへ入り、Docker内でtmuxを起動します。
 ホストにscreenがない場合は`sudo apt-get install screen`で導入します。tmuxはDocker imageに含まれます。

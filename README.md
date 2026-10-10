@@ -14,6 +14,8 @@ RGB・Infraは30/60/90Hz/なし、地図・lane・center/race/custom・モデル
 
 ## 地図UI: Kart Map Studio
 
+Docker入室直後は `../scripts/webui.sh`。新しいイメージでは `webui` だけでも起動できる。
+
 [使い方・構成](tools/app/README.md) / [設計方針](docs/policies/ui_app.md)
 
 ```bash

@@ -7,12 +7,17 @@ Notebookでbagを受信し、Isaac ROS cuVSLAMの地図・点群からHDMapと�
 
 ## 起動
 
-リポジトリ直下から:
+Docker入室直後（/workspaces/ros2_ws）から:
 
 ```bash
-./tools/app/start.sh
+../scripts/webui.sh
 # http://127.0.0.1:8766
 ```
+
+新しいDockerイメージでは、どのディレクトリからも `webui` だけで起動できます。
+既存コンテナでも `source /workspaces/docker/scripts/kart-ros.bash` を一度実行すれば有効です。
+引数は従来どおり渡せます（例: `webui --port 8769`）。
+リポジトリ直下からは `bash scripts/webui.sh`。旧tools/app/start.shも引き続き利用可能です。
 
 Python 3.10以上。UI本体は標準ライブラリ、ES modules、Canvasのみ。npm/build不要。
 Macでも点群編集・簡易ライン生成・SSH/SCP転送を利用できる。helper方式は別途専用Python環境が必要。
@@ -376,6 +381,8 @@ ONNXモデル名は選択した実験の名前を基に`<name>-v1, -v2, ...`を�
 選択で変更するのはhostのみ。ユーザー・SSHポート・record/mapルートは保持し、
 「設定を保存」でbag探索、SCP pull、map/ONNX転送へ共通適用する。
 既存の保存済み接続先は維持する。未設定時のhostは共通既定値を使用する。
+SSHユーザー既定はkart、record/mapは/home/kart/workspaces/kart/{record,map}。
+既存の保存済み設定は上書きしないため、必要なら接続設定画面で変更する。
 任意IP・hostnameの手入力も可能。SSHユーザー未設定なら転送前に設定画面を開く。
 Foxglove起動スクリプトも同じ定義を使い、`--preset notebook|lan|usb`で選択する。
 UIでの選択は保存済みSSH接続、CLIでの選択はその実行だけに適用し、互いに上書きしない。

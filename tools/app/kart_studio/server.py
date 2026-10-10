@@ -52,11 +52,11 @@ class Studio:
                 read_json(self.profile_file)
                 if self.profile_file.exists()
                 else dict(
-                    user="",
+                    user="kart",
                     host=default_host,
                     port=22,
-                    record_root="/home/tamiya/workspaces/kart/record",
-                    map_root="/home/tamiya/workspaces/kart/map",
+                    record_root="/home/kart/workspaces/kart/record",
+                    map_root="/home/kart/workspaces/kart/map",
                 )
             )
             return dict(
