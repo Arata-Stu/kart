@@ -41,23 +41,24 @@ class Studio:
         self.learning = Learning(repo, base, self.records, self.state)
         self.profile_file = self.state / "connection.json"
 
+    def connection_defaults(self):
+        hosts = read_json(self.repo / "config/jetson_hosts.json")
+        return dict(
+            user="kart",
+            host=next(p["host"] for p in hosts["presets"] if p["id"] == hosts["default"]),
+            port=22,
+            record_root="/home/kart/workspaces/kart/record",
+            map_root="/home/kart/workspaces/kart/map",
+        )
+
     def get(self, path, q):
         key = q.get("id", "")
         if path == "/api/config":
             hosts = read_json(self.repo / "config/jetson_hosts.json")
-            default_host = next(
-                p["host"] for p in hosts["presets"] if p["id"] == hosts["default"]
-            )
             connection = (
                 read_json(self.profile_file)
                 if self.profile_file.exists()
-                else dict(
-                    user="kart",
-                    host=default_host,
-                    port=22,
-                    record_root="/home/kart/workspaces/kart/record",
-                    map_root="/home/kart/workspaces/kart/map",
-                )
+                else self.connection_defaults()
             )
             return dict(
                 connection=connection,
@@ -127,6 +128,10 @@ class Studio:
                 ["e2e:models:" + key],
                 lambda job: self.learning.push(job, p, key, root),
             )
+        if path == "/api/connection/reset":
+            value = self.connection_defaults()
+            atomic_json(self.profile_file, value)
+            return value
         if path == "/api/connection":
             value = profile(b)
             atomic_json(self.profile_file, value)

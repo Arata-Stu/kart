@@ -25,7 +25,7 @@ function form(id, submit) {
     }
   });
 }
-action("connection-open", () => {
+function fillConnection() {
   for (const [k, v] of Object.entries(state.config.connection))
     $("connection-form").elements[k].value = v;
   const preset = $("connection-preset");
@@ -33,7 +33,16 @@ action("connection-open", () => {
   for (const row of state.config.jetson_hosts.presets)
     preset.add(new Option(row.label, row.host));
   preset.value = state.config.connection.host;
+}
+action("connection-open", () => {
+  fillConnection();
   open("connection-dialog");
+});
+action("connection-reset", async () => {
+  state.config.connection = await api("connection/reset", {});
+  fillConnection();
+  emit("connection");
+  toast("接続設定を初期値に戻して保存しました");
 });
 $("connection-preset").addEventListener("change", () => {
   if ($("connection-preset").value)
