@@ -69,6 +69,9 @@ class Studio:
                 records=str(self.records),
                 maps=str(self.maps.root),
             )
+        if path == "/api/e2e/engine":
+            folder = self.learning.folder("engines", key)
+            return read_json(within(folder, "report.json"))
         if path == "/api/e2e/evaluation":
             folder = self.learning.folder("evaluations", key)
             return read_json(within(folder, "report.json"))
@@ -113,6 +116,7 @@ class Studio:
             "/api/e2e/train",
             "/api/e2e/export",
             "/api/e2e/evaluate",
+            "/api/e2e/build-engine",
         ):
             action = path.rsplit("/", 1)[1]
             plan = self.learning.prepare(action, b)
@@ -121,6 +125,7 @@ class Studio:
                 "train": "DINOv3学習",
                 "export": "ONNX export",
                 "evaluate": "rosbagオフライン評価",
+                "build-engine": "Notebook TensorRT build",
             }
             return self.jobs.start(
                 titles[action] + ": " + plan["key"],

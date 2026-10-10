@@ -1,4 +1,4 @@
-import { showEvaluation } from "./evaluation.js";
+import { showEvaluation, showEngine } from "./evaluation.js";
 import { $, state, api, action, on, emit, item, toast } from "./api.js";
 import { nextVersion } from "./learning_names.js";
 let catalog = null;
@@ -133,6 +133,7 @@ export async function refreshLearning() {
   options("e2e-export-run", data.runs, "実験を選択");
   options("e2e-push-model", data.models, "モデルを選択");
   options("e2e-eval-model", data.models, "モデルを選択");
+  options("e2e-engine-history", data.engines, "Notebook engineの結果を選択");
   options(
     "e2e-eval-bag",
     records.map((r) => ({ id: r.id, label: r.id })),
@@ -231,3 +232,18 @@ on("job-finished", () => {
   if (catalog) return refreshLearning();
 });
 on("connection", render);
+
+action("e2e-build-engine", () =>
+  start("build-engine", {
+    model: $("e2e-eval-model").value,
+    name: nextVersion(
+      ($("e2e-eval-model").value || "model").slice(0, 42) + "-notebook-trt",
+      catalog.engines.map((r) => r.id),
+    ),
+  }),
+);
+$("e2e-engine-history").addEventListener("change", () =>
+  showEngine($("e2e-engine-history").value).catch((e) =>
+    toast(e.message, true),
+  ),
+);

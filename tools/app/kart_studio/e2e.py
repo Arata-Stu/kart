@@ -20,7 +20,7 @@ class Learning:
         self.repo, self.records = repo, records
         self.root = base / "e2e"
         self.settings_file = state / "e2e.json"
-        for kind in ("datasets", "runs", "models", "evaluations"):
+        for kind in ("datasets", "runs", "models", "evaluations", "engines"):
             (self.root / kind).mkdir(parents=True, exist_ok=True)
         spec = importlib.util.spec_from_file_location(
             "kart_ui_e2e_contract", repo / "ros2_ws/src/kart_e2e/kart_e2e/contract.py"
@@ -61,7 +61,7 @@ class Learning:
 
     def catalog(self):
         result = dict(settings=self.settings(), root=str(self.root))
-        for kind in ("datasets", "runs", "models", "evaluations"):
+        for kind in ("datasets", "runs", "models", "evaluations", "engines"):
             entries = []
             for path in (self.root / kind).iterdir():
                 if path.name.startswith(".") or path.is_symlink() or not path.is_dir():
@@ -84,7 +84,11 @@ class Learning:
 
     def runtime(self, action=None):
         cfg = self.settings()
-        field = "inference_python" if action in ("export", "evaluate") else "python"
+        field = (
+            "inference_python"
+            if action in ("export", "evaluate", "build-engine")
+            else "python"
+        )
         python = Path(cfg[field]).expanduser()
         if (
             not python.is_absolute()
@@ -230,6 +234,18 @@ class Learning:
                 },
                 "resources": ["e2e-compute"],
             }
+        if action == "build-engine":
+            model = self.folder("models", body.get("model"))
+            self.contract(model)
+            return {
+                **common,
+                "kind": "engines",
+                "target": self.target("engines", key),
+                "module": "build_engine",
+                "args": ["--model", str(model), "--output", "@OUTPUT@"],
+                "provenance": {"model": model.name},
+                "resources": ["e2e-compute", "e2e:models:" + model.name],
+            }
         if action == "evaluate":
             model = self.folder("models", body.get("model"))
             self.contract(model)
@@ -332,6 +348,13 @@ class Learning:
                 if data.get("samples", 0) <= 0:
                     raise ValueError("有効なデータがありません")
                 metadata["samples"] = data["samples"]
+            elif plan["kind"] == "engines":
+                report = read_json(within(output, "report.json"))
+                if within(output, "model.plan").stat().st_size <= 0:
+                    raise ValueError("Empty TensorRT engine")
+                metadata.update(
+                    mode=report["mode"], engine_size_bytes=report["engine_size_bytes"]
+                )
             elif plan["kind"] == "evaluations":
                 report = read_json(within(output, "report.json"))
                 within(output, "predictions.csv")

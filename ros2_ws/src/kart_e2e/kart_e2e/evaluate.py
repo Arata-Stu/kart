@@ -40,6 +40,7 @@ def evaluate(model_dir, dataset, output):
         sess_options=options,
         providers=["CPUExecutionProvider"],
     )
+    warmup_runs = 10
     rows = []
     first = None
     with (dataset / "samples.jsonl").open() as stream:
@@ -51,6 +52,9 @@ def evaluate(model_dir, dataset, output):
             with Image.open(image) as rgb:
                 # Training adds patch padding; ONNX already embeds that padding.
                 tensor = preprocess(rgb)[:, 4:-4, 6:-6].unsqueeze(0).numpy()
+            if not rows:
+                for _ in range(warmup_runs):
+                    session.run(["control"], {"image": tensor})
             started = time.perf_counter()
             prediction = session.run(["control"], {"image": tensor})[0]
             elapsed = (time.perf_counter() - started) * 1000
@@ -95,6 +99,16 @@ def evaluate(model_dir, dataset, output):
         runtime=runtime,
         samples=len(rows),
         provider="CPUExecutionProvider",
+        onnx_size_bytes=Path(contract["model_file_path"]).stat().st_size,
+        warmup_runs=warmup_runs,
+        timing_scope="session.run_only_excludes_preprocessing_and_warmup",
+        inference_ms={
+            "mean": float(np.mean([r["inference_ms"] for r in rows])),
+            "median": float(np.median([r["inference_ms"] for r in rows])),
+            "p95": float(np.percentile([r["inference_ms"] for r in rows], 95)),
+            "min": float(min(r["inference_ms"] for r in rows)),
+            "max": float(max(r["inference_ms"] for r in rows)),
+        },
         scope="open_loop_labeled_manual_frames_not_driving_or_tensorrt_validation",
         onnx_sha256=hashlib.sha256(
             Path(contract["model_file_path"]).read_bytes()

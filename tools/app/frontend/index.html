@@ -505,6 +505,18 @@
             CPUのONNX
             Runtimeによる記録画像の予測比較です。実走行の成功率・JetsonのTensorRT速度は評価しません。
           </p>
+          <details>
+            <summary>NotebookでTensorRT build・速度計測</summary>
+            <p class="help">
+              上で選択したONNXを使用。Notebook
+              GPU向けengineを別保存し、合成入力で計測します。JetsonへはONNXを転送し、Jetson側で再buildします。
+            </p>
+            <button id="e2e-build-engine" type="button" class="full">
+              NotebookでTensorRT build
+            </button>
+            <label>結果<select id="e2e-engine-history"></select></label>
+            <pre id="e2e-engine-result" style="white-space: pre-wrap"></pre>
+          </details>
           <div id="e2e-eval-result">
             完了後、右の評価履歴を選択してください。
           </div>

@@ -13,6 +13,12 @@ export async function showEvaluation(id) {
   note.className = "help";
   note.textContent = `${report.mode} / CPU推論中央値 ${report.inference_ms_median.toFixed(1)} ms（前処理を除く）· 教師=灰 / 指令予測=紫。steer-onlyのスロットルはmetadataの固定値です。`;
   root.append(note);
+  if (report.inference_ms) {
+    const stats = document.createElement("p");
+    const t = report.inference_ms;
+    stats.textContent = `ONNX ${(report.onnx_size_bytes / 1048576).toFixed(1)} MiB · CPU推論 平均 ${t.mean.toFixed(2)} / 中央値 ${t.median.toFixed(2)} / P95 ${t.p95.toFixed(2)} ms · warmup ${report.warmup_runs}回を除外`;
+    root.append(stats);
+  }
   for (const [key, label, low, high] of [
     ["steering", "ステア", -1, 1],
     ["throttle", "スロットル", 0, 1],
@@ -65,4 +71,15 @@ export async function showEvaluation(id) {
     }
     root.append(svg);
   }
+}
+
+export async function showEngine(id) {
+  const root = $("e2e-engine-result");
+  if (!id) {
+    root.textContent = "";
+    return;
+  }
+  const report = await api("e2e/engine?id=" + encodeURIComponent(id));
+  if ($("e2e-engine-history").value !== id) return;
+  root.textContent = `ONNX ${(report.onnx_size_bytes / 1048576).toFixed(1)} MiB / engine ${(report.engine_size_bytes / 1048576).toFixed(1)} MiB\nBuild＋計測 ${report.total_build_and_benchmark_s.toFixed(1)} s\nGPU: ${report.gpu}\n合成入力の計測（ms、rosbag精度評価とは別）\n${JSON.stringify(report.timing_ms, null, 2)}`;
 }

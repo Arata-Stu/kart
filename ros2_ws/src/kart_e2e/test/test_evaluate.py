@@ -99,6 +99,9 @@ class EvaluationTests(unittest.TestCase):
                 output = root / (mode + "-result")
                 report = evaluate(model, data, output)
                 self.assertEqual(report["samples"], 3)
+                self.assertEqual(report["warmup_runs"], 10)
+                self.assertGreater(report["onnx_size_bytes"], 0)
+                self.assertGreaterEqual(report["inference_ms"]["p95"], 0)
                 self.assertAlmostEqual(
                     report["metrics"]["steering_command"]["mae"], 0.2, places=6
                 )

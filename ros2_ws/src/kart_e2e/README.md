@@ -228,4 +228,10 @@ UIの「4 rosbag評価」でexport済みONNXとbagを選び、評価名を指定
 
 学習と同じ前処理・教師対応付けでMANUALの有効ラベル付き画像を抽出し、ONNX Runtime CPUで推論する。ONNX内部にpaddingが含まれるため入力の二重paddingはしない。モデルmetadataのmode・SHA256・固定/最大スロットルを検証し、不正値や範囲外出力は失敗する。steer-onlyは固定スロットルを使用、steer+throttleは予測値へmetadataの最大スロットルを適用する。AUTO切替・watchdog等のオンライン状態機械は再現しない。
 
-`report.json`にMAE/RMSE/P95絶対誤差（正規化操作値）、抽出件数、スキップ数、モデルSHA256、CPU推論中央値（前処理除外、warmupを含む）、最大500点の表示用サンプルを保存。`predictions.csv`には全評価フレームの時刻・教師・生出力・上限適用値・推論時間を保存する。データは`e2e/evaluations/<評価名>/`へ公開し、一時画像は終了時に削除する。学習と同じbagでの評価も許可するが、未知のコースへの性能評価ではない。運転成功率やTensorRT実機レイテンシは別途検証する。
+`report.json`にMAE/RMSE/P95絶対誤差（正規化操作値）、抽出件数、スキップ数、モデルSHA256、CPU推論平均・中央値・P95・最小・最大（前処理・最初の10回のwarmupを除外）、最大500点の表示用サンプルを保存。`predictions.csv`には全評価フレームの時刻・教師・生出力・上限適用値・推論時間を保存する。データは`e2e/evaluations/<評価名>/`へ公開し、一時画像は終了時に削除する。学習と同じbagでの評価も許可するが、未知のコースへの性能評価ではない。運転成功率やTensorRT実機レイテンシは別途検証する。
+
+### Notebook TensorRT build
+
+UI「rosbag評価」の「NotebookでTensorRT build・速度計測」は選択ONNXを`python -m kart_e2e.build_engine --model <bundle> --output <新規ディレクトリ>`で処理する。ROSノード・topicは追加しない。x86_64限定、`trtexec`はPATHまたは`/usr/src/tensorrt/bin/trtexec`から利用し、ONNXのSHA256/入出力契約を検証する。精度はtrtexec既定、形状は固定1×3×120×212。`--warmUp=500 --duration=3 --exportTimes=<file>`で合成入力の計測を行い、engine・timings.json・report.jsonを`e2e/engines/<name>/`へ保存する。reportはONNX/engineバイト数、ビルド＋計測合計秒、GPU情報、利用可能なcomputeMs/latencyMs/h2dMs/d2hMs統計、再現コマンドを含む。詳細TensorRTバージョン・GPU計測ログはUIジョブログに残る。未対応オプションやGPU不足は失敗として表示し、engineを成功公開しない。
+
+Notebook engineはJetsonへ転送しない。既存の転送機能は引き続きONNXとmetadataのみを送信する。合成入力のTensorRT計測はrosbagでの精度検証ではなく、engineの数値一致も別途必要。
