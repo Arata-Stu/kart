@@ -2,7 +2,6 @@
 """Searchable fzf terminal selector; exec ROS directly so Ctrl-C reaches ros2 launch."""
 
 import argparse
-import glob
 import os
 import shlex
 import shutil
@@ -154,20 +153,6 @@ def main():
             args.foxglove = args.foxglove or choose(
                 "Foxglove Bridge", [False, True], lambda v: "有効" if v else "無効"
             )
-            if args.mode != "eval" and not args.no_bridge and not args.device:
-                ports = sorted(
-                    set(
-                        glob.glob("/dev/serial/by-id/*")
-                        + glob.glob("/dev/ttyACM*")
-                        + glob.glob("/dev/ttyUSB*")
-                    )
-                )
-                device = choose(
-                    "車両基板",
-                    ports + [None],
-                    lambda p: str(p) if p else "基板なし（確認用）",
-                )
-                args.device, args.no_bridge = device or "", device is None
         if args.mode in ("drive", "eval"):
             args.map_file = args.map_file or str(
                 choose("HDMap", discover(args.map_root, "hdmap"))
@@ -240,8 +225,12 @@ def main():
         width, height, _ = sensors["depth_module.infra_profile"].split("x")
         if profile["input_shape"][2:] != [int(height), int(width)]:
             raise ValueError("VGLモデルとInfra解像度が一致しません")
-    if args.mode != "eval" and not args.no_bridge and not args.device:
-        raise ValueError("車両基板の--deviceが必要です。基板なしなら--no-bridge")
+    if args.mode != "eval" and not args.no_bridge:
+        from kart_bringup.configuration import load
+
+        _, modules = load(config / "bringup.yaml",
+                          {"enable_bridge": "true", "device": args.device})
+        print(f"車両基板: {modules['bridge']['effective']['device']}")
     if args.mode == "e2e":
         from kart_e2e.contract import model_contract, runtime_settings
 

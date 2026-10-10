@@ -50,6 +50,7 @@ class ConfigurationTest(unittest.TestCase):
         self.assertEqual(modules['bridge']['effective']['device'],'/dev/configured')
 
     def test_invalid_configuration(self):
+        self.edit('vehicle/bridge.yaml', lambda d:d['/**/kart_bridge']['ros__parameters'].update(device=''))
         for overrides in ({'enable_bridge':'true'}, {'enable_bridge':'true','enable_control':'false','device':'/dev/test'},
                           {'enable_joy':'yes'}, {'unknown':'x'}):
             with self.assertRaises(ValueError): load(self.path,overrides)

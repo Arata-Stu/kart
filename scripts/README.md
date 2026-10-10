@@ -48,3 +48,6 @@ fzfはDockerfile.kartで導入します。既存コンテナでは一時的に
 Dockerから渡した補助GIDは、image内のroot entrypoint extension
 `docker/scripts/kart-device-groups.sh`がadminの所属グループへ登録してからgosuへ切り替えます。
 このextensionを追加・変更した場合はイメージ再ビルドが必要です。
+
+bringupの車両基板は既定で/dev/ttyACM0を使い、TUIで質問しません。
+変更時は--device、基板なしの確認は--no-bridgeを指定できます。

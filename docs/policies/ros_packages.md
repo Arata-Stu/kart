@@ -282,3 +282,6 @@ EVS packet topicは通常出版しない。可視化とbias調整はpacket配信
 運用biasはproject rootのbias/evsへ置き、bringupで起動時に明示選択する。
 調整ツールはROS非依存でカメラを直接占有し、driverと同時起動しない。
 プラグインソースは配置先のみ用意し、ユーザーが公式配布物を配置する。
+
+車両基板の運用既定値はbringup/config/vehicle/bridge.yamlの/dev/ttyACM0。
+TUIでは探索・選択せず使用する。明示的な--device上書きと--no-bridgeは維持する。

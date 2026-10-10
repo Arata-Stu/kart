@@ -1,7 +1,7 @@
 /**/kart_bridge:
   ros__parameters:
     use_sim_time: false
-    device: ''
+    device: /dev/ttyACM0  # Default board; no device selection in the TUI
     steering_scale: -1.0
     steering_offset: 0.0
     initial_steering_trim: 0.0

@@ -261,7 +261,7 @@ Foxgloveからの操作は`/localization/pose_hint`とVGL検索要求だけに�
 
 ROS開発コンテナ内で、リポジトリルートから`bash scripts/bringup.sh`を実行する。
 補助実装は`scripts/lib/bringup.py`。通常はshの入口を使う。
-fzfの上下キー・文字検索・Enterで用途、RGB/InfraのHz、EVS、Foxglove、USB車両基板を選ぶ。
+fzfの上下キー・文字検索・Enterで用途、RGB/InfraのHz、EVS、Foxgloveを選ぶ。車両基板は既定で/dev/ttyACM0を使用し、選択を省略する。
 地図走行ではmap/を深さ6まで探索し、HDMap、lane＋line、対応するVSLAM/VGL bundleを選択する。
 モデルはmodels/およびmap/からALIKED/LightGlue資産を検出する。ごみ箱・隠しdirectory・
 symlink directoryは探索しない。HDMapとbundleが同じ座標系であることは操作者が確認する。
@@ -307,7 +307,7 @@ driveには`--map-file`、`--map-dir`、`--model-dir`、`--lane-id`、`--line-ty
 |---|---|---|
 | mode | collect | collect / drive / e2e。evalはevaluation.launch.pyへ分岐 |
 | rgb_fps / infra_fps | 空 | YAML保持。0=なし、30/60/90=候補Hz |
-| device | 空 | vehicle/bridge.yaml保持（既定は未設定）。bridge有効時は必須 |
+| device | 空 | vehicle/bridge.yaml保持（既定/dev/ttyACM0）。必要時のみ明示上書き |
 | record_dir | 空 | bag YAMLの/workspaces/record保持 |
 | run_name | 空 | bagのrecording_name上書き。TUI既定run |
 | e2e_model_dir | 空 | e2e用model.onnx＋metadata.jsonのdirectory |

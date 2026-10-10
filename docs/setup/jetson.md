@@ -428,7 +428,7 @@ ros2 run kart_joy kart_joy_config cui
 ## 9. USB bridge・RealSenseの確認へ進む
 
 USB bridgeを使う場合、まずホストとコンテナで`ls -l /dev/serial/by-id/`と
-`ls -ln /dev/ttyACM*`を照合する。基板IDは実物から選び、最初のttyACMを自動選択しない。
+`ls -ln /dev/ttyACM*`を照合する。bringupの運用既定値は/dev/ttyACM0で、TUIのデバイス選択は省略する。
 コンテナ内にby-idがない場合は、対応を確認したttyACMパスを明示する。
 デバイスが見えない場合は`docker/dockerargs`に対象の`--device=/dev/ttyACM0`等を追加して再作成する。
 `dev.sh`がdialoutとttyACM/ttyUSBの数値GIDを`--group-add`で自動追加する。
