@@ -2,6 +2,16 @@
 
 初回準備: [セットアップ一覧](docs/setup/README.md) / [Jetsonセットアップ](docs/setup/jetson.md) / [x86_64 Ubuntuセットアップ](docs/setup/x86_64.md)。
 
+## 用途別bringup
+
+ROS開発コンテナ内でビルド後、`bash scripts/bringup.sh`を実行する。
+TUIからデータ収集／地図走行／E2E／bagでlocalization確認を選択する。
+RGB・Infraは30/60/90Hz/なし、地図・lane・center/race/custom・モデル・bagは一覧選択。
+録画先は日付/起動時刻/run_name（最初の録画開始時に作成）。offline確認はRVizを既定起動。
+`bash scripts/bringup.sh --dry-run`で起動せず選択内容を確認できる。
+録画はL1開始／R1停止。起動時にAUTOへ切り替えない。
+[構成・引数・検証範囲](ros2_ws/src/kart_bringup/README.md#用途別起動tui)を参照。
+
 ## 地図UI: Kart Map Studio
 
 [使い方・構成](tools/app/README.md) / [設計方針](docs/policies/ui_app.md)

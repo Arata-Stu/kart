@@ -57,6 +57,7 @@ class Policy(nn.Module):
         if mode not in ("steer_throttle", "steer_only"):
             raise ValueError("mode must be steer_throttle or steer_only")
         self.encoder, self.mode, self.frozen = encoder, mode, frozen
+        self.runtime = {"fixed_throttle": 0.0, "max_throttle": 0.2}
         self.head = nn.Sequential(
             nn.Linear(384, 128),
             nn.GELU(),
@@ -87,5 +88,6 @@ def load_checkpoint(path, repo, device="cpu"):
     if state["spec"] != SPEC:
         raise ValueError("Unsupported checkpoint preprocessing/encoder contract")
     model = Policy(backbone(repo), state["mode"])
+    model.runtime = state.get("runtime")
     model.load_state_dict(state["state_dict"], strict=True)
     return model.to(device).eval()

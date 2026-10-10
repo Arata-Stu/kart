@@ -16,3 +16,8 @@
   bagのstop/terminate timeoutとRAW service timeoutに余裕を加える。
 - 可視化画像はsensor側の独立した任意経路。packet配信OFFでも画像出力が可能。
   画像の時刻はpacket受信時刻への推定対応であり、hardware同期を保証しない。
+
+## セッション保存
+
+bringupではsession_layout=trueで起動日時/date/time/run_nameへ保存する。
+最初のSTARTまでdirectoryは作成しない。同セッション再録画はname_01等で既存資産を保持する。

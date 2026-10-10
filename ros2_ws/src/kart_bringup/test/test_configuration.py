@@ -37,6 +37,13 @@ class ConfigurationTest(unittest.TestCase):
         self.assertEqual(modules['bag_manager']['effective']['output_dir'],'/data/run')
         self.assertEqual(modules['bag_manager']['overrides'],{'output_dir':'/data/run'})
 
+    def test_recording_runtime_overrides(self):
+        _, modules = load(self.path, {'run_name': 'trial', 'session_layout': 'false'})
+        self.assertEqual(modules['bag_manager']['effective']['recording_name'], 'trial')
+        self.assertFalse(modules['bag_manager']['effective']['session_layout'])
+        with self.assertRaises(ValueError):
+            load(self.path, {'session_layout': 'yes'})
+
     def test_device_from_yaml_is_used(self):
         self.edit('vehicle/bridge.yaml',lambda d:d['/**/kart_bridge']['ros__parameters'].update(device='/dev/configured'))
         _, modules = load(self.path,{'enable_bridge':'true','device':''})

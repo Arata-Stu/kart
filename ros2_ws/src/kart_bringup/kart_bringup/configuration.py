@@ -10,7 +10,7 @@ NODE_NAMES = {
 }
 BOOL_KEYS = ('composed', 'enable_joy', 'enable_control', 'enable_bridge', 'enable_bag_manager', 'enable_jetson_stats')
 RUNTIME_KEYS = (*BOOL_KEYS, 'container_name', 'namespace', 'bag_shutdown_timeout',
-                'profile', 'device', 'record_dir', 'bag_config')
+                'profile', 'device', 'record_dir', 'bag_config', 'run_name', 'session_layout')
 
 
 def load(path, overrides=None):
@@ -66,10 +66,16 @@ def load(path, overrides=None):
         modules[key] = {'file': str(config_path), 'overrides': {}, 'effective': dict(params)}
     for argument, module, parameter in (('profile', 'joy', 'profile_path'),
                                         ('device', 'bridge', 'device'),
-                                        ('record_dir', 'bag_manager', 'output_dir')):
+                                        ('record_dir', 'bag_manager', 'output_dir'),
+                                        ('run_name', 'bag_manager', 'recording_name')):
         if argument in overrides:
             modules[module]['overrides'][parameter] = overrides[argument]
             modules[module]['effective'][parameter] = overrides[argument]
+    if 'session_layout' in overrides:
+        if overrides['session_layout'] not in ('true', 'false'):
+            raise ValueError('session_layout must be true or false')
+        for key in ('overrides', 'effective'):
+            modules['bag_manager'][key]['session_layout'] = overrides['session_layout'] == 'true'
     if settings['enable_bridge']:
         if not modules['bridge']['effective'].get('device'):
             raise ValueError('bridge requires device in vehicle/bridge.yaml or device:=...')

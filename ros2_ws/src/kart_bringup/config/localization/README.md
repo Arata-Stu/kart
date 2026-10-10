@@ -288,3 +288,13 @@ VSLAM用だけ作成し、VGL用は外部へloadする構成も可能。
 再起動時の二重loadを避けるため所有側で管理し、必要なら`ros2 component list`でIDを確認して
 `ros2 component unload /perception ID`を実行する。既存同名Componentの自動置換は行わない。
 LoadComposableNodesがcontainerのload serviceを待つため、固定秒数のsleepは設けない。
+
+
+## Notebookの可視化上書き
+
+localization.launch.pyのvisualizeは空が既定（YAML保持）。trueを明示すると
+enable_slam_visualization / enable_landmarks_view / enable_observations_viewを有効化する。
+evaluation.launch.pyはこの上書きとuse_sim_time=trueを使用する。
+live missionはvisualizeを上書きしない。driveでは実センサとVSLAMを同じcontainerへloadし、
+VGLのcontainerだけlocalizationが作成する。
+bag/RViz構成は[../evaluation/README.md](../evaluation/README.md)参照。

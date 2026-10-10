@@ -1,0 +1,7 @@
+/**/replay_ready:
+  ros__parameters:
+    use_sim_time: false  # Wall clock: playback has not started yet.
+    image_topics: [/realsense/infra1/image_rect_raw, /realsense/infra2/image_rect_raw]
+    subscriber_nodes: [visual_slam, visual_global_localization]
+    resume_service: /rosbag2_player/resume
+    timeout_s: 120.0

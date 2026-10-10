@@ -61,6 +61,15 @@ def main():
     p.add_argument(
         "--mode", choices=["steer_throttle", "steer_only"], default="steer_throttle"
     )
+    p.add_argument(
+        "--fixed-throttle",
+        type=float,
+        default=0.0,
+        help="Steer-only deployment throttle",
+    )
+    p.add_argument(
+        "--max-throttle", type=float, default=0.2, help="Deployment output ceiling"
+    )
     p.add_argument("--finetune", action="store_true")
     p.add_argument("--device", default="cuda")
     p.add_argument("--epochs", type=int, default=20)
@@ -76,6 +85,11 @@ def main():
     ):
         p.error("epochs, batch-size and learning-rate must be positive")
 
+    from .contract import validate_runtime
+
+    runtime = validate_runtime(
+        {"fixed_throttle": a.fixed_throttle, "max_throttle": a.max_throttle}
+    )
     random.seed(a.seed)
     np.random.seed(a.seed)
     torch.manual_seed(a.seed)
@@ -85,6 +99,7 @@ def main():
         torch.load(a.weights, map_location="cpu", weights_only=True), strict=True
     )
     model = Policy(encoder, a.mode, frozen=not a.finetune).to(a.device)
+    model.runtime = runtime
     optimizer = torch.optim.AdamW(
         (v for v in model.parameters() if v.requires_grad), lr=a.learning_rate
     )
@@ -133,6 +148,7 @@ def main():
                 "spec": SPEC,
                 "mode": a.mode,
                 "state_dict": model.state_dict(),
+                "runtime": runtime,
                 "metrics": metrics,
                 "provenance": provenance,
             }

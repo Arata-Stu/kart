@@ -47,3 +47,9 @@ Map Studioの独立「学習」画面から、dataset作成・学習・ONNX expo
 CLIを正本としてUIは固定引数の組み立て・ジョブ管理・成果物一覧だけを担当する。
 成功した成果物だけを原子的に公開する。同一bagを理由に学習開始を拒否しない。
 転送はhash検証付きのONNX bundleのみ。TensorRT engineはtargetで生成し、UIで走行を起動しない。
+
+## 起動モデルの契約
+
+学習時のruntime.fixed_throttle/max_throttleをcheckpoint→ONNX metadata→decoderへ継承する。
+TUIはoutput_modeとmodel_specも検証し、RGBなしを拒否する。センサとencoder/TensorRTは同一container。
+E2EモードではVSLAM/VGLを起動せず、AUTOは引き続き利用者の操作で選択する。

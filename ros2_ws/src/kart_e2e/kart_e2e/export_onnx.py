@@ -26,6 +26,9 @@ class ExportPolicy(nn.Module):
 
 
 def export(policy, output):
+    from .contract import validate_runtime
+
+    runtime = validate_runtime(policy.runtime)
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     model = ExportPolicy(policy.cpu().eval()).eval()
@@ -66,6 +69,7 @@ def export(policy, output):
         "schema": 1,
         "model_spec": SPEC,
         "output_mode": policy.mode,
+        "runtime": runtime,
         "input_name": "image",
         "input_shape": [1, 3, 120, 212],
         "output_name": "control",
@@ -82,8 +86,24 @@ def main():
     p.add_argument("checkpoint", type=Path)
     p.add_argument("output", type=Path)
     p.add_argument("--repo", required=True)
+    p.add_argument("--fixed-throttle", type=float, default=None)
+    p.add_argument("--max-throttle", type=float, default=None)
     a = p.parse_args()
-    print(json.dumps(export(load_checkpoint(a.checkpoint, a.repo), a.output), indent=2))
+    policy = load_checkpoint(a.checkpoint, a.repo)
+    if a.fixed_throttle is not None or a.max_throttle is not None:
+        runtime = policy.runtime or {"fixed_throttle": 0.0, "max_throttle": 0.2}
+        if (
+            policy.runtime is None
+            and policy.mode == "steer_only"
+            and a.fixed_throttle is None
+        ):
+            p.error("Legacy steer-only checkpoint needs explicit --fixed-throttle")
+        if a.fixed_throttle is not None:
+            runtime["fixed_throttle"] = a.fixed_throttle
+        if a.max_throttle is not None:
+            runtime["max_throttle"] = a.max_throttle
+        policy.runtime = runtime
+    print(json.dumps(export(policy, a.output), indent=2))
 
 
 if __name__ == "__main__":

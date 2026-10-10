@@ -41,3 +41,27 @@ def model_contract(directory):
         "model_file_path": str(path),
         "engine_file_path": str(directory / f"model_{digest[:12]}.plan"),
     }, mode
+
+
+def validate_runtime(values):
+    import math
+
+    if not isinstance(values, dict) or set(values) != {
+        "fixed_throttle",
+        "max_throttle",
+    }:
+        raise ValueError(
+            "Model runtime metadata missing: re-export with fixed/max throttle settings"
+        )
+    if any(
+        type(v) not in (int, float) or not math.isfinite(v) for v in values.values()
+    ):
+        raise ValueError("Throttle settings must be finite numbers")
+    if not 0 <= values["fixed_throttle"] <= values["max_throttle"] <= 1:
+        raise ValueError("Require 0 <= fixed_throttle <= max_throttle <= 1")
+    return dict(values)
+
+
+def runtime_settings(directory):
+    metadata = json.loads((Path(directory) / "metadata.json").read_text())
+    return validate_runtime(metadata.get("runtime"))

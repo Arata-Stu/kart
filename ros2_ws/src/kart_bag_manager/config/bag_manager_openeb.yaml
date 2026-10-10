@@ -3,6 +3,7 @@
   ros__parameters:
     output_dir: /workspaces/record
     recording_name: ''
+    session_layout: false  # date/time/run_name layout; directories created only on START
     record_all: false
     topics:
     - joy

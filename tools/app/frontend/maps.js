@@ -135,6 +135,8 @@ function status() {
     : "";
   $("empty-canvas").hidden = !!state.doc;
   $("save").disabled = !d || !state.dirty || busy;
+  $("lane-reverse").disabled = !d || busy;
+  $("simulation-open").disabled = !d || busy || !Object.keys(d.lines).length;
   $("delete-map").disabled = !state.doc || busy;
   $("copy-map").disabled = !state.doc || busy;
   $("capture-open").disabled =

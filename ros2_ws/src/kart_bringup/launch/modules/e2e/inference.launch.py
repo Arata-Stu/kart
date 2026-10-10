@@ -3,7 +3,7 @@
 import isaac_ros_launch_utils as lu
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.e2e import boolean, parameters
-from kart_e2e.contract import model_contract
+from kart_e2e.contract import model_contract, runtime_settings
 
 
 def add_nodes(args):
@@ -20,6 +20,7 @@ def add_nodes(args):
     ):
         raise ValueError("Tensor names must match exported ONNX bindings")
     trt.update(paths)
+    decoder.update(runtime_settings(args.model_dir))
     decoder["output_mode"] = mode
     if args.use_sim_time != "":
         trt["use_sim_time"] = decoder["use_sim_time"] = boolean(args.use_sim_time)

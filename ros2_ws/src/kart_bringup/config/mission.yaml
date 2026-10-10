@@ -1,0 +1,21 @@
+# System composition only; node parameters remain in each module YAML.
+sensor_container: kart_sensor_container
+create_sensor_container: true
+sensor_container_type: multithreaded
+enable_evs: false
+enable_foxglove: false
+enable_bridge: true
+e2e_drive_enabled: true  # Decoder may publish only while vehicle mode is AUTO
+modes:
+  collect:
+    localization: false
+    tracking: false
+    e2e: false
+  drive:
+    localization: true
+    tracking: true
+    e2e: false
+  e2e:
+    localization: false
+    tracking: false
+    e2e: true

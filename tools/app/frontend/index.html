@@ -200,6 +200,15 @@
           <section id="panel-lines" hidden>
             <div class="eyebrow">PATH DESIGN</div>
             <h2>ラインを生成</h2>
+            <div class="actions">
+              <button
+                id="lane-reverse"
+                title="選択laneの境界・Customを反転。生成ラインは再生成が必要です"
+              >
+                進行方向を反転
+              </button>
+              <button id="simulation-open">試走 ▶</button>
+            </div>
             <div class="line-card">
               <div>
                 <strong>Centerline</strong
@@ -402,6 +411,26 @@
                 <option value="steer_only">ステアのみ</option>
               </select></label
             >
+          </div>
+          <div class="form-grid">
+            <label
+              >固定スロットル（ステアのみ）<input
+                id="e2e-fixed-throttle"
+                type="number"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0"
+            /></label>
+            <label
+              >推論スロットル上限<input
+                id="e2e-max-throttle"
+                type="number"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0.2"
+            /></label>
           </div>
           <div class="e2e-three">
             <label
@@ -822,6 +851,66 @@
         地図フォルダ一式を保持しています。復元は同名地図を上書きしません。
       </p>
       <div id="trash-list" class="scroll"></div>
+    </dialog>
+    <dialog id="simulation-dialog">
+      <div class="dialog-title">
+        <h2 id="simulation-title">試走</h2>
+        <button data-close="simulation-dialog" aria-label="試走を閉じる">
+          ×
+        </button>
+      </div>
+      <div class="simulation-controls">
+        <label>ライン<select id="simulation-line"></select></label>
+        <label
+          >速度上限 m/s<input
+            id="simulation-speed"
+            type="number"
+            min="0.1"
+            max="20"
+            step="0.1"
+            value="1"
+        /></label>
+        <label
+          >先読み m<input
+            id="simulation-lookahead"
+            type="number"
+            min="0.05"
+            max="10"
+            step="0.05"
+            value="0.8"
+        /></label>
+        <label
+          >軸距 m<input
+            id="simulation-wheelbase"
+            type="number"
+            min="0.05"
+            max="2"
+            step="0.001"
+            value="0.257"
+        /></label>
+        <label
+          >最大舵角 °（仮）<input
+            id="simulation-steer"
+            type="number"
+            min="1"
+            max="60"
+            step="1"
+            value="26"
+        /></label>
+      </div>
+      <canvas
+        id="simulation-canvas"
+        aria-label="生成ラインの試走プレビュー"
+      ></canvas>
+      <div class="actions">
+        <button id="simulation-play">再生</button
+        ><button id="simulation-reset">リセット</button>
+      </div>
+      <p id="simulation-metrics" aria-live="off"></p>
+      <p class="help">
+        Pure
+        Pursuit＋自転車モデル。Race／Customは生成速度を目標に使用。長方形の基準は後輪軸。境界・障害物は表示のみで、試走軌跡の衝突判定・回避、実車PIDやタイヤ特性は未再現です。
+      </p>
     </dialog>
     <script type="module" src="app.js"></script>
   </body>

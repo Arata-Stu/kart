@@ -36,3 +36,10 @@ localizationはIsaac ROS 5.0のmapping/localization系に合わせ、
 - 外部所有containerは停止・自動unload・既存Component置換をしない。ライフサイクルは所有側の責務。
 - VSLAMを入れるcontainerにはmultithread executorが必要。別moduleを追加する際も、
   executor要件・TF配信者・processを共有する影響を最上位で判断する。
+
+## Offline bag確認
+
+evaluation.launch.pyはsensor/vehicle/controlを起動せず、左右画像・CameraInfo・/tf_staticだけ再生する。
+/clockでlocalization/HDMap/RVizの時間を統一し、入力購読準備後に1倍速開始。
+過去の/tf（動的TF）は使わずVSLAMがTFを所有する。校正TFが必要。
+Notebookのみvisualize=true。RVizは公式cuVSLAM設定をベースとする。正解軌跡なしに精度値は主張しない。

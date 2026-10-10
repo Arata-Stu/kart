@@ -3,6 +3,7 @@
   ros__parameters:
     output_dir: /workspaces/record
     recording_name: ''
+    session_layout: true  # date/time/run_name layout; directories created only on START
     record_all: false
     topics:
     - joy
@@ -43,6 +44,17 @@
     - realsense/accel/sample
     - realsense/gyro/sample
     - visual_slam/tracking/odometry
+    - /realsense/diagnostics
+    - /localization/vslam/diagnostics
+    - /localization/vgl/diagnostics
+    - /localization/pose_hint
+    - /planning/reference_line
+    - /hdmap/selected_lane
+    - /hdmap/selected_line
+    - /control/tracking_cmd
+    - /control/tracking_status
+    - /control/lookahead
+    - /control/speed_diagnostics
     exclude_topics:
     - /event_camera/events_raw
     - /event_camera/events

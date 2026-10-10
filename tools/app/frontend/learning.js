@@ -148,6 +148,8 @@ action("e2e-start-train", () =>
     train: selected("e2e-train-data"),
     validation: selected("e2e-validation-data"),
     mode: $("e2e-mode").value,
+    fixed_throttle: Number($("e2e-fixed-throttle").value),
+    max_throttle: Number($("e2e-max-throttle").value),
     epochs: Number($("e2e-epochs").value),
     batch_size: Number($("e2e-batch").value),
     learning_rate: Number($("e2e-lr").value),

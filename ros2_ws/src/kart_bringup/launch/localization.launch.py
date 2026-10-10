@@ -22,6 +22,15 @@ def add_localization(args: lu.ArgumentContainer) -> list[lut.Action]:
         config, args.map_dir, args.model_dir, overrides, inspect_engines
     )
 
+    if args.visualize != "":
+        from kart_bringup.mission import boolean
+
+        enabled = boolean(args.visualize)
+        parameters["cuvslam"].update(
+            enable_slam_visualization=enabled,
+            enable_landmarks_view=enabled,
+            enable_observations_view=enabled,
+        )
     targets, containers = plan(
         config / "containers.json",
         {
@@ -85,6 +94,12 @@ def generate_launch_description() -> lut.LaunchDescription:
         "",
         description="Override both clocks; empty preserves YAML",
         choices=["", "true", "false", "True", "False"],
+        cli=True,
+    )
+    args.add_arg(
+        "visualize",
+        "",
+        description="Offline visualization override; empty keeps pose-only YAML",
         cli=True,
     )
     for kind in ("vslam", "vgl"):

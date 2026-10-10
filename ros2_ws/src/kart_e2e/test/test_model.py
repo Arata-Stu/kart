@@ -35,9 +35,15 @@ class ModelTests(unittest.TestCase):
             expected = model(image).detach()
             with tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / "policy.pt"
-                state = {"spec": SPEC, "mode": mode, "state_dict": model.state_dict()}
+                state = {
+                    "spec": SPEC,
+                    "mode": mode,
+                    "state_dict": model.state_dict(),
+                    "runtime": {"fixed_throttle": 0.12, "max_throttle": 0.2},
+                }
                 torch.save(state, path)
                 restored = load_checkpoint(path, REPO)
+                self.assertEqual(restored.runtime, state["runtime"])
                 torch.testing.assert_close(expected, restored(image))
                 state["spec"] = {**SPEC, "width": 999}
                 torch.save(state, path)

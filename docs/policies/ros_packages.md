@@ -248,3 +248,20 @@ localization/control等の各moduleに重複配置しない。公式jtopはPytho
 containerへloadせず別processで起動する。notepcでは自動skipし、Jetson限定依存を無条件に要求しない。
 測定DiagnosticArrayを専用topicへ分離して標準rosbag対象へ含める。
 監視の起動と録画STARTは分離し、hostのfan/clock/power設定をlaunchで変更しない。
+
+## 9. 用途別の起動入口
+
+`scripts/bringup.sh`のTUIは選択と`mission.launch.py` / `evaluation.launch.py`呼出しに限定する。
+collectはセンサ・手動vehicle・録画管理・監視のみ、driveは地図localization・offline参照ライン追従を追加。
+構成の正本はbringup/config/mission.yaml。ROS nodeの静的値は各module YAMLに置く。
+Hz選択はprofileのrateだけを明示上書きし、未指定ではYAMLを保持する。
+TUIから録画STARTやAUTO要求を自動送信しない。地図とモデルは一覧探索し、
+HDMapとVSLAM/VGL bundleを別資産として明示選択する。TFを仮値で補わない。
+missionはsensor containerのみを所有し、sensor moduleはloadのみ。
+driveのVSLAM、e2eのimage encoder/TensorRTは実センサと同じcontainerへloadする。
+VGL/vehicle/trackingは各top-level launch所有。下位moduleはloadのみ。
+evalは実センサなしのbag再生なのでlocalization自身がcontainerを所有する。
+
+E2Eはlocalizationを起動せず、実行時throttleと前処理の正本はモデルmetadata。
+evalは再生・localization・HDMap・RVizに限定し、古い動的TFや制御指令を再生しない。
+録画のsession directoryは最初のSTARTで作成し、run_nameを起動時に選ぶ。

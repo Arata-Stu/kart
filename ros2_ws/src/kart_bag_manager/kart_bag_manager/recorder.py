@@ -28,6 +28,7 @@ DEFAULT_TOPICS = [
 class Settings:
     output_dir: str = '/workspaces/record'
     recording_name: str = ''
+    session_layout: bool = False
     record_all: bool = False
     topics: list = field(default_factory=lambda: list(DEFAULT_TOPICS))
     exclude_topics: list = field(default_factory=list)
@@ -111,7 +112,7 @@ class Recorder:
         settings.validate()
         self.settings, self._popen, self._clock = settings, popen, clock
         self.output_dir = Path(settings.output_dir).expanduser().resolve()
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.session_stamp = datetime.now().strftime('%Y-%m-%d/%H%M%S')
         self.process = None
         self.phase = 'idle'
         self.current_uri = ''
@@ -126,6 +127,14 @@ class Recorder:
 
     def next_path(self, label):
         now = datetime.now()
+        if self.settings.session_layout:
+            parent = self.output_dir / self.session_stamp
+            name = self.settings.recording_name or 'run'
+            path, suffix = parent / name, 1
+            while path.exists() or path.is_symlink():
+                path = parent / f'{name}_{suffix:02d}'
+                suffix += 1
+            return path
         if self.settings.recording_name:
             parent, name = self.output_dir / now.strftime('%Y-%m-%d'), self.settings.recording_name
         else:

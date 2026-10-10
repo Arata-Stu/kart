@@ -121,6 +121,8 @@ class LearningTests(unittest.TestCase):
             train=["train"],
             validation=["val"],
             mode="steer_only",
+            fixed_throttle=0.12,
+            max_throttle=0.25,
             epochs=2,
             finetune=True,
         )
@@ -129,9 +131,13 @@ class LearningTests(unittest.TestCase):
         plan = self.service.prepare("train", body)
         job = FakeJob()
         self.service.execute(job, plan)
+        self.assertEqual(job.args[job.args.index("--fixed-throttle") + 1], "0.12")
+        self.assertEqual(job.args[job.args.index("--max-throttle") + 1], "0.25")
         self.assertIn("--finetune", job.args)
         self.assertIn("steer_only", job.args)
         self.assertEqual(self.service.catalog()["runs"][0]["metrics"]["epoch"], 1)
+        with self.assertRaises(ValueError):
+            self.service.prepare("train", {**body, "name": "bad_runtime", "fixed_throttle": 0.9})
         export = self.service.prepare("export", dict(name="model", run="run"))
         self.assertEqual(export["module"], "export_onnx")
         self.assertTrue(export["args"][0].endswith("/run/best.pt"))

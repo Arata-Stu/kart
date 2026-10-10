@@ -89,7 +89,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ros-lyrical-ament-cmake-auto ros-lyrical-ament-cmake-python \
         ros-lyrical-ament-cmake-pytest ros-lyrical-rclcpp-components \
         ros-lyrical-rosidl-default-generators ros-lyrical-diagnostic-msgs ros-lyrical-ackermann-msgs \
-        ros-lyrical-ros2bag ros-lyrical-rosbag2-storage-mcap \
+        ros-lyrical-ros2bag ros-lyrical-rosbag2-storage-mcap ros-lyrical-rosbag2-interfaces ros-lyrical-rviz2 \
         ros-lyrical-rosbag2-py ros-lyrical-sensor-msgs-py \
         ros-lyrical-ament-index-python ros-lyrical-builtin-interfaces \
         ros-lyrical-geometry-msgs ros-lyrical-nav-msgs ros-lyrical-sensor-msgs \

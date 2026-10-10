@@ -170,6 +170,10 @@ class Learning:
             epochs = self.integer(body.get("epochs", 20), 1, 100000)
             batch = self.integer(body.get("batch_size", 32), 1, 4096)
             lr = self.number(body.get("learning_rate", 0.0001), 1e-9, 1)
+            fixed = self.number(body.get("fixed_throttle", 0.0), 0, 1)
+            maximum = self.number(body.get("max_throttle", 0.2), 0, 1)
+            if fixed > maximum:
+                raise ValueError("固定スロットルは上限以下にしてください")
             finetune = body.get("finetune", False)
             if not isinstance(finetune, bool):
                 raise ValueError("finetuneはboolです")
@@ -186,6 +190,10 @@ class Learning:
                 "@OUTPUT@",
                 "--mode",
                 mode,
+                "--fixed-throttle",
+                str(fixed),
+                "--max-throttle",
+                str(maximum),
                 "--epochs",
                 str(epochs),
                 "--batch-size",

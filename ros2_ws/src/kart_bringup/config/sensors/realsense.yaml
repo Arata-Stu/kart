@@ -1,0 +1,80 @@
+# Source: realsenseai/realsense-ros r/4.56.3, rs_launch.py and src/parameters.cpp.
+# Dockerfile.realsense builds this version from source. 2026-10-10.
+# Used D455 stereo/RGB/IMU settings are explicit. Device-specific dynamic SDK
+# options (auto-discovered exposure ranges, sensor controls) retain driver defaults
+# unless listed. No depth/postprocessing/GLSL acceleration. FPS overrides only
+# replace profile rate and enable flags, never the static width/height.
+# Node name controls /realsense topics; camera_name controls camera_* TF prefix.
+# base_frame_id is a SUFFIX: driver prepends camera_name + '_' (camera_link).
+/**/realsense:
+  ros__parameters:
+    use_sim_time: false
+    camera_name: camera
+    base_frame_id: link
+    serial_no: ''
+    usb_port_id: ''
+    device_type: ''
+    json_file_path: ''
+    rosbag_filename: ''
+    initial_reset: false
+    wait_for_device_timeout: -1.0
+    reconnect_timeout: 6.0
+    publish_tf: true
+    tf_publish_rate: 0.0
+    diagnostics_period: 1.0
+    enable_color: true
+    rgb_camera.color_profile: '424x240x30'
+    rgb_camera.color_format: RGB8
+    rgb_camera.enable_auto_exposure: true
+    enable_depth: false
+    enable_infra: false
+    enable_infra1: true
+    enable_infra2: true
+    depth_module.depth_profile: '424x240x60'
+    depth_module.depth_format: Z16
+    depth_module.infra_profile: '424x240x60'
+    depth_module.infra_format: RGB8
+    depth_module.infra1_format: Y8
+    depth_module.infra2_format: Y8
+    depth_module.color_profile: '0,0,0'
+    depth_module.emitter_enabled: 0
+    depth_module.enable_auto_exposure: true
+    depth_module.exposure: 8500
+    depth_module.gain: 16
+    depth_module.hdr_enabled: false
+    depth_module.exposure.1: 7500
+    depth_module.gain.1: 16
+    depth_module.exposure.2: 1
+    depth_module.gain.2: 16
+    depth_module.inter_cam_sync_mode: 0
+    enable_sync: false
+    enable_rgbd: false
+    enable_gyro: true
+    enable_accel: true
+    enable_motion: false
+    gyro_fps: 200
+    accel_fps: 250
+    unite_imu_method: 2
+    hold_back_imu_for_frames: false
+    angular_velocity_cov: 0.01
+    linear_accel_cov: 0.01
+    clip_distance: -1.0
+    pointcloud.enable: false
+    pointcloud.stream_filter: 2
+    pointcloud.stream_index_filter: 0
+    pointcloud.ordered_pc: false
+    pointcloud.allow_no_texture_points: false
+    align_depth.enable: false
+    colorizer.enable: false
+    decimation_filter.enable: false
+    spatial_filter.enable: false
+    temporal_filter.enable: false
+    disparity_filter.enable: false
+    hole_filling_filter.enable: false
+    hdr_merge.enable: false
+    infra1_qos: SENSOR_DATA
+    infra1_info_qos: SENSOR_DATA
+    infra2_qos: SENSOR_DATA
+    infra2_info_qos: SENSOR_DATA
+    color_qos: SENSOR_DATA
+    color_info_qos: SENSOR_DATA

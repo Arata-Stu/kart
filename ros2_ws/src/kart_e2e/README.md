@@ -203,3 +203,21 @@ TensorRT engine生成・数値比較・推論レイテンシ、実bag・実機�
 [UI手順と保存先](../../../tools/app/README.md#e2e学習画面)。
 
 公式重みの配置先は[weights/dinov3](../../../weights/dinov3/README.md)。UIの既定パスも同じ。
+
+## 起動時のモデル設定
+
+学習CLIの `--fixed-throttle`（既定0.0）と `--max-throttle`（既定0.2）は
+0 ≤ fixed ≤ max ≤ 1の正規化値。UIにも同じ設定欄がある。学習lossは従来どおりで、
+この2値は実行時設定としてrun.json・best.ptのruntimeへ保存する。
+ONNX exportはmetadata.jsonのruntimeへ引き継ぐ。
+
+bringupのe2eモードはmetadataからoutput_mode（steer_only/steer_throttle）、
+固定throttle・上限をdecoderへ設定し、model_specで学習時の入力サイズ・前処理との一致を検証する。
+RGB 424×240から212×120へresizeし、ImageNet正規化・224×128へのpaddingという既存契約は共通。
+steer_onlyでは予測steer＋固定throttle、steer_throttleでは予測steer/throttleを使う。
+起動はAUTOへの切替を行わず、decoderのmode gateが引き続き適用される。
+
+旧checkpointにruntimeがない場合、export CLIへ `--fixed-throttle 0.1 --max-throttle 0.2`
+等を明示して再exportする。推論起動時に不足値を推測しない。
+単独e2e.launchのfixed_throttle明示上書きは可能だが、TUIではmetadataをそのまま使用する。
+ROS node/topicの変更はない。decoderの全parameterは既存config/control_decoder.yaml参照。

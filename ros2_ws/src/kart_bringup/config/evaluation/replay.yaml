@@ -1,0 +1,8 @@
+# ros2 bag play CLI settings, not node ROS parameters. Lyrical rosbag2_transport.
+rate: 1.0
+clock_hz: 100
+read_ahead_queue_size: 1000
+# Replay only camera inputs and static calibration. Never replay old map->odom,
+# odometry, actuator/mode commands, or old localization outputs.
+extra_topics: [/tf_static]
+rviz: true

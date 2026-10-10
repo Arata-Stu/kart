@@ -77,6 +77,17 @@ function line(points, color, closed = false, dashed = false, lineWidth = 2) {
   ctx.stroke();
   ctx.setLineDash([]);
 }
+function directionArrows(points, color, closed) {
+  if (!points || points.length < 2) return;
+  for (let i = 0; i < points.length - (closed ? 0 : 1); i += Math.max(1, Math.floor(points.length / 12))) {
+    const a = project(points[i]), b = project(points[(i + 1) % points.length]);
+    const angle = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    if (Math.hypot(b[0]-a[0], b[1]-a[1]) < 1) continue;
+    ctx.save(); ctx.translate(a[0], a[1]); ctx.rotate(angle);
+    ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(-4, -4); ctx.lineTo(-4, 4); ctx.closePath();
+    ctx.fillStyle = color; ctx.fill(); ctx.restore();
+  }
+}
 function paintCloud() {
   cloudLayer.width = canvas.width;
   cloudLayer.height = canvas.height;
@@ -169,8 +180,11 @@ export function draw() {
       }
       line(d.left, colors.left, d.closed);
       line(d.right, colors.right, d.closed);
-      for (const [kind, data] of Object.entries(d.lines))
+      for (const [kind, data] of Object.entries(d.lines)) {
         line(data.points, colors[kind], d.closed, false, 2.5);
+        directionArrows(data.points, colors[kind], d.closed);
+      }
+      if (!Object.keys(d.lines).length) directionArrows(d.left, colors.left, d.closed);
       if (state.step === "lines") {
         if (state.target === "custom")
           line(d.custom, colors.custom, d.closed, true);

@@ -49,6 +49,25 @@ class RecorderTest(unittest.TestCase):
             time.sleep(0.01)
         self.fail(f'timed out: {recorder.phase}: {recorder.last_event}')
 
+    def test_lazy_session_directories_and_repeated_recording(self):
+        root = Path(self.tmp.name).resolve() / "new_record"
+        self.settings.output_dir = str(root)
+        self.settings.session_layout = True
+        self.settings.recording_name = "run_name"
+        r = self.make()
+        self.assertFalse(root.exists())
+        r.close()
+        self.assertFalse(root.exists())
+        r.start()
+        self.until(r, lambda: r.recording)
+        first = Path(r.current_uri)
+        self.assertEqual(first.relative_to(root).parts, (*r.session_stamp.split("/"), "run_name"))
+        r.stop()
+        self.until(r, lambda: r.process is None)
+        r.start()
+        self.until(r, lambda: r.recording)
+        self.assertEqual(Path(r.current_uri), first.with_name("run_name_01"))
+
     def test_start_stop_restart_and_finalize(self):
         r=self.make()
         self.assertTrue(r.start('../../label'))

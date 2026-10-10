@@ -256,3 +256,125 @@ Docker依存へ`ros-lyrical-foxglove-bridge`を追加したためimage再build�
 Foxgloveからの操作は`/localization/pose_hint`とVGL検索要求だけに限定する。
 ノードの全parameter既定値、入出力topic名・型、Foxglove操作、対応版・検証範囲は
 [visualization設定](config/visualization/README.md)と[全parameter YAML](config/visualization/foxglove.yaml)参照。
+
+## 用途別起動（TUI）
+
+ROS開発コンテナ内で、リポジトリルートから`bash scripts/bringup.sh`を実行する。
+番号選択とEnterで用途、RGB/InfraのHz、EVS、Foxglove、USB車両基板を選ぶ。
+地図走行ではmap/を深さ6まで探索し、HDMap、lane＋line、対応するVSLAM/VGL bundleを選択する。
+モデルはmodels/およびmap/からALIKED/LightGlue資産を検出する。ごみ箱・隠しdirectory・
+symlink directoryは探索しない。HDMapとbundleが同じ座標系であることは操作者が確認する。
+HDMapを選んだだけで無関係なbundleを自動対応させない。
+
+| mode | 起動内容 |
+|---|---|
+| collect | RealSense、Joy、mode manager、command mux、車両bridge、bag manager、Jetson jtop |
+| drive | collect一式＋VSLAM/VGL、HDMap/reference line、Pure Pursuit、速度PID |
+| e2e | collect一式＋公式image encoder/TensorRT＋control decoder。VSLAM/VGLなし |
+| eval | bag＋VSLAM/VGL＋HDMap＋RViz2。実センサ・車両・追従・録画なし |
+
+EVSとFoxgloveは選択時だけ追加。collectでいうvehicle controlは手動操作の制御権・指令muxであり、
+自律追従は起動しない。jtopは既存vehicle launchが所有し、非Jetsonではskipする。
+mode/構成の正本は`config/mission.yaml`。センサの詳細、topic・parameterは
+[sensors設定](config/sensors/README.md)参照。mission自身のnode/topicはない。
+
+起動しても録画は開始せず、AUTOへも切り替えない。録画はL1開始/R1停止。
+停止完了を確認してからCtrl-Cでlaunchを終了する。Hz変更は再起動時の選択であり、録画中には変更しない。
+データ収集後はMap Studioのbagからのoffline mappingを使う。このlaunchでmap生成は実行しない。
+
+```bash
+bash scripts/bringup.sh
+# 選択内容とコマンドだけ表示（ノード起動なし）
+bash scripts/bringup.sh --dry-run
+# 非対話のデータ収集例
+bash scripts/bringup.sh --mode collect --device /dev/ttyACM0 --rgb-fps 30 --infra-fps 60
+# 車両基板を接続しない確認
+bash scripts/bringup.sh --mode collect --no-bridge --dry-run
+# 外部の地図・モデル置場を一覧探索
+bash scripts/bringup.sh --map-root /workspaces/map --model-root /workspaces/models
+```
+
+TUIは標準入力の端末を使う。`q`/Ctrl-Cで終了。`--mode`指定時は非対話となり、
+driveには`--map-file`、`--map-dir`、`--model-dir`、`--lane-id`、`--line-type`を指定する。
+`--evs`、`--foxglove`で追加機能、`--no-bridge`で車両基板なし。
+`--record-dir`の既定はリポジトリのrecord/。`KART_BRINGUP_PYTHON`でPython実行系を指定できる。
+必要なpython3-yamlはDockerの既存依存。`exec`でros2 launchへ移行し、終了signalを直接届ける。
+
+### mission.launch.py引数
+
+| 引数 | 既定 | 意味 |
+|---|---|---|
+| mode | collect | collect / drive / e2e。evalはevaluation.launch.pyへ分岐 |
+| rgb_fps / infra_fps | 空 | YAML保持。0=なし、30/60/90=候補Hz |
+| device | 空 | vehicle/bridge.yaml保持（既定は未設定）。bridge有効時は必須 |
+| record_dir | 空 | bag YAMLの/workspaces/record保持 |
+| run_name | 空 | bagのrecording_name上書き。TUI既定run |
+| e2e_model_dir | 空 | e2e用model.onnx＋metadata.jsonのdirectory |
+| enable_bridge | 空 | mission YAMLのtrue保持。falseでUSB基板を起動しない |
+| enable_evs / enable_foxglove | 空 | mission YAMLのfalse保持 |
+| sensor_container | 空 | mission YAMLのkart_sensor_container保持 |
+| create_sensor_container | 空 | mission YAMLのtrue保持。falseは外部所有containerへのload |
+| map_file | 空 | drive用のmap.jsonまたはhd_map.yaml |
+| map_dir | 空 | drive用の完成したkart.vgl.v1 bundle |
+| model_dir | 空 | 対象GPU用ALIKED/LightGlueモデルdirectory |
+| lane_id | 空 | drive用HDMap内のlane ID |
+| line_type | 空 | drive用centerline / raceline / customline |
+
+`config/mission.yaml`の`sensor_container_type=multithreaded`を使用。
+各modeのlocalization/tracking/e2eはcollect=false/false/false、drive=true/true/false、
+e2e=false/false/true。e2e_drive_enabled=trueでdecoderを有効化するが、AUTO操作までは出力しない。
+missionはsensor containerを一度だけ作成し、RealSense/OpenEBとVSLAMまたはE2Eの
+image encoder・TensorRT・decoderを同じcontainerへloadする。VGL、vehicle、trackingは別所有。
+下位moduleはcontainerを作らない。evalは実センサを使わず、localizationがcontainerを所有する。
+二重起動しないこと。追加で独立launchを起動する場合はcontainer所有権とnode重複を確認する。
+
+センサ・localization・controlの状態と選択ラインはbringupのbag設定に追加。
+`realsense2_camera`はDockerfile.realsenseで既にビルドするためDockerfile.kartのAPTへ重複追加しない。
+`openeb_ros2`は任意機能であり、kart branchを別途導入・ビルドしてからEVSを有効にする。
+
+現時点で車体→カメラの取付TFは仮候補のため未配信。後輪軸TF、舵角校正・PID調整は別途必要。
+地図走行の起動構成が揃っても、既定の舵角0・PID gain 0のままで走行可能とは扱わない。
+VGL engineは実行GPU上で既存localization launchが検査する。
+検証: portable選択・引数・探索テスト、shell構文、dry-run。
+ROS/GPU/componentロード、RealSense実機Hz、車両・RAW記録連携は未確認。
+
+### 選択・保存・E2E metadata
+
+RGB/Infraは30/60/90Hz/なし。カメラ機種の実profile対応は別途確認する。
+driveでInfraなし、e2eでRGBなしは起動前エラー。evalではbagの左右画像・CameraInfo・
+/tf_staticに記録があることを確認し、不足をエラーにする。
+centerline/raceline/customlineはHDMap内で生成済みのものだけ一覧に出す。
+
+run_nameは起動時に入力、または `--run-name trial`。
+保存先は `record/YYYY-MM-DD/HHMMSS/trial`。日時はbag manager起動時に固定。
+同じセッションの追加録画はtrial_01等。START前にdirectoryを作らないため、
+起動直後のCtrl-Cでは空directoryは残らない。自動削除はしない。
+
+E2Eはmodels/およびe2e/models/からONNX exportを探索する。checkpoint .ptではなく、
+model.onnxとmetadata.jsonが必要。output_mode、入力サイズ・前処理、固定throttle・上限を
+metadataで検証/適用する。steer_onlyは固定throttle、steer_throttleは予測throttleを使用。
+runtime metadataのない旧exportは選択候補外とし、学習checkpointから値を明示して再exportする。
+[モデル契約](../kart_e2e/README.md#起動時のモデル設定)参照。
+
+### Notebookでbagのlocalization確認
+
+TUIの4番evalでHDMap、lane/line、対応bundle、Notebook GPU用VGLモデル、bagを選ぶ。
+`--record-dir`がbag探索ルート。既定1倍速、CLI `--rate`で変更可能。
+RVizはNVIDIA公式cuVSLAM default.cfg.rvizを基に、画像displayを除き、
+HDMapとVGL poseを追加。Fixed Frameはmap。2D Pose Estimateは/localization/pose_hintへ送る。
+VGL→VSLAM再localizeの経路はliveと共通。VGLはbootstrap/再要求時に動作する。
+
+`evaluation.launch.py`はbag/map_dir/model_dir/map_file/lane_id/line_typeが必須。
+rate/rvizの既定は空でevaluation/replay.yamlを保持（1.0/true）。
+`localization.launch.py visualize:=true`はSLAM/landmarks/observations可視化を有効化する。
+Jetsonのlive YAMLはpose/path中心のまま。moduleと全parameter/topicは
+[evaluation設定](config/evaluation/README.md)参照。
+
+過去の動的TF（/tf）・odom・制御topicは再生しない。
+カメラ入力と/tf_staticを再生し、新しいVSLAMだけがmap→odom→base_linkを配信する。
+bagに校正済み車体→カメラTFが必要。仮のidentity TFで補完しない。
+RVizで点群/HDMap/軌跡の整合性を確認できるが、正解軌跡なしのATE/RPE評価は実装していない。
+portable検証とROS/GPU/実bag動作は別であり、実機統合は未検証。
+
+vehicle.launch.pyの追加実行時引数run_name（既定空）はrecording_name、session_layout（既定空）は
+bagのsession_layoutを明示上書きする。空の場合は運用YAMLを保持する。

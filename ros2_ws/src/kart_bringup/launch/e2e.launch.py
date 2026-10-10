@@ -3,7 +3,7 @@
 import isaac_ros_launch_utils as lu
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.e2e import container_config, validate_encoder
-from kart_e2e.contract import model_contract
+from kart_e2e.contract import model_contract, runtime_settings
 
 
 def add_pipeline(args):
@@ -19,6 +19,7 @@ def add_pipeline(args):
         {key: getattr(args, key) for key in keys},
     )
     model_contract(config["model_dir"])
+    runtime_settings(config["model_dir"])
     validate_encoder(lu.get_path("kart_bringup", "config/e2e/image_encoder.yaml"))
     actions = [lu.log_info(f"E2E pipeline: {config}")]
     if config["create_container"]:
