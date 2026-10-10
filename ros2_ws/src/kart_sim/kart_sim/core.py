@@ -10,7 +10,7 @@ from .world import load_map, add_world
 from .sensors import SensorSuite, attach_sensors
 from .rig import D455Rig, OPTICAL_QUAT, rotation, quaternion, rpy_quaternion
 
-CAMERA_XYZ = (.23385, .04750, .03000)  # kart provisional camera_mount, not calibration.
+CAMERA_XYZ = (.23385, .04750, .10000)  # ~133 mm above floor with nominal 33 mm tires.
 
 class Simulation:
     def __init__(self, map_file, asset_root, camera=False, max_steer=.45, wheel_torque=.025,

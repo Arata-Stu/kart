@@ -1,18 +1,18 @@
 [
   {
     "name": "TT02Frame",
-    "source": "/Users/at/project/tools/FreeCAD/D455_mount/output/assembly_standard/D455_TT02_Assembly.FCStd",
-    "vertices": 3560,
-    "triangles": 7172,
+    "source": "/Users/at/project/tools/FreeCAD/D455_mount/output/tt02_frame/TT02_short-front_D455.FCStd",
+    "vertices": 3552,
+    "triangles": 7156,
     "bounds_mm": [
       -60.0,
       -112.5,
       0.0,
       60.0,
-      112.5,
+      85.5,
       5.0
     ],
-    "volume_mm3": 122933.03107042007,
+    "volume_mm3": 111283.03107042004,
     "extra_translation_mm": [
       0,
       0,

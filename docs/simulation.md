@@ -41,6 +41,12 @@ base_linkはkartの後輪軸中心。rc-simのchassis中心をそのままROS原
 位置とtwistの原点を変換し、rear_axleはbase_linkにidentityで接続する。
 カメラmountはkart_bringup/config/vehicle/transforms.yamlの暫定値を反映するが実測校正ではない。
 仮想カメラは理想pinhole。実機D455/EVSの内部処理・ノイズ・露出特性は再現していない。
+カメラ光学中心は床から133mmの仮値をユーザーが承認した。
+後輪軸高さ33mmを仮定し、base_link→camera_linkのzを30mmから100mmへ更新。
+画像だけ車体を隠す方法ではなく、描画とTFを同じ取り付け位置へ修正した。
+フレーム前端のメッシュはYMax=112.5mmの旧版から85.5mm版へ再export。
+フレーム上面は床から70mmへ近似（ユーザー情報60〜70mm）、
+支柱45mmを保持し、簡略ローワーデッキ厚みを24mmから仮の9mmへ変更。
 カメラ/IMUの配置と内部値はassets/d455.json。実機校正値を別JSONへ保存して起動時に指定できる。
 左右mono8とRGBは424×240、各30〜90Hz。IMUは200Hz既定、姿勢・角速度・加速度は真値。
 macOSでは`--preview --sensors`で表示されたlocalhost URLを開き、3画像と真値を確認できる。
@@ -49,7 +55,7 @@ VSLAMはLinux/NVIDIAのsim_vslam.launch.pyでVO/VIOを切り替える。
 
 ## 検証（2026-10-10、macOS）
 
-MuJoCo **3.3.7**（Docker固定版）/ NumPy 2.4.6の一時venvで20件成功。
+MuJoCo **3.3.7**（Docker固定版）/ NumPy 2.4.6の一時venvでsimの20件と取付TF設定の4件、計24件成功。
 既存rc-sim環境のMuJoCo 3.14.0でも変更前の物理9件成功。
 
 - 大会/空室マップのcompile、静止、有限値、MuJoCo警告なし。
@@ -66,6 +72,8 @@ MuJoCo **3.3.7**（Docker固定版）/ NumPy 2.4.6の一時venvで20件成功。
 - 仮想左右mono8/RGBの424×240実描画、左右の視差、バッファの独立性を確認。
 - 中心からずらした主点と非等方fx/fyの既知点投影を検査し、CameraInfoと描画の一致を確認。
 - camera/IMUのTFと描画/サイト位置・光学座標が一致すること。
+- 静止後のレンズ高さ約133mm・印刷フレーム上面約70mm、実機/仮想mount設定の一致。
+- 車体描画を有効にしたまま、左右/RGBのsegmentation画像に車体pixelがないことを確認。
 - 静止IMUの加速度約9.81m/s²、自由落下約0、回転時の光学座標角速度を検査。
 - MuJoCo全景PNGと左右/RGB画像を描画・目視確認（overviewだけ天井/照明器具を非表示）。
 - localhostモニタのHTMLと真値JSONをHTTPで取得確認。

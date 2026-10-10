@@ -39,7 +39,11 @@ def vehicle_xml(asset_root, p=Parameters()):
     height = float(config['standoff_length_m'])
     if not math.isfinite(clearance) or clearance <= 0 or not math.isfinite(height) or height <= 0:
         raise ValueError('Ground clearance and standoff length must be finite and positive')
-    deck_half_height = 0.012
+    deck_thickness = float(config.get('lower_deck_thickness_m',.024))
+    if not math.isfinite(deck_thickness) or deck_thickness <= 0:
+        raise ValueError('Lower deck thickness must be finite and positive')
+    deck_half_height = deck_thickness/2
+    chassis.find('geom').set('size',numbers([.16,.055,deck_half_height]))
     chassis_height = clearance + deck_half_height
     chassis.set('pos', numbers([0, 0, chassis_height + 0.005]))
     for wheel in ('fl', 'fr', 'rl', 'rr'):
@@ -80,7 +84,7 @@ def vehicle_xml(asset_root, p=Parameters()):
     for x in (-0.085, 0.085):
         for y in (-0.043, 0.043):
             ET.SubElement(chassis, 'geom', type='cylinder',
-                          pos=numbers([x, y, 0.012 + height / 2]),
+                          pos=numbers([x, y, deck_half_height + height / 2]),
                           size=numbers([0.003, height / 2]), mass='0',
                           contype='0', conaffinity='0', rgba='0.08 0.08 0.08 1')
     return xml

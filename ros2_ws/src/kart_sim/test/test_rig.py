@@ -32,6 +32,11 @@ class RigTests(unittest.TestCase):
             np.testing.assert_allclose(actual,cfg.intrinsics[:2],rtol=1e-6)
         self.assertLess(sim.rig.projection('infra2')[0,3],0)
         self.assertEqual(sim.rig.projection('infra1')[0,3],0)
+        for _ in range(200): sim.step()
+        # Approved nominal lens height is floor-relative; base_link is on the rear axle.
+        self.assertAlmostEqual(sim.data.cam_xpos[sim.model.camera('infra1').id][2],.133,delta=.001)
+        plate=sim.model.geom('TT02Frame_collision')
+        self.assertAlmostEqual(sim.data.geom_xpos[plate.id][2]+plate.size[2],.070,delta=.001)
 
     def test_camera_and_tf_rotations_agree(self):
         sim=self.make(camera=True)

@@ -470,7 +470,7 @@ missionのcollect/drive/e2eはいずれもvehicleを経由する。bag評価laun
 | 設定 / ノード名 | parent → child | xyz / rpy既定 |
 |---|---|---|
 | rear_axle / kart_tf_rear_axle | base_link → rear_axle | 両方[0,0,0]。後輪軸中央という定義上同一 |
-| camera_mount / kart_tf_camera_mount | base_link → camera_link | xyz=[0.23385,0.04750,0.03000] m、rpy=[0,0,0] rad。ユーザー指定の暫定値 |
+| camera_mount / kart_tf_camera_mount | base_link → camera_link | xyz=[0.23385,0.04750,0.10000] m、rpy=[0,0,0] rad。ユーザー指定の暫定値 |
 | evs_mount / kart_tf_evs_mount | base_link → event_camera | xyz=[0.2045,0,0.0705] m、rpy=[0,0,0] rad。ユーザー指定の暫定値 |
 
 base_linkは後輪軸の高さの中央で、x前方・y左・z上。xyzは親座標系における子原点、

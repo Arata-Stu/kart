@@ -8,14 +8,15 @@
     "Mount is kart's provisional left IR origin, not measured calibration.",
     "95 mm baseline and nominal FOVs from D400 datasheet; actual 424x240 intrinsics require device calibration.",
     "RGB displacement and co-located IMU are provisional; replace with real device extrinsics before sim-to-real claims.",
-    "Mono8 is rendered luminance, not infrared spectral response. No emitter, noise, blur or distortion."
+    "Mono8 is rendered luminance, not infrared spectral response. No emitter, noise, blur or distortion.",
+    "User accepted nominal optical height 133 mm above floor on 2026-10-10. Mount Z=100 mm above nominal 33 mm rear axle; not calibrated."
   ],
   "width": 424,
   "height": 240,
   "mount_xyz": [
     0.23385,
     0.0475,
-    0.03
+    0.1
   ],
   "mount_rpy": [
     0.0,

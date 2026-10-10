@@ -12,8 +12,10 @@ transforms:
     parent: base_link
     child: camera_link
     # User-selected provisional values (2026-10-10), not measured calibration.
-    # Left IR origin, 233.85 mm forward / 47.50 mm left / 30.00 mm up.
-    xyz: [0.23385, 0.04750, 0.03000]
+    # Left IR origin, 233.85 mm forward / 47.50 mm left / 100.00 mm up.
+    # User accepted nominal lens height 133 mm above floor; rear axle height assumed 33 mm.
+    # Frame height approx 60..70 mm; this is still NOT measured optical calibration.
+    xyz: [0.23385, 0.04750, 0.10000]
     rpy: [0.0, 0.0, 0.0]  # Assumed level and facing forward.
   evs_mount:
     parent: base_link
