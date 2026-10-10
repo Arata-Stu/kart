@@ -509,6 +509,9 @@ camera_enabled/viewer_enabled/require_mode/imu_enabled/publish_truth_tf、
 stereo_hz/rgb_hz/imu_hz、camera_rig_file（各既定空、YAML保持）を指定できる。
 運用正本はconfig/sim/sim.yaml。map_fileだけ選択mapから解決する。
 `ros2 launch kart_bringup sim.launch.py map:=indoor_empty`で切替。
+`camera_enabled:=true monitor_enabled:=true record_dir:=/workspaces/record/sim`で
+localhostの画像monitorから真値waypoint周回とrosbag開始/停止を操作できる。
+monitorの操作時のみsim内部が制御を所有する。起動だけでは走行・録画を開始しない。
 既存vehicle launchとの同時起動はTFとハードウェア所有が重複するため使わない。
 
 `sim_vslam.launch.py`は/visual_slamだけを専用kart_sim_vslam_containerへloadする。

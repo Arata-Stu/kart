@@ -123,6 +123,8 @@ kart_bringup/config/sim/sim.yamlを使う。
 | imu_hz | 200.0 | IMUのsim時刻Hz、30..1000 |
 | publish_truth_tf | true | 真値map/odom/base_link TFを出版。VSLAM評価はfalse |
 | viewer_enabled | false | MuJoCo GUI。overviewでは天井のみ非表示、camera描画には残る |
+| monitor_enabled | false | localhostの画像・走行操作・録画monitor。ROS nodeでの起動時固定 |
+| record_dir | record/sim | rosbag2保存親directory。相対パスは起動cwd基準、開始操作時のみ作成 |
 | require_mode | true | modeのAUTO/MANUAL・heartbeatを必須にする。falseは明示的な単体指令テスト用 |
 | command_timeout_s | 0.2 | 指令のsim stamp・steady受信期限、正値 |
 | mode_timeout_s | 0.5 | modeのsim stamp・steady受信期限、正値 |
@@ -161,10 +163,10 @@ ROS不要の確認（NumPy・MuJoCoが必要）:
 python3 -m venv /tmp/kart-sim-env
 /tmp/kart-sim-env/bin/python -m pip install -r ros2_ws/src/kart_sim/requirements.txt
 SIM_PYTHON=/tmp/kart-sim-env/bin/python scripts/sim.sh --check
-# macOS GUIはmjpythonを使う。W/S駆動増減、A/D操舵増減、X中立、R reset。
-# キーを離しても入力保持、Xはブレーキではない。
+# macOS GUIはmjpythonを使う。W/S駆動増減、A/D操舵増減、X制動、R reset。
+# キーを離しても入力保持。monitorのAuto lapなら手動運転不要。
 SIM_PYTHON=/tmp/kart-sim-env/bin/mjpython scripts/sim.sh --preview --sensors --stereo-hz 60 --rgb-hz 30
-# 表示された http://127.0.0.1:PORT/ をブラウザで開くと3画像・真値姿勢・IMUを確認できる。
+# 表示された http://127.0.0.1:PORT/ をブラウザで開くと3画像・真値姿勢・IMUと操作ボタン。
 # モニタ表示は5Hz、センサ取得Hzとは独立。
 PYTHONPATH=ros2_ws/src/kart_sim /tmp/kart-sim-env/bin/python -m unittest discover -s ros2_ws/src/kart_sim/test -v
 ```
@@ -180,7 +182,7 @@ ros2 launch kart_bringup sim_vslam.launch.py tracking_mode:=0
 VSLAM nodeは/visual_slam、設定全項目はbringup/config/sim/vslam.yaml。
 既存実車設定と同じplugin/出力を使用し、入力画像/CameraInfo/IMUのみ仮想センサへremapする。
 保存済みマップは読み込まず、実車を起動しない。MAC上のpreview自体にはROS/Isaac ROS不要。
-車両操作のROS入力は既存ControlCommand/mode heartbeatを使い、評価launchは指令を生成しない。
+外部ROS指令は既存ControlCommand/mode heartbeatを使う。monitor操作時の制御は下記参照。
 VO/VIOを同じ走行データで比較し、真値軌跡と初期姿勢を合わせて誤差/追跡喪失を評価する。
 ノイズのない描画での成功は実機D455の成功を保証しない。
 
@@ -191,3 +193,52 @@ PYTHONPATH=ros2_ws/src/kart_sim /tmp/kart-sim-env/bin/python ros2_ws/src/kart_si
 ```
 
 検証結果はdocs/simulation.mdを参照。ROS build/load/通信、Linux Docker描画、実車との一致は未確認。
+
+## monitorによる自動周回とrosbag保存
+
+ROSなしのmacOSでも、`--preview --sensors --record-dir /absolute/output`で
+既存map作成pipeline用のrosbag2を直接保存できる。`rosbags==0.11.6`をrequirementsで導入する。
+[rosbagsの公式Writer API](https://ternaris.gitlab.io/rosbags/api/rosbags.rosbag2.html)を利用し、
+SQLite3 `.db3` + `metadata.yaml`、CDR、metadata version 9で出力する。
+ROS driverやROS daemonを起動する必要はない。LinuxのROS nodeでも同じwriterを使用する。
+
+1. localhost URLを開き、`Start rosbag`で記録を開始する。
+2. `Auto lap`で大会コースを周回する。走行と録画の開始は独立。
+3. `Stop drive`で制動、`Stop rosbag`でbagを閉じてmetadataを確定する。
+4. stateの`bag.recording=false`・`bag.finalized=true`と`bag.path`を確認し、そのdirectoryを既存map生成の入力bagに指定する。
+
+連打した開始/停止は重複writerを作らない。開始ごとに時刻+ランダムsuffixの新directoryを作り、
+既存bagへ上書きしない。終了時もwriterを閉じる。録画中のResetは拒否する。
+操作はHTTP threadからqueueへ渡し、MuJoCo/GLとwriterはsim threadだけで操作する。
+UIで要求受付後、stateの`error`/`bag.error`と実状態を確認する。
+
+保存対象は左右画像/CameraInfo、RGB/CameraInfo、カメラ固定TF、IMU、`/clock`、
+`/sim/ground_truth/{pose,imu}`、`/sim/odometry`。名前・型・Hzは上のROS表と同じ。
+`/tf_static`はtransient-local/reliableで、真値のmap/odom変換を含めない。
+このwriterはnodeのpublish_truth_tf設定と独立に、常にmapping用の固定TFだけを保存する。
+動的`/tf`・推定器出力・制御指令は保存しない。実機のkart_bag_managerの操作/設定は変更しない。
+非圧縮60Hz stereo+30Hz RGBで画像だけ約21MB/s（約1.3GB/min）。
+描画/保存がwall timeより遅くなった場合もsim時刻で取得し、実時間60Hzの達成を保証しない。
+
+自動周回はmap JSONの`autodrive.waypoints`（後輪軸XY、m、閉ループ）をPure Pursuitで追従する。
+`speed_mps`既定0.45（0.05..1.5）、`lookahead_m`既定0.35（0.15..1.0）。
+これらはROS parameterではなくmap資産の設定。大会mapに周回経路を追加、空室mapには経路なし。
+曲率による減速と速度比例制御を使い、経路離脱0.65mまたは8 sim秒の停滞で制動する。
+車体の矩形衝突proxyには実物のwheel cutoutがないため、chassisと4輪の自己接触を除外する。
+室内・コース障壁との接触は有効。
+**真値姿勢を使うデータ取得用controllerであり、VSLAMや画像認識による自律走行ではない。**
+monitorのAuto/manual/Stopを押すとsim内部が制御を所有し、外部ROS指令より優先する。
+require_modeによる外部指令のgateをこの内部操作には適用しない。実機bridgeへの指令出版はない。
+外部ROS制御へ戻す場合はsimを再起動する。起動だけではAUTO/録画を開始しない。
+
+ROS版の例（全parameterは運用YAMLを保持し、必要なものだけ明示上書き）:
+
+```bash
+ros2 launch kart_bringup sim.launch.py camera_enabled:=true monitor_enabled:=true publish_truth_tf:=false record_dir:=/workspaces/record/sim
+```
+
+monitor HTTPは`GET /`、`GET /state`、`GET /{infra1,infra2,color}.png`と
+`POST /command`を提供する。bodyは`{"action":"auto_start"}`など。
+actionは`auto_start/stop/record_start/record_stop/reset/manual`、manualのみ
+`"value":[steering,throttle]`（各-1..1、負throttleはreverse）を受ける。
+これはlocalhost専用HTTP APIで、追加ROS topic/serviceはない。

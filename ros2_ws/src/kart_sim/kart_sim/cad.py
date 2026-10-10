@@ -45,6 +45,11 @@ def vehicle_xml(asset_root, p=Parameters()):
     deck_half_height = deck_thickness/2
     chassis.find('geom').set('size',numbers([.16,.055,deck_half_height]))
     chassis_height = clearance + deck_half_height
+    # The rectangular deck proxy has no real wheel cutouts. Exclude its wheel
+    # self-contacts so full steering cannot jam a tire against this coarse box.
+    contact = ET.SubElement(xml, 'contact')
+    for wheel in ('fl', 'fr', 'rl', 'rr'):
+        ET.SubElement(contact, 'exclude', body1='chassis', body2='wheel_'+wheel)
     chassis.set('pos', numbers([0, 0, chassis_height + 0.005]))
     for wheel in ('fl', 'fr', 'rl', 'rr'):
         knuckle = chassis.find(f"body[@name='knuckle_{wheel}']")

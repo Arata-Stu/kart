@@ -300,3 +300,11 @@ sim専用launchは実機bridge/実センサを起動せず、clockとTFの所有
 左右は同時刻、画像/IMU周期はsim時刻基準。理想描画と実IRの一致は仮定しない。
 VSLAM評価は専用sim_vslam launchを使い、simのpublish_truth_tfを無効にする。
 真値pose/odometryは独立sim_worldへ残し、推定器出力と混同しない。
+
+simのデータ取得操作はlocalhost monitorからsim threadへqueueで渡す。
+mapのwaypointと真値を使う内部controllerは取得補助で、推定器による自律走行と区別する。
+monitorで内部制御を開始した場合だけ外部指令より優先し、実車へ制御指令を出版しない。
+ROS非依存previewとROS nodeで同じrosbag2 writerを使い、camera/IMU/clock/真値を保存する。
+保存する静的TFはcamera外部姿勢だけとし、map/odom真値を含めない。
+録画・走行開始は独立操作、録画中resetは拒否、停止/終了時にbagを確定する。
+実車のkart_bag_managerの責務と設定は変更しない。

@@ -16,10 +16,13 @@ def main():
     parser.add_argument('--rgb-hz',type=float,default=30.)
     parser.add_argument('--imu-hz',type=float,default=200.)
     parser.add_argument('--rig',help='D455 calibration JSON')
+    parser.add_argument('--record-dir',default='record/sim',help='rosbag2 output parent; folders created on Start rosbag')
     args=parser.parse_args()
     sim=Simulation(args.map,args.assets,camera=args.sensors,rig_file=args.rig,
                    stereo_hz=args.stereo_hz,rgb_hz=args.rgb_hz,imu_hz=args.imu_hz)
     monitor=None
+    from .session import SimSession
+    session=SimSession(sim,args.record_dir)
     try:
         if args.check:
             for _ in range(100): sim.step(steps=10,collect_sensors=args.sensors)
@@ -41,13 +44,14 @@ def main():
             steering,throttle=[0.0],[0.0]
             if args.sensors:
                 from .monitor import SensorMonitor
-                monitor=SensorMonitor()
+                monitor=SensorMonitor(session)
             next_monitor=0.0
             def key(code):
                 if code in (87,83): throttle[0]=max(-1,min(1,throttle[0]+(.05 if code==87 else -.05)))
                 if code in (65,68): steering[0]=max(-1,min(1,steering[0]+(.1 if code==65 else -.1)))
-                if code==88: steering[0]=throttle[0]=0
-                if code==82: sim.reset(); steering[0]=throttle[0]=0
+                if code in (87,83,65,68): session.request('manual',[steering[0],throttle[0]])
+                if code==88: session.request('stop'); steering[0]=throttle[0]=0
+                if code==82: session.request('reset'); steering[0]=throttle[0]=0
             with mjviewer.launch_passive(sim.model,sim.data,key_callback=key) as viewer:
                 viewer.opt.geomgroup[4]=0; viewer.opt.geomgroup[5]=1
                 a,b,c,d=sim.map['room']['bounds']
@@ -55,12 +59,15 @@ def main():
                 viewer.cam.distance=max(c-a,d-b); viewer.cam.elevation=-70
                 while viewer.is_running():
                     start=time.monotonic()
-                    sim.step(steering[0],max(throttle[0],0),reverse=max(-throttle[0],0),steps=20,collect_sensors=args.sensors)
+                    session.drain(sim)
+                    samples=sim.step(*session.output(sim),steps=20,collect_sensors=args.sensors)
+                    session.append(sim,samples)
                     if monitor and time.monotonic()>=next_monitor:
                         monitor.update(sim); next_monitor=time.monotonic()+.2
                     viewer.sync(); time.sleep(max(0,.02-(time.monotonic()-start)))
     finally:
         if monitor: monitor.close()
+        session.close()
         sim.close()
 
 if __name__=='__main__': main()

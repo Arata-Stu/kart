@@ -50,6 +50,13 @@ base_linkはkartの後輪軸中心。rc-simのchassis中心をそのままROS原
 カメラ/IMUの配置と内部値はassets/d455.json。実機校正値を別JSONへ保存して起動時に指定できる。
 左右mono8とRGBは424×240、各30〜90Hz。IMUは200Hz既定、姿勢・角速度・加速度は真値。
 macOSでは`--preview --sensors`で表示されたlocalhost URLを開き、3画像と真値を確認できる。
+monitorの`Start rosbag`→`Auto lap`で、手動運転せずに大会コースのデータを取得できる。
+`Stop drive`と`Stop rosbag`は独立し、stateの保存先directoryを既存map生成pipelineに指定する。
+ROSなしでSQLite3/CDRのrosbag2を保存し、camera固定TFも含める。真値map/odom TFはbagへ入れない。
+録画中のResetは拒否する。終了時もbagを閉じてmetadataを確定する。
+起動・操作・map waypoint設定の詳細は[kart_sim README](../ros2_ws/src/kart_sim/README.md#monitorによる自動周回とrosbag保存)。
+自動周回は真値を使う取得用Pure Pursuitで、VSLAMの追跡成功を意味しない。
+矩形ローワーデッキの衝突proxyとタイヤの自己接触だけを除外し、旋回時のタイヤ固着を解消した。
 VSLAMはLinux/NVIDIAのsim_vslam.launch.pyでVO/VIOを切り替える。
 その際はsimのpublish_truth_tf=falseで推定TFとの競合を避ける。
 
@@ -78,6 +85,18 @@ MuJoCo **3.3.7**（Docker固定版）/ NumPy 2.4.6の一時venvでsimの20件と
 - MuJoCo全景PNGと左右/RGB画像を描画・目視確認（overviewだけ天井/照明器具を非表示）。
 - localhostモニタのHTMLと真値JSONをHTTPで取得確認。
 - shell構文、map一覧/切替smoke、Python構文、git diff --check。
+
+追加検証（2026-10-11、macOS、MuJoCo 3.3.7 / rosbags 0.11.6）:
+
+- sim単体テスト計24件成功（既存20件+新規4件、HTTPテストはlocalhost待受を許可して別実行）。
+- 大会コースの閉ループを連続2周、約164 sim秒。障壁・黒幕・室内壁・ゲート支柱・接合支柱への接触なし。
+- bagへの画像/校正/固定TF/IMU/clock/真値の保存・CDR読戻し、左右同stamp、右P行列、transient-local TFを検査。
+- 録画中Reset拒否、停止後Reset、繰返し録画の新directory生成、close時metadata確定を検査。
+- HTTP要求がsim threadでのみ実行され、auto状態がmonitorへ反映されることを検査。
+- 実MuJoCoカメラの0.5 sim秒を取得し、434メッセージを保存・全件deserialize。
+  左右各31画像、RGB16画像、IMU101メッセージ（初回t=0相当のサンプルを含む）。
+- ROS/colcon・rosbag2_py・Isaac ROS/CUDAでの既存map生成・VGL実行は未確認。
+  Readerによるbag構造/メッセージの検証と、GPU map生成成功は区別する。
 
 再実行:
 

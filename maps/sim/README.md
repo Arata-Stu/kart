@@ -3,6 +3,12 @@
 `*.json`がkart_simのマップ資産。`scripts/sim.sh --list`で一覧、`--map NAME`で切替。
 `minicar_2026`は大会PDFの暫定再構成、`indoor_empty`は車体検証用。
 
+任意の`autodrive`はデータ取得用の閉ループwaypoint設定。
+`waypoints`は後輪軸XY座標の配列（m、3点以上、末尾で先頭を重複しない）、
+`speed_mps`既定0.45（0.05..1.5）、`lookahead_m`既定0.35（0.15..1.0）。
+`minicar_2026`に通常周回の経路を配置し、ショートカット/駐車は通らない。
+mapを編集した場合は経路も再検証する。controllerは姿勢真値を使用し、知覚/位置推定の評価結果とは独立。
+
 schema_version=1、units=m。座標はコース左下付近を原点、+X右、+Y上、+Z上。
 車両は自身の+X前、+Y左。spawn=[後輪軸x,後輪軸y,yaw rad]。
 必須: name、room(bounds=[xmin,ymin,xmax,ymax], height)、spawn、wall_height、

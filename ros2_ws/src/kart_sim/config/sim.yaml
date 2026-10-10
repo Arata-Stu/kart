@@ -10,6 +10,8 @@ kart_sim:
     imu_hz: 200.0
     publish_truth_tf: true  # Set false when VSLAM owns map/odom/base_link TF.
     viewer_enabled: false
+    monitor_enabled: false  # Loopback camera, drive controls and rosbag2 writer.
+    record_dir: 'record/sim'  # Created only when recording starts; relative to launch cwd.
     require_mode: true
     command_timeout_s: 0.2
     mode_timeout_s: 0.5

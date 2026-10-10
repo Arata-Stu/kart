@@ -120,7 +120,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 # MuJoCo core uses ROS system Python; do not mix the inference venv.
 RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
-    uv pip install --python /usr/bin/python3 --break-system-packages 'mujoco==3.3.7' \
+    uv pip install --python /usr/bin/python3 --break-system-packages 'mujoco==3.3.7' 'rosbags==0.11.6' \
     && /usr/bin/python3 -c 'import mujoco'
 
 # Register supplementary GIDs and restore Jetson GPU permissions on every start,

@@ -3,11 +3,16 @@ import json
 import struct
 import threading
 import zlib
+from queue import Full
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PAGE=b'''<!doctype html><meta charset="utf-8"><title>kart_sim D455</title>
 <style>body{background:#171a20;color:#eee;font:16px sans-serif;margin:24px}section{display:flex;gap:14px;flex-wrap:wrap}img{width:424px;height:240px;background:#000}pre{white-space:pre-wrap}</style>
-<h1>kart_sim / D455 nominal</h1><section><div>Left mono8<br><img id="infra1"></div><div>Right mono8<br><img id="infra2"></div><div>RGB<br><img id="color"></div></section><pre id="state"></pre>
+<h1>kart_sim / D455 nominal</h1><section><div>Left mono8<br><img id="infra1"></div><div>Right mono8<br><img id="infra2"></div><div>RGB<br><img id="color"></div></section>
+<section><button onclick="command('auto_start')">Auto lap</button><button onclick="command('stop')">Stop drive</button><button onclick="command('record_start')">Start rosbag</button><button onclick="command('record_stop')">Stop rosbag</button><button onclick="command('reset')">Reset</button></section>
+<p>Steering <input id="steering" type="range" min="-1" max="1" step=".05" value="0"> Throttle <input id="throttle" type="range" min="-.5" max=".5" step=".02" value="0"><button onclick="command('manual',[+document.getElementById('steering').value,+document.getElementById('throttle').value])">Apply manual</button></p><p id="notice"></p>
+<pre id="state"></pre><p>Drive and recording are independent. Stop rosbag before Reset. Auto uses simulator truth.</p>
+<script>async function command(action,value){try{const r=await fetch('/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,value})});const data=await r.json();document.getElementById('notice').textContent=data.message}catch(e){document.getElementById('notice').textContent=String(e)}}</script>
 <script>setInterval(async()=>{for(const name of ['infra1','infra2','color'])document.getElementById(name).src='/'+name+'.png?t='+Date.now();document.getElementById('state').textContent=JSON.stringify(await(await fetch('/state')).json(),null,2)},200)</script>'''
 
 def png(pixels):
@@ -19,10 +24,27 @@ def png(pixels):
     return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('!2I5B',width,height,8,color,0,0,0))+chunk(b'IDAT',zlib.compress(payload))+chunk(b'IEND',b'')
 
 class SensorMonitor:
-    def __init__(self):
+    def __init__(self,session=None):
+        self.session=session
         self.images={}; self.metadata={}; self.lock=threading.Lock()
         owner=self
         class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                # Browser requests must come from this exact loopback origin.
+                origin=self.headers.get('Origin')
+                if origin and origin != 'http://'+self.headers.get('Host',''):
+                    self.send_error(403); return
+                try:
+                    if self.path != '/command' or owner.session is None: raise ValueError('Controls unavailable')
+                    length=int(self.headers.get('Content-Length','0'))
+                    if not 0 < length <= 1024: raise ValueError('Invalid request size')
+                    request=json.loads(self.rfile.read(length))
+                    owner.session.request(request['action'],request.get('value'))
+                    code,message=202,'Request queued; check state for result'
+                except (ValueError,KeyError,TypeError,Full) as error:
+                    code,message=400,str(error)
+                data=json.dumps({'message':message}).encode()
+                self.send_response(code); self.send_header('Content-Type','application/json'); self.end_headers(); self.wfile.write(data)
             def do_GET(self):
                 path=self.path.split('?')[0]
                 with owner.lock:
@@ -45,6 +67,7 @@ class SensorMonitor:
         if sim.imu_enabled:
             imu=sim.imu_state()
             metadata['imu']={key:value.tolist() if hasattr(value,'tolist') else value for key,value in imu.items()}
+        if self.session: metadata.update(self.session.status())
         with self.lock: self.images=images; self.metadata=metadata
 
     def close(self):

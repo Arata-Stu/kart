@@ -16,7 +16,7 @@ def build(context):
     file=directory/(name+'.json')
     if not file.is_file(): raise ValueError(f'Map does not exist: {file}')
     overrides={'map_file':str(file)}
-    for key in ('camera_enabled','viewer_enabled','require_mode','imu_enabled','publish_truth_tf'):
+    for key in ('camera_enabled','viewer_enabled','require_mode','imu_enabled','publish_truth_tf','monitor_enabled'):
         value=LaunchConfiguration(key).perform(context)
         if value:
             if value.lower() not in ('true','false'): raise ValueError(f'Invalid {key}: {value}')
@@ -26,6 +26,8 @@ def build(context):
         if value: overrides[key]=float(value)
     rig=LaunchConfiguration('camera_rig_file').perform(context)
     if rig: overrides['camera_rig_file']=rig
+    record=LaunchConfiguration('record_dir').perform(context)
+    if record: overrides['record_dir']=record
     return [LogInfo(msg=f'kart_sim config={bringup / "config/sim/sim.yaml"}, overrides={overrides}'),
         Node(package='kart_sim',executable='kart_sim_node',name='kart_sim',output='screen',
              parameters=[str(bringup/'config/sim/sim.yaml'),overrides])]
@@ -37,5 +39,5 @@ def generate_launch_description():
         DeclareLaunchArgument('camera_enabled',default_value=''),
         DeclareLaunchArgument('viewer_enabled',default_value=''),
         DeclareLaunchArgument('require_mode',default_value=''),
-        *[DeclareLaunchArgument(name,default_value='') for name in ('imu_enabled','publish_truth_tf','stereo_hz','rgb_hz','imu_hz','camera_rig_file')],
+        *[DeclareLaunchArgument(name,default_value='') for name in ('imu_enabled','publish_truth_tf','stereo_hz','rgb_hz','imu_hz','camera_rig_file','monitor_enabled','record_dir')],
         OpaqueFunction(function=build)])

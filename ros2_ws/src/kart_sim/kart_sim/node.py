@@ -36,7 +36,8 @@ class SimNode(Node):
             'require_mode':True,'command_timeout_s':.2,'mode_timeout_s':.5,
             'step_count':10,'max_steering_rad':.45,'wheel_torque_nm':.025,
             'camera_rig_file':'','stereo_hz':60.0,'rgb_hz':30.0,'imu_hz':200.0,
-            'imu_enabled':True,'publish_truth_tf':True}
+            'imu_enabled':True,'publish_truth_tf':True,
+            'monitor_enabled':False,'record_dir':'record/sim'}
         for name,value in defaults.items():
             self.declare_parameter(name,value,ParameterDescriptor(read_only=True))
         p={name:self.get_parameter(name).value for name in defaults}
@@ -50,6 +51,13 @@ class SimNode(Node):
             imu_hz=p['imu_hz'],imu_enabled=p['imu_enabled'])
         self.gate=CommandGate(p["command_timeout_s"],p["mode_timeout_s"],p["require_mode"])
         self.paused=False
+        from .session import SimSession
+        self.session=SimSession(self.sim,p['record_dir'])
+        self.monitor=None
+        self.next_monitor=0.
+        if p['monitor_enabled']:
+            from .monitor import SensorMonitor
+            self.monitor=SensorMonitor(self.session)
         self.clock_pub=self.create_publisher(ClockMessage,'/clock',10)
         self.odom_pub=self.create_publisher(Odometry,'sim/odometry',qos_profile_sensor_data)
         self.pose_pub=self.create_publisher(PoseStamped,'sim/ground_truth/pose',qos_profile_sensor_data)
@@ -98,8 +106,13 @@ class SimNode(Node):
         self.gate.accept_mode(msg.mode,source,self.sim.data.time,time.monotonic())
 
     def tick(self):
+        self.session.drain(self.sim)
+        if self.monitor and time.monotonic()>=self.next_monitor:
+            self.monitor.update(self.sim); self.next_monitor=time.monotonic()+.2
         if self.paused: return
-        samples=self.sim.step(*self.gate.output(self.sim.data.time,time.monotonic()),steps=self.p['step_count'],collect_sensors=True)
+        command=self.session.output(self.sim) if self.session.owns_control else self.gate.output(self.sim.data.time,time.monotonic())
+        samples=self.sim.step(*command,steps=self.p['step_count'],collect_sensors=True)
+        self.session.append(self.sim,samples)
         self.publish_state()
         for frames in samples['images']:
             for name,frame in frames.items(): self.publish_camera(name,frame)
@@ -140,6 +153,11 @@ class SimNode(Node):
         self.imu_pub.publish(msg); self.truth_imu_pub.publish(msg)
 
     def reset(self,request,response):
+        if self.session.recorder.writer:
+            response.success=False; response.message='Stop recording before resetting the simulation clock'
+            return response
+        self.session.controller.stop()
+        self.session.manual=(0.,0.,1.,0.)
         self.sim.reset(); self.gate.reset()
         self.publish_state(); response.success=True; response.message='Reset to spawn; commands and mode invalidated; clock rewound.'
         return response
@@ -150,6 +168,8 @@ class SimNode(Node):
         return response
 
     def destroy_node(self):
+        if self.monitor is not None: self.monitor.close()
+        self.session.close()
         if self.viewer is not None: self.viewer.close()
         self.sim.close(); return super().destroy_node()
 

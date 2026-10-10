@@ -8,11 +8,11 @@ while (($#)); do
   case "$1" in
     --map) MAP="${2:?--map requires a name}"; shift 2 ;;
     --sensors) SENSOR_ARGS+=(--sensors); shift ;;
-    --stereo-hz|--rgb-hz|--imu-hz|--rig) SENSOR_ARGS+=("$1" "${2:?requires a value}"); shift 2 ;;
+    --stereo-hz|--rgb-hz|--imu-hz|--rig|--record-dir) SENSOR_ARGS+=("$1" "${2:?requires a value}"); shift 2 ;;
     --preview) MODE=preview; shift ;;
     --check) MODE=check; shift ;;
     --list) for path in "$ROOT"/maps/sim/*.json; do basename "$path" .json; done; exit 0 ;;
-    --help|-h) echo 'Usage: scripts/sim.sh [--map NAME] [--list|--preview|--check] [--sensors] [--stereo-hz HZ] [--rgb-hz HZ] [--imu-hz HZ] [--rig JSON]'; exit 0 ;;
+    --help|-h) echo 'Usage: scripts/sim.sh [--map NAME] [--list|--preview|--check] [--sensors] [--stereo-hz HZ] [--rgb-hz HZ] [--imu-hz HZ] [--rig JSON] [--record-dir DIR]'; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
