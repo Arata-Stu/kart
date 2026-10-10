@@ -290,7 +290,7 @@ CUDA対応LinuxのROS環境でのみ開始可能。点群未取得の状態表�
 地図の作業コピーを使って可視化ありVSLAMを1倍速で再生し、原点hintからの自己位置合わせ成功を確認する。
 末尾の点群・軌跡・TFを保存すると自動的に編集可能になる。取得済み地図への再取得は行わない。
 失敗・中止時はpendingのままで、元のVSLAM地図を変更しない。ログ・停止は通常のジョブ画面を使用。
-任意地点からの位置合わせはこの工程の対象外。VGLによる位置合わせは別途実装予定。
+任意地点からの位置合わせはこの工程の対象外。VGL地図の追加生成は「VGL地図を追加生成」から実行する。
 
 
 ### TT-02の暫定寸法
@@ -468,3 +468,9 @@ Raceline初期値はJetPilot `tools/app/frontend/app.js` と `python_ws/map_tool
 オフライン評価はONNXサイズ（MiB）、実行providerと推論の平均・中央値・P95を表示する。10回のwarmupと前処理は計測から除外する。既存の評価結果は当時の統計を表示し、新統計には再評価が必要。「NotebookでTensorRT build・速度計測」を展開し、ONNXを選んでビルドすると、別保存したNotebook用engineのサイズと合成入力ベンチマークを結果一覧から確認できる。ROS/実走行/Jetson性能の評価とは異なる。操作にはNVIDIA GPUのあるx86_64 kart Dockerが必要。
 
 ONNX評価はCUDAExecutionProviderを優先し、利用不可・初期化失敗は理由をログに出してCPUで実行する。report.jsonにはprovider/providers/cuda_fallback_reasonを保存する。CUDA利用時のsession.run時間はCPU入力からの転送・出力の読み戻しを含む。Linux x86_64のDocker依存はonnxruntime-gpu 1.23.2（CUDA 12/cuDNN同梱依存）、それ以外はCPU版。更新にはDocker再buildが必要。旧評価結果のproviderは変わらないため再評価する。
+
+## Web UIからVGL地図を追加生成
+
+既存地図を開き「VGL地図を追加生成」を選択する。ALIKED/LightGlueモデルはmodelsとmap以下の候補から選ぶかパスを入力し、画像サイズ（既定424×240）と保存名（地図名-vgl-vN）を指定する。実行GPUでbuild済みのengineが必要で、download/buildは自動実行しない。公式offline処理の保存画像・posesがない場合は生成できない理由を表示する。
+
+`POST /api/vgl`はinstalled `ros2 run kart_bringup prepare_vgl_map`をジョブ実行し、検証済みbundleを`map/vgl/<保存名>`へ公開する。既存VSLAM地図・HDMapは変更しない。ログ・中止は既存ジョブ画面を使い、失敗・中止時の一時成果物は公開しない。成功後はbringupで「VSLAM＋VGL」を選び生成bundleを指定する。実走行GPUがNotebookと異なる場合は実走行GPU用モデルengineを別途準備する。UIサーバー再起動とkart_bringupのbuild/sourceが必要。

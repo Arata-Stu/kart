@@ -60,7 +60,8 @@ def add_evaluation(args):
         actions.append(include("modules/evaluation/rviz.launch.py", {}))
     actions.append(
         include(
-            "modules/evaluation/replay.launch.py", {"bag": args.bag, "rate": args.rate}
+            "modules/evaluation/replay.launch.py",
+            {"bag": args.bag, "rate": args.rate, "enable_vgl": args.enable_vgl},
         )
     )
     return actions

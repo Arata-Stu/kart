@@ -88,6 +88,7 @@ class ReplayTests(unittest.TestCase):
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             args = SimpleNamespace(
+                enable_vgl="false",
                 bag="/bag",
                 rate="",
                 map_dir="/bundle",
@@ -114,6 +115,8 @@ class ReplayTests(unittest.TestCase):
                     "launch/modules/evaluation/replay.launch.py",
                 ],
             )
+            self.assertEqual(actions[-1][1]["enable_vgl"], "false")
+            self.assertEqual(actions[0][1]["enable_vgl"], "false")
             self.assertEqual(actions[0][1]["visualize"], "true")
             self.assertEqual(actions[0][1]["use_sim_time"], "true")
             self.assertEqual(actions[1][1]["use_sim_time"], "true")

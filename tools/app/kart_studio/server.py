@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from . import capture, registration
+from . import capture, registration, vgl
 from .copies import copy_map
 from .e2e import Learning
 from .jobs import Jobs
@@ -69,6 +69,8 @@ class Studio:
                 records=str(self.records),
                 maps=str(self.maps.root),
             )
+        if path == "/api/vgl":
+            return vgl.catalog(self, key)
         if path == "/api/e2e/engine":
             folder = self.learning.folder("engines", key)
             return read_json(within(folder, "report.json"))
@@ -227,6 +229,13 @@ class Studio:
                 return dict(
                     path=str(output), files=sorted(p.name for p in output.iterdir())
                 )
+        if path == "/api/vgl":
+            key, source, models, output, size = vgl.prepare(self, b)
+            return self.jobs.start(
+                "VGL地図生成: " + key,
+                ["map:" + key, "vgl:" + str(output), "e2e-compute"],
+                lambda job: vgl.build(job, source, models, output, size),
+            )
         if path == "/api/capture":
             name(key)
             bag, workflow, options = capture.validate(self, key, b)

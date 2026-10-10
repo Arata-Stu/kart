@@ -437,3 +437,20 @@ E2E launchは有効なmanifestとハッシュ・ハードウェア一致、お�
 bringup.shのevalでは「VSLAMのみ」（既定）と「VSLAM＋VGL」を選択する。VSLAMのみはMap Studio出力の`cuvslam_map/*.mdb`が非空の地図を探索し、VGLモデル・vgl_profile.jsonを要求しない。VGL併用は従来通りprepare_vgl_map済みbundleと実行GPU用モデルが必要。非対話CLIは`--eval-localization vslam|vgl`。
 
 evaluation.launch.pyの`enable_vgl`既定はfalse、localization.launch.pyでは互換性のためtrue。false時は`model_dir`不要、VGL node/専用containerを起動せず、VSLAMのみ`localize_on_startup=true`・`enable_request_hint=false`で起動する。map_dirは地図ルートまたはcuvslam_map自体。TFのpublisherはVSLAMのみ、bagの古いTFは再生しない。HDMapと同じ地図座標系を選ぶ。初期探索範囲内に位置がない場合はlocalizationが成立しないことがあり、実際の一致をRVizで確認する。
+
+## Web UIからVGL地図を追加生成
+
+既存地図を開き「VGL地図を追加生成」を選択する。ALIKED/LightGlueモデルはmodelsとmap以下の候補から選ぶかパスを入力し、画像サイズ（既定424×240）と保存名（地図名-vgl-vN）を指定する。実行GPUでbuild済みのengineが必要で、download/buildは自動実行しない。公式offline処理の保存画像・posesがない場合は生成できない理由を表示する。
+
+`POST /api/vgl`はinstalled `ros2 run kart_bringup prepare_vgl_map`をジョブ実行し、検証済みbundleを`map/vgl/<保存名>`へ公開する。既存VSLAM地図・HDMapは変更しない。ログ・中止は既存ジョブ画面を使い、失敗・中止時の一時成果物は公開しない。成功後はbringupで「VSLAM＋VGL」を選び生成bundleを指定する。実走行GPUがNotebookと異なる場合は実走行GPU用モデルengineを別途準備する。UIサーバー再起動とkart_bringupのbuild/sourceが必要。
+
+### オフライン再生の操作
+
+再生は一時停止で開始し、選択したlocalizationの画像購読が揃うと自動再開する。VSLAM単独時はvisual_slamのみ、VGL併用時は両nodeを待つ。キーボード操作はlaunch下では無効。別ターミナルから以下を呼ぶ（同じROS環境/domain）。
+
+```bash
+ros2 service call /rosbag2_player/resume rosbag2_interfaces/srv/Resume '{}'
+ros2 service call /rosbag2_player/pause rosbag2_interfaces/srv/Pause '{}'
+```
+
+終了は起動ターミナルでCtrl-C。先頭から再評価するときは終了後bringupを再起動し、localizationの内部状態も初期化する。

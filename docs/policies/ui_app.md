@@ -160,3 +160,5 @@ Jetson向け事前TensorRT buildはscripts/e2e_trt.shで行う。通常E2E起動
 E2E bringupではTensorRT engineを自動生成しない。未build・不適合なら案内して起動を停止する。事前buildはe2e_trt.shへ分離する。オフラインONNX評価はCUDA優先、利用不可時のCPU fallback理由と実際のproviderをログ・結果へ記録する。
 
 bagによる地図確認はVSLAM単独とVGL併用を明示選択する。Map StudioのVSLAM地図をVGL準備済みbundleと混同せず、VSLAM単独にVGL資産を要求しない。
+
+Web UIのVGL準備は選択中の公式VSLAM地図から明示実行し、別bundleへ保存する。元地図とHDMapを変更せず、モデル資産不足を大型モデルへのfallbackで補わない。

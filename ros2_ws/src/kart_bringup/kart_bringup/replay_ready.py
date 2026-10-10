@@ -1,4 +1,4 @@
-"""Resume paused playback once both localization components subscribe to stereo."""
+"""Resume paused playback once the selected localization components subscribe to stereo."""
 
 import math
 import time

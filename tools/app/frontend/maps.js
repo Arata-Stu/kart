@@ -140,6 +140,7 @@ function status() {
   $("delete-map").disabled = !state.doc || busy;
   $("hdmap-reset").disabled = !d || busy;
   $("copy-map").disabled = !state.doc || busy;
+  $("vgl-open").disabled = !state.doc || busy || !state.config?.environment.ros || !state.maps.find(m => m.id === state.id)?.has_vslam;
   $("capture-open").disabled =
     !pending || busy || !state.config?.environment.ros;
   $("undo").disabled = !state.undo.length;
