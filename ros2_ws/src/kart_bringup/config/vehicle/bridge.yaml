@@ -4,7 +4,7 @@
     device: /dev/ttyACM0  # Default board; no device selection in the TUI
     steering_scale: -1.0
     steering_offset: 0.0
-    initial_steering_trim: 0.40
+    initial_steering_trim: 0.040
     initial_throttle_trim: 0.0
     steering_trim_limit: 0.25
     throttle_trim_limit: 0.1
