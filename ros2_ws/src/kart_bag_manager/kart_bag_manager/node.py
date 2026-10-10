@@ -134,8 +134,12 @@ class BagManagerNode(Node):
             self._next_split = now + self.settings.recording_split_duration_s
         if self.recorder.last_event != self._last_event:
             self._last_event = self.recorder.last_event
-            log = self.get_logger().error if self.recorder.phase == 'error' else self.get_logger().info
-            log(f'{self.recorder.phase}: {self._last_event}; uri={self.recorder.current_uri}')
+            message = f'{self.recorder.phase}: {self._last_event}; uri={self.recorder.current_uri}'
+            # rclpy caches severity per call site; keep separate sites for each level.
+            if self.recorder.phase == 'error':
+                self.get_logger().error(message)
+            else:
+                self.get_logger().info(message)
             force_status = True
         if force_status or now - self._last_status >= self.settings.status_period_s:
             msg = BagStatus()

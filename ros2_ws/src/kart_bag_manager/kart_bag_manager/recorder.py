@@ -101,9 +101,17 @@ class Settings:
             if getattr(self, attr):
                 cmd.append('--' + attr.replace('_', '-'))
         cmd.extend(self.extra_args)
-        if self.exclude_topics:
+        if self.record_all and self.exclude_topics:
             cmd.extend(['--exclude-topics', *self.exclude_topics])
-        cmd.extend(['--all-topics'] if self.record_all else ['--topics', *self.topics])
+        if self.record_all:
+            cmd.append('--all-topics')
+        else:
+            # Lyrical rejects --exclude-topics with only --topics selected.
+            excluded = {topic.lstrip('/') for topic in self.exclude_topics}
+            topics = [topic for topic in self.topics if topic.lstrip('/') not in excluded]
+            if not topics:
+                raise ValueError('no topics remain after exclusions')
+            cmd.extend(['--topics', *topics])
         return cmd
 
 

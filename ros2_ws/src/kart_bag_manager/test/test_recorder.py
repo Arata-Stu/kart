@@ -133,9 +133,17 @@ class RecorderTest(unittest.TestCase):
         cmd=s.command('/tmp/a b')
         self.assertEqual(cmd[cmd.index('-o')+1],'/tmp/a b')
         self.assertEqual(cmd[-3:],['--topics','/joy','/tf'])
-        self.assertIn('--exclude-topics',cmd); self.assertNotIn('--exclude',cmd)
+        self.assertNotIn('--exclude-topics',cmd); self.assertNotIn('--exclude',cmd)
         self.assertEqual(cmd[cmd.index('--max-bag-duration')+1],'60')
         s.record_all=True; self.assertEqual(s.command('/tmp/b')[-1],'--all-topics')
+        self.assertIn('--exclude-topics', s.command('/tmp/b'))
+
+    def test_explicit_topics_exclusion(self):
+        s = Settings(topics=['/joy', '/tf'], exclude_topics=['joy'])
+        self.assertEqual(s.command('/tmp/b')[-2:], ['--topics', '/tf'])
+        s.exclude_topics.append('/tf')
+        with self.assertRaisesRegex(ValueError, 'no topics remain'):
+            s.command('/tmp/b')
 
     def test_named_collision_and_symlink(self):
         self.settings.recording_name='trial'

@@ -95,7 +95,7 @@ managerのすべての設定は起動時固定（read-only）。独自parameter�
 | `recording_name` | `""` | 固定フォルダ名。単一名・120 bytes以内。空なら日時＋label |
 | `record_all` | `false` | trueなら`--all-topics`、falseならtopicsを指定 |
 | `topics` | config記載のリスト | 記録topic。record_all=falseかつ空ならSTART拒否 |
-| `exclude_topics` | `[]` | 除外topicのリスト（正規表現ではない） |
+| `exclude_topics` | `[]` | 除外topicのリスト（正規表現ではない）。明示topicsでは一覧から除外、record_allではCLIへ渡す |
 | `storage_id` | `mcap` | storage plugin。必要なpluginをインストールする |
 | `serialization_format` | `""` | 空ならrosbag2既定 |
 | `max_bag_size` | `0` bytes | サイズ分割。0で無効、非負 |
@@ -119,6 +119,9 @@ managerのすべての設定は起動時固定（read-only）。独自parameter�
 
 JetPilotの廃止済み`max_bag_duration`互換パラメータは移植せず、recording_split_duration_sに統一した。
 LyricalのCLIに合わせ、旧位置引数topic／`--exclude`を`--topics`／`--exclude-topics`へ変更した。
+Lyricalは`--topics`単独と`--exclude-topics`の併用を拒否するため、明示topic録画では
+除外後の一覧だけを`--topics`へ渡す。全topicが除外された場合は開始を拒否する。
+状態ログはinfo/errorの呼出し箇所を分け、録画失敗時にもログseverity変更でノードを落とさない。
 [ROS 2 Lyrical公式CLI実装](https://github.com/ros2/rosbag2/blob/lyrical/ros2bag/ros2bag/verb/record.py)と照合した。
 
 ## ビルド・起動
