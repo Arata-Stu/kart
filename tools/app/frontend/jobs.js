@@ -12,8 +12,35 @@ const labels = {
 async function showLog(id) {
   selected = id;
   const result = await api("log?id=" + id);
+  if (selected !== id) return;
   $("job-log").textContent = result.text;
+  $("job-log-copy").disabled = !result.text;
 }
+action("job-log-copy", async () => {
+  const text = $("job-log").textContent;
+  if (!selected || !text) throw new Error("コピーするログがありません");
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // HTTP access via a notebook IP may not provide the Clipboard API.
+    const input = document.createElement("textarea");
+    input.value = text;
+    input.readOnly = true;
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    const focus = document.activeElement;
+    document.body.append(input);
+    try {
+      input.select();
+      if (!document.execCommand("copy"))
+        throw new Error("コピーできませんでした。ブラウザのコピー権限を確認してください");
+    } finally {
+      input.remove();
+      focus?.focus({ preventScroll: true });
+    }
+  }
+  toast("表示中のログをコピーしました");
+});
 export async function poll() {
   if (busy) return;
   busy = true;
