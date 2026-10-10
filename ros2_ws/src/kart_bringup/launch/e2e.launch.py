@@ -20,6 +20,8 @@ def add_pipeline(args):
     )
     model_contract(config["model_dir"])
     runtime_settings(config["model_dir"])
+    from kart_e2e.engine_cache import require_engine
+    require_engine(config["model_dir"])
     validate_encoder(lu.get_path("kart_bringup", "config/e2e/image_encoder.yaml"))
     actions = [lu.log_info(f"E2E pipeline: {config}")]
     if config["create_container"]:

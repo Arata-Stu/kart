@@ -5,7 +5,8 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "numpy==2.4.6",
     "onnx==1.21.0",
-    "onnxruntime==1.27.0",
+    "onnxruntime==1.27.0; sys_platform != 'linux' or platform_machine != 'x86_64'",
+    "onnxruntime-gpu[cuda,cudnn]==1.23.2; sys_platform == 'linux' and platform_machine == 'x86_64'",
     "onnxslim==0.1.97",
     "polygraphy==0.53.6",
     "opencv-python-headless==4.13.0.92",

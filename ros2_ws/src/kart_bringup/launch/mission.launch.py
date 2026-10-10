@@ -61,6 +61,8 @@ def add_mission(args):
             raise ValueError("E2E requires RGB (rgb_fps > 0)")
         model_contract(args.e2e_model_dir)
         runtime_settings(args.e2e_model_dir)
+        from kart_e2e.engine_cache import require_engine
+        require_engine(args.e2e_model_dir)
     actions = [
         lu.log_info(
             f"Mission: {args.mode}; config: {cfg}; recording/AUTO require Joy operation"

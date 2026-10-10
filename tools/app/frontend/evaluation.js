@@ -11,12 +11,18 @@ export async function showEvaluation(id) {
   root.append(title);
   const note = document.createElement("p");
   note.className = "help";
-  note.textContent = `${report.mode} / CPU推論中央値 ${report.inference_ms_median.toFixed(1)} ms（前処理を除く）· 教師=灰 / 指令予測=紫。steer-onlyのスロットルはmetadataの固定値です。`;
+  note.textContent = `${report.mode} / ${report.provider || "CPUExecutionProvider"} 推論中央値 ${report.inference_ms_median.toFixed(1)} ms（前処理を除く）· 教師=灰 / 指令予測=紫。steer-onlyのスロットルはmetadataの固定値です。`;
   root.append(note);
+  if (report.cuda_fallback_reason) {
+    const warning = document.createElement("p");
+    warning.className = "help";
+    warning.textContent = "CUDA未使用: " + report.cuda_fallback_reason;
+    root.append(warning);
+  }
   if (report.inference_ms) {
     const stats = document.createElement("p");
     const t = report.inference_ms;
-    stats.textContent = `ONNX ${(report.onnx_size_bytes / 1048576).toFixed(1)} MiB · CPU推論 平均 ${t.mean.toFixed(2)} / 中央値 ${t.median.toFixed(2)} / P95 ${t.p95.toFixed(2)} ms · warmup ${report.warmup_runs}回を除外`;
+    stats.textContent = `ONNX ${(report.onnx_size_bytes / 1048576).toFixed(1)} MiB · ${report.provider || "CPUExecutionProvider"} 推論 平均 ${t.mean.toFixed(2)} / 中央値 ${t.median.toFixed(2)} / P95 ${t.p95.toFixed(2)} ms · warmup ${report.warmup_runs}回を除外`;
     root.append(stats);
   }
   for (const [key, label, low, high] of [

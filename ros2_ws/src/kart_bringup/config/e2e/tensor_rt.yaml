@@ -5,7 +5,8 @@
 # model/engine paths are resolved from model_dir and ONNX SHA at launch.
 # kart changes: names/shape fixed by exported metadata, strict dimensions, 1GiB workspace,
 # verbosity off and FP32 bindings. Source's enable_fp16 currently sets kTF32, NOT kFP16.
-# Force rebuilding by default avoids silently reusing an incompatible GPU/TRT engine.
+# Build is a separate explicit step via e2e_trt.sh. Launch requires verified
+# hardware, hashes and TensorRT deserialization; never builds an engine.
 # No old input_tensor_formats/output_tensor_formats: not present in this release.
 /**:
   ros__parameters:
@@ -17,7 +18,7 @@
     input_binding_names: [image]
     output_tensor_names: [control]
     output_binding_names: [control]
-    force_engine_update: true
+    force_engine_update: false
     verbose: false
     max_workspace_size: 1073741824
     dla_core: -1

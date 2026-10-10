@@ -30,7 +30,7 @@ encoder内部topicは`/e2e/resize/image`, `/e2e/rgb/image` (sensor_msgs/msg/Imag
 TensorRTは`/e2e/tensor_input`入力、`/e2e/tensor_output`出力。同じTensorList型。
 旧`isaac_ros_tensor_list_interfaces`や`NitrosTensorList`ではない。
 
-`force_engine_update=true`は毎回target GPUで再構築する設定。
+`force_engine_update=false`が既定。launchではtrueを拒否し、検証済みengineがない場合は案内して停止する。buildは別途`scripts/e2e_trt.sh`で実行する。
 falseでcache再利用する際はGPU/TensorRTの互換性を確認する。
 この上流commitの`enable_fp16`は名前と異なりkTF32を設定するため、既定false。
 FP16最適化済みと主張しない。精度・latency検証後に別途最適化する。

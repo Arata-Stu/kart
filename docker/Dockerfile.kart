@@ -58,6 +58,7 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     && UV_PROJECT_ENVIRONMENT=/opt/inference uv sync \
         --project /opt/kart/python/inference --python /usr/bin/python3 --locked --no-dev \
     && /opt/inference/bin/python -c 'import tensorrt, onnx, onnxruntime; from onnxruntime.quantization import quantize_static, CalibrationDataReader' \
+    && /opt/inference/bin/python -c 'import platform, onnxruntime as ort; assert platform.machine() != "x86_64" or "CUDAExecutionProvider" in ort.get_available_providers()' \
     && test -x /usr/src/tensorrt/bin/trtexec
 
 # Offline raceline optimization runs on the x86_64 notebook only.

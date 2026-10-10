@@ -27,19 +27,45 @@ def metrics(predicted, labels):
     }
 
 
+def evaluation_session(ort, model):
+    """Prefer CUDA and report unavailable/failed CUDA initialization explicitly."""
+    options = ort.SessionOptions()
+    options.intra_op_num_threads = 2
+    reason = "CUDAExecutionProviderがありません（GPU版ONNX Runtimeが必要）"
+    if "CUDAExecutionProvider" in ort.get_available_providers():
+        try:
+            # Load pip CUDA/cuDNN libraries when installed; also supports system libraries.
+            if hasattr(ort, "preload_dlls"):
+                ort.preload_dlls()
+            session = ort.InferenceSession(
+                model,
+                sess_options=options,
+                providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+            )
+            if "CUDAExecutionProvider" in session.get_providers():
+                session.disable_fallback()
+                return session, ""
+            reason = (
+                "CUDA provider初期化に失敗しました。直前のORTログを確認してください"
+            )
+        except (RuntimeError, OSError) as error:
+            reason = str(error)
+    return ort.InferenceSession(
+        model, sess_options=options, providers=["CPUExecutionProvider"]
+    ), reason
+
+
 def evaluate(model_dir, dataset, output):
     import onnxruntime as ort
     from .model import preprocess
 
     contract, mode = model_contract(model_dir)
     runtime = runtime_settings(model_dir)
-    options = ort.SessionOptions()
-    options.intra_op_num_threads = 2
-    session = ort.InferenceSession(
-        contract["model_file_path"],
-        sess_options=options,
-        providers=["CPUExecutionProvider"],
-    )
+    session, fallback_reason = evaluation_session(ort, contract["model_file_path"])
+    providers = session.get_providers()
+    print(f"ONNX Runtime providers: {providers}", flush=True)
+    if fallback_reason:
+        print(f"WARNING: CUDAを利用できないためCPU評価: {fallback_reason}", flush=True)
     warmup_runs = 10
     rows = []
     first = None
@@ -98,7 +124,9 @@ def evaluate(model_dir, dataset, output):
         mode=mode,
         runtime=runtime,
         samples=len(rows),
-        provider="CPUExecutionProvider",
+        provider=providers[0],
+        providers=providers,
+        cuda_fallback_reason=fallback_reason,
         onnx_size_bytes=Path(contract["model_file_path"]).stat().st_size,
         warmup_runs=warmup_runs,
         timing_scope="session.run_only_excludes_preprocessing_and_warmup",

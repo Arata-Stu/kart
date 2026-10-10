@@ -113,3 +113,31 @@ class EvaluationTests(unittest.TestCase):
                     len((output / "predictions.csv").read_text().splitlines()), 4
                 )
                 json.loads((output / "report.json").read_text())
+
+
+class ProviderTests(unittest.TestCase):
+    def test_cuda_priority_and_cpu_fallback_reporting(self):
+        from unittest.mock import MagicMock
+        from kart_e2e.evaluate import evaluation_session
+
+        for available, active in (
+            (
+                ["CUDAExecutionProvider", "CPUExecutionProvider"],
+                ["CUDAExecutionProvider", "CPUExecutionProvider"],
+            ),
+            (["CPUExecutionProvider"], ["CPUExecutionProvider"]),
+            (
+                ["CUDAExecutionProvider", "CPUExecutionProvider"],
+                ["CPUExecutionProvider"],
+            ),
+        ):
+            with self.subTest(available=available, active=active):
+                ort = MagicMock()
+                ort.get_available_providers.return_value = available
+                ort.InferenceSession.return_value.get_providers.return_value = active
+                session, reason = evaluation_session(ort, "model.onnx")
+                self.assertEqual(bool(reason), "CUDAExecutionProvider" not in active)
+                requested = ort.InferenceSession.call_args_list[0].kwargs["providers"]
+                self.assertEqual(requested[0], available[0])
+                if not reason:
+                    session.disable_fallback.assert_called_once()

@@ -154,3 +154,7 @@ Notebookでも既存SSH agentを転送する。接続先検証は有効のまま
 地図生成の失敗時は公式ログと中間成果物を`map/.failed/<ID>/`へ保持し、保存先をジョブログに表示する。成功地図として公開しない。ユーザーによる中止は従来どおり一時領域を削除する。
 
 E2Eのオフライン評価はexport済みONNXを対象にrosbagの有効教師付きMANUAL画像で行い、ROS制御topicをpublishしない。学習と同じ前処理とモデルmetadataの出力設定を用いる。UIで予測/教師グラフと誤差指標を提示し、Jetsonへの転送前に確認可能にする。実車安全ゲート・TensorRT速度・閉ループ追従性能の検証とは区別する。
+
+Jetson向け事前TensorRT buildはscripts/e2e_trt.shで行う。通常E2E起動のcache再利用はハードウェア・ソフトウェア指紋とONNX/engineハッシュ・deserialize検証を必須とし、未検証engineを明示falseで使うことも拒否する。
+
+E2E bringupではTensorRT engineを自動生成しない。未build・不適合なら案内して起動を停止する。事前buildはe2e_trt.shへ分離する。オフラインONNX評価はCUDA優先、利用不可時のCPU fallback理由と実際のproviderをログ・結果へ記録する。

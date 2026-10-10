@@ -4,6 +4,7 @@ import isaac_ros_launch_utils as lu
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.e2e import boolean, parameters
 from kart_e2e.contract import model_contract, runtime_settings
+from kart_e2e.engine_cache import require_engine
 
 
 def add_nodes(args):
@@ -30,6 +31,11 @@ def add_nodes(args):
         decoder["drive_enabled"] = boolean(args.drive_enabled)
     if args.force_engine_update != "":
         trt["force_engine_update"] = boolean(args.force_engine_update)
+    if trt["force_engine_update"]:
+        raise ValueError(
+            "bringupではTensorRT buildを行いません。scripts/e2e_trt.sh --forceを実行してください"
+        )
+    require_engine(args.model_dir)
     nodes = [
         lut.ComposableNode(
             name="e2e_tensor_rt",
