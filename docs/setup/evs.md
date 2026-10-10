@@ -22,7 +22,11 @@ bash scripts/repos.sh import
 ./scripts/dev.sh --evs --build-local
 ```
 
-以後もEVS利用時は`./scripts/dev.sh --evs`で同じEVS image/containerを選ぶ。
+以後は`./scripts/dev.sh`だけで同じEVS image/containerを選ぶ。
+明示選択をcheckout内の`.kart-dev-profile`へ保存する（Git対象外）。
+EVSなしへ戻す場合は`./scripts/dev.sh --no-evs`。選択はCLI呼出し前に保存するため、
+Dockerビルドが失敗した場合も再実行は同じprofileを使用する。
+pluginソースの存在確認はEVSイメージをビルドする時のみ行う。
 通常devはOpenEBレイヤーを含まないため、全体ビルドでは
 `--packages-skip openeb_ros2`を指定する。
 packages.reposはopeneb_ros2 commit f89015ba1f05d2fe432b270e73e132351c1a9377を固定。

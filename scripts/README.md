@@ -4,7 +4,7 @@
 
 | 場所 | 用途 | 実行環境 |
 |---|---|---|
-| dev.sh | 開発Dockerへ入る（EVSは--evs） | Linuxホスト |
+| dev.sh | 開発Dockerへ入る（--evs/--no-evsの選択を保存） | Linuxホスト |
 | update-isaac-ros-cli.sh | Isaac ROS CLI更新 | Linuxホスト |
 | bringup.sh | 起動構成のTUI／CLI | ROSコンテナ |
 | open-foxglove.sh | Foxgloveを開く | ホスト |
@@ -25,3 +25,6 @@ bash scripts/workspace/build.sh --packages-up-to kart_bringup
 bash scripts/sensors/evs-bias.sh --build
 bash scripts/tests/test-vehicle.sh
 ```
+
+`dev.sh --evs --build-local`でEVSを選ぶと、次回は`dev.sh`だけでEVS環境へ入れます。
+選択はGit対象外の`.kart-dev-profile`へ保存。`--no-evs`で通常環境へ戻し、その選択を保存します。

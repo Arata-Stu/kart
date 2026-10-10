@@ -33,3 +33,6 @@ __pycache__/
 /ros2_ws/src/sensing/openeb_ros2/
 
 /tools/evs_bias_tuner/build/
+
+# Checkout-local remembered Docker profile.
+/.kart-dev-profile
