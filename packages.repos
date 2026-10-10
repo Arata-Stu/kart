@@ -7,5 +7,5 @@ repositories:
   ros2_ws/src/sensing/openeb_ros2:
     type: git
     url: https://github.com/carbuncle01/openeb_ros2.git
-    # kart direct tensor / RAW / image implementation (2026-10-10)
-    version: f89015ba1f05d2fe432b270e73e132351c1a9377
+    # Follow the kart development branch (requested 2026-10-10).
+    version: kart
