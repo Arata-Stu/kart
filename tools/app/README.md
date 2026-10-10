@@ -456,3 +456,5 @@ HDMap編集ではカーソル位置への追加結果を点線でプレビュー
 Customの「区間速度」は番号付きwaypoint図と開始・終了WPの選択欄で指定する。開始欄を選んで図をクリックすると終了選択へ進み、選択区間が紫で表示される。閉路は末尾→先頭を跨ぐ区間と「WP 1（周回末尾）」に対応する。既存の距離指定は勝手に丸めず保持する。内部保存は従来の距離形式で、Custom点列を編集した後は区間を選び直す。
 
 Raceline初期値はJetPilot `tools/app/frontend/app.js` と `python_ws/map_tools/generate_raceline.py` の `race-stacks` presetを参照。共通項目は点間隔0.10m、曲率上限1.0/m、余裕0.05m、最高速度3.0m/s、横加速度2.5m/s²、加速1.5m/s²、減速2.5m/s²。kartの車体幅0.19m・全長0.47m・後輪軸位置は既定のTT-02モデルを保持。JetPilotの最低速度0.8m/sは停止・制約と競合するため導入しない。helperの内部再サンプリング・平滑化はアルゴリズムが異なるため同一値を意味しない。保存済みラインの設定は維持する。
+
+学習開始時にDINOv3ソースが見つからない場合は、Notebookコンテナの`/workspaces`で`vcs import . < e2e.repos`を実行する。`.pth`の配置だけではソースは導入されない。UI「学習環境」でソースを`/workspaces/python_ws/dinov3`、重みを`/workspaces/weights/dinov3/dinov3_vits16_pretrain_lvd1689m-08c60483.pth`に設定する。環境変数の追加は不要。

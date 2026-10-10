@@ -81,6 +81,20 @@ class LearningTests(unittest.TestCase):
         self.service.execute(FakeJob(), plan)
         return self.service.folder("datasets", name)
 
+    def test_missing_encoder_and_weights_identify_path(self):
+        self.dataset()
+        body = dict(name="run", train=["data"], validation=["data"])
+        missing = str(self.base / "missing")
+        for field, message in (
+            ("encoder_repo", "DINOv3ソース"),
+            ("weights", "DINOv3公式重み"),
+        ):
+            with self.subTest(field=field):
+                self.service.save_settings(dict(self.settings, **{field: missing}))
+                with self.assertRaisesRegex(ValueError, message) as error:
+                    self.service.prepare("train", body)
+                self.assertIn(missing, str(error.exception))
+
     def test_dataset_publication_and_overwrite(self):
         folder = self.dataset()
         self.assertTrue((folder / "artifact.json").is_file())
@@ -137,7 +151,9 @@ class LearningTests(unittest.TestCase):
         self.assertIn("steer_only", job.args)
         self.assertEqual(self.service.catalog()["runs"][0]["metrics"]["epoch"], 1)
         with self.assertRaises(ValueError):
-            self.service.prepare("train", {**body, "name": "bad_runtime", "fixed_throttle": 0.9})
+            self.service.prepare(
+                "train", {**body, "name": "bad_runtime", "fixed_throttle": 0.9}
+            )
         export = self.service.prepare("export", dict(name="model", run="run"))
         self.assertEqual(export["module"], "export_onnx")
         self.assertTrue(export["args"][0].endswith("/run/best.pt"))

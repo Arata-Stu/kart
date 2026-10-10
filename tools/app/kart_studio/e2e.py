@@ -163,9 +163,16 @@ class Learning:
                 raise ValueError("予測モードが不正です")
             repo = Path(cfg["encoder_repo"]).expanduser()
             weights = Path(cfg["weights"]).expanduser()
-            if not repo.is_dir() or not weights.is_file():
+            if not repo.is_dir():
                 raise ValueError(
-                    "環境設定にDINOv3ソースと公式重みのパスを指定してください"
+                    f"DINOv3ソースが見つかりません: {repo}。"
+                    "Notebookのコンテナ内で cd /workspaces && vcs import . < e2e.repos "
+                    "を実行し、UI「学習環境」のDINOv3ソースを確認してください。重みとは別に必要です"
+                )
+            if not weights.is_file():
+                raise ValueError(
+                    f"DINOv3公式重みが見つかりません: {weights}。"
+                    "UI「学習環境」の重みパスをコンテナ内のパスで指定してください"
                 )
             epochs = self.integer(body.get("epochs", 20), 1, 100000)
             batch = self.integer(body.get("batch_size", 32), 1, 4096)
