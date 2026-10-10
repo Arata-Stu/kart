@@ -81,3 +81,19 @@ Dockerから渡した補助GIDは、image内のroot entrypoint extension
 
 bringupの車両基板は既定で/dev/ttyACM0を使い、TUIで質問しません。
 変更時は--device、基板なしの確認は--no-bridgeを指定できます。
+
+
+### DockerのSSH設定共有
+
+dev.shはJetPilotと同じく、起動したホストユーザーの~/.sshを/home/admin/.sshへ
+読み取り専用でmountする。既存の秘密鍵・config・known_hostsを再利用し、
+コンテナ再作成で消えない。鍵をimageやリポジトリへコピーしない。
+SSH agentが起動していればNotebookでもソケットを渡す（aarch64はCLI側の既存転送）。
+
+初回の接続先登録・鍵認証設定はホストで一度行う。UIのIPと同じ宛先を使い、
+fingerprintを確認して登録する。コンテナ側からknown_hostsへの追記はできない。
+ホストでssh-add済みのagentを使う場合は、そのシェルからdev.shを起動する。
+
+この変更はイメージ再ビルド不要。既存コンテナにはmountを追加できないため、
+Web UI等を終了してホストでdocker stop kart_dev（EVSはkart_evs_dev）後、dev.shを実行する。
+コンテナ内だけに保存したSSH設定は停止前に必要に応じてホストへ移す。

@@ -147,3 +147,6 @@ ROSノードや実車PIDと等価とは扱わず、実車へ接続しない。
 
 Web UIの短い入口はscripts/webui.shとし、Dockerの対話Bashではwebuiコマンドも提供する。
 Jetson接続の初期SSHユーザーはkart。保存済み接続設定は自動上書きしない。
+
+SSH認証とknown_hostsの正本はホストの~/.ssh。Dockerは読み取り専用共有し、
+Notebookでも既存SSH agentを転送する。接続先検証は有効のまま、初回登録はホストで行う。
