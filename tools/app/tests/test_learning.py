@@ -66,6 +66,7 @@ class LearningTests(unittest.TestCase):
         self.settings = self.service.settings()
         self.settings.update(
             python=sys.executable,
+            inference_python=sys.executable,
             encoder_repo=str(self.base),
             weights=str(self.base / "weights.pt"),
             device="cpu",

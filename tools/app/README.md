@@ -462,3 +462,5 @@ Raceline初期値はJetPilot `tools/app/frontend/app.js` と `python_ws/map_tool
 ### ONNXのrosbag評価
 
 学習→ONNX export→「4 rosbag評価」→Jetson転送の順で操作できる。モデル・bag・評価名を選び開始する。画像/教師操作/モードtopic・時計・許容差は「1 データセット」の設定を共用する。評価履歴をクリックすると教師と指令予測の時系列グラフ、MAE/RMSE/P95を表示する。全フレームCSVとJSONは`e2e/evaluations/<評価名>/`。モデルとbagを処理資源として固定し、bag内容の変更や評価失敗時には結果を公開しない。転送に合格閾値は設けず、評価結果を人が確認する。評価はCPU ONNX RuntimeでのMANUAL画像・教師比較で、閉ループ走行やJetson上TensorRTの動作を保証しない。
+
+学習環境のPythonは用途別に指定する。`python`は学習・データ抽出用、`inference_python`はONNX export・rosbag評価用で既定`/opt/inference/bin/python`。Dockerの既存ONNX/ONNX Runtime環境を利用し、システム側のPyTorchはsystem-site-packages経由で参照する。独自venvだけにPyTorchを入れた場合はexport用Pythonからもtorchをimportできる環境を指定する。既存設定の学習Pythonは保持する。

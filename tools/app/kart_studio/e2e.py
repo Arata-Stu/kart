@@ -32,6 +32,7 @@ class Learning:
     def settings(self):
         result = dict(
             python=os.environ.get("KART_E2E_PYTHON", sys.executable),
+            inference_python="/opt/inference/bin/python",
             encoder_repo=str(self.repo / "python_ws/dinov3"),
             weights=str(
                 self.repo
@@ -81,16 +82,19 @@ class Learning:
         within(path, "artifact.json")
         return path
 
-    def runtime(self):
+    def runtime(self, action=None):
         cfg = self.settings()
-        python = Path(cfg["python"]).expanduser()
+        field = "inference_python" if action in ("export", "evaluate") else "python"
+        python = Path(cfg[field]).expanduser()
         if (
             not python.is_absolute()
             or not python.is_file()
             or not os.access(python, os.X_OK)
             or not re.fullmatch(r"python(?:[0-9]+(?:\.[0-9]+)*)?", python.name)
         ):
-            raise ValueError("実行可能なPythonの絶対パスを環境設定に指定してください")
+            raise ValueError(
+                f"UI「学習環境」の{field}に実行可能なPythonを指定してください: {python}"
+            )
         env = os.environ.copy()
         env["PYTHONPATH"] = (
             str(self.repo / "ros2_ws/src/kart_e2e")
@@ -108,7 +112,7 @@ class Learning:
 
     def prepare(self, action, body):
         key = name(body.get("name"))
-        python, cfg, env = self.runtime()
+        python, cfg, env = self.runtime(action)
         common = dict(key=key, python=python, env=env)
         if action == "dataset":
             target = self.target("datasets", key)

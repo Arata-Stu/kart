@@ -16,7 +16,14 @@ const labels = {
   models: "ONNXモデル",
   evaluations: "オフライン評価",
 };
-const fields = ["python", "encoder_repo", "weights", "device", "model_root"];
+const fields = [
+  "python",
+  "inference_python",
+  "encoder_repo",
+  "weights",
+  "device",
+  "model_root",
+];
 function suggestNames() {
   if (!catalog) return;
   const base =
