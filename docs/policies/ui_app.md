@@ -163,4 +163,8 @@ bagによる地図確認はVSLAM単独とVGL併用を明示選択する。Map St
 
 Web UIのVGL準備は選択中の公式VSLAM地図から明示実行し、別bundleへ保存する。元地図とHDMapを変更せず、モデル資産不足を大型モデルへのfallbackで補わない。
 
+地図送信にはcuVSLAMの内容ハッシュで対応付く完成済みVGL bundleを全版同梱する。
+HDMapと同じ一時領域で検証・公開し、対応bundleの有無をログへ表示する。
+GPU固有モデルengineは地図転送に含めず、実行先で準備したモデルをbringupで選択する。
+
 カメラbagのオフラインlocalization評価はcamera_linkを既定基準とする。車体TFを仮定・生成しない。実車localizationのbase_linkとは明示的に区別する。

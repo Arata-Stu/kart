@@ -13,6 +13,7 @@ from pathlib import Path
 from .transfer_progress import run_transfer
 from .remote_agent import signature
 from .storage import atomic_json, name, within
+from .vgl_transfer import copy_vgl_bundles
 
 SSH_OPTIONS = [
     "-o",
@@ -158,6 +159,7 @@ class Transfers:
             if (source / "cuvslam_map").is_dir():
                 signature(source / "cuvslam_map")  # Refuse links before copy.
                 shutil.copytree(source / "cuvslam_map", bundle / "cuvslam_map")
+            copy_vgl_bundles(job, self.maps.root, bundle, bundle)
             expected = signature(bundle)
             job.check()
             request(p, "reserve", p["map_root"], stage_name)

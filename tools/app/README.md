@@ -471,6 +471,16 @@ ONNX評価はCUDAExecutionProviderを優先し、利用不可・初期化失敗�
 
 ## Web UIからVGL地図を追加生成
 
+地図のJetson送信では、`map/vgl/*/vgl_profile.json`を探索し、送信するcuVSLAMの
+`.mdb`全ファイルのSHA-256が一致する完成済みbundleを自動同梱する。
+名前や生成元の絶対パスでは照合しないため、同じ元地図のHDMapコピーにも対応する。
+対応するv1/v2等はすべて送り、ログへ名前を表示する。対応bundleがなければログで明示して従来の地図送信を続行する。
+送信先は`map/<地図名>_r<revision>_<識別子>/vgl/<bundle名>/`で、bringupの再帰探索から選択できる。
+cuVSLAM/cuVGL地図・VGL設定・profileのみを同梱し、GPU固有のTensorRTモデルは送らない。
+同梱時に元地図・設定ハッシュ、画像shape、必須VGL成果物を検査し、不整合時は送信を止める。
+転送後はHDMapとVGLをまとめてサイズ・件数照合してから公開する。モデルとのONNX照合は既存のbringup検証で行う。
+反映にはNotebook側のコード更新とUIサーバー再起動が必要。既存の送信済み地図は変更せず、UIから再送信する。
+
 既存地図を開き「VGL地図を追加生成」を選択する。ALIKED/LightGlueモデルはmodelsとmap以下の候補から選ぶかパスを入力し、画像サイズ（既定424×240）と保存名（地図名-vgl-vN）を指定する。実行GPUでbuild済みのengineが必要で、download/buildは自動実行しない。公式offline処理の保存画像・posesがない場合は生成できない理由を表示する。
 
 `POST /api/vgl`はinstalled `ros2 run kart_bringup prepare_vgl_map`をジョブ実行し、検証済みbundleを`map/vgl/<保存名>`へ公開する。既存VSLAM地図・HDMapは変更しない。ログ・中止は既存ジョブ画面を使い、失敗・中止時の一時成果物は公開しない。成功後はbringupで「VSLAM＋VGL」を選び生成bundleを指定する。実走行GPUがNotebookと異なる場合は実走行GPU用モデルengineを別途準備する。UIサーバー再起動とkart_bringupのbuild/sourceが必要。
