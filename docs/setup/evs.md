@@ -18,7 +18,7 @@ docker/silky_evcam_plugin_source/licensing/
 
 ```bash
 cd /path/to/kart
-bash scripts/workspace/repos.sh import
+bash scripts/repos.sh import
 ./scripts/dev.sh --evs --build-local
 ```
 

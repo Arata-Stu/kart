@@ -242,8 +242,8 @@ mkdir -p ~/workspaces
 read -r -p 'kart repository URL: ' KART_REPO_URL
 git clone "$KART_REPO_URL" ~/workspaces/kart
 cd ~/workspaces/kart
-./scripts/workspace/repos.sh import
-./scripts/workspace/repos.sh status
+./scripts/repos.sh import
+./scripts/repos.sh status
 git -C tools/isaac-ros-cli rev-parse HEAD
 mkdir -p record map config
 ```

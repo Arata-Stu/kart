@@ -10,7 +10,7 @@
 | open-foxglove.sh | Foxgloveを開く | ホスト |
 | jetson_max_performance.sh | Jetson性能設定・確認 | Jetsonホスト |
 | workspace/build.sh | colcon build | ROSコンテナ |
-| workspace/repos.sh | vcs import／status | ホスト |
+| repos.sh | vcs import／status | ホスト |
 | setup/bluetooth.sh | コントローラーのBluetooth接続 | Linuxホスト／Docker |
 | setup/setup-jtop.sh | jtopの初期導入 | Jetsonホスト |
 | sensors/evs-bias.sh | EVS bias調整ツールのbuild／起動 | EVSコンテナ |

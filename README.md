@@ -63,8 +63,8 @@ Dockerからは共有D-Bus経由でホストのBlueZを操作する。
 ```bash
 # kartルート、Ubuntuホスト上
 sudo apt install python3-vcstool
-./scripts/workspace/repos.sh import
-./scripts/workspace/repos.sh status
+./scripts/repos.sh import
+./scripts/repos.sh status
 ```
 
 `tools/isaac-ros-cli` は外部Gitとして管理し、kart本体へ内容を追加しない。
