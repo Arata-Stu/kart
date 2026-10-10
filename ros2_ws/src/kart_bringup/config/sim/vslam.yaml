@@ -1,0 +1,73 @@
+# Simulation evaluation: full cuVSLAM parameter set, copied from localization/cuvslam.yaml.
+# Changes: use_sim_time=true, empty load map; tracking_mode default stereo VO (0).
+# Noise coefficients are inherited estimator settings; the simulator itself is noise-free.
+# Camera/IMU topics and sensor TF come from kart_sim; truth dynamic TF must be disabled.
+# ROS package: isaac_ros_cuvslam; APT: ros-lyrical-isaac-ros-cuvslam
+# Target: Isaac ROS release-5.0. Installed APT version is not verified on macOS.
+# Source: https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_visual_slam/blob/e4dc8f59816dfca387bcb92364ecaf9207216475/isaac_ros_cuvslam/src/visual_slam_node.cpp
+# Source declarations checked: 2026-10-08; sim adaptation: 2026-10-10. All 60 declared node parameters (including QoS depth) are explicit.
+# Common ROS params omitted except use_sim_time: runtime-managed services/clock flags.
+# No upstream launch/YAML is layered beneath this file.
+/**/visual_slam:
+  ros__parameters:
+    use_sim_time: true
+    num_cameras: 2
+    num_input_masks: 0
+    multicam_mode: 1
+    min_num_images: 2
+    sync_matching_threshold_ms: 5.0
+    img_mask_top: 0
+    img_mask_bottom: 0
+    img_mask_left: 0
+    img_mask_right: 0
+    enable_image_denoising: false
+    rectified_images: true
+    enable_ground_constraint_in_odometry: false
+    enable_ground_constraint_in_slam: false
+    enable_localization_n_mapping: true
+    tracking_mode: 0  # Optional launch override 1 enables VIO
+    debug_imu_mode: false
+    gyro_noise_density: 0.000244
+    gyro_random_walk: 0.000019393
+    accel_noise_density: 0.001862
+    accel_random_walk: 0.003
+    calibration_frequency: 200.0
+    depth_scale_factor: 1000.0
+    depth_camera_id: 0
+    depth_enable_stereo_tracking: false
+    image_jitter_threshold_ms: 34.0
+    imu_jitter_threshold_ms: 10.0
+    save_map_folder_path: ''  # Never save over the original map
+    load_map_folder_path: ''  # Start a new simulation map; no existing map required
+    localize_on_startup: false
+    localizer_horizontal_radius: 1.5
+    localizer_vertical_radius: 0.5
+    localizer_horizontal_step: 0.5
+    localizer_vertical_step: 0.25
+    localizer_angular_step: 0.1745
+    slam_max_map_size: 300
+    slam_throttling_time_ms: 500
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_link  # Requires calibrated base_link -> camera_link mount TF
+    camera_optical_frames: [camera_infra1_optical_frame, camera_infra2_optical_frame]
+    imu_frame: camera_gyro_optical_frame  # Only used with tracking_mode=1
+    image_buffer_size: 10
+    imu_buffer_size: 50
+    image_qos: SENSOR_DATA
+    image_qos_depth: 5
+    imu_qos: SENSOR_DATA
+    imu_qos_depth: 5
+    override_publishing_stamp: false
+    publish_map_to_odom_tf: true
+    publish_odom_to_base_tf: true
+    invert_map_to_odom_tf: false
+    invert_odom_to_base_tf: false
+    enable_slam_visualization: false  # Jetson: poses/paths only, no landmark/pose-graph visualization
+    enable_observations_view: false
+    enable_landmarks_view: false  # No feature cloud on Jetson
+    path_max_size: 2048  # Bounded live pose trail
+    verbosity: 1
+    enable_debug_mode: false
+    debug_dump_path: /tmp/cuvslam
+    enable_request_hint: true  # Request VGL again if a pose hint fails

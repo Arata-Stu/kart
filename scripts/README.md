@@ -136,3 +136,15 @@ Jetsonでの初回buildと以後の検証は`bash scripts/vgl_build.sh`（既定
 別名は`bash scripts/vgl_build.sh 424x240-v2`。ONNXとmanifestは先に配置する。
 既存engineは両engineのdeserialize・ALIKED shape・ONNXハッシュを検査し、buildをスキップする。
 初回検証時にGPU UUID/driver/TRT等とengineハッシュを記録し、以後の不一致は自動上書きせず停止する。
+
+## sim.sh
+
+`./scripts/sim.sh --map minicar_2026`で室内sim専用launch。`--list`はマップ一覧。
+`--check`はROS不要の物理smoke、`--preview`は手動MuJoCo viewer。
+`SIM_PYTHON`でMuJoCo導入済みinterpreterを指定する。詳細は[kart_sim](../ros2_ws/src/kart_sim/README.md)。
+
+`--preview --sensors`は左右mono8/RGB（424×240）を取得し、表示されたlocalhost URLで
+画像・真値姿勢・IMUを確認できる。`--stereo-hz`/`--rgb-hz`は30〜90（既定60/30）、
+`--imu-hz`は30〜1000（既定200）、`--rig JSON`で校正を指定。
+macOS GUIにはvenvのmjpythonをSIM_PYTHONへ指定する。ROS起動のHz/TF変更は
+`ros2 launch kart_bringup sim.launch.py`の引数を使う。

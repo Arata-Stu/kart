@@ -98,7 +98,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         htop procps psmisc lsof strace gdb \
         iproute2 iputils-ping dnsutils netcat-openbsd socat tcpdump iperf3 \
         usbutils v4l-utils \
-        fzf cmake ninja-build pkg-config libevdev-dev libyaml-cpp-dev python3-yaml python3-pytest python3-numpy python3-pil \
+        fzf cmake ninja-build pkg-config libevdev-dev libyaml-cpp-dev libgl1 libegl1 libglfw3 python3-yaml python3-pytest python3-numpy python3-pil \
         ros-lyrical-event-camera-codecs ros-lyrical-event-camera-msgs \
         ros-lyrical-ament-cmake-auto ros-lyrical-ament-cmake-python \
         ros-lyrical-ament-cmake-pytest ros-lyrical-rclcpp-components \
@@ -107,7 +107,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ros-lyrical-rosbag2-py ros-lyrical-sensor-msgs-py \
         ros-lyrical-ament-index-python ros-lyrical-builtin-interfaces \
         ros-lyrical-geometry-msgs ros-lyrical-nav-msgs ros-lyrical-sensor-msgs \
-        ros-lyrical-std-msgs ros-lyrical-std-srvs ros-lyrical-visualization-msgs \
+        ros-lyrical-std-msgs ros-lyrical-std-srvs ros-lyrical-visualization-msgs ros-lyrical-rosgraph-msgs \
         ros-lyrical-launch ros-lyrical-launch-ros ros-lyrical-rcl-interfaces \
         ros-lyrical-rclcpp ros-lyrical-rclpy ros-lyrical-rosbag2-transport \
         ros-lyrical-rosidl-default-runtime ros-lyrical-rosidl-runtime-py \
@@ -117,6 +117,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ros-lyrical-isaac-ros-tensor-msgs ros-lyrical-isaac-ros-tensor-proc \
         ros-lyrical-isaac-ros-visual-slam-interfaces \
     && rm -rf /var/lib/apt/lists/*
+
+# MuJoCo core uses ROS system Python; do not mix the inference venv.
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv pip install --python /usr/bin/python3 --break-system-packages 'mujoco==3.3.7' \
+    && /usr/bin/python3 -c 'import mujoco'
 
 # Register supplementary GIDs and restore Jetson GPU permissions on every start,
 # before gosu drops root. Keep the hook executable regardless of checkout mode.

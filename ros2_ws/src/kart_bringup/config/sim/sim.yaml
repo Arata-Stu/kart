@@ -1,0 +1,19 @@
+kart_sim:
+  ros__parameters:
+    map_file: ''  # Required; launch selects maps/sim/*.json.
+    asset_dir: ''  # Empty selects installed kart_sim assets.
+    camera_enabled: false
+    camera_rig_file: ''  # Empty selects installed assets/d455.json.
+    stereo_hz: 60.0
+    rgb_hz: 30.0
+    imu_enabled: true
+    imu_hz: 200.0
+    publish_truth_tf: true  # Set false when VSLAM owns map/odom/base_link TF.
+    viewer_enabled: false
+    require_mode: true
+    command_timeout_s: 0.2
+    mode_timeout_s: 0.5
+    step_count: 10
+    max_steering_rad: 0.45
+    wheel_torque_nm: 0.025
+    use_sim_time: true

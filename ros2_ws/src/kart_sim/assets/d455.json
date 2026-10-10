@@ -1,0 +1,54 @@
+{
+  "name": "D455 nominal rectified pinhole",
+  "sources": [
+    "https://www.realsenseai.com/download/21345/",
+    "kart_bringup/config/vehicle/transforms.yaml"
+  ],
+  "notes": [
+    "Mount is kart's provisional left IR origin, not measured calibration.",
+    "95 mm baseline and nominal FOVs from D400 datasheet; actual 424x240 intrinsics require device calibration.",
+    "RGB displacement and co-located IMU are provisional; replace with real device extrinsics before sim-to-real claims.",
+    "Mono8 is rendered luminance, not infrared spectral response. No emitter, noise, blur or distortion."
+  ],
+  "width": 424,
+  "height": 240,
+  "mount_xyz": [
+    0.23385,
+    0.0475,
+    0.03
+  ],
+  "mount_rpy": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "baseline_m": 0.095,
+  "rgb_xyz": [
+    0.0,
+    -0.06,
+    0.0
+  ],
+  "imu_xyz": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "stereo_fov_deg": [
+    87.0,
+    58.0
+  ],
+  "rgb_fov_deg": [
+    90.0,
+    65.0
+  ],
+  "rgb_rpy": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "imu_rpy": [
+    0.0,
+    0.0,
+    0.0
+  ]
+}

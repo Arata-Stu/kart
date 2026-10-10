@@ -285,3 +285,18 @@ EVS packet topicは通常出版しない。可視化とbias調整はpacket配信
 
 車両基板の運用既定値はbringup/config/vehicle/bridge.yamlの/dev/ttyACM0。
 TUIでは探索・選択せず使用する。明示的な--device上書きと--no-bridgeは維持する。
+
+## 11. シミュレーション
+
+kart_simはMuJoCo物理・車体/CAD・室内マップ生成・ROS bridgeを同一packageで所有する。
+内部の物理/マップはROS非依存、ROS nodeはGL contextを含む独立process。
+マップの正本はproject root maps/sim、運用parameterはbringup/config/sim。
+実機と同じbase_link（後輪軸中心）を使用する。実車の未校正値を実測値として扱わない。
+sim専用launchは実機bridge/実センサを起動せず、clockとTFの所有者を一意にする。
+真値はsim topicへ出版し、VSLAM診断の成功を偽装しない。
+資料指定寸法・参考値・仮定をマップ資産内へ記録し、実会場の忠実再現と区別する。
+
+仮想D455は同じrig定義から描画・CameraInfo・固定TFを構築する。
+左右は同時刻、画像/IMU周期はsim時刻基準。理想描画と実IRの一致は仮定しない。
+VSLAM評価は専用sim_vslam launchを使い、simのpublish_truth_tfを無効にする。
+真値pose/odometryは独立sim_worldへ残し、推定器出力と混同しない。

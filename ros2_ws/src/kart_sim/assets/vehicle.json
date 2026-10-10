@@ -1,0 +1,17 @@
+{
+  "note": "Standoff length 45 mm is user-specified, measured in this model from deck top to frame bottom. Ground clearance 11 mm, all masses and Jetson dimensions/position are provisional. CAD meshes retain their exported relative assembly placements. CAD +Y is assumed forward, mapped to vehicle +X. Base 1.40 kg includes motor, servo, ESC and drive battery, but excludes all added CAD parts and Jetson below. Collision and inertia use bounding boxes, not exact CAD volumes.",
+  "lower_deck_clearance_m": 0.011,
+  "standoff_length_m": 0.045,
+  "cad_yaw_deg": -90,
+  "part_masses_kg": {
+    "TT02Frame": 0.10,
+    "MountBody": 0.08,
+    "D455Envelope": 0.12,
+    "SilkyEvCamOfficialCAD": 0.05
+  },
+  "jetson": {
+    "position_m": [-0.06, 0, 0.078],
+    "size_m": [0.085, 0.075, 0.030],
+    "mass_kg": 0.14
+  }
+}

@@ -499,3 +499,22 @@ source ros2_ws/install/setup.bash
 ros2 run tf2_ros tf2_echo base_link camera_link
 ros2 run tf2_ros tf2_echo base_link camera_infra1_optical_frame
 ```
+
+## 室内シミュレーション
+
+`sim.launch.py`はkart_simだけを起動し、実USB bridgeや実センサを起動しない。
+本launch自身のノード・入出力はなし。kart_simのtopic/parameterは[package README](../kart_sim/README.md)。
+map（既定minicar_2026）、map_dir（既定空、installed map）、
+camera_enabled/viewer_enabled/require_mode/imu_enabled/publish_truth_tf、
+stereo_hz/rgb_hz/imu_hz、camera_rig_file（各既定空、YAML保持）を指定できる。
+運用正本はconfig/sim/sim.yaml。map_fileだけ選択mapから解決する。
+`ros2 launch kart_bringup sim.launch.py map:=indoor_empty`で切替。
+既存vehicle launchとの同時起動はTFとハードウェア所有が重複するため使わない。
+
+`sim_vslam.launch.py`は/visual_slamだけを専用kart_sim_vslam_containerへloadする。
+運用正本config/sim/vslam.yaml、tracking_mode引数は既定空（YAMLの0=VO）、1=VIO。
+入力は/realsense/infra{1,2}/image_rect_raw・camera_info・/realsense/imu。
+nodeの出力型・全parameterは[localization config README](config/localization/README.md)、
+シミュレーションの変更点・起動例は[sim config README](config/sim/README.md)と
+[kart_sim](../kart_sim/README.md)を参照。simのpublish_truth_tf=falseが必要。
+本入口はsimそのものや実車、操作ノードを起動しない。GPU環境での結合は未検証。

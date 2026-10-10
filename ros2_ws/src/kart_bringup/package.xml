@@ -29,6 +29,7 @@
   <exec_depend>kart_bag_manager</exec_depend>
   <exec_depend>kart_system</exec_depend>
   <exec_depend>kart_vehicle</exec_depend>
+  <exec_depend>kart_sim</exec_depend>
   <exec_depend>rclcpp_components</exec_depend>
   <exec_depend>isaac_ros_cuvslam</exec_depend>
   <exec_depend>isaac_ros_launch_utils</exec_depend>

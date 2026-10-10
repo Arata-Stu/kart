@@ -1,0 +1,82 @@
+[
+  {
+    "name": "TT02Frame",
+    "source": "/Users/at/project/tools/FreeCAD/D455_mount/output/assembly_standard/D455_TT02_Assembly.FCStd",
+    "vertices": 3560,
+    "triangles": 7172,
+    "bounds_mm": [
+      -60.0,
+      -112.5,
+      0.0,
+      60.0,
+      112.5,
+      5.0
+    ],
+    "volume_mm3": 122933.03107042007,
+    "extra_translation_mm": [
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "name": "MountBody",
+    "source": "/Users/at/project/tools/FreeCAD/D455_mount/output/mount_silkyevcam/D455_TT02_Mount_with_SilkyEvCam_VGA.FCStd",
+    "vertices": 2494,
+    "triangles": 5032,
+    "bounds_mm": [
+      -56.0,
+      -10.0,
+      5.0,
+      56.0,
+      50.00000000000002,
+      95.0
+    ],
+    "volume_mm3": 80220.16907107856,
+    "extra_translation_mm": [
+      0,
+      45,
+      5
+    ]
+  },
+  {
+    "name": "D455Envelope",
+    "source": "/Users/at/project/tools/FreeCAD/D455_mount/output/mount_silkyevcam/D455_TT02_Mount_with_SilkyEvCam_VGA.FCStd",
+    "vertices": 8,
+    "triangles": 12,
+    "bounds_mm": [
+      -62.0,
+      50.0,
+      50.0,
+      62.0,
+      76.0,
+      79.0
+    ],
+    "volume_mm3": 93496.0,
+    "extra_translation_mm": [
+      0,
+      45,
+      5
+    ]
+  },
+  {
+    "name": "SilkyEvCamOfficialCAD",
+    "source": "/Users/at/project/tools/FreeCAD/D455_mount/output/mount_silkyevcam/D455_TT02_Mount_with_SilkyEvCam_VGA.FCStd",
+    "vertices": 86267,
+    "triangles": 173490,
+    "bounds_mm": [
+      -15.0,
+      5.628999999999998,
+      90.381,
+      15.0,
+      41.599000000000004,
+      120.381
+    ],
+    "volume_mm3": 13232.699822716117,
+    "extra_translation_mm": [
+      0,
+      45,
+      5
+    ]
+  }
+]

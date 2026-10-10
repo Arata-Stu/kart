@@ -371,3 +371,9 @@ EVSの起動時decoder/bias選択は`bash scripts/bringup.sh`。Bias配置先は
 スクリプトの用途と配置は[scripts/README.md](scripts/README.md)を参照。普段使う入口はscripts直下、補助shはworkspace/・setup/・sensors/・tests/に配置します。
 
 `dev.sh --evs --build-local`の選択はローカル保存され、次回から`./scripts/dev.sh`だけでEVS環境へ入ります。通常環境に戻す場合は`./scripts/dev.sh --no-evs`。
+
+## 室内シミュレーション
+
+[kart_sim](ros2_ws/src/kart_sim/README.md)にMuJoCoのTT-02モデルとROS bridgeを実装。
+`maps/sim/`へコースを配置し、`scripts/sim.sh --map minicar_2026`で選択する。
+大会コースの再現範囲・検証状況は[シミュレーション](docs/simulation.md)を参照。
