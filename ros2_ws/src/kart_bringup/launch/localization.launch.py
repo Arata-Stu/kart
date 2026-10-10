@@ -6,6 +6,7 @@ import isaac_ros_launch_utils as lu
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.container_plan import plan
 from kart_bringup.localization import resolve
+from kart_bringup.mission import boolean
 from kart_bringup.vgl_assets import inspect_engines
 
 
@@ -19,12 +20,15 @@ def add_localization(args: lu.ArgumentContainer) -> list[lut.Action]:
         if getattr(args, key) != ""
     }
     parameters, remaps, _workflow, profile = resolve(
-        config, args.map_dir, args.model_dir, overrides, inspect_engines
+        config,
+        args.map_dir,
+        args.model_dir,
+        overrides,
+        inspect_engines,
+        enable_vgl=boolean(args.enable_vgl),
     )
 
     if args.visualize != "":
-        from kart_bringup.mission import boolean
-
         enabled = boolean(args.visualize)
         parameters["cuvslam"].update(
             enable_slam_visualization=enabled,
@@ -52,8 +56,12 @@ def add_localization(args: lu.ArgumentContainer) -> list[lut.Action]:
     actions.extend(
         lu.component_container(item["name"], container_type=item["type"])
         for item in containers
+        if boolean(args.enable_vgl)
+        or item["name"].strip("/") == targets["vslam"].strip("/")
     )
     for kind, key in (("vslam", "cuvslam"), ("vgl", "vgl")):
+        if kind == "vgl" and not boolean(args.enable_vgl):
+            continue
         actions.append(
             lu.include(
                 "kart_bringup",
@@ -73,6 +81,7 @@ def add_localization(args: lu.ArgumentContainer) -> list[lut.Action]:
 def generate_launch_description() -> lut.LaunchDescription:
     """Expose runtime inputs; node tuning remains in bringup YAML."""
     args = lu.ArgumentContainer()
+    args.add_arg("enable_vgl", "true", cli=True)
     args.add_arg(
         "map_dir",
         description="Paired localization bundle from prepare_vgl_map",
@@ -80,6 +89,7 @@ def generate_launch_description() -> lut.LaunchDescription:
     )
     args.add_arg(
         "model_dir",
+        "",
         description="ALIKED/LightGlue model directory for this GPU",
         cli=True,
     )

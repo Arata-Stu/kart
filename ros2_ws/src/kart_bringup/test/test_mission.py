@@ -253,6 +253,7 @@ class MissionCompositionTests(unittest.TestCase):
             with (
                 patch("kart_e2e.contract.model_contract"),
                 patch("kart_e2e.contract.runtime_settings"),
+                patch("kart_e2e.engine_cache.require_engine"),
             ):
                 module.add_mission(args)
             paths = [c.args[1] for c in lu.include.call_args_list]

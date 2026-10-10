@@ -158,3 +158,5 @@ E2Eのオフライン評価はexport済みONNXを対象にrosbagの有効教師�
 Jetson向け事前TensorRT buildはscripts/e2e_trt.shで行う。通常E2E起動のcache再利用はハードウェア・ソフトウェア指紋とONNX/engineハッシュ・deserialize検証を必須とし、未検証engineを明示falseで使うことも拒否する。
 
 E2E bringupではTensorRT engineを自動生成しない。未build・不適合なら案内して起動を停止する。事前buildはe2e_trt.shへ分離する。オフラインONNX評価はCUDA優先、利用不可時のCPU fallback理由と実際のproviderをログ・結果へ記録する。
+
+bagによる地図確認はVSLAM単独とVGL併用を明示選択する。Map StudioのVSLAM地図をVGL準備済みbundleと混同せず、VSLAM単独にVGL資産を要求しない。

@@ -47,6 +47,7 @@ class LocalizationLaunchTest(unittest.TestCase):
         self.assertEqual(
             [a.name for a in arguments],
             [
+                "enable_vgl",
                 "map_dir",
                 "model_dir",
                 "base_frame",
@@ -58,7 +59,7 @@ class LocalizationLaunchTest(unittest.TestCase):
                 "create_vgl_container",
             ],
         )
-        self.assertIsNone(arguments[0].default_value)
+        self.assertIsNotNone(arguments[0].default_value)
         self.assertIsNone(arguments[1].default_value)
         self.assertEqual(sum(isinstance(a, OpaqueFunction) for a in entities), 1)
 
@@ -75,6 +76,7 @@ class LocalizationLaunchTest(unittest.TestCase):
 
     def test_separate_container_and_load_actions(self):
         args = SimpleNamespace(
+            enable_vgl="true",
             map_dir="/map",
             model_dir="/model",
             base_frame="",
@@ -106,6 +108,7 @@ class LocalizationLaunchTest(unittest.TestCase):
 
     def test_invalid_assets_start_no_containers(self):
         args = SimpleNamespace(
+            enable_vgl="true",
             map_dir="/map", model_dir="/model", base_frame="", use_sim_time=""
         )
         with (
@@ -121,6 +124,7 @@ class LocalizationLaunchTest(unittest.TestCase):
         description = module.generate_launch_description()
         context = LaunchContext()
         context.launch_configurations.update(
+            enable_vgl="true",
             map_dir="/map", model_dir="/model", base_frame="", use_sim_time="False"
         )
         callback = next(
@@ -136,6 +140,7 @@ class LocalizationLaunchTest(unittest.TestCase):
     def test_external_containers_create_no_processes(self):
         self.route.return_value = ({"vslam": "/external", "vgl": "/external"}, [])
         args = SimpleNamespace(
+            enable_vgl="true",
             map_dir="/map",
             model_dir="/model",
             base_frame="",

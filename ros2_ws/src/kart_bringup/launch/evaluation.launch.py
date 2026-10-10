@@ -12,7 +12,11 @@ def add_evaluation(args):
     root = lu.get_path("kart_bringup", "config")
     playback(root, args.bag, args.rate)
     resolve(
-        root / "localization", args.map_dir, args.model_dir, {"use_sim_time": "true"}
+        root / "localization",
+        args.map_dir,
+        args.model_dir,
+        {"use_sim_time": "true"},
+        enable_vgl=boolean(args.enable_vgl),
     )
     if (args.lane_id, args.line_type) not in hdmap_choices(args.map_file):
         raise ValueError("Select a generated HDMap line")
@@ -34,6 +38,7 @@ def add_evaluation(args):
                 "model_dir": args.model_dir,
                 "use_sim_time": "true",
                 "visualize": "true",
+                "enable_vgl": args.enable_vgl,
             },
         ),
         include(
@@ -63,8 +68,10 @@ def add_evaluation(args):
 
 def generate_launch_description():
     args = lu.ArgumentContainer()
-    for key in ("bag", "map_dir", "model_dir", "map_file", "lane_id", "line_type"):
+    for key in ("bag", "map_dir", "map_file", "lane_id", "line_type"):
         args.add_arg(key, cli=True)
+    args.add_arg("model_dir", "", cli=True)
+    args.add_arg("enable_vgl", "false", cli=True)
     args.add_arg("rate", "", cli=True)
     args.add_arg("rviz", "", cli=True)
     args.add_opaque_function(add_evaluation)

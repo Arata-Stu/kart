@@ -182,3 +182,23 @@ class LocalizationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VslamOnlyTest(unittest.TestCase):
+    def test_studio_map_without_vgl_assets(self):
+        from kart_bringup.mission import discover
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            folder = root / "course" / "cuvslam_map"
+            folder.mkdir(parents=True)
+            self.assertEqual(discover(root, "vslam"), [])
+            (folder / "map.mdb").write_bytes(b"test map")
+            self.assertEqual(discover(root, "vslam"), [folder.parent])
+            self.assertEqual(discover(root, "bundle"), [])
+            for map_dir in (folder, folder.parent):
+                params, remaps, _, _ = resolve(CONFIG, map_dir, "", enable_vgl=False)
+                self.assertEqual(params["cuvslam"]["load_map_folder_path"], str(folder))
+                self.assertTrue(params["cuvslam"]["localize_on_startup"])
+                self.assertFalse(params["cuvslam"]["enable_request_hint"])
+                self.assertTrue(remaps["cuvslam"])

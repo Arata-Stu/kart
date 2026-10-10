@@ -119,6 +119,12 @@ def discover(root, kind):
                         result.append(p / name)
                 except (ValueError, OSError, AttributeError, yaml.YAMLError):
                     pass
+        elif kind == "vslam" and (p / "cuvslam_map").is_dir():
+            if any(
+                f.is_file() and f.stat().st_size
+                for f in (p / "cuvslam_map").glob("*.mdb")
+            ):
+                result.append(p)
         elif kind == "bundle" and "vgl_profile.json" in files:
             try:
                 profile = json.loads((p / "vgl_profile.json").read_text())

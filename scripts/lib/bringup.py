@@ -90,6 +90,7 @@ def main():
     )
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--e2e-model-dir", default="")
+    parser.add_argument("--eval-localization", choices=("vslam", "vgl"), default=None)
     parser.add_argument("--bag", default="")
     parser.add_argument("--rate", default="")
     args = parser.parse_args()
@@ -167,10 +168,13 @@ def main():
             args.lane_id, args.line_type = choose(
                 "lane / 追従ライン", options, lambda x: " / ".join(x)
             )
+            if args.mode == "eval" and args.eval_localization is None:
+                args.eval_localization = choose("評価するlocalization", ["vslam", "vgl"], lambda v: "VSLAMのみ" if v == "vslam" else "VSLAM＋VGL（準備済みbundle）")
+            vslam_only = args.mode == "eval" and args.eval_localization == "vslam"
             args.map_dir = args.map_dir or str(
                 choose(
-                    "同じ座標系のVSLAM/VGL bundle（HDMapとは別に選択）",
-                    discover(args.map_root, "bundle"),
+                    "VSLAM地図（HDMapと同じ座標系）" if vslam_only else "同じ座標系のVSLAM/VGL bundle（HDMapとは別に選択）",
+                    discover(args.map_root, "vslam" if vslam_only else "bundle"),
                 )
             )
             models = sorted(
@@ -179,7 +183,7 @@ def main():
                     + discover(args.map_root, "models")
                 )
             )
-            args.model_dir = args.model_dir or str(
+            args.model_dir = "" if vslam_only else args.model_dir or str(
                 choose("VGLモデル（実行GPU用engine）", models)
             )
         if args.mode == "e2e":
@@ -211,7 +215,8 @@ def main():
     if args.mode in ("drive", "eval"):
         if not sensors["enable_infra1"]:
             raise ValueError("VSLAM/VGLにはInfraが必要です（なしは選択できません）")
-        if not args.map_file or not args.map_dir or not args.model_dir:
+        vslam_only = args.mode == "eval" and args.eval_localization != "vgl"
+        if not args.map_file or not args.map_dir or (not vslam_only and not args.model_dir):
             raise ValueError(
                 "drive/evalには--map-file / --map-dir / --model-dirが必要です（TUIなら一覧選択）"
             )
@@ -220,10 +225,10 @@ def main():
         from kart_bringup.localization import resolve
 
         _, _, _, profile = resolve(
-            config / "localization", args.map_dir, args.model_dir
+            config / "localization", args.map_dir, args.model_dir, enable_vgl=not vslam_only
         )
         width, height, _ = sensors["depth_module.infra_profile"].split("x")
-        if profile["input_shape"][2:] != [int(height), int(width)]:
+        if not vslam_only and profile["input_shape"][2:] != [int(height), int(width)]:
             raise ValueError("VGLモデルとInfra解像度が一致しません")
     if args.mode != "eval" and not args.no_bridge:
         from kart_bringup.configuration import load
@@ -285,6 +290,8 @@ def main():
                 "rate",
             )
         }
+    if args.mode == "eval":
+        values["enable_vgl"] = str(args.eval_localization == "vgl").lower()
     command = ["ros2", "launch", "kart_bringup", launch] + [
         f"{k}:={v}" for k, v in values.items() if v is not None and v != ""
     ]

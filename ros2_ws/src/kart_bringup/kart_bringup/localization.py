@@ -6,7 +6,9 @@ from pathlib import Path
 from .vgl_assets import validate_bundle
 
 
-def resolve(config_dir, map_dir, model_dir, overrides=None, inspect=None):
+def resolve(
+    config_dir, map_dir, model_dir, overrides=None, inspect=None, enable_vgl=True
+):
     import yaml
 
     config = Path(config_dir)
@@ -73,13 +75,26 @@ def resolve(config_dir, map_dir, model_dir, overrides=None, inspect=None):
         raise ValueError("This launch currently supports stereo VO, not IMU/RGBD")
     if slam["save_map_folder_path"]:
         raise ValueError("Runtime localization must not overwrite the reference map")
-    root, models, profile = validate_bundle(map_dir, model_dir, inspect)
-    slam["load_map_folder_path"] = str(root / "cuvslam_map")
-    vgl.update(
-        map_dir=str(root / "cuvgl_map"),
-        model_dir=str(models),
-        config_dir=str(root / "vgl_runtime_config"),
-    )
+    if enable_vgl:
+        root, models, profile = validate_bundle(map_dir, model_dir, inspect)
+        slam["load_map_folder_path"] = str(root / "cuvslam_map")
+        vgl.update(
+            map_dir=str(root / "cuvgl_map"),
+            model_dir=str(models),
+            config_dir=str(root / "vgl_runtime_config"),
+        )
+    else:
+        root = Path(map_dir).expanduser().resolve(strict=True)
+        if (root / "cuvslam_map").is_dir():
+            root = root / "cuvslam_map"
+        if not root.is_dir() or not any(
+            p.is_file() and p.stat().st_size for p in root.glob("*.mdb")
+        ):
+            raise ValueError("VSLAM地図が空です")
+        slam["load_map_folder_path"] = str(root)
+        slam["enable_request_hint"] = False
+        slam["localize_on_startup"] = True
+        profile = {"input_shape": None}
     mappings = {}
     for kind, prefix in (("cuvslam", "visual_slam"), ("vgl", "visual_localization")):
         mappings[kind] = [
