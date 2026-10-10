@@ -33,6 +33,17 @@ bash scripts/tests/test-vehicle.sh
 `dev.sh --evs --build-local`でEVSを選ぶと、次回は`dev.sh`だけでEVS環境へ入れます。
 選択はGit対象外の`.kart-dev-profile`へ保存。`--no-evs`で通常環境へ戻し、その選択を保存します。
 
+Docker起動時はrootのentrypoint拡張`50-kart-device-groups.sh`が、adminへ追加GIDを登録し、
+Jetson GPUの既知のデバイス（`/dev/nvhost-{gpu,ctrl-gpu,power-gpu}`と
+`/dev/nvgpu/igpu0/{power,ctrl}`）を存在する場合だけ`video:0660`へ設定します。
+adminをvideoグループへ追加してから一般ユーザーへ移行するため、毎回の手動chmodは不要です。
+デバイス全体やdebug/profiling用ノードの権限は変更しません。
+このhookはイメージへCOPYするため、修正を同期しただけ／古いコンテナを再起動しただけでは反映されません。
+初回反映はホストで`bash scripts/dev.sh --evs --build-local`を実行し、新しいイメージからコンテナを作成してください。
+起動ログの`kart GPU permissions: /dev/nvgpu/igpu0/ctrl -> video 0660`でhookの実行を確認し、
+コンテナ内の`python3 -c 'import ctypes; print(ctypes.CDLL("libcuda.so.1").cuInit(0))'`が`0`になることを確認します。
+起動済みコンテナへのexec接続ではentrypointは再実行されません。
+
 ## SSHとDocker内のセッション維持
 
 JetsonのGUIを停止するには、SSH接続したホストで`./scripts/jetson_display_mode.sh cui --now`。

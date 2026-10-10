@@ -118,8 +118,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ros-lyrical-isaac-ros-visual-slam-interfaces \
     && rm -rf /var/lib/apt/lists/*
 
-# Register Docker supplementary GIDs in admin's account before gosu drops root.
-COPY scripts/kart-device-groups.sh /usr/local/bin/scripts/entrypoint_additions/50-kart-device-groups.sh
+# Register supplementary GIDs and restore Jetson GPU permissions on every start,
+# before gosu drops root. Keep the hook executable regardless of checkout mode.
+COPY --chmod=0755 scripts/kart-device-groups.sh /usr/local/bin/scripts/entrypoint_additions/50-kart-device-groups.sh
 
 # DDS XML is read at runtime from the project-root mount (not baked in).
 COPY scripts/kart-ros.bash /etc/kart/ros.bash
