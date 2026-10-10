@@ -64,6 +64,10 @@ def run_dir(name):
 
 def manifest(name):
     directory = run_dir(name)
+    if not (directory / "manifest.json").is_file():
+        raise ValueError(
+            f"ONNX exportが未完了です。先に export --name {name} を成功させてください"
+        )
     data = json.loads((directory / "manifest.json").read_text())
     checked_hash(directory / "aliked.onnx", data["onnx_sha256"])
     return directory, data
@@ -160,6 +164,24 @@ def doctor(args):
                     failures.append(
                         "CUDA-enabled PyTorch is required for the upstream exporter"
                     )
+            if name == "torchvision":
+                if not module.extension._has_ops():
+                    failures.append(
+                        "torchvision C++/CUDA operators could not be loaded"
+                    )
+                else:
+                    import torch
+
+                    if torch.cuda.is_available():
+                        # ALIKED needs this compiled CUDA operator, not only an import.
+                        with torch.inference_mode():
+                            module.ops.deform_conv2d(
+                                torch.zeros(1, 1, 4, 4, device="cuda"),
+                                torch.zeros(1, 18, 2, 2, device="cuda"),
+                                torch.ones(1, 1, 3, 3, device="cuda"),
+                            )
+                            torch.cuda.synchronize()
+                        print("torchvision deform_conv2d CUDA: OK")
             if name == "onnxruntime":
                 print("ORT providers:", module.get_available_providers())
         except (ImportError, OSError, RuntimeError) as error:

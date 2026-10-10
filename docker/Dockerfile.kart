@@ -61,6 +61,18 @@ RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
     && /opt/inference/bin/python -c 'import platform, onnxruntime as ort; assert platform.machine() != "x86_64" or "CUDAExecutionProvider" in ort.get_available_providers()' \
     && test -x /usr/src/tensorrt/bin/trtexec
 
+# VGL source export needs torchvision CUDA operators matching the base image torch.
+# Keep inherited torch intact: uv sync must not resolve/install another torch wheel.
+# Verified official cu132 torchvision 0.27.1 metadata requires torch==2.12.1.
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    if [ "$(dpkg --print-architecture)" = amd64 ]; then \
+        /opt/inference/bin/python -c 'import torch; assert torch.__version__.split("+")[0] == "2.12.1" and torch.version.cuda == "13.2", "Update the VGL torchvision pin for this base-image torch/CUDA pair"' \
+        && uv pip install --python /opt/inference/bin/python --no-deps \
+            --index-url https://download.pytorch.org/whl/cu132 \
+            'torchvision==0.27.1+cu132' \
+        && /opt/inference/bin/python -c 'import torch, torchvision; assert torchvision.extension._has_ops(); print(torch.__version__, torchvision.__version__)'; \
+    fi
+
 # Offline raceline optimization runs on the x86_64 notebook only.
 # Check the image's Debian architecture (also correct for cross-builds), not
 # the build host's uname. Jetson/arm64 must not create the raceline environment.

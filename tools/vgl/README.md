@@ -68,3 +68,24 @@ python3 -m unittest discover -s tools/vgl -p test_lab.py
 
 パス逸脱拒否・ハッシュ・ソース改変拒否・buildの入力選択などを単体テストする。
 GPU export/buildとbagによるVGL位置推定は実行先で別途確認する。
+
+## torchvision不足の復旧（torch 2.12.1+cu132）
+
+Notebook Dockerはtorchvision 0.27.1+cu132を追加し、既存torchの版/CUDAとの一致をbuild時に検査する。
+通常の依存解決でtorchを上書きしないため、torchvisionはuv sync後に公式cu132 indexから`--no-deps`で導入する。
+Jetsonのモデルengine buildにはtorchvision不要なので、この追加はamd64限定。
+ベースのtorch/CUDAが変わった場合は検査で停止し、互換pinを改めて確認する。
+
+既存コンテナでは次で復旧できる（コンテナ再作成後も維持するにはDockerを再build）。
+
+```bash
+sudo uv pip install --python /opt/inference/bin/python --no-deps \
+  --index-url https://download.pytorch.org/whl/cu132 'torchvision==0.27.1+cu132'
+bash scripts/vgl_model.sh doctor --stage export && \
+  bash scripts/vgl_model.sh export --name 424x240 && \
+  bash scripts/vgl_model.sh build --name 424x240 && \
+  bash scripts/vgl_model.sh inspect --name 424x240
+```
+
+prepare --source-onlyのReference ready: Falseは正常。参照ONNX比較以外では不要。
+doctorはimportに加えて実際のCUDA deform_conv2d実行を確認する。
