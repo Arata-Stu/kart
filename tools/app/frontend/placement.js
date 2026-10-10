@@ -9,7 +9,11 @@ export function placementPreview(lane, target, point, width, obstacle) {
       right: lane.right.map((p) => [...p]),
       closed: lane.closed,
     };
-    appendPair(next, point, width);
+    try {
+      appendPair(next, point, width);
+    } catch {
+      return null;
+    }
     return { ...next, point, width };
   }
   const points = target === "obstacle" ? obstacle?.polygon : lane[target];

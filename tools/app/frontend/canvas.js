@@ -121,7 +121,7 @@ function paintPlacement() {
         ctx.fill();
         ctx.stroke();
       }
-      label = `クリックでlane追加 · 幅 ${preview.width.toFixed(2)} m`;
+      label = `クリックでlane追加 · 区間幅 ${preview.width.toFixed(2)} m`;
       if (!state.lane.left.length) label += "（向きは2点目で決定）";
     } else {
       line(preview.points.slice(-2), colors[state.target], false, true);

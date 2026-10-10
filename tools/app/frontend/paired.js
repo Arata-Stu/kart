@@ -10,51 +10,67 @@ export function movePair(lane, i, p) {
   for (const side of ["left", "right"])
     lane[side][i] = lane[side][i].map((v, k) => v + p[k] - old[k]);
 }
+// Offset the two adjoining segments at their bisector. Limit sharp-corner miters.
+function section(mid, i, width, closed = false) {
+  const p = mid[i],
+    n = mid.length;
+  const previous = i > 0 ? mid[i - 1] : closed && n > 2 ? mid[n - 1] : null;
+  const next = i + 1 < n ? mid[i + 1] : closed && n > 2 ? mid[0] : null;
+  const unit = (a, b) => {
+    const dx = b[0] - a[0],
+      dy = b[1] - a[1],
+      length = Math.hypot(dx, dy);
+    return length > 1e-6 ? [dx / length, dy / length] : null;
+  };
+  const incoming = previous && unit(previous, p);
+  const outgoing = next && unit(p, next);
+  let tangent = outgoing || incoming || [1, 0],
+    scale = 1;
+  if (incoming && outgoing) {
+    const x = incoming[0] + outgoing[0],
+      y = incoming[1] + outgoing[1];
+    const length = Math.hypot(x, y);
+    if (length > 1e-6) {
+      tangent = [x / length, y / length];
+      scale = Math.min(
+        2,
+        1 / Math.max(0.01, tangent[0] * outgoing[0] + tangent[1] * outgoing[1]),
+      );
+    }
+  }
+  const dx = (-tangent[1] * width * scale) / 2,
+    dy = (tangent[0] * width * scale) / 2;
+  return [
+    [p[0] + dx, p[1] + dy],
+    [p[0] - dx, p[1] - dy],
+  ];
+}
 export function appendPair(lane, p, width) {
   const mid = centers(lane),
-    prev = mid.at(-1);
-  const dx = prev ? p[0] - prev[0] : 1,
-    dy = prev ? p[1] - prev[1] : 0;
-  const len = Math.hypot(dx, dy) || 1;
-  if (mid.length === 1) {
-    const firstWidth = Math.hypot(
-      lane.left[0][0] - lane.right[0][0],
-      lane.left[0][1] - lane.right[0][1],
-    );
-    lane.left[0] = [
-      prev[0] - ((dy / len) * firstWidth) / 2,
-      prev[1] + ((dx / len) * firstWidth) / 2,
-    ];
-    lane.right[0] = [
-      prev[0] + ((dy / len) * firstWidth) / 2,
-      prev[1] - ((dx / len) * firstWidth) / 2,
-    ];
+    previous = mid.at(-1);
+  if (previous && Math.hypot(p[0] - previous[0], p[1] - previous[1]) < 0.01)
+    throw Error("直前の点から1cm以上離して配置してください");
+  const oldWidth = mid.length
+    ? Math.hypot(
+        lane.left.at(-1)[0] - lane.right.at(-1)[0],
+        lane.left.at(-1)[1] - lane.right.at(-1)[1],
+      )
+    : width;
+  mid.push([...p]);
+  // While drawing, the last station is an open endpoint even for a closed lane.
+  if (mid.length > 1) {
+    const i = mid.length - 2;
+    [lane.left[i], lane.right[i]] = section(mid, i, oldWidth);
   }
-  lane.left.push([
-    p[0] - ((dy / len) * width) / 2,
-    p[1] + ((dx / len) * width) / 2,
-  ]);
-  lane.right.push([
-    p[0] + ((dy / len) * width) / 2,
-    p[1] - ((dx / len) * width) / 2,
-  ]);
+  const [left, right] = section(mid, mid.length - 1, width);
+  lane.left.push(left);
+  lane.right.push(right);
 }
 export function resizePairs(lane, width, selected = -1) {
   const mid = centers(lane);
   for (let i = 0; i < mid.length; i++) {
     if (selected >= 0 && i !== selected) continue;
-    let dx = lane.left[i][0] - lane.right[i][0],
-      dy = lane.left[i][1] - lane.right[i][1];
-    const length = Math.hypot(dx, dy);
-    if (!length) throw Error("幅0の区間は左右境界を個別に修正してください");
-  }
-  for (let i = 0; i < mid.length; i++) {
-    if (selected >= 0 && i !== selected) continue;
-    const dx = lane.left[i][0] - lane.right[i][0],
-      dy = lane.left[i][1] - lane.right[i][1];
-    const factor = width / (2 * Math.hypot(dx, dy));
-    lane.left[i] = [mid[i][0] + dx * factor, mid[i][1] + dy * factor];
-    lane.right[i] = [mid[i][0] - dx * factor, mid[i][1] - dy * factor];
+    [lane.left[i], lane.right[i]] = section(mid, i, width, lane.closed);
   }
 }
 export function alignPairs(lane) {

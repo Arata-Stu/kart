@@ -12,11 +12,13 @@ import shutil
 import subprocess
 import sys
 import urllib.request
+import uuid
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parents[1]
 ARTIFACTS = REPO / "models/vgl"
 sys.path.insert(0, str(REPO / "ros2_ws/src/kart_bringup"))
+sys.path.insert(0, str(REPO / "ros2_ws/src/kart_e2e"))
 from kart_bringup.vgl_assets import extractor_shape, inspect_engines, model_files
 
 COMMIT = "96f1f9e7a9932a5da4f0d1aa62017c0fd48141ce"
@@ -456,13 +458,61 @@ def inspect_engine(args):
     print(json.dumps(info, indent=2))
 
 
+def gpu_preflight():
+    from kart_e2e.engine_cache import fingerprint
+
+    try:
+        hardware = fingerprint()
+    except (OSError, RuntimeError, ImportError) as error:
+        raise ValueError(
+            "CUDA GPUを利用できません。DockerのNVIDIA runtime・GPUデバイス・権限を確認してください。"
+            f"exporterは起動していません。詳細: {error}"
+        ) from error
+    print(
+        "Build GPU:",
+        hardware["gpu_name"],
+        "TensorRT:",
+        hardware["tensorrt"],
+        flush=True,
+    )
+    return hardware
+
+
+def verify_runtime(directory, data):
+    from kart_e2e.engine_cache import fingerprint
+
+    target = directory / "runtime_models"
+    _, onnx, engines = model_files(target)
+    checked_hash(onnx, data["onnx_sha256"])
+    identity = dict(
+        hardware=fingerprint(),
+        onnx_sha256=data["onnx_sha256"],
+        engines={k: digest(v) for k, v in engines.items()},
+        input_shape=[1, 3, data["height"], data["width"]],
+    )
+    record = directory / "runtime-cache.json"
+    if record.exists() and json.loads(record.read_text()) != identity:
+        raise ValueError(
+            "GPU/TensorRT/モデルが変わっています。別の--nameでbuildしてください"
+        )
+    inspect_engines(engines, identity["input_shape"])
+    save(record, identity)
+    return target
+
+
 def build(args):
     directory, data = manifest(args.name)
+    gpu_preflight()
     target = directory / "runtime_models"
+    if target.exists() and getattr(args, "retry", False):
+        archived = directory / (".failed-runtime-" + uuid.uuid4().hex[:12])
+        target.rename(archived)
+        (directory / "runtime-cache.json").unlink(missing_ok=True)
+        print("以前のengineを保管:", archived)
     if target.exists():
-        raise ValueError(
-            "runtime_models already exists; inspect it or create a new named export"
-        )
+        verify_runtime(directory, data)
+        print("検証済みVGL engineを再利用（buildスキップ）:", target)
+        return
     prefix = Path(
         subprocess.check_output(
             ["ros2", "pkg", "prefix", "isaac_ros_visual_mapping"], text=True
@@ -532,6 +582,7 @@ def build(args):
     shutil.copy2(directory / "aliked.onnx", target / "aliked_lightglue/aliked.onnx")
     _, _, engines = model_files(target)
     inspect_engines(engines, [1, 3, data["height"], data["width"]])
+    verify_runtime(directory, data)
     print("VGL model directory (UI model path):", target)
 
 
@@ -591,6 +642,12 @@ def main():
     for name, function in [("build", build), ("inspect", inspect_engine)]:
         p = sub.add_parser(name)
         p.add_argument("--name", default="424x240")
+        if name == "build":
+            p.add_argument(
+                "--retry",
+                action="store_true",
+                help="Archive previous runtime_models and rebuild after GPU preflight",
+            )
         p.set_defaults(func=function)
     args = parser.parse_args()
     try:

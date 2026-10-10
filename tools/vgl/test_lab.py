@@ -11,6 +11,11 @@ import lab
 
 
 class LabTest(unittest.TestCase):
+    def setUp(self):
+        preflight = patch.object(lab, "gpu_preflight", return_value={})
+        preflight.start()
+        self.addCleanup(preflight.stop)
+
     def test_stage_reference_preserves_bytes_and_records_build_manifest(self):
         with (
             tempfile.TemporaryDirectory() as temporary,
@@ -192,6 +197,67 @@ class LabTest(unittest.TestCase):
                     lab.prepare(types.SimpleNamespace(source_only=True))
                 network.assert_not_called()
 
+    def test_build_reuses_verified_runtime_without_exporters(self):
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(lab, "ARTIFACTS", Path(tmp)),
+        ):
+            directory = lab.run_dir("small")
+            (directory / "runtime_models").mkdir(parents=True)
+            (directory / "aliked.onnx").write_bytes(b"onnx")
+            lab.save(
+                directory / "manifest.json",
+                dict(
+                    width=424,
+                    height=240,
+                    onnx_sha256=lab.digest(directory / "aliked.onnx"),
+                ),
+            )
+            with (
+                patch.object(lab, "verify_runtime") as verify,
+                patch.object(lab.subprocess, "run") as run,
+            ):
+                lab.build(types.SimpleNamespace(name="small"))
+                verify.assert_called_once()
+                run.assert_not_called()
+            with (
+                patch.object(
+                    lab, "verify_runtime", side_effect=ValueError("GPU changed")
+                ),
+                patch.object(lab.subprocess, "run") as run,
+            ):
+                with self.assertRaisesRegex(ValueError, "GPU changed"):
+                    lab.build(types.SimpleNamespace(name="small"))
+                run.assert_not_called()
+
+    def test_runtime_cache_rejects_hardware_and_engine_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            target = directory / "runtime_models/aliked_lightglue"
+            target.mkdir(parents=True)
+            (target / "aliked.onnx").write_bytes(b"onnx")
+            (target / "aliked_test.engine").write_bytes(b"extractor")
+            (target / "lightglue_aliked_test.engine").write_bytes(b"matcher")
+            data = dict(
+                width=424, height=240, onnx_sha256=lab.digest(target / "aliked.onnx")
+            )
+            with (
+                patch("kart_e2e.engine_cache.fingerprint", return_value={"gpu": "A"}),
+                patch.object(lab, "inspect_engines"),
+            ):
+                lab.verify_runtime(directory, data)
+                lab.verify_runtime(directory, data)
+                (target / "aliked_test.engine").write_bytes(b"changed")
+                with self.assertRaisesRegex(ValueError, "GPU/TensorRT"):
+                    lab.verify_runtime(directory, data)
+                (target / "aliked_test.engine").write_bytes(b"extractor")
+            with (
+                patch("kart_e2e.engine_cache.fingerprint", return_value={"gpu": "B"}),
+                patch.object(lab, "inspect_engines"),
+            ):
+                with self.assertRaisesRegex(ValueError, "GPU/TensorRT"):
+                    lab.verify_runtime(directory, data)
+
     def test_help_is_available_without_runtime_imports(self):
         for stage in (
             "export",
@@ -273,6 +339,7 @@ class LabTest(unittest.TestCase):
                     patch.object(lab, "extractor_shape", return_value="424x240"),
                     patch.object(lab, "model_files", return_value=(None, None, {})),
                     patch.object(lab, "inspect_engines"),
+                    patch.object(lab, "verify_runtime"),
                 ):
                     lab.build(types.SimpleNamespace(name="small"))
                     self.assertEqual(executed.call_count, 2)

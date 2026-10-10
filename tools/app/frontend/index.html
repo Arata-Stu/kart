@@ -164,6 +164,11 @@
                   step="0.05"
                   style="width: 80px" /></label
               ><button id="pair-resize">幅を適用</button
+              ><button
+                id="pair-reshape"
+                title="指定した区間幅で全体と閉路のつなぎ目を整形します。Undo可能"
+              >
+                全体を整形</button
               ><button id="pair-align">対応を揃える</button>
             </div>
             <p class="help">
@@ -650,14 +655,38 @@
       </form>
     </dialog>
     <dialog id="vgl-dialog">
-      <div class="dialog-head"><h2>VGL地図を追加生成</h2><button type="button" data-close="vgl-dialog">×</button></div>
-      <p class="help">選択中のVSLAM地図と公式保存画像からALIKEDのVGL bundleを生成します。元地図・HDMapは保持します。</p>
+      <div class="dialog-head">
+        <h2>VGL地図を追加生成</h2>
+        <button type="button" data-close="vgl-dialog">×</button>
+      </div>
+      <p class="help">
+        選択中のVSLAM地図と公式保存画像からALIKEDのVGL
+        bundleを生成します。元地図・HDMapは保持します。
+      </p>
       <p id="vgl-info" class="help"></p>
       <label>保存名<input id="vgl-name" /></label>
-      <label>ALIKED / LightGlueモデル（このGPU用engine）<input id="vgl-model" list="vgl-models" placeholder="/workspaces/models/…" /></label>
+      <label
+        >ALIKED / LightGlueモデル（このGPU用engine）<input
+          id="vgl-model"
+          list="vgl-models"
+          placeholder="/workspaces/models/…"
+      /></label>
       <datalist id="vgl-models"></datalist>
-      <div class="row"><label>画像幅<input id="vgl-width" type="number" min="16" max="8192" /></label><label>画像高さ<input id="vgl-height" type="number" min="16" max="8192" /></label></div>
-      <p class="help">モデルと保存画像の解像度を合わせてください。モデルのdownload・engine buildはこの処理には含みません。</p>
+      <div class="row">
+        <label
+          >画像幅<input
+            id="vgl-width"
+            type="number"
+            min="16"
+            max="8192" /></label
+        ><label
+          >画像高さ<input id="vgl-height" type="number" min="16" max="8192"
+        /></label>
+      </div>
+      <p class="help">
+        モデルと保存画像の解像度を合わせてください。モデルのdownload・engine
+        buildはこの処理には含みません。
+      </p>
       <button id="vgl-start" class="primary full">VGL生成を開始</button>
     </dialog>
     <dialog id="build-dialog">

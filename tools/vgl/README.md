@@ -89,3 +89,25 @@ bash scripts/vgl_model.sh doctor --stage export && \
 
 prepare --source-onlyのReference ready: Falseは正常。参照ONNX比較以外では不要。
 doctorはimportに加えて実際のCUDA deform_conv2d実行を確認する。
+
+## 初回buildと再利用を一つのコマンドにする
+
+`bash scripts/vgl_build.sh [名前]`でROSをsourceしてbuild/検証する。名前省略は424x240。
+完成済みruntime_modelsがあれば検証してbuildをスキップするため、地図転送のたびにbuildしない。
+`runtime-cache.json`へGPU・CUDA driver・TRT・engine/ONNXハッシュ・shapeを記録する。
+記録のない既存成果物もdeserialize・shape・ONNXを検証して再利用登録する。
+不完全なruntime_modelsや環境変更は停止し、別名でのbuildを案内する。
+
+GPU事前検査でcuInit/GPU UUID取得に失敗した場合は、出力フォルダを変更せずexporter起動前に停止する。GPU公開設定を直した後、失敗済みruntime_modelsが残る場合は`bash scripts/vgl_build.sh 424x240 --retry`で旧フォルダを隠し診断フォルダへ保管して再buildする。ONNX/manifestは保持する。通常の再実行では--retryを付けず検証済みengineを再利用する。
+
+### JetsonでadminだけcuInit=100、rootでは0
+
+コンテナ内のnvhost-gpu/nvhost-ctrl-gpuがroot:root 0600、ホスト側がroot:video 0660だった実例に対応し、root entrypointでこの2つの文字デバイスだけvideo 0660へ揃える。adminをvideoへ追加してから権限を落とす。イメージを再buildしてコンテナを再作成すると適用される。既存コンテナの応急処置は以下（adminがvideo所属の場合）。
+
+```bash
+sudo chgrp video /dev/nvhost-gpu /dev/nvhost-ctrl-gpu
+sudo chmod 0660 /dev/nvhost-gpu /dev/nvhost-ctrl-gpu
+python3 -c 'import ctypes; print(ctypes.CDLL("libcuda.so.1").cuInit(0))'
+```
+
+0を確認してから通常ユーザーで`bash scripts/vgl_build.sh 424x240 --retry`を実行する。rootでのモデルbuildや全デバイスのchmodは不要。

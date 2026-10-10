@@ -140,7 +140,11 @@ function status() {
   $("delete-map").disabled = !state.doc || busy;
   $("hdmap-reset").disabled = !d || busy;
   $("copy-map").disabled = !state.doc || busy;
-  $("vgl-open").disabled = !state.doc || busy || !state.config?.environment.ros || !state.maps.find(m => m.id === state.id)?.has_vslam;
+  $("vgl-open").disabled =
+    !state.doc ||
+    busy ||
+    !state.config?.environment.ros ||
+    !state.maps.find((m) => m.id === state.id)?.has_vslam;
   $("capture-open").disabled =
     !pending || busy || !state.config?.environment.ros;
   $("undo").disabled = !state.undo.length;
@@ -393,6 +397,20 @@ action("pair-resize", () => {
     throw Error("幅は0.05〜100 mです");
   const candidate = structuredClone(state.lane);
   resizePairs(candidate, width, state.selected);
+  remember();
+  state.lane.left = candidate.left;
+  state.lane.right = candidate.right;
+  edited();
+});
+
+action("pair-reshape", () => {
+  if (state.target !== "pair" || !compatible(state.lane))
+    throw Error("左右対応したセット編集を選択してください");
+  const width = Number($("pair-width").value);
+  if (!Number.isFinite(width) || width < 0.05 || width > 100)
+    throw Error("幅は0.05〜100 mです");
+  const candidate = structuredClone(state.lane);
+  resizePairs(candidate, width, -1);
   remember();
   state.lane.left = candidate.left;
   state.lane.right = candidate.right;

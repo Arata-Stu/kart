@@ -92,6 +92,10 @@ def execute(data):
         if not (path / "metadata.yaml").is_file():
             raise ValueError("completed bag metadata.yaml not found")
         return signature(path)
+    if action == "progress":
+        if not re.fullmatch(r"\.kart-upload-[a-f0-9]{32}", relative):
+            raise ValueError("invalid staging name")
+        return signature(path)
     if action == "reserve":
         if not re.fullmatch(r"\.kart-upload-[a-f0-9]{32}", relative):
             raise ValueError("invalid staging name")

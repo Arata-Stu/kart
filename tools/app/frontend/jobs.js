@@ -33,7 +33,9 @@ action("job-log-copy", async () => {
     try {
       input.select();
       if (!document.execCommand("copy"))
-        throw new Error("コピーできませんでした。ブラウザのコピー権限を確認してください");
+        throw new Error(
+          "コピーできませんでした。ブラウザのコピー権限を確認してください",
+        );
     } finally {
       input.remove();
       focus?.focus({ preventScroll: true });
@@ -56,7 +58,7 @@ export async function poll() {
     const running = state.jobs.filter((j) => j.status === "running");
     $("job-dot").classList.toggle("running", !!running.length);
     $("job-summary").textContent = running.length
-      ? `${running.length}件の処理中 · ${running[0].title}`
+      ? `${running.length}件の処理中 · ${running[0].title} · ${running[0].message}`
       : state.jobs.length
         ? `${state.jobs[0].title} · ${labels[state.jobs[0].status]}`
         : "処理は実行されていません";
@@ -66,8 +68,10 @@ export async function poll() {
       for (const job of state.jobs) {
         const row = document.createElement("div");
         row.className = "job-row";
-        const button = item(job.title, labels[job.status], () =>
-          showLog(job.id),
+        const button = item(
+          job.title,
+          job.status === "running" ? job.message : labels[job.status],
+          () => showLog(job.id),
         );
         button.className = "job-select";
         row.append(button);

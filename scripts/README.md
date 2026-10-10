@@ -119,3 +119,9 @@ evaluation.launch.pyの`enable_vgl`既定はfalse、localization.launch.pyでは
 完成モデルは`models/vgl/424x240/runtime_models`でWeb UIから選択できる。
 Pythonは`KART_VGL_PYTHON`（既定`/opt/inference/bin/python`）。既存成果物は上書きしない。
 GPUごとにbuildが必要。詳細と依存・検証範囲は[tools/vgl](../tools/vgl/README.md)。
+
+VGL engineは地図ごとの生成物ではない。地図追加・転送だけなら再build不要。
+Jetsonでの初回buildと以後の検証は`bash scripts/vgl_build.sh`（既定424x240）だけで実行できる。
+別名は`bash scripts/vgl_build.sh 424x240-v2`。ONNXとmanifestは先に配置する。
+既存engineは両engineのdeserialize・ALIKED shape・ONNXハッシュを検査し、buildをスキップする。
+初回検証時にGPU UUID/driver/TRT等とengineハッシュを記録し、以後の不一致は自動上書きせず停止する。

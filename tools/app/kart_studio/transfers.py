@@ -10,6 +10,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
+from .transfer_progress import run_transfer
 from .remote_agent import signature
 from .storage import atomic_json, name, within
 
@@ -107,7 +108,8 @@ class Transfers:
         job.log(f"受信予定 {before['bytes']:,} bytes / 一時保存 {stage}")
         try:
             source = f"{p['user']}@{p['host']}:{p['record_root']}/{relative}"
-            job.run(
+            run_transfer(
+                job,
                 [
                     "scp",
                     *SSH_OPTIONS,
@@ -116,7 +118,13 @@ class Transfers:
                     "-r",
                     source,
                     str(stage / "bag"),
-                ]
+                ],
+                before["bytes"],
+                lambda: sum(
+                    p.stat().st_size
+                    for p in (stage / "bag").rglob("*")
+                    if p.is_file() and not p.is_symlink()
+                ),
             )
             after = request(p, "stat", p["record_root"], relative)
             if before != after:
@@ -154,7 +162,8 @@ class Transfers:
             job.check()
             request(p, "reserve", p["map_root"], stage_name)
             job.log(f"送信先: {p['map_root']}/{destination} / 一時領域: {stage_name}")
-            job.run(
+            run_transfer(
+                job,
                 [
                     "scp",
                     *SSH_OPTIONS,
@@ -163,7 +172,9 @@ class Transfers:
                     "-r",
                     str(bundle),
                     f"{p['user']}@{p['host']}:{p['map_root']}/{stage_name}/",
-                ]
+                ],
+                expected["bytes"],
+                lambda: request(p, "progress", p["map_root"], stage_name)["bytes"],
             )
             job.check()
             return request(

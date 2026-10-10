@@ -409,7 +409,8 @@ class Learning:
             job.log(
                 f"ONNX送信先: {root}/{destination}（TensorRT engineはJetsonで生成）"
             )
-            job.run(
+            transfers.run_transfer(
+                job,
                 [
                     "scp",
                     *transfers.SSH_OPTIONS,
@@ -418,7 +419,9 @@ class Learning:
                     "-r",
                     str(bundle),
                     f"{p['user']}@{p['host']}:{root}/{stage}/",
-                ]
+                ],
+                sum(p.stat().st_size for p in bundle.iterdir()),
+                lambda: transfers.request(p, "progress", root, stage)["bytes"],
             )
             job.check()
             return transfers.request(

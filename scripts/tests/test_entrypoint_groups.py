@@ -9,7 +9,7 @@ SCRIPT = Path(__file__).resolve().parents[2] / "docker/scripts/kart-device-group
 
 
 class EntrypointGroupsTests(unittest.TestCase):
-    def run_extension(self, groups, fail=False):
+    def run_extension(self, groups, fail=False, gpu=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             log = root / "calls"
@@ -17,6 +17,8 @@ class EntrypointGroupsTests(unittest.TestCase):
                 "id": '#!/bin/bash\nif [[ "$1" == -u ]]; then echo 0; else echo "$TEST_GROUPS"; fi\n',
                 "getent": '#!/bin/bash\n[[ "$2" != 996 ]]\n',
                 "groupadd": '#!/bin/bash\nprintf "groupadd %s\\n" "$*" >> "$TEST_LOG"\n',
+                "chgrp": '#!/bin/bash\nprintf "chgrp %s\\n" "$*" >> "$TEST_LOG"\n',
+                "chmod": '#!/bin/bash\nprintf "chmod %s\\n" "$*" >> "$TEST_LOG"\n',
                 "usermod": '#!/bin/bash\nprintf "usermod %s\\n" "$*" >> "$TEST_LOG"\nexit "$TEST_FAIL"\n',
             }
             for name, text in commands.items():
@@ -26,7 +28,11 @@ class EntrypointGroupsTests(unittest.TestCase):
             env = {**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
                    "USERNAME": "admin", "TEST_GROUPS": groups, "TEST_LOG": str(log),
                    "TEST_FAIL": "1" if fail else "0"}
-            result = subprocess.run(["bash", "-c", 'source "$1"; echo CONTINUED', "_", str(SCRIPT)],
+            script = SCRIPT
+            if gpu:
+                script = root / "extension.sh"
+                script.write_text(SCRIPT.read_text().replace("/dev/nvhost-gpu", "/dev/null").replace("/dev/nvhost-ctrl-gpu", "/dev/zero"))
+            result = subprocess.run(["bash", "-c", 'source "$1"; echo CONTINUED', "_", str(script)],
                                     env=env, capture_output=True, text=True)
             return result, log.read_text() if log.exists() else ""
 
@@ -45,6 +51,14 @@ class EntrypointGroupsTests(unittest.TestCase):
         result, _ = self.run_extension("0 20", fail=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("CONTINUED", result.stdout)
+
+    def test_gpu_permissions_are_scoped_and_grant_video(self):
+        result, calls = self.run_extension("0", gpu=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls.splitlines(), [
+            "chgrp video /dev/null", "chmod 0660 /dev/null", "usermod --append --groups video admin",
+            "chgrp video /dev/zero", "chmod 0660 /dev/zero", "usermod --append --groups video admin",
+        ])
 
     def test_root_only_adds_no_groups(self):
         result, calls = self.run_extension("0")
