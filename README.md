@@ -65,6 +65,8 @@ Dockerからは共有D-Bus経由でホストのBlueZを操作する。
 sudo apt install python3-vcstool
 ./scripts/repos.sh import
 ./scripts/repos.sh status
+# ブランチをcheckoutしている外部リポジトリを更新
+./scripts/repos.sh pull
 ```
 
 `tools/isaac-ros-cli` は外部Gitとして管理し、kart本体へ内容を追加しない。

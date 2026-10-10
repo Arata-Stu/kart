@@ -10,7 +10,7 @@
 | open-foxglove.sh | Foxgloveを開く | ホスト |
 | jetson_max_performance.sh | Jetson性能設定・確認 | Jetsonホスト |
 | build.sh | colcon build | ROSコンテナ |
-| repos.sh | vcs import／status | ホスト |
+| repos.sh | vcs import／status／pull | ホスト |
 | setup/bluetooth.sh | コントローラーのBluetooth接続 | Linuxホスト／Docker |
 | setup/setup-jtop.sh | jtopの初期導入 | Jetsonホスト |
 | sensors/evs-bias.sh | EVS bias調整ツールのbuild／起動 | EVSコンテナ |
@@ -30,3 +30,8 @@ bash scripts/tests/test-vehicle.sh
 選択はGit対象外の`.kart-dev-profile`へ保存。`--no-evs`で通常環境へ戻し、その選択を保存します。
 
 `sensors/evs-raw-timing.sh --build FILE.raw`はRAW読込み時のtimestamp shiftを取得します（録画停止後、EVSコンテナ内）。
+
+外部リポジトリの更新は `bash scripts/repos.sh pull`。対象はstatusと同じ
+`tools`と`ros2_ws/src/sensing`内のリポジトリで、kart本体は含めません。
+commit固定のdetached HEADは追従ブランチがないためpullで更新できません。
+固定SHAの更新はpackages.reposで管理します。
