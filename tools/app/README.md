@@ -382,6 +382,7 @@ ONNXモデル名は選択した実験の名前を基に`<name>-v1, -v2, ...`を�
 「設定を保存」でbag探索、SCP pull、map/ONNX転送へ共通適用する。
 既存の保存済み接続先は維持する。未設定時のhostは共通既定値を使用する。
 SSHユーザー既定はkart、record/mapは/home/kart/workspaces/kart/{record,map}。
+学習環境設定のモデル転送先も/home/kart/workspaces/kart/modelsを既定とする。
 既存の保存済み設定は上書きしないため、必要なら接続設定画面で変更する。
 任意IP・hostnameの手入力も可能。SSHユーザー未設定なら転送前に設定画面を開く。
 Foxglove起動スクリプトも同じ定義を使い、`--preset notebook|lan|usb`で選択する。

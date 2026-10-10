@@ -38,7 +38,7 @@ class Learning:
                 / "weights/dinov3/dinov3_vits16_pretrain_lvd1689m-08c60483.pth"
             ),
             device="cuda",
-            model_root="/home/tamiya/workspaces/kart/models",
+            model_root="/home/kart/workspaces/kart/models",
         )
         if self.settings_file.exists():
             saved = read_json(self.settings_file)
