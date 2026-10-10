@@ -454,3 +454,5 @@ ros2 service call /rosbag2_player/pause rosbag2_interfaces/srv/Pause '{}'
 ```
 
 終了は起動ターミナルでCtrl-C。先頭から再評価するときは終了後bringupを再起動し、localizationの内部状態も初期化する。
+
+オフラインevaluationの基準frameはevaluation/replay.yamlの`base_frame: camera_link`。点群取得と揃え、bagに未収録の車体取付TFを要求しない。evaluation.launch.pyの`base_frame`引数（既定空文字）で明示変更できる。実車localizationのbase_link設定は変更しない。HDMapのmap座標は変更せず、odomから推定対象camera_linkへのTFを配信する。車体poseの評価には校正済み取付TFとbase_frame:=base_linkが必要。

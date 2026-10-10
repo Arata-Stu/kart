@@ -6,3 +6,6 @@ read_ahead_queue_size: 1000
 # odometry, actuator/mode commands, or old localization outputs.
 extra_topics: [/tf_static]
 rviz: true
+
+# Offline camera-only bags need no uncalibrated vehicle mount TF.
+base_frame: camera_link

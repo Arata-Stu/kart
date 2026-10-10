@@ -10,12 +10,14 @@ from kart_bringup.replay import playback
 
 def add_evaluation(args):
     root = lu.get_path("kart_bringup", "config")
+    settings = yaml.safe_load((root / "evaluation/replay.yaml").read_text())
+    base_frame = args.base_frame if args.base_frame != "" else settings["base_frame"]
     playback(root, args.bag, args.rate)
     resolve(
         root / "localization",
         args.map_dir,
         args.model_dir,
-        {"use_sim_time": "true"},
+        {"use_sim_time": "true", "base_frame": base_frame},
         enable_vgl=boolean(args.enable_vgl),
     )
     if (args.lane_id, args.line_type) not in hdmap_choices(args.map_file):
@@ -38,6 +40,7 @@ def add_evaluation(args):
                 "model_dir": args.model_dir,
                 "use_sim_time": "true",
                 "visualize": "true",
+                "base_frame": base_frame,
                 "enable_vgl": args.enable_vgl,
             },
         ),
@@ -74,6 +77,7 @@ def generate_launch_description():
     args.add_arg("model_dir", "", cli=True)
     args.add_arg("enable_vgl", "false", cli=True)
     args.add_arg("rate", "", cli=True)
+    args.add_arg("base_frame", "", cli=True)
     args.add_arg("rviz", "", cli=True)
     args.add_opaque_function(add_evaluation)
     return lut.LaunchDescription(args.get_launch_actions())

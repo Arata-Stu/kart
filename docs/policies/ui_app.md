@@ -162,3 +162,5 @@ E2E bringupではTensorRT engineを自動生成しない。未build・不適合�
 bagによる地図確認はVSLAM単独とVGL併用を明示選択する。Map StudioのVSLAM地図をVGL準備済みbundleと混同せず、VSLAM単独にVGL資産を要求しない。
 
 Web UIのVGL準備は選択中の公式VSLAM地図から明示実行し、別bundleへ保存する。元地図とHDMapを変更せず、モデル資産不足を大型モデルへのfallbackで補わない。
+
+カメラbagのオフラインlocalization評価はcamera_linkを既定基準とする。車体TFを仮定・生成しない。実車localizationのbase_linkとは明示的に区別する。

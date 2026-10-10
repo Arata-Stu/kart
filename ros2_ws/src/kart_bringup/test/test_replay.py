@@ -89,6 +89,7 @@ class ReplayTests(unittest.TestCase):
             spec.loader.exec_module(module)
             args = SimpleNamespace(
                 enable_vgl="false",
+                base_frame="",
                 bag="/bag",
                 rate="",
                 map_dir="/bundle",
@@ -117,6 +118,7 @@ class ReplayTests(unittest.TestCase):
             )
             self.assertEqual(actions[-1][1]["enable_vgl"], "false")
             self.assertEqual(actions[0][1]["enable_vgl"], "false")
+            self.assertEqual(actions[0][1]["base_frame"], "camera_link")
             self.assertEqual(actions[0][1]["visualize"], "true")
             self.assertEqual(actions[0][1]["use_sim_time"], "true")
             self.assertEqual(actions[1][1]["use_sim_time"], "true")
