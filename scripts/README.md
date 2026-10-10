@@ -5,6 +5,7 @@
 | 場所 | 用途 | 実行環境 |
 |---|---|---|
 | dev.sh | 開発Dockerへ入る（--evs/--no-evsの選択を保存） | Linuxホスト |
+| screen.sh | SSH用screenの作成／再接続／デタッチ | Linuxホスト |
 | update-isaac-ros-cli.sh | Isaac ROS CLI更新 | Linuxホスト |
 | bringup.sh | 起動構成のTUI／CLI | ROSコンテナ |
 | open-foxglove.sh | Foxgloveを開く | ホスト |
@@ -29,6 +30,26 @@ bash scripts/tests/test-vehicle.sh
 
 `dev.sh --evs --build-local`でEVSを選ぶと、次回は`dev.sh`だけでEVS環境へ入れます。
 選択はGit対象外の`.kart-dev-profile`へ保存。`--no-evs`で通常環境へ戻し、その選択を保存します。
+
+## SSHとDocker内のセッション維持
+
+SSH接続先のLinuxホストでscreenを使い、その中からDockerへ入り、Docker内でtmuxを起動します。
+ホストにscreenがない場合は`sudo apt-get install screen`で導入します。tmuxはDocker imageに含まれます。
+
+```bash
+# Linuxホスト（SSH接続後、kartのproject root）
+./scripts/screen.sh             # 既定名kart。既存sessionへ再接続、なければ作成
+./scripts/dev.sh
+
+# Docker内
+tmux new-session -A -s kart -c /workspaces
+```
+
+tmuxのデタッチは`Ctrl-b`→`d`、screenは`Ctrl-a`→`d`。
+screen内で`screen.sh`を再実行してもデタッチします。
+SSH再接続後は`./scripts/screen.sh`で元の画面へ戻ります。
+Dockerへ入り直した場合は同じtmuxコマンドで既存sessionへ再接続します。
+screenとtmuxはSSH切断後も作業プロセスを維持しますが、Dockerの停止・再作成やホスト再起動では終了します。
 
 `sensors/evs-raw-timing.sh --build FILE.raw`はRAW読込み時のtimestamp shiftを取得します（録画停止後、EVSコンテナ内）。
 
