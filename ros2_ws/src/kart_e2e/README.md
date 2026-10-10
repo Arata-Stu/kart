@@ -221,3 +221,11 @@ steer_onlyでは予測steer＋固定throttle、steer_throttleでは予測steer/t
 等を明示して再exportする。推論起動時に不足値を推測しない。
 単独e2e.launchのfixed_throttle明示上書きは可能だが、TUIではmetadataをそのまま使用する。
 ROS node/topicの変更はない。decoderの全parameterは既存config/control_decoder.yaml参照。
+
+## rosbagのオフライン評価（Notebook専用）
+
+UIの「4 rosbag評価」でexport済みONNXとbagを選び、評価名を指定する。`e2e_evaluate` / `python -m kart_e2e.evaluate`はROSノードを起動せず、topicをpublishしないオフラインCLI。入力は`--model`（ONNX bundle）、`--bag`、`--output`（新規保存先）が必須。画像topicの既定は`--image-topic /realsense/color/image_raw`、教師操作は`--command-topic /teleop/control_cmd`、モードは`--mode-topic /operation_mode/state`、時計は`--clock bag`、過去ラベル許容差は`--max-skew-ms 100`。UIではデータセット作成欄の抽出設定を共用する。
+
+学習と同じ前処理・教師対応付けでMANUALの有効ラベル付き画像を抽出し、ONNX Runtime CPUで推論する。ONNX内部にpaddingが含まれるため入力の二重paddingはしない。モデルmetadataのmode・SHA256・固定/最大スロットルを検証し、不正値や範囲外出力は失敗する。steer-onlyは固定スロットルを使用、steer+throttleは予測値へmetadataの最大スロットルを適用する。AUTO切替・watchdog等のオンライン状態機械は再現しない。
+
+`report.json`にMAE/RMSE/P95絶対誤差（正規化操作値）、抽出件数、スキップ数、モデルSHA256、CPU推論中央値（前処理除外、warmupを含む）、最大500点の表示用サンプルを保存。`predictions.csv`には全評価フレームの時刻・教師・生出力・上限適用値・推論時間を保存する。データは`e2e/evaluations/<評価名>/`へ公開し、一時画像は終了時に削除する。学習と同じbagでの評価も許可するが、未知のコースへの性能評価ではない。運転成功率やTensorRT実機レイテンシは別途検証する。

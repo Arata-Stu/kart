@@ -95,6 +95,32 @@ class LearningTests(unittest.TestCase):
                     self.service.prepare("train", body)
                 self.assertIn(missing, str(error.exception))
 
+    def test_evaluation_publishes_report_without_dataset(self):
+        model = self.service.root / "models/example"
+        model.mkdir()
+        atomic_json(model / "artifact.json", {"created": 1})
+        with patch.object(self.service, "contract", return_value=({}, "steer_only")):
+            plan = self.service.prepare(
+                "evaluate", dict(name="check-v1", model="example", bag="bag")
+            )
+        self.assertIn("--clock", plan["args"])
+        self.assertIn("e2e:models:example", plan["resources"])
+        report = dict(
+            samples=3, mode="steer_only", metrics={"steering_command": {"mae": 0.1}}
+        )
+
+        class Worker(FakeJob):
+            def run(inner, args, env=None):
+                output = Path(args[args.index("--output") + 1])
+                output.mkdir()
+                atomic_json(output / "report.json", report)
+                (output / "predictions.csv").write_text("fixture")
+
+        result = self.service.execute(Worker(), plan)
+        self.assertEqual(result["kind"], "evaluations")
+        self.assertEqual(self.service.catalog()["evaluations"][0]["samples"], 3)
+        self.assertEqual(self.service.catalog()["datasets"], [])
+
     def test_dataset_publication_and_overwrite(self):
         folder = self.dataset()
         self.assertTrue((folder / "artifact.json").is_file())

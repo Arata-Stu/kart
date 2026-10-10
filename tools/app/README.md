@@ -458,3 +458,7 @@ Customの「区間速度」は番号付きwaypoint図と開始・終了WPの選�
 Raceline初期値はJetPilot `tools/app/frontend/app.js` と `python_ws/map_tools/generate_raceline.py` の `race-stacks` presetを参照。共通項目は点間隔0.10m、曲率上限1.0/m、余裕0.05m、最高速度3.0m/s、横加速度2.5m/s²、加速1.5m/s²、減速2.5m/s²。kartの車体幅0.19m・全長0.47m・後輪軸位置は既定のTT-02モデルを保持。JetPilotの最低速度0.8m/sは停止・制約と競合するため導入しない。helperの内部再サンプリング・平滑化はアルゴリズムが異なるため同一値を意味しない。保存済みラインの設定は維持する。
 
 学習開始時にDINOv3ソースが見つからない場合は、Notebookコンテナの`/workspaces`で`vcs import . < e2e.repos`を実行する。`.pth`の配置だけではソースは導入されない。UI「学習環境」でソースを`/workspaces/python_ws/dinov3`、重みを`/workspaces/weights/dinov3/dinov3_vits16_pretrain_lvd1689m-08c60483.pth`に設定する。環境変数の追加は不要。
+
+### ONNXのrosbag評価
+
+学習→ONNX export→「4 rosbag評価」→Jetson転送の順で操作できる。モデル・bag・評価名を選び開始する。画像/教師操作/モードtopic・時計・許容差は「1 データセット」の設定を共用する。評価履歴をクリックすると教師と指令予測の時系列グラフ、MAE/RMSE/P95を表示する。全フレームCSVとJSONは`e2e/evaluations/<評価名>/`。モデルとbagを処理資源として固定し、bag内容の変更や評価失敗時には結果を公開しない。転送に合格閾値は設けず、評価結果を人が確認する。評価はCPU ONNX RuntimeでのMANUAL画像・教師比較で、閉ループ走行やJetson上TensorRTの動作を保証しない。

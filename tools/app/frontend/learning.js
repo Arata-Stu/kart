@@ -1,3 +1,4 @@
+import { showEvaluation } from "./evaluation.js";
 import { $, state, api, action, on, emit, item, toast } from "./api.js";
 import { nextVersion } from "./learning_names.js";
 let catalog = null;
@@ -7,11 +8,13 @@ const kinds = {
   train: "runs",
   export: "runs",
   push: "models",
+  evaluate: "evaluations",
 };
 const labels = {
   datasets: "データセット",
   runs: "学習済み実験",
   models: "ONNXモデル",
+  evaluations: "オフライン評価",
 };
 const fields = ["python", "encoder_repo", "weights", "device", "model_root"];
 function suggestNames() {
@@ -21,6 +24,11 @@ function suggestNames() {
   for (const [id, prefix, kind] of [
     ["e2e-run-name", base, "runs"],
     ["e2e-model-name", $("e2e-export-run").value || base, "models"],
+    [
+      "e2e-eval-name",
+      ($("e2e-eval-model").value || base) + "-eval",
+      "evaluations",
+    ],
   ]) {
     const input = $(id);
     if (!input.value || input.value === input.dataset.suggestion) {
@@ -45,7 +53,7 @@ function options(id, rows, title) {
 }
 function render() {
   if (!catalog) return;
-  for (const kind of ["datasets", "runs", "models"])
+  for (const kind of ["datasets", "runs", "models", "evaluations"])
     $("e2e-count-" + kind).textContent = catalog[kind].length;
   $("e2e-device").textContent = "学習: " + catalog.settings.device;
   $("e2e-storage").textContent = catalog.root;
@@ -76,8 +84,11 @@ function render() {
         : kind === "runs"
           ? `${row.mode} · epoch ${row.metrics?.epoch ?? "—"} · val MSE ${row.metrics?.validation_mse?.toPrecision(4) ?? "—"}`
           : `${row.mode} · ORT最大誤差 ${Number(row.ort_max_abs_error).toExponential(2)}`;
+    if (kind === "evaluations")
+      detail = `${row.samples} frames · ${row.model} · steer MAE ${row.metrics.steering_command.mae.toFixed(4)}`;
     list.append(
       item(row.id, detail, () => {
+        if (kind === "evaluations") return showEvaluation(row.id);
         if (step === "dataset") {
           setStep("train");
           $("e2e-train-data").value = row.id;
@@ -114,9 +125,16 @@ export async function refreshLearning() {
     );
   options("e2e-export-run", data.runs, "実験を選択");
   options("e2e-push-model", data.models, "モデルを選択");
+  options("e2e-eval-model", data.models, "モデルを選択");
+  options(
+    "e2e-eval-bag",
+    records.map((r) => ({ id: r.id, label: r.id })),
+    "bagを選択",
+  );
   suggestNames();
   render();
 }
+$("e2e-eval-model").addEventListener("change", suggestNames);
 $("e2e-mode").addEventListener("change", suggestNames);
 $("e2e-export-run").addEventListener("change", suggestNames);
 function selected(id) {
@@ -160,6 +178,18 @@ action("e2e-start-export", () =>
   start("export", {
     name: $("e2e-model-name").value,
     run: $("e2e-export-run").value,
+  }),
+);
+action("e2e-start-evaluate", () =>
+  start("evaluate", {
+    name: $("e2e-eval-name").value,
+    model: $("e2e-eval-model").value,
+    bag: $("e2e-eval-bag").value,
+    image_topic: $("e2e-image-topic").value,
+    command_topic: $("e2e-command-topic").value,
+    mode_topic: $("e2e-mode-topic").value,
+    clock: $("e2e-clock").value,
+    max_skew_ms: Number($("e2e-skew").value),
   }),
 );
 action("e2e-start-push", async () => {

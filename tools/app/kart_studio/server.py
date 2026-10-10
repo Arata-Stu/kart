@@ -45,7 +45,9 @@ class Studio:
         hosts = read_json(self.repo / "config/jetson_hosts.json")
         return dict(
             user="kart",
-            host=next(p["host"] for p in hosts["presets"] if p["id"] == hosts["default"]),
+            host=next(
+                p["host"] for p in hosts["presets"] if p["id"] == hosts["default"]
+            ),
             port=22,
             record_root="/home/kart/workspaces/kart/record",
             map_root="/home/kart/workspaces/kart/map",
@@ -67,6 +69,9 @@ class Studio:
                 records=str(self.records),
                 maps=str(self.maps.root),
             )
+        if path == "/api/e2e/evaluation":
+            folder = self.learning.folder("evaluations", key)
+            return read_json(within(folder, "report.json"))
         if path == "/api/e2e":
             return self.learning.catalog()
         if path == "/api/trash":
@@ -103,13 +108,19 @@ class Studio:
         key = b.get("id", "")
         if path == "/api/e2e/settings":
             return self.learning.save_settings(b)
-        if path in ("/api/e2e/dataset", "/api/e2e/train", "/api/e2e/export"):
+        if path in (
+            "/api/e2e/dataset",
+            "/api/e2e/train",
+            "/api/e2e/export",
+            "/api/e2e/evaluate",
+        ):
             action = path.rsplit("/", 1)[1]
             plan = self.learning.prepare(action, b)
             titles = {
                 "dataset": "データセット作成",
                 "train": "DINOv3学習",
                 "export": "ONNX export",
+                "evaluate": "rosbagオフライン評価",
             }
             return self.jobs.start(
                 titles[action] + ": " + plan["key"],

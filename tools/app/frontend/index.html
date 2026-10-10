@@ -332,8 +332,11 @@
           2 学習 <small id="e2e-count-runs">0</small>
         </button>
         <button id="e2e-tab-export">3 ONNX export</button>
+        <button id="e2e-tab-evaluate">
+          4 rosbag評価 <small id="e2e-count-evaluations">0</small>
+        </button>
         <button id="e2e-tab-push">
-          4 Jetson転送 <small id="e2e-count-models">0</small>
+          5 Jetson転送 <small id="e2e-count-models">0</small>
         </button>
       </nav>
       <div class="learning-body">
@@ -486,6 +489,25 @@
           <button id="e2e-start-export" class="primary full">
             ONNXをexport
           </button>
+        </section>
+        <section id="e2e-pane-evaluate" class="learning-form" hidden>
+          <h2>ONNXをrosbagでオフライン評価</h2>
+          <label>ONNXモデル<select id="e2e-eval-model"></select></label>
+          <label>評価rosbag<select id="e2e-eval-bag"></select></label>
+          <label>評価名<input id="e2e-eval-name" maxlength="64" /></label>
+          <p class="help">
+            「データセット」の画像・操作・モードtopic、時計、許容時間差を使用。教師付きMANUAL区間だけを評価します。同じ学習bagも使用できます。
+          </p>
+          <button id="e2e-start-evaluate" class="primary full">
+            評価を開始
+          </button>
+          <p class="help">
+            CPUのONNX
+            Runtimeによる記録画像の予測比較です。実走行の成功率・JetsonのTensorRT速度は評価しません。
+          </p>
+          <div id="e2e-eval-result">
+            完了後、右の評価履歴を選択してください。
+          </div>
         </section>
         <section id="e2e-pane-push" class="learning-form" hidden>
           <h2>検証済みモデルをJetsonへ送信</h2>

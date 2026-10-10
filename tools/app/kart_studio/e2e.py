@@ -20,7 +20,7 @@ class Learning:
         self.repo, self.records = repo, records
         self.root = base / "e2e"
         self.settings_file = state / "e2e.json"
-        for kind in ("datasets", "runs", "models"):
+        for kind in ("datasets", "runs", "models", "evaluations"):
             (self.root / kind).mkdir(parents=True, exist_ok=True)
         spec = importlib.util.spec_from_file_location(
             "kart_ui_e2e_contract", repo / "ros2_ws/src/kart_e2e/kart_e2e/contract.py"
@@ -60,7 +60,7 @@ class Learning:
 
     def catalog(self):
         result = dict(settings=self.settings(), root=str(self.root))
-        for kind in ("datasets", "runs", "models"):
+        for kind in ("datasets", "runs", "models", "evaluations"):
             entries = []
             for path in (self.root / kind).iterdir():
                 if path.name.startswith(".") or path.is_symlink() or not path.is_dir():
@@ -226,6 +226,38 @@ class Learning:
                 },
                 "resources": ["e2e-compute"],
             }
+        if action == "evaluate":
+            model = self.folder("models", body.get("model"))
+            self.contract(model)
+            # Share extraction validation with dataset creation; do not publish images.
+            extraction = self.prepare(
+                "dataset", dict(body, name="eval-" + uuid.uuid4().hex)
+            )
+            args = [
+                "--bag",
+                extraction["args"][0],
+                "--model",
+                str(model),
+                "--output",
+                "@OUTPUT@",
+                *extraction["args"][2:],
+            ]
+            return {
+                **common,
+                "kind": "evaluations",
+                "target": self.target("evaluations", key),
+                "module": "evaluate",
+                "args": args,
+                "provenance": {
+                    "bag": extraction["provenance"]["bag"],
+                    "model": model.name,
+                },
+                "resources": [
+                    "e2e-compute",
+                    "e2e:models:" + model.name,
+                    *extraction["resources"],
+                ],
+            }
         if action == "export":
             run = self.folder("runs", body.get("run"))
             checkpoint = within(run, "best.pt")
@@ -272,7 +304,7 @@ class Learning:
 
             before = (
                 signature(Path(plan["provenance"]["bag"]))
-                if plan["kind"] == "datasets"
+                if plan["kind"] in ("datasets", "evaluations")
                 else None
             )
             job.run(
@@ -296,6 +328,16 @@ class Learning:
                 if data.get("samples", 0) <= 0:
                     raise ValueError("有効なデータがありません")
                 metadata["samples"] = data["samples"]
+            elif plan["kind"] == "evaluations":
+                report = read_json(within(output, "report.json"))
+                within(output, "predictions.csv")
+                if report.get("samples", 0) <= 0:
+                    raise ValueError("評価サンプルがありません")
+                metadata.update(
+                    samples=report["samples"],
+                    mode=report["mode"],
+                    metrics=report["metrics"],
+                )
             elif plan["kind"] == "runs":
                 within(output, "best.pt")
                 rows = within(output, "metrics.jsonl").read_text().splitlines()
