@@ -63,7 +63,7 @@ class BagManagerNode(Node):
         self._last_raw_event = ''
         self._steady = Clock(clock_type=ClockType.STEADY_TIME)
         self.timer = self.create_timer(0.05, self.update, clock=self._steady)
-        self.get_logger().info(f'Recorder idle; output_dir={self.recorder.output_dir}; L1 START / R1 STOP')
+        self.get_logger().info(f'Recorder idle; output_dir={self.recorder.output_dir}; waiting for /bag/request')
 
     def handle_request(self, request):
         if request.command == BagRequest.START:
@@ -119,8 +119,10 @@ class BagManagerNode(Node):
             self.raw_relay.tick()
         if self.raw_relay is not None and self.raw_relay.last_event != self._last_raw_event:
             self._last_raw_event = self.raw_relay.last_event
-            log = self.get_logger().error if self.raw_relay.last_error else self.get_logger().info
-            log(self._last_raw_event)
+            if self.raw_relay.last_error:
+                self.get_logger().error(self._last_raw_event)
+            else:
+                self.get_logger().info(self._last_raw_event)
         now = time.monotonic()
         if self.recorder.recording and not self._announced:
             self.send_raw(BagRequest.START, self.recorder.current_uri)

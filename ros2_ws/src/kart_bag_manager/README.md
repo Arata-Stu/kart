@@ -121,7 +121,8 @@ JetPilotの廃止済み`max_bag_duration`互換パラメータは移植せず、
 LyricalのCLIに合わせ、旧位置引数topic／`--exclude`を`--topics`／`--exclude-topics`へ変更した。
 Lyricalは`--topics`単独と`--exclude-topics`の併用を拒否するため、明示topic録画では
 除外後の一覧だけを`--topics`へ渡す。全topicが除外された場合は開始を拒否する。
-状態ログはinfo/errorの呼出し箇所を分け、録画失敗時にもログseverity変更でノードを落とさない。
+rosbagとRAW連携の状態ログはinfo/errorの呼出し箇所を分け、録画失敗時にもログseverity変更でノードを落とさない。
+起動ログはボタン配置を固定表示せず、`/bag/request`待機を表示する。ボタン配置はJoy manager設定に従う。
 [ROS 2 Lyrical公式CLI実装](https://github.com/ros2/rosbag2/blob/lyrical/ros2bag/ros2bag/verb/record.py)と照合した。
 
 ## ビルド・起動
