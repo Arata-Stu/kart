@@ -67,10 +67,10 @@ current_uriは最後の試行先を保持するので、URIだけで録画成功
 ## 保存先・停止・RAW連携
 
 - 既定保存先は`/workspaces/record`。kartのproject root mountによりホストと共有する。
-- session_layout=true（bringup既定）では起動日時で `YYYY-MM-DD/HHMMSS/recording_name`。空名はrun。
+- session_layout=true（bringup既定）では起動日時で `YYYY-MM-DD/HH-MM/recording_name`。空名はrun。
   同じセッションの再録画は_01等。STARTまで親directoryも作らず、単なる起動/終了では何も作らない。
 - 以下の旧形式はsession_layout=false（単体package既定）の場合。
-- recording_nameが空なら`YYYYmmdd_HHMMSS_label`。ラベル内のパス記号等は置換する。
+- recording_nameが空なら`YYYYmmdd_HH-MM_label`。ラベル内のパス記号等は置換する。
 - recording_nameありなら`YYYY-MM-DD/recording_name`。既存パス・symlinkがあれば`_01`等を付け、上書きしない。
 - CLIは引数配列で実行し、shellを通さない。子を独立したPOSIX process groupにする。
 - 50 ms周期で起動・終了を監視し、通常コールバック中に待機しない。STOPは起動待ち中にも受け付ける。

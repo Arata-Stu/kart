@@ -112,7 +112,7 @@ class Recorder:
         settings.validate()
         self.settings, self._popen, self._clock = settings, popen, clock
         self.output_dir = Path(settings.output_dir).expanduser().resolve()
-        self.session_stamp = datetime.now().strftime('%Y-%m-%d/%H%M%S')
+        self.session_stamp = datetime.now().strftime('%Y-%m-%d/%H-%M')
         self.process = None
         self.phase = 'idle'
         self.current_uri = ''
@@ -141,7 +141,7 @@ class Recorder:
             parent = self.output_dir
             label = ''.join(c if c.isalnum() or c in '-_' else '_' for c in label).strip('_')
             label = label.encode()[:100].decode(errors='ignore')
-            name = now.strftime('%Y%m%d_%H%M%S') + ('_' + label if label else '')
+            name = now.strftime('%Y%m%d_%H-%M') + ('_' + label if label else '')
         path, suffix = parent / name, 1
         while path.exists() or path.is_symlink():
             path = parent / f'{name}_{suffix:02d}'

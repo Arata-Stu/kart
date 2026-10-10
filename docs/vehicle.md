@@ -130,7 +130,7 @@ AUTO/MANUALなどの要求には現在時刻の`header.stamp`を付ける。要�
 | R2 / L2 | 正 / 負のスロットル。L2側はESCの状態に応じてブレーキ・後退 |
 | ○ | ブレーキ。前進・後退より優先 |
 | × | STOP要求。AUTOでも使用できる |
-| L1 / R1 | rosbag録画開始 / 停止。走行とは独立、同時押しは録画停止優先 |
+| R1 / L1 | rosbag録画開始 / 停止。走行とは独立、同時押しは録画停止優先 |
 | D-pad左 / 右 | ステアトリムを左 / 右へ1段階 |
 | D-pad上 / 下 | スロットルトリムを正 / 負へ1段階 |
 
@@ -170,7 +170,7 @@ ESCの中立PWMを変更する機能ではない。
 ## rosbag録画
 
 `kart_bag_manager`はvehicle.launch.pyから別プロセスで待機起動する。
-L1で開始、R1で停止。×やJoy切断で録画は停止しない。保存先は既定`/workspaces/record`。
+R1で開始、L1で停止。×やJoy切断で録画は停止しない。保存先は既定`/workspaces/record`。
 `/bag/status`で状態とcurrent_uriを確認できる。設定・停止完了の判定は
 [kart_bag_manager README](../ros2_ws/src/kart_bag_manager/README.md)を参照。
 

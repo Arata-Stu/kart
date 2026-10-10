@@ -279,7 +279,7 @@ EVSとFoxgloveは選択時だけ追加。collectでいうvehicle controlは手�
 mode/構成の正本は`config/mission.yaml`。センサの詳細、topic・parameterは
 [sensors設定](config/sensors/README.md)参照。mission自身のnode/topicはない。
 
-起動しても録画は開始せず、AUTOへも切り替えない。録画はL1開始/R1停止。
+起動しても録画は開始せず、AUTOへも切り替えない。録画はR1開始/L1停止。
 停止完了を確認してからCtrl-Cでlaunchを終了する。Hz変更は再起動時の選択であり、録画中には変更しない。
 データ収集後はMap Studioのbagからのoffline mappingを使う。このlaunchでmap生成は実行しない。
 
@@ -347,7 +347,7 @@ driveでInfraなし、e2eでRGBなしは起動前エラー。evalではbagの左
 centerline/raceline/customlineはHDMap内で生成済みのものだけ一覧に出す。
 
 run_nameは起動時に入力、または `--run-name trial`。
-保存先は `record/YYYY-MM-DD/HHMMSS/trial`。日時はbag manager起動時に固定。
+保存先は `record/YYYY-MM-DD/HH-MM/trial`。日時はbag manager起動時に固定。
 同じセッションの追加録画はtrial_01等。START前にdirectoryを作らないため、
 起動直後のCtrl-Cでは空directoryは残らない。自動削除はしない。
 

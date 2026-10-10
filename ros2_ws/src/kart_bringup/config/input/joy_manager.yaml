@@ -4,8 +4,8 @@
     steering_axis: 0
     throttle_axis: 5
     reverse_axis: 4
-    bag_start_button: 4
-    bag_stop_button: 5
+    bag_start_button: 5  # R1
+    bag_stop_button: 4   # L1
     deadman_button: -1
     brake_button: 1
     stop_button: 0
