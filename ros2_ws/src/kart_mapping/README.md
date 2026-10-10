@@ -72,7 +72,9 @@ metadata一致はbag全メッセージの同一性の証明ではないため、
    元bagの開始位置付近を想定する。任意地点からの大域自己位置推定ではなく、VGLはまだ使わない。
 6. serviceのsuccessは受理に過ぎない。診断の`localized_in_exist_map=Yes`かつ`vo_status=OK`で成功確認。
    成功前や追跡喪失前の点群・TFを破棄し、新しい成功区間のデータだけ採用。軌跡も成功前のposeを除外する。
-7. 再生終了後、診断・点群・軌跡・map→odomが入力末尾の許容範囲に到達し、更新が静まるのを待つ。
+7. 再生終了後、診断・軌跡・map→odomが入力末尾の許容範囲に到達し、更新が静まるのを待つ。
+   可視化点群は更新時のみ配信されるため末尾への時刻一致を要求せず、最終localize成功区間の最新非空点群を使う。
+   `cloud_tail_age_s`と`cloud_within_tail_tolerance`をsnapshotのprovenanceに保存し、古い場合は警告する。
    未localize、末尾未到達、TF不足、更新待ちtimeoutは失敗。失敗時に編集可能へ進めない。
 8. 最新TFを一度だけ適用（既にmap座標なら適用しない）してsnapshot/cloudを保存し、map.jsonを最後にreadyへ更新。
 

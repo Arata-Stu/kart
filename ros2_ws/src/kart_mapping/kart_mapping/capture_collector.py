@@ -79,8 +79,15 @@ class CaptureCollector(Collector):
         self.gate.require_final(expected, tolerance)
         if self.cloud is None or self.path is None:
             raise ValueError("localize成功後の点群・SLAM軌跡がありません")
-        if stamp_ns(self.cloud.header.stamp) < expected - tolerance:
-            raise ValueError("点群が再生末尾に到達していません")
+        cloud_stamp = stamp_ns(self.cloud.header.stamp)
+        if not self.gate.accepts(cloud_stamp):
+            raise ValueError("点群が最後のlocalize成功区間に属していません")
+        cloud_age_s = (expected - cloud_stamp) / 1e9
+        if cloud_stamp < expected - tolerance:
+            self.get_logger().warning(
+                f"点群の更新時刻は入力末尾より{cloud_age_s:.3f}秒前です。"
+                "最終localize成功区間の最新非空点群を採用します（全地図の網羅性は未保証）"
+            )
         if stamp_ns(self.path.header.stamp) < expected - tolerance:
             raise ValueError("SLAM軌跡が再生末尾に到達していません")
         tf = self.frames.transforms.get("odom")
@@ -91,6 +98,8 @@ class CaptureCollector(Collector):
             localized_since_ns=str(self.gate.since),
             final_diagnostic_stamp_ns=str(self.gate.stamp),
             expected_final_image_stamp_ns=str(expected),
+            cloud_tail_age_s=cloud_age_s,
+            cloud_within_tail_tolerance=cloud_stamp >= expected - tolerance,
             point_scope="last_nonempty_visualization_cloud_not_guaranteed_full_map",
         )
         return self.snapshot(provenance)

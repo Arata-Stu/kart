@@ -107,7 +107,7 @@ marker更新は専用topic内で古い表示を削除し、未選択／未生成
 
 公式offline地図作成後、元bagを保存地図の作業コピーへ再生し、VSLAM可視化点群を取得する。
 LocalizeInMapのservice受理だけでは成功扱いにしない。診断のsaved-map localizedと追跡OKを確認する。
-成功前／追跡喪失区間のデータを捨て、末尾stamp確認と最新TF適用後にpendingからreadyへ移行する。
+成功前／追跡喪失区間のデータを捨て、診断・軌跡・TFの末尾stamp確認と最新TF適用後にpendingからreadyへ移行する。可視化点群は更新駆動のため末尾stamp一致を要求せず、最終成功区間の最新非空点群を使う。点群と入力末尾の時間差を記録・警告し、全地図の網羅性は保証しない。
 取得済みsnapshotの再生成はHDMap座標を変える危険があるため初版では提供しない。
 VGLは今後の位置推定機能として対応予定。FoundationStereo low_res（深度）と
 ALIKED 424×240（VGL特徴抽出）の軽量化を区別する。地図とONNX・入力shapeを対応付け、
