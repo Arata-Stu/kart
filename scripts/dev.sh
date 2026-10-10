@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 KART_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+KART_EVS_ARGS=()
+if [[ "${1:-}" == --evs ]]; then
+    shift
+    for part in hal hal_psee_plugins licensing; do
+        if [[ ! -d "${KART_ROOT}/docker/silky_evcam_plugin_source/${part}" ]] || [[ -z "$(find "${KART_ROOT}/docker/silky_evcam_plugin_source/${part}" -type f -print -quit)" ]]; then
+            echo "Missing SilkyEvCam source: docker/silky_evcam_plugin_source/${part}; see docs/setup/evs.md" >&2
+            exit 1
+        fi
+    done
+    KART_EVS_ARGS=(-c 'docker.image.additional_image_keys=[realsense,openeb,kart]' -c 'docker.run.container_name=kart_evs_dev')
+fi
 export ISAAC_ROS_WS="${KART_ROOT}/ros2_ws"
 export DOCKER_ARGS_FILE="${KART_ROOT}/docker/dockerargs"
 if ! command -v isaac-ros >/dev/null 2>&1; then
@@ -18,4 +29,4 @@ if [[ "${1:-}" != --help && "${1:-}" != -h && "$(uname -s)" == Linux ]]; then
         "${KART_ROOT}/docker/dockerargs" "$KART_ARGS_FILE"
     export DOCKER_ARGS_FILE="$KART_ARGS_FILE"
 fi
-isaac-ros activate "$@"
+isaac-ros activate "${KART_EVS_ARGS[@]}" "$@"

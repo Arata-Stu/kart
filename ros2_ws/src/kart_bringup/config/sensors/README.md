@@ -2,7 +2,7 @@
 
 `mission.launch.py`だけがsensor containerを作成する。modules/sensorsのlaunchは既存containerへのloadのみ。
 `create_sensor_container:=false sensor_container:=/name`で外部所有containerを使用できる。
-RealSense/OpenEBを同一multithreaded containerへload。driveではVSLAM、e2eではimage encoder/TensorRTも同じcontainerへloadする。
+RealSenseをsensor containerへload。OpenEBはdirect入力のため専用プロセスを所有。driveではVSLAM、e2eではimage encoder/TensorRTも同じcontainerへloadする。
 VGL・vehicle・controlは別container。
 
 ## RealSense
@@ -69,7 +69,7 @@ collectでもmapping用bagにはInfraを有効にする。driveではInfra OFF�
 `openeb_ros2`のkart branchを別途ビルドした環境でのみ`enable_evs=true`を使う。
 必須のpackage依存には加えず、起動前のpackage検索で未導入をエラーにする。
 設定は[openeb.yaml](openeb.yaml)。RAWはL1/R1と連携し、起動時に開始しない。
-画像可視化・GPU tensor・E2Eは起動しない。bag_manager_openeb.yamlを選択して
+画像可視化とGPU Tensorを生成する。EVS E2Eモデルは未接続。bag_manager_openeb.yamlを選択して
 `/event_camera/start_raw_recording`・`stop_raw_recording`（std_srvs/srv/Trigger）と連携する。
 RAW設定はドライバparameter service経由。通常の診断は`/event_camera/diagnostics`（diagnostic_msgs/msg/DiagnosticArray）。
 イベントpacket出版は無効。ROS標準管理topic/serviceは省略。
@@ -93,3 +93,30 @@ RAW設定はドライバparameter service経由。通常の診断は`/event_came
 
 Portableテストは`test/test_mission.py`。ROS component load、実機profile・画像配送、
 TF、RAW/MCAP同時記録、GPU実行は未確認。
+
+## EVS Tensor・可視化
+
+OpenEB sourceはpackages.reposのf89015ba1f05d2fe432b270e73e132351c1a9377。
+`modules/sensors/openeb.launch.py`はopeneb_tensor_pipelineへ全運用YAMLを渡す。
+`openeb_tensor_pipeline.yaml`のtensor_backendはcuda_async（既定）/cpu/cudaから選択し、
+対応するopeneb_tensor_<backend>.yamlを読む。全parameter・既定値・意味は
+[parameter一覧](openeb_parameters.md)を参照（各運用YAMLは全parameterを記載、値変更なし）。
+`openeb_visualization.yaml`は赤青白bgr8・25 Hz、購読者がいる時だけ生成。
+起動時固定のTensor設定は再起動で変更する。driverのpacket_publish_enabledは動的変更可。
+
+| 出力topic | 型 | QoS | 内容 |
+|---|---|---|---|
+| /event_camera/tensor | isaac_ros_tensor_msgs/msg/TensorList | reliable/volatile/depth 8（cpu,cudaは4） | FP32 NCHW [1,20,120,212]、250 Hz |
+| /event_camera/event_image | sensor_msgs/msg/Image | best effort/volatile/depth 2 | ON赤/OFF青/背景白、25 Hz |
+| /event_camera/events_raw | event_camera_msgs/msg/EventPacket | best effort/volatile/depth 8 | 既定OFF、動的ON可 |
+| /event_camera/diagnostics | diagnostic_msgs/msg/DiagnosticArray | reliable/volatile/depth 1 | driver/画像診断、1 Hz |
+| /event_camera/tensor_diagnostics | diagnostic_msgs/msg/DiagnosticArray | reliable/volatile/depth 10 | tensor診断、1 Hz |
+
+ノードは/event_camera/{tensor_pipeline,event_camera_driver,event_tensor,event_preprocessor}。
+標準ROS自動topicは省略。RAW start/stop/splitは同namespaceのstd_srvs/srv/Trigger。
+Tensorはbag標準対象から除外。RAWと制御stampの正確な同期、GPU共有、実機性能は未検証。
+
+Bias配置先はproject rootの`bias/evs/`。運用YAMLのbias_file既定は空。
+起動時overrideのevs_bias_fileは空ならYAML保持、@defaultならカメラ既定、
+それ以外は検証した.bias絶対パス。evs_backend/evs_serialも明示時のみ上書きする。
+`bringup.sh`のTUIでdecoderとbiasを選択できる。

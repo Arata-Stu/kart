@@ -52,8 +52,13 @@ def main():
     parser.add_argument(
         "--evs",
         action="store_true",
-        help="SilkyEvCam RAW連携（openeb_ros2 kart branchが必要）",
+        help="SilkyEvCam direct Tensor・画像・RAW連携",
     )
+    parser.add_argument("--no-evs", action="store_true", help="EVSを無効にする")
+    parser.add_argument("--evs-backend", choices=("cpu", "cuda", "cuda_async"), default="")
+    parser.add_argument("--evs-serial", default="")
+    parser.add_argument("--evs-bias-file", default="", help=".bias path; @defaultでカメラ既定")
+    parser.add_argument("--bias-root", type=Path, default=ROOT / "bias/evs")
     parser.add_argument("--foxglove", action="store_true")
     parser.add_argument("--no-bridge", action="store_true", help="車両基板なしの確認用")
     parser.add_argument(
@@ -64,6 +69,11 @@ def main():
     parser.add_argument("--bag", default="")
     parser.add_argument("--rate", default="")
     args = parser.parse_args()
+    from kart_bringup.evs import BACKENDS, DEFAULT_BIAS, bias_files, bias_selection, pipeline_configuration
+    selected_evs = args.evs or any((args.evs_backend, args.evs_serial, args.evs_bias_file))
+    if args.no_evs and selected_evs:
+        raise ValueError("--no-evsとEVS指定は併用できません")
+    args.evs = selected_evs
     from kart_bringup.mission import discover, hdmap_choices, sensor_parameters
 
     interactive = args.mode is None
@@ -104,11 +114,18 @@ def main():
                 raise ValueError("VSLAM/VGLにはInfraが必要です（なしは選択できません）")
             if args.mode == "e2e" and args.rgb_fps == "0":
                 raise ValueError("E2EにはRGBが必要です")
-            args.evs = args.evs or choose(
-                "SilkyEvCam VGA RAW記録",
+            args.evs = not args.no_evs and (args.evs or choose(
+                "EVS（Tensor・画像・RAW記録）",
                 [False, True],
                 lambda v: "有効" if v else "無効",
-            )
+            ))
+            if args.evs:
+                if not args.evs_backend:
+                    import yaml
+                    default_backend = yaml.safe_load((config / "sensors/openeb_tensor_pipeline.yaml").read_text())["/**/tensor_pipeline"]["ros__parameters"]["tensor_backend"]
+                    args.evs_backend = choose("EVS decoder", list(BACKENDS), default=BACKENDS.index(default_backend))
+                if not args.evs_bias_file:
+                    args.evs_bias_file = str(choose("EVS bias file", [DEFAULT_BIAS] + bias_files(args.bias_root), lambda p: "カメラ既定" if p == DEFAULT_BIAS else str(p)))
             args.foxglove = args.foxglove or choose(
                 "Foxglove Bridge", [False, True], lambda v: "有効" if v else "無効"
             )
@@ -171,6 +188,13 @@ def main():
             )
         elif args.run_name is None:
             args.run_name = input("run_name [run] > ").strip() or "run"
+    if args.mode == "eval" and args.evs:
+        raise ValueError("evalでは実EVSを起動しません")
+    if args.evs:
+        paths, overrides = pipeline_configuration(config / "sensors", args.evs_backend, args.evs_serial, args.evs_bias_file)
+        if args.evs_bias_file and args.evs_bias_file != DEFAULT_BIAS:
+            args.evs_bias_file = bias_selection(args.evs_bias_file)
+        print(f"EVS: {overrides}; packet topic OFF; configs={paths}")
     sensors = sensor_parameters(
         config / "sensors/realsense.yaml", args.rgb_fps or "", args.infra_fps or ""
     )
@@ -216,6 +240,9 @@ def main():
         "enable_bridge": str(not args.no_bridge).lower(),
         "device": args.device,
         "enable_evs": str(args.evs).lower(),
+        "evs_backend": args.evs_backend,
+        "evs_serial": args.evs_serial,
+        "evs_bias_file": args.evs_bias_file,
         "enable_foxglove": str(args.foxglove).lower(),
         "record_dir": args.record_dir,
         "run_name": args.run_name or "run",
@@ -280,7 +307,7 @@ def main():
         ) or sys.exit(0)
     if not shutil.which("ros2"):
         raise ValueError(
-            "ros2がありません。scripts/dev.shでROSコンテナへ入り、scripts/build.shでビルドしてください"
+            "ros2がありません。scripts/dev.shでROSコンテナへ入り、scripts/workspace/build.shでビルドしてください"
         )
     os.execvp(command[0], command)
 

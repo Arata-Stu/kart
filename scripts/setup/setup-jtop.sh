@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Explicit host setup; dev.sh never installs packages or restarts services.
 set -euo pipefail
-KART_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+KART_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 if [[ "$(uname -s)" != Linux || "$(uname -m)" != aarch64 || "$EUID" != 0 ]]; then
-    echo 'Run on the Jetson host: sudo ./scripts/setup-jtop.sh "$(command -v uv)"' >&2
+    echo 'Run on the Jetson host: sudo ./scripts/setup/setup-jtop.sh "$(command -v uv)"' >&2
     exit 1
 fi
 UV_BIN="${1:?Pass the absolute path to the uv executable}"

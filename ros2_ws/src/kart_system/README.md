@@ -124,5 +124,5 @@ ros2 run kart_system kart_command_mux
 
 全体の同時起動は[kart_bringup](../kart_bringup/README.md)。
 `colcon test --packages-select kart_system`でcontrol_core・joy_controlsを実行する。
-ROSを使わないテストはプロジェクトrootの`./scripts/test-vehicle.sh`でも実行可能。
+ROSを使わないテストはプロジェクトrootの`./scripts/tests/test-vehicle.sh`でも実行可能。
 単体テストはmacOSで確認済み。ROS上の結合ビルド・実機動作は未検証。

@@ -8,6 +8,7 @@ install(PROGRAMS scripts/prepare_vgl_map scripts/replay_ready DESTINATION lib/${
 install(FILES README.md DESTINATION share/${PROJECT_NAME})
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(evs test/test_evs.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}:${CMAKE_CURRENT_SOURCE_DIR}/../kart_hdmap:${CMAKE_CURRENT_SOURCE_DIR}/../kart_e2e:${CMAKE_CURRENT_SOURCE_DIR}/../kart_bag_manager)
   ament_add_pytest_test(mission test/test_mission.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}:${CMAKE_CURRENT_SOURCE_DIR}/../kart_hdmap:${CMAKE_CURRENT_SOURCE_DIR}/../kart_e2e)
   ament_add_pytest_test(replay test/test_replay.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}:${CMAKE_CURRENT_SOURCE_DIR}/../kart_e2e)
   ament_add_pytest_test(foxglove test/test_foxglove.py)

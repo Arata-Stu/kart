@@ -1,31 +1,29 @@
-"""Optional SilkyEvCam driver; native RAW starts only on bag-manager request."""
+"""Owned direct EVS pipeline; explicit startup overrides follow operational YAML."""
+from pathlib import Path
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+from kart_bringup.evs import pipeline_configuration
 
-import isaac_ros_launch_utils as lu
-import isaac_ros_launch_utils.all_types as lut
 
-
-def add_driver(args):
-    config = lu.get_path("kart_bringup", "config/sensors/openeb.yaml")
+def setup(context):
+    root = Path(get_package_share_directory("kart_bringup")) / "config/sensors"
+    paths, overrides = pipeline_configuration(
+        root, *(LaunchConfiguration(key).perform(context)
+                for key in ("evs_backend", "evs_serial", "evs_bias_file")))
     return [
-        lu.log_info(f"OpenEB config: {config}; RAW auto-start disabled"),
-        lu.load_composable_nodes(
-            args.container_name,
-            [
-                lut.ComposableNode(
-                    package="openeb_ros2",
-                    plugin="openeb_ros2::DriverComponent",
-                    name="event_camera_driver",
-                    namespace="event_camera",
-                    parameters=[str(config)],
-                    extra_arguments=[{"use_intra_process_comms": True}],
-                )
-            ],
-        ),
+        LogInfo(msg=f"OpenEB configs={paths}; overrides={overrides}; packet default OFF"),
+        Node(package="openeb_ros2", executable="openeb_tensor_pipeline",
+             name="tensor_pipeline", namespace="event_camera",
+             parameters=[*(str(p) for p in paths), overrides], output="screen"),
     ]
 
 
 def generate_launch_description():
-    args = lu.ArgumentContainer()
-    args.add_arg("container_name", description="Existing sensor container", cli=True)
-    args.add_opaque_function(add_driver)
-    return lut.LaunchDescription(args.get_launch_actions())
+    return LaunchDescription([
+        *(DeclareLaunchArgument(key, default_value="")
+          for key in ("evs_backend", "evs_serial", "evs_bias_file")),
+        OpaqueFunction(function=setup),
+    ])

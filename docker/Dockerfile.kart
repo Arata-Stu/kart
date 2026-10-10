@@ -86,6 +86,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         iproute2 iputils-ping dnsutils netcat-openbsd socat tcpdump iperf3 \
         usbutils v4l-utils \
         cmake ninja-build pkg-config libevdev-dev libyaml-cpp-dev python3-yaml python3-pytest python3-numpy python3-pil \
+        ros-lyrical-event-camera-codecs ros-lyrical-event-camera-msgs \
         ros-lyrical-ament-cmake-auto ros-lyrical-ament-cmake-python \
         ros-lyrical-ament-cmake-pytest ros-lyrical-rclcpp-components \
         ros-lyrical-rosidl-default-generators ros-lyrical-diagnostic-msgs ros-lyrical-ackermann-msgs \
@@ -98,7 +99,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ros-lyrical-rclcpp ros-lyrical-rclpy ros-lyrical-rosbag2-transport \
         ros-lyrical-rosidl-default-runtime ros-lyrical-rosidl-runtime-py \
         ros-lyrical-tf2 ros-lyrical-tf2-msgs ros-lyrical-tf2-ros \
-        ros-lyrical-cuda-buffer ros-lyrical-tensor-msgs \
+        ros-lyrical-cuda-buffer ros-lyrical-cuda-buffer-backend ros-lyrical-tensor-msgs \
         ros-lyrical-isaac-ros-common ros-lyrical-isaac-ros-image-proc \
         ros-lyrical-isaac-ros-tensor-msgs ros-lyrical-isaac-ros-tensor-proc \
         ros-lyrical-isaac-ros-visual-slam-interfaces \

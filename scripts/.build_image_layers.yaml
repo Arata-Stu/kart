@@ -1,5 +1,5 @@
 image_key_order:
-  - isaac_ros.realsense.kart
+  - isaac_ros.realsense.openeb.kart
 context_overrides:
   isaac_ros: ..
   # Reuse helpers and the Lyrical patch from the commit pinned in packages.repos.

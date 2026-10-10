@@ -219,7 +219,7 @@ steeringはROS左正から、既存基板の左1000 µsへ既定`steering_scale=
 2026-10-05、macOS上で以下を確認した。
 
 ```bash
-./scripts/test-vehicle.sh /Users/at/project/tmp/kart_bridge_board
+./scripts/tests/test-vehicle.sh /Users/at/project/tmp/kart_bridge_board
 ```
 
 - Joy managerの連続入力、ボタンedge・長押し・再接続時の誤発火防止: pass

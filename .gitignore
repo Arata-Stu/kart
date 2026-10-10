@@ -27,3 +27,9 @@ __pycache__/
 
 # Learning UI generated datasets, checkpoints and ONNX bundles.
 /e2e/
+
+/docker/silky_evcam_plugin_source/*
+!/docker/silky_evcam_plugin_source/README.md
+/ros2_ws/src/sensing/openeb_ros2/
+
+/tools/evs_bias_tuner/build/

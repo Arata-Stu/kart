@@ -265,3 +265,16 @@ evalは実センサなしのbag再生なのでlocalization自身がcontainerを�
 E2Eはlocalizationを起動せず、実行時throttleと前処理の正本はモデルmetadata。
 evalは再生・localization・HDMap・RVizに限定し、古い動的TFや制御指令を再生しない。
 録画のsession directoryは最初のSTARTで作成し、run_nameを起動時に選ぶ。
+
+## 10. EVS direct入力
+
+OpenEB direct tensor pipelineはSDK callbackと3方式のencoder、画像workerを
+同一専用processで所有する。missionがprocessを一度だけ起動し、sensor containerへ
+driverを重複loadしない。EVS TensorRT consumerは専用tensor_containerへ接続する。
+通常RGB E2E起動へのEVSモデル接続は未実装。RAWはbag manager連携、
+Tensorは既定では録画しない。
+
+EVS packet topicは通常出版しない。可視化とbias調整はpacket配信に依存させない。
+運用biasはproject rootのbias/evsへ置き、bringupで起動時に明示選択する。
+調整ツールはROS非依存でカメラを直接占有し、driverと同時起動しない。
+プラグインソースは配置先のみ用意し、ユーザーが公式配布物を配置する。

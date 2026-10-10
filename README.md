@@ -35,7 +35,7 @@ ROSを使う場合は`colcon build --symlink-install --packages-up-to kart_mappi
 自動運転アルゴリズムは未実装。ROS結合ビルドおよびRealSense・Joy・車両の実機動作は未検証。
 
 Joyノードのビルド・GUI/CUI設定手順は [kart_joy README](ros2_ws/src/kart_joy/README.md) を参照。
-DualSenseのBluetooth接続はLinuxホストまたはkart Docker内の`./scripts/bluetooth.sh`を使う。
+DualSenseのBluetooth接続はLinuxホストまたはkart Docker内の`./scripts/setup/bluetooth.sh`を使う。
 Dockerからは共有D-Bus経由でホストのBlueZを操作する。
 検索・ペアリング・再接続は[セットアップ手順](docs/setup/jetson.md#8-dualsense接続初回profile)を参照。
 
@@ -63,8 +63,8 @@ Dockerからは共有D-Bus経由でホストのBlueZを操作する。
 ```bash
 # kartルート、Ubuntuホスト上
 sudo apt install python3-vcstool
-./scripts/repos.sh import
-./scripts/repos.sh status
+./scripts/workspace/repos.sh import
+./scripts/workspace/repos.sh status
 ```
 
 `tools/isaac-ros-cli` は外部Gitとして管理し、kart本体へ内容を追加しない。
@@ -123,13 +123,13 @@ SSH/HTTPS認証は別途用意する必要がある。git worktreeで`.git`が�
 `colcon build --symlink-install`を実行する。追加引数はそのままcolconへ渡す。
 
 ```bash
-/workspaces/scripts/build.sh
+/workspaces/scripts/workspace/build.sh
 # 車両関連だけビルドする場合
-/workspaces/scripts/build.sh --packages-up-to kart_bringup
+/workspaces/scripts/workspace/build.sh --packages-up-to kart_bringup
 source /workspaces/ros2_ws/install/setup.bash
 ```
 
-プロジェクトルートからは`./scripts/build.sh`、`ros2_ws`からは`../scripts/build.sh`でも実行できる。
+プロジェクトルートからは`./scripts/workspace/build.sh`、`ros2_ws`からは`../scripts/workspace/build.sh`でも実行できる。
 ROSワークスペースの外部依存はDockerfileで導入するため、通常はコンテナ内の`rosdep install`は不要。
 依存追加時は`package.xml`と`docker/Dockerfile.kart`を更新し、Dockerイメージを再ビルドする。
 
@@ -249,7 +249,7 @@ JetPilotで使っていた任意ライブラリのロード失敗対策パッチ
 必要な場合だけ次をJetsonホストで実行する。この操作はホストのjtopを置き換え、サービスを再起動する。
 
 ```bash
-sudo ./scripts/setup-jtop.sh "$(command -v uv)"
+sudo ./scripts/setup/setup-jtop.sh "$(command -v uv)"
 sudo usermod -aG jtop "$USER"
 # グループ追加後はログインし直す
 /usr/bin/python3 scripts/check-jtop.py
@@ -353,3 +353,15 @@ CLIのPython単体テストと、manifestの取り込みをmacOSで確認する�
 [設計方針](docs/policies/e2e.md)と`kart_bringup/config/e2e/`を参照。
 実行時は公式Isaac ROS GPU画像encoder＋TensorRT＋C++ decoder。PyTorchは学習・ONNX変換専用。
 既定は車両に接続しない推論出力。ROS/GPU・実機検証は未完了。
+
+## EVS導入（2026-10-10）
+
+手順は[EVSセットアップ](docs/setup/evs.md)。`packages.repos`でopeneb_ros2を固定commit取得し、
+`./scripts/dev.sh --evs --build-local`でSilkyEvCam対応OpenEB 5.2.0レイヤーを追加する。
+通常のdevは追加しない。公式プラグインソースの配置が必要。
+
+EVSの起動時decoder/bias選択は`bash scripts/bringup.sh`。Bias配置先は[bias/evs](bias/evs/README.md)。
+調整ツールは[EVS Bias Tuner](tools/evs_bias_tuner/README.md)、`bash scripts/sensors/evs-bias.sh --build`。
+通常はevent packet topicを出版せず、direct Tensorとイベント画像を使用する。
+
+スクリプトの用途と配置は[scripts/README.md](scripts/README.md)を参照。普段使う入口はscripts直下、補助shはworkspace/・setup/・sensors/・tests/に配置します。

@@ -242,8 +242,8 @@ mkdir -p ~/workspaces
 read -r -p 'kart repository URL: ' KART_REPO_URL
 git clone "$KART_REPO_URL" ~/workspaces/kart
 cd ~/workspaces/kart
-./scripts/repos.sh import
-./scripts/repos.sh status
+./scripts/workspace/repos.sh import
+./scripts/workspace/repos.sh status
 git -C tools/isaac-ros-cli rev-parse HEAD
 mkdir -p record map config
 ```
@@ -304,7 +304,7 @@ uv --version
 
 ```bash
 cd ~/workspaces/kart
-sudo ./scripts/setup-jtop.sh "$(command -v uv)"
+sudo ./scripts/setup/setup-jtop.sh "$(command -v uv)"
 sudo usermod -aG jtop "$USER"
 ```
 
@@ -357,7 +357,7 @@ ros2 pkg prefix realsense2_camera
 /usr/bin/python3 -c 'import tensorrt; print(tensorrt.__version__)'
 nvidia-smi
 
-/workspaces/scripts/build.sh
+/workspaces/scripts/workspace/build.sh
 source install/setup.bash
 colcon test --packages-select kart_system kart_vehicle kart_joy
 colcon test-result --verbose
@@ -377,7 +377,7 @@ CLIを使う場合はホストのkartルート、またはkart Dockerの`/worksp
 ホストに`sudo apt install bluez`で導入する。
 
 ```bash
-bash ./scripts/bluetooth.sh
+bash ./scripts/setup/bluetooth.sh
 ```
 
 JetPilotの`scripts/bluetooth.sh`を変更せずコピーして使用する。

@@ -30,9 +30,15 @@ def add_mission(args):
         "record_dir": args.record_dir,
         "run_name": args.run_name,
     }
+    evs_values = {key: getattr(args, key, "") for key in ("evs_backend", "evs_serial", "evs_bias_file")}
+    if any(evs_values.values()) and not cfg["enable_evs"]:
+        raise ValueError("EVS startup overrides require enable_evs:=true")
     if cfg["enable_evs"]:
+        from kart_bringup.evs import pipeline_configuration
+        pipeline_configuration(root / "sensors", *evs_values.values())
         get_package_share_directory("openeb_ros2")
         vehicle["bag_config"] = str(root / "recording/bag_manager_openeb.yaml")
+        vehicle["bag_shutdown_timeout"] = "26"
     load(
         root / "bringup.yaml", vehicle
     )  # Validate device/config before any node starts.
@@ -91,7 +97,7 @@ def add_mission(args):
         actions.append(
             include(
                 "modules/sensors/openeb.launch.py",
-                {"container_name": "/" + cfg["sensor_container"].lstrip("/")},
+                evs_values,
             )
         )
     actions.append(include("vehicle.launch.py", vehicle))
@@ -144,6 +150,9 @@ def generate_launch_description():
         "record_dir",
         "run_name",
         "e2e_model_dir",
+        "evs_backend",
+        "evs_serial",
+        "evs_bias_file",
         "rgb_fps",
         "infra_fps",
         "map_dir",

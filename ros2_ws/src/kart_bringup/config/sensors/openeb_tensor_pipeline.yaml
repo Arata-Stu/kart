@@ -1,0 +1,5 @@
+# Source: openeb_ros2 f89015ba1f05d2fe432b270e73e132351c1a9377, tensor_pipeline.yaml; 2026-10-10.
+# Full parameters; values unchanged. Direct pipeline forces packet subscriptions off.
+/**/tensor_pipeline:
+  ros__parameters:
+    tensor_backend: "cuda_async"

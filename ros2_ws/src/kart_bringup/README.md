@@ -241,7 +241,7 @@ rule-based制御と同時起動しない。外部containerのComponentはlaunch�
 recording/bag_manager_openeb.yamlは全bag manager設定を含む運用profile。
 raw_recording_driver_node=/event_camera/event_camera_driverを設定し、
 RAWをrosbagと同じsession directoryに保存する。利用時はbag_configでこのファイルを指定し、
-bag_shutdown_timeout:=26等で終了猶予を確保する。カメラは別途openeb_ros2のkart branchで起動する。
+bag_shutdown_timeout:=26等で終了猶予を確保する。missionのenable_evsでOpenEB direct pipelineを起動する。
 RAW記録はnative OpenEB writer、rosbagはMCAP writerとして独立する。
 イベントpacketとGPU tensor payloadは除外し、可視化Imageと診断を対象に加える。
 通常profileはRAW連携無効のまま。実カメラ・サービス結合は未確認。
@@ -378,3 +378,34 @@ portable検証とROS/GPU/実bag動作は別であり、実機統合は未検証�
 
 vehicle.launch.pyの追加実行時引数run_name（既定空）はrecording_name、session_layout（既定空）は
 bagのsession_layoutを明示上書きする。空の場合は運用YAMLを保持する。
+
+## EVS direct pipeline
+
+`mission.launch.py enable_evs:=true`は専用プロセスの`openeb_tensor_pipeline`を所有する。
+RealSense用sensor containerとは別。driver/event_tensor/event_preprocessorと
+`/event_camera/tensor_container`は同一EVSプロセスにあり、packet topicを経由しない。
+全設定とtopic/parameterの説明は[センサ設定](config/sensors/README.md)。
+RAWはbag START後に同一session dirへ保存し、起動では録画しない。
+EVS有効時のbag終了猶予は26秒。現在のE2E missionはRGBモデル専用であり、
+EVSモデルのTensorRT接続・制御decoder統合は別途必要。
+
+### EVS起動時選択
+
+`bash scripts/bringup.sh`のTUIでEVS有効/無効、decoder（cpu/cuda/cuda_async）、
+`bias/evs/`の.bias一覧またはカメラ既定を選択する。packet topicは既定OFF。
+CLIは`--evs`、`--no-evs`、`--evs-backend`、`--evs-serial`、`--evs-bias-file`、
+`--bias-root`。decoder/serial/biasの明示指定はEVSを有効にする。evalではEVS指定を拒否する。
+
+| mission/module launch引数 | 既定値 | 意味 |
+|---|---|---|
+| evs_backend | 空 | 運用YAMLのcuda_asyncを保持。cpu/cuda/cuda_async選択 |
+| evs_serial | 空 | 運用YAMLのserialを保持 |
+| evs_bias_file | 空 | 運用YAMLのbias_fileを保持。.bias絶対パス、@defaultでカメラ既定 |
+
+`bias_file`は起動時のみ適用し、変更後はdriverを再起動する。
+モジュールは運用YAML全体に明示overrideを最後に適用し、実効選択をログ表示する。
+`evs_bias_file:=@default`は空bias_fileへ変換する。biasパスは起動前に存在・拡張子・非空を確認。
+SDKによる内容/機種互換性確認は実機起動時。
+チューナーは[tools/evs_bias_tuner](../../../tools/evs_bias_tuner/README.md)、
+`bash scripts/sensors/evs-bias.sh --build`でビルド/起動する。実行時にカメラを占有するのでbringupと併用しない。
+検証はtest/test_evs.pyとtest/test_mission.py。ROS結合・実機bias適用は未確認。

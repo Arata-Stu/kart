@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Portable tests only: no ROS daemon, USB device, or vehicle access.
 set -euo pipefail
-kart_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+kart_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 kart_build=$(mktemp -d "${TMPDIR:-/tmp}/kart-vehicle-test.XXXXXX")
 trap 'rm -rf "$kart_build"' EXIT
 cxx=${CXX:-c++}

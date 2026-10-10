@@ -9,5 +9,5 @@ D-Bus API操作を読み取り専用に制限しない。開発用コンテナ�
 Connected: yesはBluetooth接続状態の確認であり、入力鮮度や実車停止の保証ではない。
 JetPilotのBlueZ導入・D-Bus共有を参考にした。実Docker/実Bluetoothは別途検証する。
 
-ユーザー指定により、scripts/bluetooth.shはJetPilot版をそのままコピーする。
+ユーザー指定により、scripts/setup/bluetooth.shはJetPilot版をそのままコピーする。
 独自の自動判定・引数・接続確認を追加しない。選択したMACのremoveを含む元の動作を維持する。

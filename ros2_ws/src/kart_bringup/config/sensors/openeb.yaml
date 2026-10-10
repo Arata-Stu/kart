@@ -1,6 +1,6 @@
 # Source: openeb_ros2 kart branch config/driver_bag_linked.yaml, 2026-10-10.
 # Full driver settings for native RAW recording linked to bag START/STOP.
-# Optional package; no image/tensor components are loaded by this mission.
+# Direct pipeline: packet OFF, tensor and visualization remain enabled.
 /**/event_camera_driver:
   ros__parameters:
     packet_publish_enabled: false

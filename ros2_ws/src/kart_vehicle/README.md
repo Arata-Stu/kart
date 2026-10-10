@@ -130,5 +130,5 @@ ros2 run kart_vehicle kart_bridge_node --ros-args -p device:=/dev/serial/by-id/�
 通常は[kart_bringup](../kart_bringup/README.md)で全体を起動する。
 macOSでprotocol・arm制御・擬似端末の単体テスト、実firmwareパーサーとの45指令の照合を確認済み。
 ESCモデルの全20遷移、負入力保持、専用brake拒否、制御権喪失、整数化境界を単体テスト済み。
-再実行: `scripts/test-vehicle.sh /path/to/kart_bridge_board`（project rootから、実機アクセスなし）。
+再実行: `scripts/tests/test-vehicle.sh /path/to/kart_bridge_board`（project rootから、実機アクセスなし）。
 ROS結合ビルド、実USB再接続、CH3切替・ESC動作は未検証。
