@@ -21,3 +21,11 @@
 
 bringupではsession_layout=trueで起動日時/date/time/run_nameへ保存する。
 最初のSTARTまでdirectoryは作成しない。同セッション再録画はname_01等で既存資産を保持する。
+
+## EVS学習時刻契約
+
+RAW relative_usはreaderのshiftを明示してセンサ時刻へ戻す。
+Tensor windowごとにsensor_to_ros_offset_nsをbagへ保存し、整数nsで対応付ける。
+録画開始ROS時刻とRAWの0を等置しない。Tensor headerとwindow endも区別する。
+RAW splitごとのshift、sensor resetごとのepoch、メタデータsequenceの欠落を確認する。
+packet topic/Tensor本体は標準収集対象外。offsetは受信遅延を含む推定で実機校正が必要。

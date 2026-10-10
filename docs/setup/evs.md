@@ -101,3 +101,19 @@ bash scripts/bringup.sh --mode collect --evs --evs-backend cuda_async \
 --bias-root DIRでbiasの一覧探索先を変更。カメラ既定は--evs-bias-file @default。
 packet topicは出版せず、direct Tensorと赤青白画像を使う。
 Bias内容のSDK互換性、チューナーGUI、調整値の実機適用は未確認。
+
+## 学習用時刻保存
+
+OpenEB用bag profileに/event_camera/tensor_timingを追加済み。
+Tensorの窓とセンサ→ROS offsetを250 Hzの軽量JSONとして記録する。
+各RAWを閉じた後、timestamp shiftを取得して同dirに保存する:
+
+```bash
+bash scripts/sensors/evs-raw-timing.sh --build /workspaces/record/session/camera.raw \
+  > /workspaces/record/session/camera.raw.time_shift.json
+```
+
+この出力ファイルはコマンド実行前にshellが作るため、失敗時は空のJSONを利用しないこと。
+式は`ros_ns=(raw_relative_us+raw_sensor_shift_us)*1000+sensor_to_ros_offset_ns`。
+学習readerのtime shifting設定を合わせる。推定offsetはUSB遅延を含み同期精度は未検証。
+openeb_ros2のこの追加はローカル変更。別環境へvcs取得するにはcommit/pushとpackages.repos更新が必要。

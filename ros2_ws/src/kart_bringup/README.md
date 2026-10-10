@@ -409,3 +409,11 @@ SDKによる内容/機種互換性確認は実機起動時。
 チューナーは[tools/evs_bias_tuner](../../../tools/evs_bias_tuner/README.md)、
 `bash scripts/sensors/evs-bias.sh --build`でビルド/起動する。実行時にカメラを占有するのでbringupと併用しない。
 検証はtest/test_evs.pyとtest/test_mission.py。ROS結合・実機bias適用は未確認。
+
+OpenEB学習収集では/event_camera/tensor_timing（std_msgs/msg/String、JSON v1、
+reliable/volatile/depth 512、既定250 Hz）をOpenEB用bag profileへ追加。
+GPU Tensorは記録せず、窓のセンサ時刻とsensor_to_ros_offset_nsを保存する。
+RAWの相対時刻には各RAWのSDK timestamp shiftを足し、そのoffsetでROS時刻へ変換する。
+録画開始ROS時刻をRAWの0へ直接対応させない。
+RAW shift取得ツールはtools/evs_raw_timing（scripts/sensors/evs-raw-timing.sh）。
+USB遅延を含む推定なので、実機で同期精度を確認する。
