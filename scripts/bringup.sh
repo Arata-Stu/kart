@@ -8,4 +8,4 @@ fi
 if [[ -f "$kart_root/ros2_ws/install/setup.bash" ]]; then
     source "$kart_root/ros2_ws/install/setup.bash"
 fi
-exec "${KART_BRINGUP_PYTHON:-python3}" "$kart_root/scripts/bringup.py" "$@"
+exec "${KART_BRINGUP_PYTHON:-python3}" "$kart_root/scripts/lib/bringup.py" "$@"

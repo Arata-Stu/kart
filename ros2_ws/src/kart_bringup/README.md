@@ -260,6 +260,7 @@ Foxgloveからの操作は`/localization/pose_hint`とVGL検索要求だけに�
 ## 用途別起動（TUI）
 
 ROS開発コンテナ内で、リポジトリルートから`bash scripts/bringup.sh`を実行する。
+補助実装は`scripts/lib/bringup.py`。通常はshの入口を使う。
 番号選択とEnterで用途、RGB/InfraのHz、EVS、Foxglove、USB車両基板を選ぶ。
 地図走行ではmap/を深さ6まで探索し、HDMap、lane＋line、対応するVSLAM/VGL bundleを選択する。
 モデルはmodels/およびmap/からALIKED/LightGlue資産を検出する。ごみ箱・隠しdirectory・

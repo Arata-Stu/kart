@@ -105,7 +105,7 @@ class MissionTests(unittest.TestCase):
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "scripts/bringup.py"),
+                str(ROOT / "scripts/lib/bringup.py"),
                 "--mode",
                 "collect",
                 "--no-bridge",
@@ -131,7 +131,7 @@ class MissionTests(unittest.TestCase):
         result = subprocess.run(
             [
                 sys.executable,
-                str(ROOT / "scripts/bringup.py"),
+                str(ROOT / "scripts/lib/bringup.py"),
                 "--mode",
                 "drive",
                 "--no-bridge",

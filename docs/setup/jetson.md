@@ -420,7 +420,7 @@ ros2 topic echo /joy
 ros2 run kart_joy kart_joy_config cui
 ```
 
-`dev.sh`がホストのinputグループとeventデバイスの所有GIDを読み、補助グループへ自動追加する。
+`dev.sh`がホストのinput/dialout/plugdevグループとevent/ttyACM/ttyUSBデバイスの所有GIDを読み、補助グループへ自動追加する。
 古いコンテナはホストで`docker stop kart_dev`後、`./scripts/dev.sh`で再作成する。
 イメージ再ビルドや固定GIDの手動記載は不要。新たなデバイスが別GIDで作成された場合も再作成する。
 詳細・GUI・入力確認は[kart_joy README](../../ros2_ws/src/kart_joy/README.md)を参照。
@@ -431,7 +431,10 @@ USB bridgeを使う場合、まずホストとコンテナで`ls -l /dev/serial/
 `ls -ln /dev/ttyACM*`を照合する。基板IDは実物から選び、最初のttyACMを自動選択しない。
 コンテナ内にby-idがない場合は、対応を確認したttyACMパスを明示する。
 デバイスが見えない場合は`docker/dockerargs`に対象の`--device=/dev/ttyACM0`等を追加して再作成する。
-権限不足なら対象デバイスの数値GIDを`--group-add`で追加する。
+`dev.sh`がdialoutとttyACM/ttyUSBの数値GIDを`--group-add`で自動追加する。
+権限不足の場合はコンテナ内の`id`と`ls -ln /dev/ttyACM* /dev/ttyUSB*`を照合する。
+設定変更前のコンテナでは反映されないので、bringup終了後にホストで対象コンテナを停止・再作成する。
+標準構成はkart_dev、EVS構成はkart_evs_dev。イメージ再ビルドは不要。
 追加した固定デバイスの抜き差し後のアクセスは別途確認する。
 
 bridge無効のlaunchを終了し、車輪を浮かせた状態で、実物のパスに置き換えて起動する。

@@ -98,7 +98,7 @@ CLI更新は、kart本体・`packages.repos`を更新後に`./scripts/update-isa
 ビルド依存導入・固定commit取得・debビルド・インストールを行う。
 詳細は[セットアップREADME](docs/setup/jetson.md#cliを後から更新する)を参照。
 
-通常の起動は `./scripts/dev.sh`。ホストのinputグループ・evdev所有GIDを補助グループへ自動追加する。
+通常の起動は `./scripts/dev.sh`。ホストのinput/dialout/plugdevグループ・evdev/USBシリアル所有GIDを補助グループへ自動追加する。
 既存コンテナへのattachでは反映されないため、初回反映は停止後に再作成する。コンテナ内では次の配置になる。
 
 ```text

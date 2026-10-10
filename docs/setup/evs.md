@@ -31,7 +31,35 @@ pluginソースの存在確認はEVSイメージをビルドする時のみ行�
 `--packages-skip openeb_ros2`を指定する。
 packages.reposはopeneb_ros2 commit f89015ba1f05d2fe432b270e73e132351c1a9377を固定。
 プラグインソースの版・カメラfirmwareとの互換性は配布元で確認する。
-USBアクセスは既存CLIの/devマウントを利用。ホスト側の認識と権限をlsusbで確認する。
+USBアクセスは既存CLIの/devマウントを利用。lsusbでホストの認識、
+/dev/bus/usbの対象ノードのmode/GIDとコンテナ内idで権限を確認する。
+
+### ホストのUSB権限（初回必須）
+
+SilkyEvCamのLIBUSB_ERROR_ACCESSはUSBを開く権限がないことを示す。
+後続のCamera not foundだけで未接続と判断しない。
+メーカー公式のca_device.rulesを**Jetson/Notebookホスト側**へ配置する。
+Docker内のOpenEBインストールは、ホストのudevへルールを導入しない。
+
+リポジトリルートで、配置済みのメーカー公式plugin sourceを利用する:
+
+```bash
+sudo install -m 0644 docker/silky_evcam_plugin_source/hal_psee_plugins/resources/rules/ca_device.rules /etc/udev/rules.d/ca_device.rules
+sudo udevadm control --reload-rules
+```
+
+bringupを終了してカメラを抜き差しする。上記ファイルがない場合はメーカー公式ページの
+ca_device.zipを展開してca_device.rulesを使う。VID/PIDを推測したルールや
+/dev/bus/usb全体へのchmodは使わない。
+
+dev.shはホストのplugdevが存在すれば数値GIDをDocker補助グループへ追加する。
+反映にはコンテナ再作成が必要。bringup終了後、ホストで
+`docker stop kart_evs_dev`、続いて`bash scripts/dev.sh --evs`。
+イメージ再ビルドは不要。udevルール自体が未適用ならグループ追加だけでは解決しない。
+
+出典: [CenturyArks公式plugin手順](https://centuryarks.com/en/faq/silkyevcams-plugin-source-for-metavision-openeb/)、
+[Prophesee公式FAQ](https://docs.prophesee.ai/stable/faq.html)（2026-10-10確認）。
+対象カメラのUSB認識・権限・OpenEB起動は実機確認が必要。
 
 ## EVSコンテナ内
 

@@ -47,7 +47,7 @@ class EvsTests(unittest.TestCase):
                 bias_selection(str(good))
 
     def run_cli(self, *args):
-        return subprocess.run([sys.executable, str(ROOT / "scripts/bringup.py"),
+        return subprocess.run([sys.executable, str(ROOT / "scripts/lib/bringup.py"),
                                "--mode", "collect", "--no-bridge", "--dry-run", *args],
                               text=True, capture_output=True, env=os.environ.copy())
 
@@ -69,7 +69,7 @@ class EvsTests(unittest.TestCase):
         import importlib.util
         import io
         from unittest.mock import patch
-        spec = importlib.util.spec_from_file_location("bringup_tui", ROOT / "scripts/bringup.py")
+        spec = importlib.util.spec_from_file_location("bringup_tui", ROOT / "scripts/lib/bringup.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         with tempfile.TemporaryDirectory() as folder:

@@ -251,6 +251,8 @@ containerへloadせず別processで起動する。notepcでは自動skipし、Je
 
 ## 9. 用途別の起動入口
 
+通常実行する入口は`scripts/bringup.sh`、Python補助実装は`scripts/lib/bringup.py`へ置き、
+Tab補完のため直下に同名stemのファイルを並べない。
 `scripts/bringup.sh`のTUIは選択と`mission.launch.py` / `evaluation.launch.py`呼出しに限定する。
 collectはセンサ・手動vehicle・録画管理・監視のみ、driveは地図localization・offline参照ライン追従を追加。
 構成の正本はbringup/config/mission.yaml。ROS nodeの静的値は各module YAMLに置く。

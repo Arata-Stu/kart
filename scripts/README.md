@@ -16,7 +16,8 @@
 | sensors/evs-bias.sh | EVS bias調整ツールのbuild／起動 | EVSコンテナ |
 | tests/test-vehicle.sh | 車両制御のportableテスト | C++コンパイラのある環境 |
 
-bringup.py、check-jtop.py、input-dockerargs.pyは入口から呼ぶ補助実装。
+bringup.shの補助実装はlib/bringup.pyへ配置し、直下のTab補完候補を重複させません。
+check-jtop.py、input-dockerargs.pyも入口から呼ぶ補助実装です。
 隠し設定ファイルはIsaac ROS CLIが場所を参照するため直下に保持します。
 
 ```bash
@@ -35,3 +36,6 @@ bash scripts/tests/test-vehicle.sh
 `tools`と`ros2_ws/src/sensing`内のリポジトリで、kart本体は含めません。
 commit固定のdetached HEADは追従ブランチがないためpullで更新できません。
 固定SHAの更新はpackages.reposで管理します。
+
+`dev.sh`はinput/dialout/plugdevと接続中のevent/ttyACM/ttyUSBデバイスの所有GIDを
+Docker補助グループへ追加します。反映はコンテナ作成時のため、既存コンテナへのattachでは変わりません。
