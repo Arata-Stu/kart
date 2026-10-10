@@ -6,6 +6,7 @@ from ament_index_python.packages import get_package_share_directory
 from kart_bringup.configuration import load
 from kart_bringup.localization import resolve
 from kart_bringup.mission import composition, hdmap_choices, sensor_parameters
+from kart_bringup.vehicle_tf import load_transforms
 
 OVERRIDES = (
     "sensor_container",
@@ -44,6 +45,7 @@ def add_mission(args):
     )  # Validate device/config before any node starts.
     get_package_share_directory("realsense2_camera")
     if cfg["localization"]:
+        load_transforms(root / "vehicle/transforms.yaml", require_camera=True)
         if not params["enable_infra1"] or not params["enable_infra2"]:
             raise ValueError("Drive localization requires stereo infra (infra_fps > 0)")
         _, _, _, profile = resolve(root / "localization", args.map_dir, args.model_dir)

@@ -456,3 +456,46 @@ ros2 service call /rosbag2_player/pause rosbag2_interfaces/srv/Pause '{}'
 終了は起動ターミナルでCtrl-C。先頭から再評価するときは終了後bringupを再起動し、localizationの内部状態も初期化する。
 
 オフラインevaluationの基準frameはevaluation/replay.yamlの`base_frame: camera_link`。点群取得と揃え、bagに未収録の車体取付TFを要求しない。evaluation.launch.pyの`base_frame`引数（既定空文字）で明示変更できる。実車localizationのbase_link設定は変更しない。HDMapのmap座標は変更せず、odomから推定対象camera_linkへのTFを配信する。車体poseの評価には校正済み取付TFとbase_frame:=base_linkが必要。
+
+## 車体取付TF
+
+`vehicle.launch.py`が`modules/vehicle/transforms.launch.py`を一度includeする。
+missionのcollect/drive/e2eはいずれもvehicleを経由する。bag評価launchでは起動せず、
+既存のcamera_link基準・bag内のカメラTFを維持する。
+画像を扱わない静的TF publisherは独立processとし、sensor/VSLAM/E2Eの同一container構成を変更しない。
+
+正本は`config/vehicle/transforms.yaml`。ROS parameter YAMLではなくlaunch用の取付設定。
+各項目は`parent`、`child`、`xyz`（m）、`rpy`（rad、roll/pitch/yaw）の全キーを持つ。
+
+| 設定 / ノード名 | parent → child | xyz / rpy既定 |
+|---|---|---|
+| rear_axle / kart_tf_rear_axle | base_link → rear_axle | 両方[0,0,0]。後輪軸中央という定義上同一 |
+| camera_mount / kart_tf_camera_mount | base_link → camera_link | xyz=[0.23385,0.04750,0.03000] m、rpy=[0,0,0] rad。ユーザー指定の暫定値 |
+| evs_mount / kart_tf_evs_mount | base_link → event_camera | xyz=[0.2045,0,0.0705] m、rpy=[0,0,0] rad。ユーザー指定の暫定値 |
+
+base_linkは後輪軸の高さの中央で、x前方・y左・z上。xyzは親座標系における子原点、
+event_cameraの仮原点はEVS本体前面のレンズ軸中心で、x前方・y左・z上。校正済み光学中心とは区別する。
+rpyは子座標系の取付姿勢。光学座標への回転をcamera_mountへ重ねない。
+CADの穴座標をcamera_link座標として使わない。D455は2026-10-10のユーザー指定値を暫定採用し、水平・前向きを仮定する。実測校正済みではない。取付値をnullへ戻すとdriveは起動前にエラーになる。
+collect/e2eは未設定mountをログ表示して省略する。設定済みmountは録画時にも配信する。
+
+使用実行ファイルは`tf2_ros/static_transform_publisher`（依存`ros-lyrical-tf2-ros`、Docker導入済み）。
+出力は`/tf_static` (`tf2_msgs/msg/TFMessage`, reliable/transient_local、静的配信)。入力topicなし。
+標準`/rosout`等は省略。独自ROSパラメータなし。取付値は標準CLIの
+`--frame-id --child-frame-id --x --y --z --roll --pitch --yaw`へ変換して渡す。
+モジュールlaunch引数`transforms_config`の既定はインストール済み上記YAML。
+取付値は起動時固定で、変更後は再起動する。RealSense内部TFはドライバだけが所有する。
+
+出典: geometry2の`tf2_ros/static_transform_broadcaster_program.cpp`
+（https://github.com/ros2/geometry2/tree/rolling/tf2_ros）。対象はROS Lyrical、aptの厳密な版は実機未確認。
+外部nodeのROSパラメータ設定ではなく、全取付入力をこのlaunch設定で管理する。
+検証: `test/test_vehicle_tf.py`は未設定ガード・数値検査・軸順序を確認する。
+ROS結合と実機の取付座標・TF接続は別途確認が必要。
+
+```bash
+bash scripts/build.sh --packages-up-to kart_bringup
+source ros2_ws/install/setup.bash
+# bringup実行中、別ターミナルで確認
+ros2 run tf2_ros tf2_echo base_link camera_link
+ros2 run tf2_ros tf2_echo base_link camera_infra1_optical_frame
+```

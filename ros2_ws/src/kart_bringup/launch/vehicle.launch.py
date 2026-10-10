@@ -34,6 +34,8 @@ def start(context):
         return [module['file']] + ([module['overrides']] if module['overrides'] else [])
 
     actions = [LogInfo(msg=f'Kart config: {config}; launch={settings}; explicit overrides={ {k:v for k,v in overrides.items() if v} }')]
+    actions.append(lu.include('kart_bringup', 'launch/modules/vehicle/transforms.launch.py',
+                              scoped=True, forwarding=False))
     for key in [d[0] for d in definitions] + (['bag_manager'] if settings['enable_bag_manager'] else []):
         actions.append(LogInfo(msg=f"Kart {key}: {modules[key]['file']}; effective parameters={modules[key]['effective']}"))
     if settings['composed'] and definitions:

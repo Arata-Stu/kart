@@ -1,0 +1,25 @@
+# kart launch configuration (not a ROS parameter file). Metres and radians.
+# base_link: rear axle midpoint, x forward, y left, z up.
+# null = unmeasured. Never substitute the CAD mounting holes for camera_link.
+# RealSense owns camera_link -> optical frames; do not duplicate those here.
+transforms:
+  rear_axle:
+    parent: base_link
+    child: rear_axle
+    xyz: [0.0, 0.0, 0.0]
+    rpy: [0.0, 0.0, 0.0]
+  camera_mount:
+    parent: base_link
+    child: camera_link
+    # User-selected provisional values (2026-10-10), not measured calibration.
+    # Left IR origin, 233.85 mm forward / 47.50 mm left / 30.00 mm up.
+    xyz: [0.23385, 0.04750, 0.03000]
+    rpy: [0.0, 0.0, 0.0]  # Assumed level and facing forward.
+  evs_mount:
+    parent: base_link
+    child: event_camera
+    # User-selected provisional values (2026-10-10), not measured calibration.
+    # Origin: lens-axis centre on the EVS front face, not calibrated optical centre.
+    # Axes: x forward, y left, z up.
+    xyz: [0.2045, 0.0, 0.0705]
+    rpy: [0.0, 0.0, 0.0]  # Assumed level and facing forward.

@@ -83,3 +83,14 @@ CADのZ座標を使う際には、フレーム厚5mmを重ねて加算しない�
 これはレンズ中心の高さではなく、後輪軸基準の高さでもない。
 ローワーデッキの取付座面と後輪軸中心との高低差は別途必要であり、
 上面写真からの遠近・高さの混在した画素計測で置き換えない。
+
+### 取付TFのbringup所有
+
+`kart_bringup/config/vehicle/transforms.yaml`を取付TFの正本とする。
+vehicle launchが独立したtransforms moduleを一度起動し、base_link→rear_axleは定義上のidentityを配信する。
+D455はユーザー指定の暫定値xyz=[0.23385, 0.04750, 0.03000] m、rpy=[0,0,0] radを採用する（2026-10-10）。
+後輪軸中央から左IR原点への変換で、水平・前向きを仮定する。実測校正済みとは扱わない。
+EVSもユーザー指定の暫定値xyz=[0.2045, 0.0, 0.0705] m、rpy=[0,0,0] radを採用する（2026-10-10）。
+event_cameraの仮原点は本体前面のレンズ軸中心、x前方・y左・z上。校正済み光学中心とは扱わない。
+設定済みの取付はcollect/drive/e2eで配信し、camera_mount未設定のdriveは起動前に停止する。
+offline evalはcamera_link基準とbag内TFを維持し、vehicle mount publisherを重複起動しない。
