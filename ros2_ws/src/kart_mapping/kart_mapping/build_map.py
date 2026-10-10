@@ -55,6 +55,7 @@ def run(job):
         f"--camera_topic_config={camera_config}",
         f"--base_link_name={parameters['base_frame']}",
         "--use_raw_image=False",
+        "--print_mode=all",
         "--steps_to_run",
         "edex",
         "compute_poses",
@@ -62,10 +63,23 @@ def run(job):
     print("Official offline mapping: " + " ".join(command), flush=True)
     subprocess.run(command, check=True)
     outputs = list(official.glob("*/cuvslam_map"))
+    print(f"cuVSLAM map directories: {[str(p) for p in outputs]}", flush=True)
+    for folder in outputs:
+        for index, path in enumerate(sorted(folder.rglob("*"))):
+            if index >= 100:
+                print("  (listing truncated at 100 entries)", flush=True)
+                break
+            if path.is_file():
+                print(
+                    f"  {path.relative_to(official)}: {path.stat().st_size} bytes",
+                    flush=True,
+                )
     if len(outputs) != 1 or not any(
         p.is_file() and p.stat().st_size > 0 for p in outputs[0].glob("*.mdb")
     ):
-        raise ValueError("公式処理が非空のcuVSLAM .mdb地図を生成していません")
+        raise ValueError(
+            "公式処理後に非空のcuVSLAM .mdb地図を確認できません。直前のファイル一覧とofficial配下のrun_cuvslam_api_launcher.logを確認してください"
+        )
     shutil.move(str(outputs[0]), str(output / "cuvslam_map"))
     version = subprocess.run(
         ["dpkg-query", "-W", "-f=${Version}", "ros-lyrical-isaac-mapping-ros"],

@@ -7,6 +7,7 @@ import shutil
 import uuid
 from pathlib import Path
 
+from .jobs import Cancelled
 from .geometry import number
 from .storage import atomic_json, name, read_json, within
 
@@ -98,6 +99,16 @@ class Mapping:
                 raise ValueError("同名の地図があります")
             os.rename(stage, self.maps.root / key)
             return dict(map=key)
+        except Cancelled:
+            raise
+        except Exception:
+            if stage.exists():
+                failed = self.maps.root / ".failed"
+                failed.mkdir(exist_ok=True)
+                retained = failed / stage.name.removeprefix(".build-")
+                os.rename(stage, retained)
+                job.log(f"失敗時の診断データを保存しました: {retained}")
+            raise
         finally:
             if stage.exists():
                 shutil.rmtree(stage)

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from kart_mapping.build_map import run
-from kart_studio.jobs import Job
+from kart_studio.jobs import Cancelled, Job
 from kart_studio.mapping import Mapping
 from kart_studio.maps import Maps
 from kart_studio.copies import copy_map
@@ -120,5 +120,20 @@ class OfficialMappingTests(unittest.TestCase):
                 raise RuntimeError("official failed")
 
         with self.assertRaises(RuntimeError):
+            self.mapping.build(Worker(), "course", self.bag, self.mapping.defaults)
+        self.assertEqual(self.maps.list(), [])
+        retained = list((self.maps.root / ".failed").iterdir())
+        self.assertEqual(len(retained), 1)
+        self.assertTrue((retained[0] / "job.json").is_file())
+
+    def test_cancelled_build_cleans_stage(self):
+        class Worker:
+            def log(inner, text):
+                pass
+
+            def run(inner, *args, **kwargs):
+                raise Cancelled("cancelled")
+
+        with self.assertRaises(Cancelled):
             self.mapping.build(Worker(), "course", self.bag, self.mapping.defaults)
         self.assertEqual(list(self.maps.root.iterdir()), [])

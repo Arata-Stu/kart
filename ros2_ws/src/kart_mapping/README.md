@@ -41,7 +41,9 @@ cuVSLAM内部の設定はインストールされた公式map_creation_configの
 `cuvslam_map/`を地図直下へ配置し、軌跡・中間データ・ログは`official/`配下に保持。
 `mapping_result.json`に実行引数・APT版・bag metadata hash・点群未取得状態を保存する。
 UIは`map.json`を`revision=1, snapshot_status=pending`で作成する。空のsnapshotを成功成果物として作らない。
-失敗・中止時は未公開の一時領域を削除する。
+公式CLIは`--print_mode=all`で詳細ログを出力する。出力地図のファイル名・サイズもログに記録する。
+UI実行の失敗時は診断用に`map/.failed/<ID>/`へ中間成果物・公式ログを保持し、地図一覧には公開しない。中止時は一時領域を削除する。
+診断後の`.failed`内データは手動削除可能（自動削除しないため容量に注意）。
 
 点群取得の後続工程では、保存地図の読み込みと自己位置合わせを確認してからlandmarksを採用する。
 終了時の最新TF採用・map座標の二重変換防止はその工程の要件として維持する。
