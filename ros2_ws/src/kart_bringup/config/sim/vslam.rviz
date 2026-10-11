@@ -1,4 +1,4 @@
-# Fresh-map stereo VSLAM diagnostics. No reference map, VGL or HDMap.
+# Stereo images and calibrated landmark reprojection (not raw detector pixels).
 Panels:
 - Class: rviz_common/Displays
   Help Height: 138
@@ -212,13 +212,12 @@ Visualization Manager:
   - Class: rviz_default_plugins/Image
     Enabled: true
     Name: Left mono8
-    Image Topic:
+    Topic:
       Value: /realsense/infra1/image_rect_raw
       Reliability Policy: Best Effort
       Durability Policy: Volatile
       History Policy: Keep Last
       Depth: 5
-    Transport Hint: raw
     Queue Size: 5
     Normalize Range: true
     Min Value: 0
@@ -227,18 +226,61 @@ Visualization Manager:
   - Class: rviz_default_plugins/Image
     Enabled: true
     Name: Right mono8
-    Image Topic:
+    Topic:
       Value: /realsense/infra2/image_rect_raw
       Reliability Policy: Best Effort
       Durability Policy: Volatile
       History Policy: Keep Last
       Depth: 5
-    Transport Hint: raw
     Queue Size: 5
     Normalize Range: true
     Min Value: 0
     Max Value: 255
     Median window: 5
+  - Class: rviz_default_plugins/Camera
+    Enabled: true
+    Name: Left landmark reprojection
+    Topic:
+      Value: /realsense/infra1/image_rect_raw
+      Reliability Policy: Best Effort
+      Durability Policy: Volatile
+      History Policy: Keep Last
+      Depth: 5
+    Image Rendering: background
+    Overlay Alpha: 0.5
+    Zoom Factor: 1
+    Far Plane Distance: 100
+    Visibility:
+      All Displays: false
+      Grid: false
+      TF: false
+      Landmarks: true
+      Observations: false
+      Loop closure: false
+      VO Path: false
+      SLAM Path: false
+  - Class: rviz_default_plugins/Camera
+    Enabled: true
+    Name: Right landmark reprojection
+    Topic:
+      Value: /realsense/infra2/image_rect_raw
+      Reliability Policy: Best Effort
+      Durability Policy: Volatile
+      History Policy: Keep Last
+      Depth: 5
+    Image Rendering: background
+    Overlay Alpha: 0.5
+    Zoom Factor: 1
+    Far Plane Distance: 100
+    Visibility:
+      All Displays: false
+      Grid: false
+      TF: false
+      Landmarks: true
+      Observations: false
+      Loop closure: false
+      VO Path: false
+      SLAM Path: false
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

@@ -57,8 +57,13 @@ class SimVslamTests(unittest.TestCase):
         rviz=next(a for a in actions if a.kind=='Node' and a.kwargs['package']=='rviz2')
         rviz_config=yaml.safe_load(Path(rviz.kwargs['arguments'][1]).read_text())
         displays=rviz_config['Visualization Manager']['Displays']
-        self.assertTrue(any(d['Class']=='rviz_default_plugins/Image' for d in displays))
+        images=[d for d in displays if d['Class']=='rviz_default_plugins/Image']
+        self.assertEqual([d['Topic']['Value'] for d in images], ['/realsense/infra1/image_rect_raw','/realsense/infra2/image_rect_raw'])
+        self.assertTrue(all('Image Topic' not in d for d in images))
         self.assertTrue(any(d['Name']=='Landmarks' for d in displays))
+        cameras=[d for d in displays if d['Class']=='rviz_default_plugins/Camera']
+        self.assertEqual(len(cameras),2)
+        self.assertTrue(all(d['Visibility']['Landmarks'] and not d['Visibility']['Observations'] for d in cameras))
         player=next(a for a in actions if a.kind=='ExecuteProcess').kwargs['cmd']
         topics=player[player.index('--topics')+1:]
         self.assertNotIn('/tf',topics);self.assertNotIn('/clock',topics)

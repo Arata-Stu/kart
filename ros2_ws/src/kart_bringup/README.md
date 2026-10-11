@@ -441,7 +441,9 @@ bringup.shのevalでは「VSLAMのみ」（既定）と「VSLAM＋VGL」を選�
 
 4番目の用途 → 「mapなしVSLAM診断」では、地図・HDMap・VGLモデルを選ばずbagとVO/VIOだけ選ぶ。
 `sim_vslam.launch.py`で既存mapを読まず新規SLAMを開始し、RVizに左右画像・観測点群・ランドマーク・軌跡を表示する。
-左右画像は入力画像そのもの。画像上に特徴点を描くoverlayではなく、特徴点は別のPointCloud2表示。
+左右のmono8表示は入力画像そのもの。追加の左右CameraビューではCameraInfoとTFを使い、
+3Dランドマークを画像へ再投影する。抽出器が検出した全2D pixelを表示するものではなく、
+追跡・三角測量された点の投影。観測点群は別のPointCloud2表示で確認する。
 最初はstereo VOで確認し、IMUを含むbagでVIOと比較できる。
 
 ```bash

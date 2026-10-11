@@ -32,8 +32,13 @@ launch直接指定なら `ros2 launch kart_bringup sim_vslam.launch.py bag:=/abs
 enable_landmarks_view / enable_observations_viewを有効化する。
 `rviz`既定空は可視化設定に追従、true/falseでRViz起動だけ明示変更できる。
 `vslam.rviz`に左右raw画像、observations/landmarks/loop closure PointCloud2、VO/SLAM Pathを表示する。
-画像へ特徴点を重ねる表示ではない。topicの型はlocalization READMEを参照。
+左右CameraビューではCameraInfo・TFを用いて3Dランドマークを画像へ再投影する。
+全2D検出pixelではなく追跡・三角測量済み点の投影であり、時刻・TF・校正が必要。
+左右mono8のImage表示はTFなしでも入力画像を確認できる。topic型はlocalization READMEを参照。
 bag再生は左右画像・CameraInfo・/tf_staticだけ（VIOでは/realsense/imuも）に限定し、
 録画済み/clock・動的/tf・真値・車両指令を除外する。再生時刻はplayerが生成する。
 /replay_readyはevaluation/replay_ready.yamlの全parameterを使用し、subscriber_nodesのみ
 [visual_slam]へ変更する。入出力・既定parameterはevaluation READMEを参照。
+
+RVizのImage表示は`Topic` propertyに画像topicとQoSを指定する。
+`Image Topic`は対象RVizのproperty名ではないため使用しない。
