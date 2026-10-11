@@ -18,6 +18,7 @@ MuJoCo/GL contextを単一threadで所有するためComponent化しない。
 芝の毛、マットの正確な凹凸、動的な矢印、ライトかく乱は未再現。
 板は接触あり、駐車テープ・スタート線は描画のみ。
 トンネル入口を塞いでいた横断黒幕は撤去し、外周・内側境界の黒幕だけ残す。
+黒幕は床から立ち上げ、厚みを板厚+4mmにして下部の赤白板を両面から覆う。
 大会マップの駐車枠はwalls=trueで外側3辺に壁を配置。
 コースに接する1辺は開口し、入口を横切るコース障壁は撤去したまま。
 開口に幅5cmの白線、内側に色付きの4辺テープ枠とP1（緑）/P2（赤）/P3（青）を描く。
@@ -242,3 +243,6 @@ monitor HTTPは`GET /`、`GET /state`、`GET /{infra1,infra2,color}.png`と
 actionは`auto_start/stop/record_start/record_stop/reset/manual`、manualのみ
 `"value":[steering,throttle]`（各-1..1、負throttleはreverse）を受ける。
 これはlocalhost専用HTTP APIで、追加ROS topic/serviceはない。
+
+2026-10-11: ボタンのinline handlerがHTMLButtonElementの`command`属性と衝突し、
+クリックで要求が送られない不具合を修正。monitorを読み込むsim processを再起動して反映する。

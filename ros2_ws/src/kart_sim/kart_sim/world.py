@@ -114,7 +114,9 @@ def add_world(root, doc):
                  .012,.006,'gray',bottom=.075,contype='0',conaffinity='0')
     for i,line in enumerate(doc.get('black_walls',[])):
         for j,(a,b) in enumerate(zip(line,line[1:])):
-            wall(world,f'black_curtain_{i}_{j}',a,b,1.33,.01,'black')
+            # Cover both faces of the underlying board down to the floor.
+            # A 10 mm curtain left the 19 mm red/white board protruding below.
+            wall(world,f'black_curtain_{i}_{j}',a,b,1.33,doc['wall_thickness']+.004,'black')
     for i,p in enumerate(doc.get('parking',[])):
         x,y,L,W=p['x'],p['y'],p['length'],p['width']
         points=[(x,y+W),(x,y),(x+L,y),(x+L,y+W)]

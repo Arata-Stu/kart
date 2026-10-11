@@ -93,6 +93,9 @@ MuJoCo **3.3.7**（Docker固定版）/ NumPy 2.4.6の一時venvでsimの20件と
 - bagへの画像/校正/固定TF/IMU/clock/真値の保存・CDR読戻し、左右同stamp、右P行列、transient-local TFを検査。
 - 録画中Reset拒否、停止後Reset、繰返し録画の新directory生成、close時metadata確定を検査。
 - HTTP要求がsim threadでのみ実行され、auto状態がmonitorへ反映されることを検査。
+- ブラウザ実クリックでAuto lap要求が送信されず、`command is not a function`となる不具合を再現。
+  HTMLButtonElement.commandと同名のhandler関数を改名し、修正版GUI/monitorで
+  Auto lapの実クリック後にenabled=true、約1.7m前進、Stop drive後にenabled=falseを確認。
 - 実MuJoCoカメラの0.5 sim秒を取得し、434メッセージを保存・全件deserialize。
   左右各31画像、RGB16画像、IMU101メッセージ（初回t=0相当のサンプルを含む）。
 - ROS/colcon・rosbag2_py・Isaac ROS/CUDAでの既存map生成・VGL実行は未確認。
