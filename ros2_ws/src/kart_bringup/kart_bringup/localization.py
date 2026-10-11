@@ -1,6 +1,7 @@
 """Resolve localization assets/settings without launching sensors or the vehicle."""
 
 import json
+import re
 from pathlib import Path
 
 from .vgl_assets import validate_bundle
@@ -14,6 +15,7 @@ def resolve(
     config = Path(config_dir)
     workflow = json.loads((config / "workflow.json").read_text())
     required = {
+        "imu",
         "left_image",
         "right_image",
         "left_info",
@@ -38,18 +40,21 @@ def resolve(
             f"/**/{node}"
         ]["ros__parameters"]
     overrides = overrides or {}
-    if set(overrides) - {"use_sim_time", "base_frame"}:
+    if set(overrides) - {"use_sim_time", "base_frame", "tracking_mode", "imu_frame"}:
         raise ValueError("Unknown localization override")
     for key, value in overrides.items():
         if key == "use_sim_time":
             if str(value).lower() not in ("true", "false"):
                 raise ValueError("use_sim_time must be true or false")
             value = str(value).lower() == "true"
-        elif not isinstance(value, str) or not value.strip() or value.startswith("/"):
-            raise ValueError(
-                "base_frame must be a nonempty TF frame without leading slash"
-            )
-        for values in params.values():
+        elif key == "tracking_mode":
+            if str(value) not in ("0","1"):
+                raise ValueError("tracking_mode must be 0 (VO) or 1 (VIO)")
+            value=int(value)
+        elif not isinstance(value,str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_/]*',value) or value.endswith('/') or '//' in value:
+            raise ValueError(f"{key} must be a nonempty TF frame without leading slash")
+        targets=[params["cuvslam"]] if key in ("tracking_mode","imu_frame") else params.values()
+        for values in targets:
             values[key] = value
     slam, vgl = params["cuvslam"], params["vgl"]
     for key in (
@@ -71,8 +76,9 @@ def resolve(
         or vgl["stereo_localizer_cam_ids"] != "0,1"
     ):
         raise ValueError("This workflow supports one stereo pair")
-    if slam["tracking_mode"] != 0:
-        raise ValueError("This launch currently supports stereo VO, not IMU/RGBD")
+    if str(slam["tracking_mode"]) not in ("0","1"):
+        raise ValueError("This launch supports stereo VO/VIO, not RGBD")
+    slam["tracking_mode"]=int(slam["tracking_mode"])
     if slam["save_map_folder_path"]:
         raise ValueError("Runtime localization must not overwrite the reference map")
     if enable_vgl:
@@ -106,6 +112,8 @@ def resolve(
                 ("camera_info", 1, "right_info"),
             )
         ]
+    if slam["tracking_mode"] == 1:
+        mappings["cuvslam"].append(("visual_slam/imu", workflow["imu"]))
     mappings["cuvslam"] += [
         ("visual_slam/initial_pose", workflow["pose_hint"]),
         ("visual_slam/trigger_hint", workflow["request_hint"]),

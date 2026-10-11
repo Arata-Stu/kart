@@ -298,3 +298,17 @@ evaluation.launch.pyはこの上書きとuse_sim_time=trueを使用する。
 live missionはvisualizeを上書きしない。driveでは実センサとVSLAMを同じcontainerへloadし、
 VGLのcontainerだけlocalizationが作成する。
 bag/RViz構成は[../evaluation/README.md](../evaluation/README.md)参照。
+
+## 保存mapでのVO/VIO切替
+
+`localization.launch.py`と`evaluation.launch.py`にtracking_mode/imu_frame引数を追加。
+どちらも既定は空（運用YAML保持）。tracking_mode=0はstereo VO、1はVIO、
+RGBDやその他の値は本入口では拒否する。tracking_mode/imu_frameはcuVSLAMだけに適用し、
+VGLのparameterへ渡さない。base_frame/use_sim_timeは従来通り両方へ適用する。
+VOの既定、VGLのモデル/bundle検証、TF所有権、保存mapの上書き禁止は維持する。
+
+workflow.jsonの全キーにimuを追加し、既定入力は`/realsense/imu`
+（sensor_msgs/Imu、SENSOR_DATA QoS）。cuVSLAMのvisual_slam/imuをこのtopicへ
+remapするのはVIO時のみ。camera_optical_framesとimu_frameへの固定TFが必要。
+imu_frame既定はcamera_gyro_optical_frame。実機のheader/記録TFに合わせて指定する。
+保存地図へのlocalization成功は追跡成功とは別で、診断のlocalized_in_exist_mapを確認する。

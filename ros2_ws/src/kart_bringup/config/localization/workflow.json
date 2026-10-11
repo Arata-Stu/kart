@@ -6,5 +6,6 @@
   "pose_hint": "/localization/pose_hint",
   "request_hint": "/visual_localization/trigger_localization",
   "vslam_diagnostics": "/localization/vslam/diagnostics",
-  "vgl_diagnostics": "/localization/vgl/diagnostics"
+  "vgl_diagnostics": "/localization/vgl/diagnostics",
+  "imu": "/realsense/imu"
 }

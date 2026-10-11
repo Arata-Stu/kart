@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 from kart_bringup.mission import discover
-from kart_bringup.replay import playback
+from kart_bringup.replay import playback, imu_topics
 from kart_e2e.contract import runtime_settings, validate_runtime
 
 CONFIG = Path(__file__).resolve().parents[1] / "config"
@@ -52,6 +52,19 @@ class ReplayTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "lacks required"):
                 playback(CONFIG, bag)
 
+    def test_vio_imu_is_required_and_filtered(self):
+        topics=["/realsense/infra1/image_rect_raw","/realsense/infra2/image_rect_raw",
+                "/realsense/infra1/camera_info","/realsense/infra2/camera_info","/tf_static"]
+        with tempfile.TemporaryDirectory() as directory:
+            metadata=Path(directory)/'metadata.yaml'
+            def write():metadata.write_text(yaml.safe_dump({'rosbag2_bagfile_information':{'topics_with_message_count':[{'topic_metadata':{'name':t},'message_count':10} for t in topics]}}))
+            write()
+            with self.assertRaisesRegex(ValueError,'/realsense/imu'):playback(CONFIG,directory,extra_topics=imu_topics(CONFIG,1))
+            topics.append('/realsense/imu');write()
+            command=playback(CONFIG,directory,extra_topics=imu_topics(CONFIG,1))
+            self.assertIn('/realsense/imu',command[command.index('--topics')+1:])
+            self.assertEqual(imu_topics(CONFIG,0),[])
+
     def test_rviz_overlay_and_clock(self):
         config = yaml.safe_load((CONFIG / "evaluation/localization.rviz").read_text())
         manager = config["Visualization Manager"]
@@ -89,7 +102,7 @@ class ReplayTests(unittest.TestCase):
             spec.loader.exec_module(module)
             args = SimpleNamespace(
                 enable_vgl="false",
-                base_frame="",
+                base_frame="",tracking_mode="",imu_frame="",
                 bag="/bag",
                 rate="",
                 map_dir="/bundle",
@@ -101,7 +114,7 @@ class ReplayTests(unittest.TestCase):
             )
             with (
                 patch.object(module, "playback"),
-                patch.object(module, "resolve"),
+                patch.object(module, "resolve", return_value=({'cuvslam':{'tracking_mode':0}},None,None,None)),
                 patch.object(
                     module, "hdmap_choices", return_value=[("lane_001", "raceline")]
                 ),
@@ -122,6 +135,15 @@ class ReplayTests(unittest.TestCase):
             self.assertEqual(actions[0][1]["visualize"], "true")
             self.assertEqual(actions[0][1]["use_sim_time"], "true")
             self.assertEqual(actions[1][1]["use_sim_time"], "true")
+            args.tracking_mode='1';args.imu_frame='camera_imu_optical_frame'
+            with patch.object(module,'playback') as player,patch.object(module,'resolve',return_value=({'cuvslam':{'tracking_mode':1}},None,None,None)) as resolver,patch.object(module,'hdmap_choices',return_value=[('lane_001','raceline')]):
+                actions=module.add_evaluation(args)
+            self.assertEqual(player.call_args.kwargs['extra_topics'],['/realsense/imu'])
+            self.assertEqual(resolver.call_args.args[3]['tracking_mode'],'1')
+            self.assertEqual(actions[0][1]['tracking_mode'],'1')
+            self.assertEqual(actions[0][1]['imu_frame'],'camera_imu_optical_frame')
+            self.assertEqual(actions[-1][1]['tracking_mode'],'1')
+
 
     def test_readiness_waits_for_both_nodes_on_both_images(self):
         import importlib.util
@@ -144,6 +166,7 @@ class ReplayTests(unittest.TestCase):
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             ready = module.ReplayReady.__new__(module.ReplayReady)
+            ready.imu_topic=''
             ready.topics = ["left", "right"]
             ready.nodes = {"visual_slam", "visual_global_localization"}
             ready.future = None
@@ -160,6 +183,12 @@ class ReplayTests(unittest.TestCase):
             ]
             ready.check()
             ready.client.call_async.assert_called_once()
+            ready.future=None;ready.client.reset_mock();ready.imu_topic='/imu'
+            ready.get_subscriptions_info_by_topic=lambda topic:[] if topic=='/imu' else [SimpleNamespace(node_name=n) for n in ready.nodes]
+            ready.check();ready.client.call_async.assert_not_called()
+            ready.get_subscriptions_info_by_topic=lambda topic:[SimpleNamespace(node_name='visual_slam')] if topic=='/imu' else [SimpleNamespace(node_name=n) for n in ready.nodes]
+            ready.check();ready.client.call_async.assert_called_once()
+
 
     def test_runtime_metadata_exact_and_legacy_rejected(self):
         settings = {"fixed_throttle": 0.12, "max_throttle": 0.2}

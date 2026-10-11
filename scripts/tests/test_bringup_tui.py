@@ -111,6 +111,30 @@ class FreshDiagnosticTests(unittest.TestCase):
             self.assertNotIn('map_dir:=',text)
             self.assertNotIn('enable_vgl:=true',text)
 
+    def test_saved_map_vio_selects_map_and_replays_imu(self):
+        with tempfile.TemporaryDirectory() as folder:
+            bag=Path(folder)/'bag';bag.mkdir()
+            topics=['/realsense/infra1/image_rect_raw','/realsense/infra2/image_rect_raw','/realsense/infra1/camera_info','/realsense/infra2/camera_info','/realsense/imu','/tf_static']
+            (bag/'metadata.yaml').write_text(yaml.safe_dump({'rosbag2_bagfile_information':{'topics_with_message_count':[{'topic_metadata':{'name':t},'message_count':10} for t in topics]}}))
+            def choose(title,values,*args,**kwargs):
+                if title=='用途':return 'eval'
+                if title=='評価するlocalization':
+                    self.assertIn('vslam_vio',values);return 'vslam_vio'
+                return values[0]
+            def discover(root,kind):
+                return [bag] if kind=='bag' else [Path('/map/hdmap.yaml')] if kind=='hdmap' else [Path('/map/course')]
+            from kart_bringup import mission,localization
+            output=io.StringIO()
+            with patch.object(sys,'argv',['bringup.py','--dry-run','--record-dir',folder,'--imu-frame','camera_imu_optical_frame']),patch.object(sys.stdin,'isatty',return_value=True),patch.object(module,'choose',side_effect=choose),patch.object(mission,'discover',side_effect=discover),patch.object(mission,'hdmap_choices',return_value=[('lane_001','centerline')]),patch.object(localization,'resolve',return_value=({'cuvslam':{'tracking_mode':1}},None,None,{'input_shape':None})) as resolve,redirect_stdout(output):
+                module.main()
+            text=output.getvalue()
+            self.assertIn('evaluation.launch.py',text)
+            self.assertIn('tracking_mode:=1',text)
+            self.assertIn('map_dir:=/map/course',text)
+            self.assertIn('enable_vgl:=false',text)
+            self.assertIn('imu_frame:=camera_imu_optical_frame',text)
+            self.assertEqual(resolve.call_args.kwargs['overrides']['tracking_mode'],'1')
+
 
 if __name__ == "__main__":
     unittest.main()

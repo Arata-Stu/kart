@@ -45,6 +45,7 @@ timeoutではbagをpausedのまま残し、ログでcomponent/engine確認を案
 | parameter | 既定 | 意味 |
 |---|---|---|
 | use_sim_time | false | 再生前なので壁時計を使う |
+| imu_topic | 空文字 | VIO時にvisual_slamの購読も待つIMU topic。VOでは確認なし |
 | image_topics | [/realsense/infra1/image_rect_raw, /realsense/infra2/image_rect_raw] | 準備を確認する左右画像 |
 | subscriber_nodes | [visual_slam, visual_global_localization] | 両topicに必要な購読node名 |
 | resume_service | /rosbag2_player/resume | 再生再開service |
@@ -70,3 +71,12 @@ VSLAM点群は/visual_slam/vis/{landmarks_cloud,observations_cloud,localizer_map
 
 実bag、ROS、GPU、RViz表示は対象Notebookでの結合確認が必要。
 位置合わせ・軌跡の目視確認用で、正解軌跡とのATE/RPE計算は含まない。
+
+保存mapのoffline評価でも`tracking_mode:=0|1`でVO/VIOを切り替えられる。
+既定空ならlocalization YAMLのVOを保持する。VIOではworkflow.jsonのimu
+（既定`/realsense/imu`、sensor_msgs/Imu）が必須で、bag再生対象へ追加する。
+replay_readyは指定された画像subscriberに加えてvisual_slamのIMU subscriberを待つ。
+VGLにIMU購読は要求しない。古い動的TF・推定出力・clockは引き続き再生対象から除外する。
+`base_frame`は未指定時にreplay.yamlのcamera_link、`imu_frame`は未指定時に
+localization/cuvslam.yamlのcamera_gyro_optical_frameを保持する。
+実機bagのIMUがcamera_imu_optical_frameなら明示指定する。

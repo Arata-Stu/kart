@@ -437,7 +437,7 @@ E2E launchは有効なmanifestとハッシュ・ハードウェア一致、お�
 
 ## VSLAM地図だけでbag評価
 
-bringup.shのevalでは「VSLAMのみ」（既定）と「VSLAM＋VGL」を選択する。VSLAMのみはMap Studio出力の`cuvslam_map/*.mdb`が非空の地図を探索し、VGLモデル・vgl_profile.jsonを要求しない。VGL併用は従来通りprepare_vgl_map済みbundleと実行GPU用モデルが必要。非対話CLIは`--eval-localization vslam|vgl|fresh`。
+bringup.shのevalでは「保存mapでVO localization」（既定）、「保存mapでVIO localization」、「VSLAM＋VGL」を選択する。VSLAMのみはMap Studio出力の`cuvslam_map/*.mdb`が非空の地図を探索し、VGLモデル・vgl_profile.jsonを要求しない。VGL併用は従来通りprepare_vgl_map済みbundleと実行GPU用モデルが必要。非対話CLIは`--eval-localization vslam|vgl|fresh`。
 
 4番目の用途（offline bag評価）では「mapなしVO評価」と「mapなしVIO評価」を直接選べる。地図・HDMap・VGLモデルを選ばずbagだけ選ぶ。実機/simのbagを同じ入口で再実行し、VIOは`/realsense/imu`も必須入力として検査・再生する。両方ともVGLは起動せず、`sim_vslam.launch.py`で可視化・RVizを有効にする。
 `sim_vslam.launch.py`で既存mapを読まず新規SLAMを開始し、RVizに左右画像・観測点群・ランドマーク・軌跡を表示する。
@@ -649,3 +649,24 @@ bash scripts/bringup.sh --mode eval --eval-localization fresh --tracking-mode 1 
 
 IMU frame名はbagのheaderと記録TFを確認して指定する。上のframe間TFの存在は
 対象bagで別途確認する。既定configの変更、ROS topicの変更はない。
+
+保存mapでのoffline VIO評価をTUIから直接選べる。保存地図・HDMap・lane/line・bagを
+選択し、evaluation.launch.pyへtracking_mode=1を渡す。VGLを選択しなければ
+モデル探索やVGL起動は行わない。VIOはIMUが必須で、bag不足を起動前に拒否する。
+frame overrideはmapなし/保存mapのどちらのevalでも利用できる。
+
+```bash
+# TUIで「保存mapでVIO localization」を選ぶ（今回の旧実機bagのframe）
+bash scripts/bringup.sh --base-frame camera_link --imu-frame camera_imu_optical_frame
+
+# 非対話: 既存の保存map評価へ--tracking-mode 1を追加
+bash scripts/bringup.sh --mode eval --eval-localization vslam --tracking-mode 1 \
+  --bag /workspaces/record/e522 --map-dir /workspaces/map/e522 \
+  --map-file /workspaces/map/e522/exports/revision-12-v2/hd_map.yaml \
+  --lane-id lane_001 --line-type centerline \
+  --base-frame camera_link --imu-frame camera_imu_optical_frame
+```
+
+localization/evaluation launchへ直接tracking_mode:=1とimu_frame:=...を指定することもできる。
+VIO追跡と保存地図への再局在は別で、localization成功までは既存のAUTO許可条件を緩めない。
+ROS/GPUでの実地図を用いたVIO実行は未検証。Map StudioのVIO地図生成はこの変更に含めない。

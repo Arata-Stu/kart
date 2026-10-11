@@ -117,6 +117,26 @@ class LocalizationTest(unittest.TestCase):
             (self.output / "vgl_runtime_config/localizer_config.pb.txt").read_text(),
         )
 
+    def test_vio_loads_saved_map_and_routes_only_slam_imu(self):
+        for mode in ('0','1'):
+            params,remaps,_,_=resolve(CONFIG,self.source,'',
+                {'tracking_mode':mode,'base_frame':'camera_link','imu_frame':'camera_imu_optical_frame'},enable_vgl=False)
+            self.assertEqual(params['cuvslam']['tracking_mode'],int(mode))
+            self.assertEqual(params['cuvslam']['imu_frame'],'camera_imu_optical_frame')
+            self.assertNotIn('tracking_mode',params['vgl'])
+            self.assertNotIn('imu_frame',params['vgl'])
+            self.assertEqual(params['cuvslam']['load_map_folder_path'],str((self.source/'cuvslam_map').resolve()))
+            self.assertEqual(('visual_slam/imu','/realsense/imu') in remaps['cuvslam'],mode=='1')
+            self.assertTrue(params['cuvslam']['localize_on_startup'])
+        for value in ('2',True,'bad'):
+            with self.assertRaises(ValueError):resolve(CONFIG,self.source,'',{'tracking_mode':value},enable_vgl=False)
+        self.prepare()
+        params,remaps,_,_=resolve(CONFIG,self.output,self.models,{'tracking_mode':1},inspect=lambda *_:None)
+        self.assertEqual(params['cuvslam']['tracking_mode'],1)
+        self.assertIn(('visual_slam/imu','/realsense/imu'),remaps['cuvslam'])
+        self.assertFalse(any(topic=='visual_slam/imu' for topic,_ in remaps['vgl']))
+        self.assertEqual((self.source/'cuvslam_map/map.mdb').read_text(),'map')
+
     def test_mismatched_model_rejected(self):
         self.prepare()
         self.write(self.models / "aliked_lightglue/aliked.onnx", "different")

@@ -8,7 +8,7 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction, LogInfo, Shutd
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
-from kart_bringup.replay import playback
+from kart_bringup.replay import playback, imu_topics
 
 
 def build(context):
@@ -38,7 +38,7 @@ def build(context):
     rate=LaunchConfiguration('rate').perform(context)
     if rate and not bag: raise ValueError('rate requires bag')
     mode=overrides.get('tracking_mode',parameters['tracking_mode'])
-    command=playback(root,bag,rate,extra_topics=['/realsense/imu'] if mode==1 else []) if bag else None
+    command=playback(root,bag,rate,extra_topics=imu_topics(root,mode)) if bag else None
     actions=[LogInfo(msg=f'cuVSLAM config={config}, overrides={overrides}; no saved map is loaded; live kart_sim publish_truth_tf must be false'),
         ComposableNodeContainer(name='kart_sim_vslam_container',namespace='',package='rclcpp_components',
             executable='component_container_mt',output='screen',on_exit=Shutdown(),composable_node_descriptions=[
@@ -57,7 +57,7 @@ def build(context):
         actions += [LogInfo(msg=f'Sim bag replay (filtered, initially paused): {command}'),
             ExecuteProcess(cmd=command,output='screen'),
             Node(package='kart_bringup',executable='replay_ready',name='replay_ready',output='screen',
-                parameters=[str(root/'evaluation/replay_ready.yaml'),{'subscriber_nodes':['visual_slam']}])]
+                parameters=[str(root/'evaluation/replay_ready.yaml'),{'subscriber_nodes':['visual_slam'],'imu_topic':imu_topics(root,mode)[0] if mode==1 else ''}])]
     return actions
 
 

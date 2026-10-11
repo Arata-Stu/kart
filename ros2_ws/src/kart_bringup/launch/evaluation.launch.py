@@ -5,21 +5,24 @@ import isaac_ros_launch_utils.all_types as lut
 import yaml
 from kart_bringup.localization import resolve
 from kart_bringup.mission import boolean, hdmap_choices
-from kart_bringup.replay import playback
+from kart_bringup.replay import playback, imu_topics
 
 
 def add_evaluation(args):
     root = lu.get_path("kart_bringup", "config")
     settings = yaml.safe_load((root / "evaluation/replay.yaml").read_text())
     base_frame = args.base_frame if args.base_frame != "" else settings["base_frame"]
-    playback(root, args.bag, args.rate)
-    resolve(
+    overrides={"use_sim_time": "true", "base_frame": base_frame}
+    overrides.update({k:getattr(args,k) for k in ('tracking_mode','imu_frame') if getattr(args,k)!=""})
+    parameters,_,_,_=resolve(
         root / "localization",
         args.map_dir,
         args.model_dir,
-        {"use_sim_time": "true", "base_frame": base_frame},
+        overrides,
         enable_vgl=boolean(args.enable_vgl),
     )
+    mode=parameters['cuvslam']['tracking_mode']
+    playback(root,args.bag,args.rate,extra_topics=imu_topics(root,mode))
     if (args.lane_id, args.line_type) not in hdmap_choices(args.map_file):
         raise ValueError("Select a generated HDMap line")
 
@@ -42,6 +45,8 @@ def add_evaluation(args):
                 "visualize": "true",
                 "base_frame": base_frame,
                 "enable_vgl": args.enable_vgl,
+                "tracking_mode": str(mode),
+                "imu_frame": args.imu_frame,
             },
         ),
         include(
@@ -64,7 +69,7 @@ def add_evaluation(args):
     actions.append(
         include(
             "modules/evaluation/replay.launch.py",
-            {"bag": args.bag, "rate": args.rate, "enable_vgl": args.enable_vgl},
+            {"bag": args.bag, "rate": args.rate, "enable_vgl": args.enable_vgl,"tracking_mode":str(mode)},
         )
     )
     return actions
@@ -78,6 +83,8 @@ def generate_launch_description():
     args.add_arg("enable_vgl", "false", cli=True)
     args.add_arg("rate", "", cli=True)
     args.add_arg("base_frame", "", cli=True)
+    args.add_arg("tracking_mode", "", cli=True)
+    args.add_arg("imu_frame", "", cli=True)
     args.add_arg("rviz", "", cli=True)
     args.add_opaque_function(add_evaluation)
     return lut.LaunchDescription(args.get_launch_actions())

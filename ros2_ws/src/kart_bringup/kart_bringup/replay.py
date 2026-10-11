@@ -7,6 +7,13 @@ from pathlib import Path
 import yaml
 
 
+def imu_topics(config, mode):
+    """Required IMU topic for VIO; no input added for VO."""
+    if str(mode) not in ('0','1'):raise ValueError('tracking_mode must be 0 (VO) or 1 (VIO)')
+    if str(mode)=='0':return []
+    return [json.loads((Path(config)/'localization/workflow.json').read_text())['imu']]
+
+
 def playback(config, bag, rate="", extra_topics=None):
     config, bag = Path(config), Path(bag).expanduser().resolve(strict=True)
     try:

@@ -16,7 +16,7 @@ def add_localization(args: lu.ArgumentContainer) -> list[lut.Action]:
     # ArgumentContainer evaluates 'False' to bool: preserve explicit false overrides.
     overrides = {
         key: getattr(args, key)
-        for key in ("use_sim_time", "base_frame")
+        for key in ("use_sim_time", "base_frame", "tracking_mode", "imu_frame")
         if getattr(args, key) != ""
     }
     parameters, remaps, _workflow, profile = resolve(
@@ -106,6 +106,8 @@ def generate_launch_description() -> lut.LaunchDescription:
         choices=["", "true", "false", "True", "False"],
         cli=True,
     )
+    args.add_arg("tracking_mode", "", description="0=stereo VO / 1=VIO; empty preserves YAML", cli=True)
+    args.add_arg("imu_frame", "", description="IMU TF frame override for VIO", cli=True)
     args.add_arg(
         "visualize",
         "",

@@ -91,9 +91,9 @@ def main():
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--e2e-model-dir", default="")
     parser.add_argument("--eval-localization", choices=("vslam", "vgl", "fresh"), default=None)
-    parser.add_argument("--tracking-mode", choices=("0", "1"), default="", help="mapなし診断: 0=stereo VO / 1=VIO")
-    parser.add_argument("--base-frame", default="", help="mapなし評価の基準TF frame（例: camera_link）")
-    parser.add_argument("--imu-frame", default="", help="mapなしVIO評価のIMU TF frame")
+    parser.add_argument("--tracking-mode", choices=("0", "1"), default="", help="offline評価: 0=stereo VO / 1=VIO")
+    parser.add_argument("--base-frame", default="", help="offline評価の基準TF frame（例: camera_link）")
+    parser.add_argument("--imu-frame", default="", help="offline VIO評価のIMU TF frame")
     parser.add_argument("--bag", default="")
     parser.add_argument("--rate", default="")
     args = parser.parse_args()
@@ -159,11 +159,16 @@ def main():
             )
         if args.mode == "eval" and args.eval_localization is None:
             args.eval_localization = choose(
-                "評価するlocalization", ["vslam", "vgl"] +
+                "評価するlocalization", (["vslam_vio"] if args.tracking_mode == "1" else ["vslam"] if args.tracking_mode == "0" else ["vslam", "vslam_vio"]) + ["vgl"] +
                 (["fresh_vio" if args.tracking_mode == "1" else "fresh_vo"] if args.tracking_mode else ["fresh_vo", "fresh_vio"]),
-                lambda v: {"vslam": "保存mapでVSLAM localization", "vgl": "VSLAM＋VGL（準備済みbundle）",
+                lambda v: {"vslam": "保存mapでVO localization", "vslam_vio": "保存mapでVIO localization（左右画像＋IMU）", "vgl": "VSLAM＋VGL（準備済みbundle）",
                            "fresh_vo": "mapなしVO評価（左右画像・特徴点群・軌跡）",
                            "fresh_vio": "mapなしVIO評価（左右画像＋IMU・特徴点群・軌跡）"}[v])
+            if args.eval_localization == "vslam_vio":
+                args.tracking_mode="1"
+                args.eval_localization="vslam"
+            elif args.eval_localization == "vslam" and not args.tracking_mode:
+                args.tracking_mode="0"
             if args.eval_localization in ("fresh_vo", "fresh_vio"):
                 args.tracking_mode = "1" if args.eval_localization == "fresh_vio" else "0"
                 args.eval_localization = "fresh"
@@ -216,10 +221,8 @@ def main():
         elif args.run_name is None:
             args.run_name = input("run_name [run] > ").strip() or "run"
     fresh = args.mode == "eval" and args.eval_localization == "fresh"
-    if (args.base_frame or args.imu_frame) and not fresh:
-        raise ValueError("--base-frame/--imu-frameはmapなし評価で使用してください")
-    if args.tracking_mode and not fresh:
-        raise ValueError("--tracking-modeは--mode eval --eval-localization freshで使用してください")
+    if (args.base_frame or args.imu_frame or args.tracking_mode) and args.mode != "eval":
+        raise ValueError("--base-frame/--imu-frame/--tracking-modeはoffline evalで使用してください")
     if fresh and any((args.map_file, args.map_dir, args.model_dir, args.lane_id, args.line_type)):
         raise ValueError("mapなし診断では地図・モデル・ラインを指定しないでください")
     if args.mode == "eval" and args.evs:
@@ -244,9 +247,16 @@ def main():
             raise ValueError("HDMapに存在する--lane-id / --line-typeを選んでください")
         from kart_bringup.localization import resolve
 
-        _, _, _, profile = resolve(
-            config / "localization", args.map_dir, args.model_dir, enable_vgl=not vslam_only
+        overrides={}
+        if args.mode=="eval":
+            import yaml
+            base=args.base_frame or yaml.safe_load((config/'evaluation/replay.yaml').read_text())['base_frame']
+            overrides={'base_frame':base,'use_sim_time':True}
+            overrides.update({k:getattr(args,k) for k in ('tracking_mode','imu_frame') if getattr(args,k)})
+        parameters, _, _, profile = resolve(
+            config / "localization", args.map_dir, args.model_dir, overrides=overrides, enable_vgl=not vslam_only
         )
+        if args.mode=="eval":args.tracking_mode=str(parameters['cuvslam']['tracking_mode'])
         width, height, _ = sensors["depth_module.infra_profile"].split("x")
         if not vslam_only and profile["input_shape"][2:] != [int(height), int(width)]:
             raise ValueError("VGLモデルとInfra解像度が一致しません")
@@ -269,9 +279,9 @@ def main():
 
         Settings(recording_name=args.run_name or "run").validate()
     else:
-        from kart_bringup.replay import playback
+        from kart_bringup.replay import playback, imu_topics
 
-        playback(config, args.bag, args.rate, extra_topics=["/realsense/imu"] if fresh and args.tracking_mode == "1" else [])
+        playback(config,args.bag,args.rate,extra_topics=imu_topics(config,args.tracking_mode or "0"))
     values = {
         "mode": args.mode,
         "rgb_fps": args.rgb_fps,
@@ -308,6 +318,9 @@ def main():
                 "line_type",
                 "bag",
                 "rate",
+                "base_frame",
+                "imu_frame",
+                "tracking_mode",
             )
         }
     if fresh:

@@ -22,7 +22,7 @@
     enable_ground_constraint_in_odometry: false
     enable_ground_constraint_in_slam: false
     enable_localization_n_mapping: true
-    tracking_mode: 0  # This launch supports stereo VO only
+    tracking_mode: 0  # Default VO; explicit override 1 enables VIO
     debug_imu_mode: false
     gyro_noise_density: 0.000244
     gyro_random_walk: 0.000019393

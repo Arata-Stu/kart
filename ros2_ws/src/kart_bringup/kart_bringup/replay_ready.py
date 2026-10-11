@@ -15,6 +15,7 @@ class ReplayReady(Node):
             "image_topics",
             ["/realsense/infra1/image_rect_raw", "/realsense/infra2/image_rect_raw"],
         ).value
+        self.imu_topic=self.declare_parameter("imu_topic", "").value
         self.nodes = set(
             self.declare_parameter(
                 "subscriber_nodes", ["visual_slam", "visual_global_localization"]
@@ -59,7 +60,8 @@ class ReplayReady(Node):
                 "Startup timeout: bag remains paused. Check component/engine errors. Resume: ros2 service call /rosbag2_player/resume rosbag2_interfaces/srv/Resume '{}'"
             )
         elif self.future is None and self.client.service_is_ready():
-            if all(
+            imu_ready=not self.imu_topic or any(s.node_name=='visual_slam' for s in self.get_subscriptions_info_by_topic(self.imu_topic))
+            if imu_ready and all(
                 self.nodes
                 <= {s.node_name for s in self.get_subscriptions_info_by_topic(topic)}
                 for topic in self.topics
