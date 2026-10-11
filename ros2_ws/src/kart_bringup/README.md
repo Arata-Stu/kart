@@ -605,3 +605,9 @@ sim camera有効・真値TF無効・操舵上限一致が必要。接続や推�
 `sim_operator`の状態JSONには`last_tracking_issue`（最後のtracking異常の状態とsim時刻）を
 含める。地図restart時に履歴を消す。起動時の`not_localized`等も記録するため、
 異常履歴だけで走行中の停止原因を断定しない。topic・parameterの変更はない。
+
+Foxgloveの内部launchは`launch/modules/visualization/foxglove_bridge.launch.py`。
+公開入口とbasenameを分け、ROS 2のshare内検索で同名衝突を起こさない。
+旧版から更新するとinstallに古い内部`foxglove.launch.py`が残る場合があるため、
+`install/kart_bringup/share/kart_bringup/launch/modules/visualization/foxglove.launch.py`
+だけを取り除いて再buildする。ノード・topic・parameterは変更しない。

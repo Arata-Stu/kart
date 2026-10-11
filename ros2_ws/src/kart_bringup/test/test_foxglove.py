@@ -18,6 +18,13 @@ def allowed(key, name):
 
 
 class FoxgloveTests(unittest.TestCase):
+    def test_public_launch_name_is_unique(self):
+        matches=list((ROOT/'launch').rglob('foxglove.launch.py'))
+        self.assertEqual(matches,[ROOT/'launch/foxglove.launch.py'])
+        entry=(ROOT/'launch/foxglove.launch.py').read_text()
+        self.assertIn('launch/modules/visualization/foxglove_bridge.launch.py',entry)
+        self.assertTrue((ROOT/'launch/modules/visualization/foxglove_bridge.launch.py').is_file())
+
     def test_telemetry(self):
         for name in (
             "/tf_static",

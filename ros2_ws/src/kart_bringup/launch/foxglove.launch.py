@@ -9,7 +9,7 @@ def generate_launch_description():
         [
             lu.include(
                 "kart_bringup",
-                "launch/modules/visualization/foxglove.launch.py",
+                "launch/modules/visualization/foxglove_bridge.launch.py",
                 scoped=True,
                 forwarding=False,
             ),
