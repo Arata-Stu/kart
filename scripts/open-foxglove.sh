@@ -5,14 +5,16 @@ set -euo pipefail
 
 usage() {
   cat <<'HELP'
-Usage: scripts/open-foxglove.sh [--web] [--print-url] [--preset ID | --list] [HOST[:PORT] | ws://URL | wss://URL]
+Usage: scripts/open-foxglove.sh [--web] [--respect-gpu-blocklist] [--print-url] [--preset ID | --list] [HOST[:PORT] | ws://URL | wss://URL]
 
 Open Foxglove with the Bridge connection preselected.
-  Default: desktop app, config/jetson_hosts.json default (10.42.0.1)
+  Default: direct desktop URI; Linux adds --ignore-gpu-blocklist
+  Connection default: config/jetson_hosts.json (10.42.0.1)
   KART_FOXGLOVE_URL: default connection address (command argument takes precedence)
   --preset ID  Choose a shared Jetson IP preset (notebook, lan, usb)
   --list       List shared presets without opening anything
   --web        Open the web app instead of the desktop app
+  --respect-gpu-blocklist  Omit the Linux GPU workaround
   --print-url  Print the link without opening anything
   -h, --help   Show this help
 
@@ -27,6 +29,7 @@ HELP
 }
 
 kart_open_mode=desktop
+kart_gpu_workaround=true
 kart_print_url=false
 kart_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 kart_target=${KART_FOXGLOVE_URL:-}
@@ -36,6 +39,7 @@ kart_target_set=false
 while (( $# )); do
   case "$1" in
     --web) kart_open_mode=web ;;
+    --respect-gpu-blocklist) kart_gpu_workaround=false ;;
     --list) kart_list=true ;;
     --preset)
       if [[ $# -lt 2 || "$kart_target_set" == true ]]; then usage >&2; exit 2; fi
@@ -87,9 +91,13 @@ try:
     endpoint = urlunsplit((url.scheme, f'{host}:{port if port is not None else 8765}', url.path, url.query, ''))
 except ValueError as exc:
     sys.exit(f'Invalid Bridge address: {exc}')
-print('https://app.foxglove.dev/~/view?' + urlencode({
-    'ds': 'foxglove-websocket', 'ds.url': endpoint, 'openIn': mode,
-}))
+params = {'ds': 'foxglove-websocket', 'ds.url': endpoint}
+if mode == 'web':
+    params['openIn'] = 'web'
+    prefix = 'https://app.foxglove.dev/~/view?'
+else:
+    prefix = 'foxglove://open?'
+print(prefix + urlencode(params))
 PY
 )
 
@@ -100,6 +108,16 @@ fi
 case "$(uname -s)" in
   Darwin) exec open "$kart_link" ;;
   Linux)
+    if [[ "$kart_open_mode" == desktop ]]; then
+      if ! command -v foxglove-studio >/dev/null 2>&1; then
+        printf 'foxglove-studio is required on the notebook host. Use --web or --print-url.\n' >&2
+        exit 1
+      fi
+      if [[ "$kart_gpu_workaround" == true ]]; then
+        exec foxglove-studio --ignore-gpu-blocklist "$kart_link"
+      fi
+      exec foxglove-studio "$kart_link"
+    fi
     if command -v xdg-open >/dev/null 2>&1; then exec xdg-open "$kart_link"; fi
     printf 'xdg-open is required on the notebook host. Use --print-url to copy the link.\n' >&2
     exit 1
