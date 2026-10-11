@@ -622,3 +622,10 @@ bash scripts/bringup.sh --mode eval --eval-localization fresh \
 既存の`--eval-localization fresh --tracking-mode 0|1`は維持する。
 VIOでIMUが記録されていないbagは起動前に拒否する。Map StudioのVIO地図生成を
 追加する変更ではなく、bagの再実行・可視化用。node/topic/parameterの変更はない。
+
+mapなしVO/VIO評価のRVizは全画面で起動する（Escで通常windowへ戻る）。
+`config/sim/vslam.rviz`にQt5のdock配置を保存し、左にDisplays、中央に3D、
+右に左右画像を上下配置する。再投影は各画像の切替tabにまとめ、Viewsパネルは置かない。
+起動時の注視点は原点。全画面・画像受信・dock復元のROS実行はLinuxで確認する。
+Qt配置の再生成手順は[tools/rviz](../../../tools/rviz/README.md)参照。
+node/topic/ROS parameterは変更しない。

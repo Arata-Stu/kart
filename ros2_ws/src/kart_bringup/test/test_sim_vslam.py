@@ -55,7 +55,17 @@ class SimVslamTests(unittest.TestCase):
         self.assertFalse(params['localize_on_startup'])
         self.assertTrue(all(overrides[k] for k in ('enable_slam_visualization','enable_landmarks_view','enable_observations_view')))
         rviz=next(a for a in actions if a.kind=='Node' and a.kwargs['package']=='rviz2')
-        rviz_config=yaml.safe_load(Path(rviz.kwargs['arguments'][1]).read_text())
+        self.assertIn('--fullscreen',rviz.kwargs['arguments'])
+        args=rviz.kwargs['arguments']
+        rviz_config=yaml.safe_load(Path(args[args.index('-d')+1]).read_text())
+        self.assertEqual([p['Name'] for p in rviz_config['Panels']],['Displays'])
+        geometry=rviz_config['Window Geometry']
+        self.assertEqual((geometry['Width'],geometry['Height']),(1600,900))
+        dock_state=bytes.fromhex(geometry['QMainWindow State'])
+        for name in ('Displays','Left mono8','Right mono8','Left landmark reprojection','Right landmark reprojection'):
+            self.assertIn(name.encode('utf-16-be'),dock_state)
+            self.assertFalse(geometry[name]['collapsed'])
+        self.assertNotIn('Views'.encode('utf-16-be'),dock_state)
         displays=rviz_config['Visualization Manager']['Displays']
         images=[d for d in displays if d['Class']=='rviz_default_plugins/Image']
         self.assertEqual([d['Topic']['Value'] for d in images], ['/realsense/infra1/image_rect_raw','/realsense/infra2/image_rect_raw'])
