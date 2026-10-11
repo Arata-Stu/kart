@@ -63,9 +63,9 @@
     publish_odom_to_base_tf: true
     invert_map_to_odom_tf: false
     invert_odom_to_base_tf: false
-    enable_slam_visualization: false  # Jetson: poses/paths only, no landmark/pose-graph visualization
+    enable_slam_visualization: false  # Low-load default; explicit visualize:=true enables diagnostic clouds.
     enable_observations_view: false
-    enable_landmarks_view: false  # No feature cloud on Jetson
+    enable_landmarks_view: false  # Explicit visualize:=true enables landmarks/observations together.
     path_max_size: 2048  # Bounded live pose trail
     verbosity: 1
     enable_debug_mode: false

@@ -255,7 +255,7 @@ containerへloadせず別processで起動する。notepcでは自動skipし、Je
 Tab補完のため直下に同名stemのファイルを並べない。
 対話選択はfzfで検索・上下キー選択を提供し、Esc/Ctrl-Cでは起動せず中止する。
 非対話CLIはfzfに依存しない。fzf依存はDockerに含める。
-`scripts/bringup.sh`のTUIは選択と`mission.launch.py` / `evaluation.launch.py`呼出しに限定する。
+`scripts/bringup.sh`のTUIは選択と`mission.launch.py` / `evaluation.launch.py` / `sim_vslam.launch.py`呼出しに限定する。
 collectはセンサ・手動vehicle・録画管理・監視のみ、driveは地図localization・offline参照ライン追従を追加。
 構成の正本はbringup/config/mission.yaml。ROS nodeの静的値は各module YAMLに置く。
 Hz選択はprofileのrateだけを明示上書きし、未指定ではYAMLを保持する。
@@ -268,6 +268,8 @@ evalは実センサなしのbag再生なのでlocalization自身がcontainerを�
 
 E2Eはlocalizationを起動せず、実行時throttleと前処理の正本はモデルmetadata。
 evalは再生・localization・HDMap・RVizに限定し、古い動的TFや制御指令を再生しない。
+mapなし診断ではsim_vslam launchで新規SLAM・RVizを起動し、地図・HDMap・VGLを要求しない。
+VOはstereo画像・CameraInfo・固定TF、VIOは加えてIMUだけを再生する。
 録画のsession directoryは最初のSTARTで作成し、run_nameを起動時に選ぶ。
 
 ## 10. EVS direct入力

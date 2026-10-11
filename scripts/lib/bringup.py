@@ -90,7 +90,8 @@ def main():
     )
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--e2e-model-dir", default="")
-    parser.add_argument("--eval-localization", choices=("vslam", "vgl"), default=None)
+    parser.add_argument("--eval-localization", choices=("vslam", "vgl", "fresh"), default=None)
+    parser.add_argument("--tracking-mode", choices=("0", "1"), default="", help="mapなし診断: 0=stereo VO / 1=VIO")
     parser.add_argument("--bag", default="")
     parser.add_argument("--rate", default="")
     args = parser.parse_args()
@@ -154,7 +155,14 @@ def main():
             args.foxglove = args.foxglove or choose(
                 "Foxglove Bridge", [False, True], lambda v: "有効" if v else "無効"
             )
-        if args.mode in ("drive", "eval"):
+        if args.mode == "eval" and args.eval_localization is None:
+            args.eval_localization = choose(
+                "評価するlocalization", ["vslam", "vgl", "fresh"],
+                lambda v: {"vslam": "保存mapでVSLAM localization", "vgl": "VSLAM＋VGL（準備済みbundle）",
+                           "fresh": "mapなしVSLAM診断（画像・特徴点群・軌跡）"}[v])
+        if args.mode == "eval" and args.eval_localization == "fresh" and not args.tracking_mode:
+            args.tracking_mode = choose("追跡方式", ["0", "1"], lambda v: "stereo VO（IMUなし）" if v == "0" else "VIO（IMUあり）")
+        if args.mode == "drive" or (args.mode == "eval" and args.eval_localization != "fresh"):
             args.map_file = args.map_file or str(
                 choose("HDMap", discover(args.map_root, "hdmap"))
             )
@@ -168,8 +176,6 @@ def main():
             args.lane_id, args.line_type = choose(
                 "lane / 追従ライン", options, lambda x: " / ".join(x)
             )
-            if args.mode == "eval" and args.eval_localization is None:
-                args.eval_localization = choose("評価するlocalization", ["vslam", "vgl"], lambda v: "VSLAMのみ" if v == "vslam" else "VSLAM＋VGL（準備済みbundle）")
             vslam_only = args.mode == "eval" and args.eval_localization == "vslam"
             args.map_dir = args.map_dir or str(
                 choose(
@@ -202,6 +208,11 @@ def main():
             )
         elif args.run_name is None:
             args.run_name = input("run_name [run] > ").strip() or "run"
+    fresh = args.mode == "eval" and args.eval_localization == "fresh"
+    if args.tracking_mode and not fresh:
+        raise ValueError("--tracking-modeは--mode eval --eval-localization freshで使用してください")
+    if fresh and any((args.map_file, args.map_dir, args.model_dir, args.lane_id, args.line_type)):
+        raise ValueError("mapなし診断では地図・モデル・ラインを指定しないでください")
     if args.mode == "eval" and args.evs:
         raise ValueError("evalでは実EVSを起動しません")
     if args.evs:
@@ -212,7 +223,7 @@ def main():
     sensors = sensor_parameters(
         config / "sensors/realsense.yaml", args.rgb_fps or "", args.infra_fps or ""
     )
-    if args.mode in ("drive", "eval"):
+    if args.mode in ("drive", "eval") and not fresh:
         if not sensors["enable_infra1"]:
             raise ValueError("VSLAM/VGLにはInfraが必要です（なしは選択できません）")
         vslam_only = args.mode == "eval" and args.eval_localization != "vgl"
@@ -251,7 +262,7 @@ def main():
     else:
         from kart_bringup.replay import playback
 
-        playback(config, args.bag, args.rate)
+        playback(config, args.bag, args.rate, extra_topics=["/realsense/imu"] if fresh and args.tracking_mode == "1" else [])
     values = {
         "mode": args.mode,
         "rgb_fps": args.rgb_fps,
@@ -266,7 +277,7 @@ def main():
         "record_dir": args.record_dir,
         "run_name": args.run_name or "run",
     }
-    if args.mode in ("drive", "eval"):
+    if args.mode in ("drive", "eval") and not fresh:
         values.update(
             {
                 k: getattr(args, k)
@@ -290,7 +301,11 @@ def main():
                 "rate",
             )
         }
-    if args.mode == "eval":
+    if fresh:
+        launch = "sim_vslam.launch.py"
+        values = {"bag": args.bag, "rate": args.rate, "tracking_mode": args.tracking_mode,
+                  "visualize": "true", "rviz": "true"}
+    elif args.mode == "eval":
         values["enable_vgl"] = str(args.eval_localization == "vgl").lower()
     command = ["ros2", "launch", "kart_bringup", launch] + [
         f"{k}:={v}" for k, v in values.items() if v is not None and v != ""
@@ -307,6 +322,8 @@ def main():
             else "OFF",
         )
     print(shlex.join(command))
+    if fresh:
+        print("mapを読み込まず新規SLAMで追跡。RViz: 左右画像・観測点・ランドマーク・軌跡。終了はCtrl-C。")
     if args.mode == "eval":
         print(
             "実センサ・車両・制御は起動しません。RVizで確認。入力購読準備後に指定速度で再生（既定1倍）。終了はCtrl-C。"

@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 
-def playback(config, bag, rate=""):
+def playback(config, bag, rate="", extra_topics=None):
     config, bag = Path(config), Path(bag).expanduser().resolve(strict=True)
     try:
         metadata = yaml.safe_load((bag / "metadata.yaml").read_text())[
@@ -24,7 +24,10 @@ def playback(config, bag, rate=""):
     settings = yaml.safe_load((config / "evaluation/replay.yaml").read_text())
     topics = [
         workflow[k] for k in ("left_image", "right_image", "left_info", "right_info")
-    ] + settings["extra_topics"]
+    ] + settings["extra_topics"] + list(extra_topics or [])
+    topics = list(dict.fromkeys(topics))
+    if any(t in ('/tf', '/clock') for t in topics):
+        raise ValueError('Do not replay competing dynamic TF or recorded clock')
     missing = set(topics) - available
     if missing:
         raise ValueError(

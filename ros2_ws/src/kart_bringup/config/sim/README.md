@@ -24,3 +24,16 @@ VSLAMがmap/odom/base_linkの動的TFを所有する。センサ固定TFはsim�
 monitorのAuto lapはmapのwaypointを真値で追従する取得用controller。
 録画はROSなしでも動くrosbags writerで、固定カメラTFだけを保存しmappingへ渡せる。
 運転/録画は明示ボタンで開始し、録画中のresetは拒否する。外部ROS制御との優先順位はpackage README参照。
+
+mapなしbag診断は `scripts/bringup.sh` の4番目 → mapなしVSLAM診断から実行する。
+launch直接指定なら `ros2 launch kart_bringup sim_vslam.launch.py bag:=/absolute/bag visualize:=true`。
+`bag`既定空はlive入力、`rate`既定空はevaluation/replay.yamlの1倍（bagが必要）。
+`visualize`既定空はYAMLのfalse、trueでenable_slam_visualization /
+enable_landmarks_view / enable_observations_viewを有効化する。
+`rviz`既定空は可視化設定に追従、true/falseでRViz起動だけ明示変更できる。
+`vslam.rviz`に左右raw画像、observations/landmarks/loop closure PointCloud2、VO/SLAM Pathを表示する。
+画像へ特徴点を重ねる表示ではない。topicの型はlocalization READMEを参照。
+bag再生は左右画像・CameraInfo・/tf_staticだけ（VIOでは/realsense/imuも）に限定し、
+録画済み/clock・動的/tf・真値・車両指令を除外する。再生時刻はplayerが生成する。
+/replay_readyはevaluation/replay_ready.yamlの全parameterを使用し、subscriber_nodesのみ
+[visual_slam]へ変更する。入出力・既定parameterはevaluation READMEを参照。

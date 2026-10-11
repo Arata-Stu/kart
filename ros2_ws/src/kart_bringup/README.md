@@ -275,7 +275,7 @@ HDMapを選んだだけで無関係なbundleを自動対応させない。
 | collect | RealSense、Joy、mode manager、command mux、車両bridge、bag manager、Jetson jtop |
 | drive | collect一式＋VSLAM/VGL、HDMap/reference line、Pure Pursuit、速度PID |
 | e2e | collect一式＋公式image encoder/TensorRT＋control decoder。VSLAM/VGLなし |
-| eval | bag＋VSLAM/VGL＋HDMap＋RViz2。実センサ・車両・追従・録画なし |
+| eval | bag＋保存map localization、またはmapなしVSLAM診断＋RViz2。実センサ・車両・追従・録画なし |
 
 EVSとFoxgloveは選択時だけ追加。collectでいうvehicle controlは手動操作の制御権・指令muxであり、
 自律追従は起動しない。jtopは既存vehicle launchが所有し、非Jetsonではskipする。
@@ -437,7 +437,23 @@ E2E launchは有効なmanifestとハッシュ・ハードウェア一致、お�
 
 ## VSLAM地図だけでbag評価
 
-bringup.shのevalでは「VSLAMのみ」（既定）と「VSLAM＋VGL」を選択する。VSLAMのみはMap Studio出力の`cuvslam_map/*.mdb`が非空の地図を探索し、VGLモデル・vgl_profile.jsonを要求しない。VGL併用は従来通りprepare_vgl_map済みbundleと実行GPU用モデルが必要。非対話CLIは`--eval-localization vslam|vgl`。
+bringup.shのevalでは「VSLAMのみ」（既定）と「VSLAM＋VGL」を選択する。VSLAMのみはMap Studio出力の`cuvslam_map/*.mdb`が非空の地図を探索し、VGLモデル・vgl_profile.jsonを要求しない。VGL併用は従来通りprepare_vgl_map済みbundleと実行GPU用モデルが必要。非対話CLIは`--eval-localization vslam|vgl|fresh`。
+
+4番目の用途 → 「mapなしVSLAM診断」では、地図・HDMap・VGLモデルを選ばずbagとVO/VIOだけ選ぶ。
+`sim_vslam.launch.py`で既存mapを読まず新規SLAMを開始し、RVizに左右画像・観測点群・ランドマーク・軌跡を表示する。
+左右画像は入力画像そのもの。画像上に特徴点を描くoverlayではなく、特徴点は別のPointCloud2表示。
+最初はstereo VOで確認し、IMUを含むbagでVIOと比較できる。
+
+```bash
+bash scripts/bringup.sh --record-dir /workspaces/record/sim
+# 非対話でmapなし診断（0=VO、1=VIO）
+bash scripts/bringup.sh --mode eval --eval-localization fresh \
+  --bag /workspaces/record/sim/<bag-directory> --tracking-mode 0 --rate 0.5
+```
+
+bagは左右のrectified画像・CameraInfo・/tf_staticが必要。VIOでは/realsense/imuも必須。
+入力購読準備後に再生し、録画済み/clock・動的/tf・真値・制御指令は再生しない。
+他のsim/localizationやbag再生を終了してから実行する。再評価はCtrl-C後に再起動してSLAM状態を初期化する。
 
 evaluation.launch.pyの`enable_vgl`既定はfalse、localization.launch.pyでは互換性のためtrue。false時は`model_dir`不要、VGL node/専用containerを起動せず、VSLAMのみ`localize_on_startup=true`・`enable_request_hint=false`で起動する。map_dirは地図ルートまたはcuvslam_map自体。TFのpublisherはVSLAMのみ、bagの古いTFは再生しない。HDMapと同じ地図座標系を選ぶ。初期探索範囲内に位置がない場合はlocalizationが成立しないことがあり、実際の一致をRVizで確認する。
 
@@ -517,7 +533,12 @@ localhostの画像monitorから真値waypoint周回とrosbag開始/停止を操�
 monitorの操作時のみsim内部が制御を所有する。起動だけでは走行・録画を開始しない。
 既存vehicle launchとの同時起動はTFとハードウェア所有が重複するため使わない。
 
-`sim_vslam.launch.py`は/visual_slamだけを専用kart_sim_vslam_containerへloadする。
+`sim_vslam.launch.py`は/visual_slamを専用kart_sim_vslam_containerへloadする。
+`bag`既定空はlive入力、指定時は選択bagを再生。`rate`既定空はevaluation/replay.yamlの1倍。
+`visualize`既定空はYAMLのfalseを保持、trueで観測点・ランドマーク可視化を有効化。
+`rviz`既定空は可視化設定に追従、明示true/falseでRVizの起動だけ上書きする。
+RViz設定はconfig/sim/vslam.rviz。bag指定時のみ/replay_readyを起動し、
+入力購読と再生resume serviceの準備完了後に再生する（既存evaluation設定を使用）。
 運用正本config/sim/vslam.yaml、tracking_mode引数は既定空（YAMLの0=VO）、1=VIO。
 入力は/realsense/infra{1,2}/image_rect_raw・camera_info・/realsense/imu。
 nodeの出力型・全parameterは[localization config README](config/localization/README.md)、
