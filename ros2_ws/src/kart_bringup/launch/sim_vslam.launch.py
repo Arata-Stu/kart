@@ -1,5 +1,6 @@
 """cuVSLAM evaluation against kart_sim; simulation is launched separately."""
 from pathlib import Path
+import re
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -19,6 +20,12 @@ def build(context):
     if value:
         if value not in ('0','1'): raise ValueError('tracking_mode must be 0 (VO) or 1 (VIO)')
         overrides['tracking_mode']=int(value)
+    for key in ('base_frame','imu_frame'):
+        frame=LaunchConfiguration(key).perform(context)
+        if frame:
+            if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_/]*',frame) or frame.endswith('/') or '//' in frame:
+                raise ValueError(f'{key}: specify a TF frame name without a leading slash')
+            overrides[key]=frame
     visualize=LaunchConfiguration('visualize').perform(context)
     if visualize:
         if visualize.lower() not in ('true','false'): raise ValueError('visualize must be true or false')
@@ -56,4 +63,4 @@ def build(context):
 
 def generate_launch_description():
     return LaunchDescription([*[DeclareLaunchArgument(name,default_value='') for name in
-        ('tracking_mode','visualize','rviz','bag','rate')],OpaqueFunction(function=build)])
+        ('tracking_mode','base_frame','imu_frame','visualize','rviz','bag','rate')],OpaqueFunction(function=build)])

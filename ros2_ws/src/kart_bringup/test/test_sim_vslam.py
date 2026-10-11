@@ -100,5 +100,14 @@ class SimVslamTests(unittest.TestCase):
         for key,value in [('visualize','bad'),('rviz','bad'),('tracking_mode','2'),('rate','1')]:
             with self.assertRaises(ValueError):module.build({key:value})
 
+    def test_recorded_camera_and_imu_frames_can_override_sim_defaults(self):
+        module=self.load()
+        actions=module.build({'tracking_mode':'1','base_frame':'camera_link','imu_frame':'camera_imu_optical_frame','rviz':'false'})
+        component=next(a for a in actions if a.kind=='ComposableNodeContainer').kwargs['composable_node_descriptions'][0]
+        self.assertEqual(component.kwargs['parameters'][1],{'tracking_mode':1,'base_frame':'camera_link','imu_frame':'camera_imu_optical_frame'})
+        for key in ('base_frame','imu_frame'):
+            for value in ('/camera_link','camera link','camera//imu','camera/'):
+                with self.assertRaises(ValueError):module.build({key:value})
+
 
 if __name__=='__main__':unittest.main()

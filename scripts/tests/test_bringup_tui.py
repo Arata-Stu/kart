@@ -100,11 +100,13 @@ class FreshDiagnosticTests(unittest.TestCase):
                 if title=='再生rosbag':return values[0]
                 self.fail(f'Unexpected selection: {title}')
             output=io.StringIO()
-            with patch.object(sys,'argv',['bringup.py','--dry-run','--record-dir',folder]),patch.object(sys.stdin,'isatty',return_value=True),patch.object(module,'choose',side_effect=choose),redirect_stdout(output):
+            with patch.object(sys,'argv',['bringup.py','--dry-run','--record-dir',folder,'--base-frame','camera_link','--imu-frame','camera_imu_optical_frame']),patch.object(sys.stdin,'isatty',return_value=True),patch.object(module,'choose',side_effect=choose),redirect_stdout(output):
                 module.main()
             text=output.getvalue()
             self.assertIn('sim_vslam.launch.py',text)
             self.assertIn('tracking_mode:=1',text)
+            self.assertIn('base_frame:=camera_link',text)
+            self.assertIn('imu_frame:=camera_imu_optical_frame',text)
             self.assertIn('rviz:=true',text)
             self.assertNotIn('map_dir:=',text)
             self.assertNotIn('enable_vgl:=true',text)

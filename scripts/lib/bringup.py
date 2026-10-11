@@ -92,6 +92,8 @@ def main():
     parser.add_argument("--e2e-model-dir", default="")
     parser.add_argument("--eval-localization", choices=("vslam", "vgl", "fresh"), default=None)
     parser.add_argument("--tracking-mode", choices=("0", "1"), default="", help="mapなし診断: 0=stereo VO / 1=VIO")
+    parser.add_argument("--base-frame", default="", help="mapなし評価の基準TF frame（例: camera_link）")
+    parser.add_argument("--imu-frame", default="", help="mapなしVIO評価のIMU TF frame")
     parser.add_argument("--bag", default="")
     parser.add_argument("--rate", default="")
     args = parser.parse_args()
@@ -214,6 +216,8 @@ def main():
         elif args.run_name is None:
             args.run_name = input("run_name [run] > ").strip() or "run"
     fresh = args.mode == "eval" and args.eval_localization == "fresh"
+    if (args.base_frame or args.imu_frame) and not fresh:
+        raise ValueError("--base-frame/--imu-frameはmapなし評価で使用してください")
     if args.tracking_mode and not fresh:
         raise ValueError("--tracking-modeは--mode eval --eval-localization freshで使用してください")
     if fresh and any((args.map_file, args.map_dir, args.model_dir, args.lane_id, args.line_type)):
@@ -309,6 +313,7 @@ def main():
     if fresh:
         launch = "sim_vslam.launch.py"
         values = {"bag": args.bag, "rate": args.rate, "tracking_mode": args.tracking_mode,
+                  "base_frame": args.base_frame, "imu_frame": args.imu_frame,
                   "visualize": "true", "rviz": "true"}
     elif args.mode == "eval":
         values["enable_vgl"] = str(args.eval_localization == "vgl").lower()

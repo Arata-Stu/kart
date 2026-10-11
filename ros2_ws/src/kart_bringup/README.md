@@ -631,3 +631,21 @@ windowの最大化ボタンを使う。以前の全画面で起動中ならEsc�
 起動時の注視点は原点。画像受信・dock復元のROS実行はLinuxで確認する。
 Qt配置の再生成手順は[tools/rviz](../../../tools/rviz/README.md)参照。
 node/topic/ROS parameterは変更しない。
+
+mapなし評価は`base_frame`/`imu_frame`を明示指定できる（空が既定でYAML保持）。
+simの既定は`base_link`/`camera_gyro_optical_frame`。実機bagに`base_link`の固定TFが
+記録されていない場合は、camera/IMUへ接続される`camera_link`を基準に評価する。
+この場合の出力poseは車体基準ではなくcamera_link基準で、車体軌跡との比較には
+実測のcamera mount TFが必要。TFを仮に追加して補わない。
+
+```bash
+ros2 launch kart_bringup sim_vslam.launch.py \
+  bag:=/workspaces/record/e522 tracking_mode:=1 visualize:=true rviz:=true \
+  base_frame:=camera_link imu_frame:=camera_imu_optical_frame
+
+bash scripts/bringup.sh --mode eval --eval-localization fresh --tracking-mode 1 \
+  --bag /workspaces/record/e522 --base-frame camera_link --imu-frame camera_imu_optical_frame
+```
+
+IMU frame名はbagのheaderと記録TFを確認して指定する。上のframe間TFの存在は
+対象bagで別途確認する。既定configの変更、ROS topicの変更はない。
