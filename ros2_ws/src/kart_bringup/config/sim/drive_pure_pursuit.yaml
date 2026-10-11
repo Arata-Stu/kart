@@ -1,0 +1,18 @@
+# Full parameter set from control/pure_pursuit.yaml; sim-only settings.
+# Nominal simulator tuning; do not use these gains as physical vehicle calibration.
+/**/pure_pursuit:
+  ros__parameters:
+    use_sim_time: true
+    tracking_frame: rear_axle
+    map_frame: map
+    wheelbase_m: 0.257
+    max_steering_rad: 0.45
+    lookahead_m: 0.35
+    max_speed_mps: 0.45
+    max_cross_track_m: 1.0
+    goal_tolerance_m: 0.1
+    deceleration_mps2: 1.0
+    pose_timeout_s: 0.2
+    line_timeout_s: 2.5
+    localization_timeout_s: 2.5
+    control_rate_hz: 30.0

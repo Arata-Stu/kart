@@ -1,0 +1,6 @@
+# Full parameter set from system/command_mux.yaml; sim-only settings.
+# Nominal simulator tuning; do not use these gains as physical vehicle calibration.
+/**/command_mux:
+  ros__parameters:
+    use_sim_time: true
+    command_timeout: 0.15

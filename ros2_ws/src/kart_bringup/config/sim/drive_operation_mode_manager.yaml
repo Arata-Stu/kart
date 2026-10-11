@@ -1,0 +1,5 @@
+# Full parameter set from system/operation_mode_manager.yaml; sim-only settings.
+# Nominal simulator tuning; do not use these gains as physical vehicle calibration.
+/**/operation_mode_manager:
+  ros__parameters:
+    use_sim_time: true

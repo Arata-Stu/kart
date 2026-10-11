@@ -1,0 +1,13 @@
+# Full parameter set from hdmap/hdmap.yaml; sim-only settings.
+# Nominal simulator tuning; do not use these gains as physical vehicle calibration.
+/**/hdmap_server:
+  ros__parameters:
+    map_file: ''
+    frame_id: map
+    lane_id: ''
+    line_type: centerline
+    centerline_speed_mps: 0.35
+    publish_rate_hz: 1.0
+    line_width_m: 0.04
+    label_height_m: 0.25
+    use_sim_time: true

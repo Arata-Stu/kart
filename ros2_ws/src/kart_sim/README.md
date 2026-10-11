@@ -256,3 +256,31 @@ JSONの`visual_textures`は任意（既定なし）、PNG pathはJSONからの�
 詳細・再生成・起動例は[map仕様](../../../maps/sim/README.md)を参照。
 sourceのJSONを使うなら`map_dir:=/workspaces/maps/sim`、installed版はkart_simをbuild/sourceして使う。
 模様追加によるVSLAM改善はGPU上で別bagを記録して比較する。現場の外観としては扱わない。
+
+## monitorとkart bringupの連携
+
+ROS起動時は[2 terminal手順](../../../docs/simulation.md#monitorからの地図生成とkart制御)で
+monitorから保存地図読込み、lane/line選択、kart AUTO/STOP、unload、記録を操作できる。
+Map Studioは同じmonitor内のiframeで開き、既存VSLAM/VGL/HDMap作成pipelineを使用する。
+ROSなしpreviewでも真値周回・記録は使えるが、kart制御の操作はROS接続が必要。
+
+`kart_sim`の追加出力は`/sim/operator/request`、`/sim/operator/heartbeat`
+（std_msgs/String JSON）。追加入力は`/sim/operator/status`（std_msgs/String JSON）と
+`/visual_slam/tracking/odometry`（nav_msgs/Odometry）。既存ROS topic/parameterは変更しない。
+heartbeatにはcamera有効、真値TF有効、操舵上限を送る。
+operator状態の受信期限はsteady時刻で2秒。kart AUTOは準備済みoperatorだけに要求し、
+接続・準備状態の喪失、AUTOへの移行失敗ではlocal brakeを適用してSTOPを要求する。
+真値周回・手動・STOPに切り替えるとkart指令を無効化し、sim側が操作を所有する。
+地図を読み込んだbringupがrunningの間は、時刻巻戻しを防ぐためResetを拒否する。
+先にUnloadと録画停止を実施する。
+
+monitorの緑の軌跡は真値、橙はVSLAM推定。初回受信点の位置・yawをSE(2)で合わせた
+表示だけの比較で、非同期・約5Hz・最大1200点。真値はkart制御へ渡さない。
+誤差評価にはheader時刻で対応する`tools/sim/evaluate_vslam.py`を使う。
+Studio proxyは指定localhost portに限り、browser POSTのOriginを検査する。
+
+monitor上部に記録・走行・bringup・simの状態カードを表示する。
+記録中は赤枠でメッセージ数と保存先、停止後は保存完了状態を表示する。
+走行指令停止と実際の残速度を分け、sim時刻・実速度も表示する。
+エラーはカード下にまとめ、JSON詳細は折り畳む。状態取得が3秒以内に完了しない
+場合は状態取得不可を表示する。ROS topicやparameterの追加・変更はない。

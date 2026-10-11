@@ -32,6 +32,40 @@ class SessionTests(unittest.TestCase):
                 {'image': image, 'encoding': 'mono8' if name.startswith('infra') else 'rgb8', 'K': self.sim.rig.K[name]})
         return {'images': [frames], 'imu': [self.sim.imu_state()]}
 
+    def test_kart_ownership_stop_and_loss(self):
+        sent=[]
+        self.session.operator.send=lambda action,value=None:sent.append((action,value))
+        self.session.operator.update({'ready':True,'mode':3,'running':True})
+        self.session.request('kart_auto');self.session.drain(self.sim)
+        self.assertTrue(self.session.kart_active)
+        self.assertFalse(self.session.owns_control)
+        self.assertEqual(sent[-1][0],'kart_auto')
+        self.session.operator.update({'ready':False,'mode':1,'running':True})
+        self.session.drain(self.sim)
+        self.assertFalse(self.session.kart_active)
+        self.assertTrue(self.session.owns_control)
+        self.assertEqual(self.session.output(self.sim),(0.,0.,1.,0.))
+        self.assertEqual(sent[-1][0],'kart_stop')
+        self.session.request('auto_start');self.session.drain(self.sim)
+        self.assertTrue(self.session.controller.enabled)
+        self.assertEqual(sent[-1][0],'kart_stop')
+        self.session.request('stop');self.session.drain(self.sim)
+        self.assertFalse(self.session.controller.enabled)
+        self.session.request('reset');self.session.drain(self.sim)
+        self.assertIn('Unload',self.session.error)
+
+    def test_kart_unavailable_and_expired_heartbeat_never_release(self):
+        self.session.request('kart_auto');self.session.drain(self.sim)
+        self.assertFalse(self.session.kart_active)
+        self.assertTrue(self.session.owns_control)
+        self.assertIn('require ROS',self.session.error)
+        self.session.operator.send=lambda *_:None
+        self.session.operator.update({'ready':True,'mode':1})
+        self.session.operator.received-=3
+        self.session.request('kart_auto');self.session.drain(self.sim)
+        self.assertFalse(self.session.kart_active)
+        self.assertEqual(self.session.output(self.sim),(0.,0.,1.,0.))
+
     def test_bag_roundtrip_and_reset_guard(self):
         self.session.request('record_start'); self.session.drain(self.sim)
         self.assertTrue(self.session.recorder.writer)
@@ -83,6 +117,37 @@ class SessionTests(unittest.TestCase):
         with self.assertRaises(HTTPError) as caught:
             urlopen(request)
         self.assertEqual(caught.exception.code, 403)
+
+    def test_studio_proxy_keeps_monitor_origin_and_rejects_foreign_posts(self):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        import threading
+        from urllib.error import HTTPError
+        class Studio(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header('Content-Type','text/html')
+                self.send_header('Content-Security-Policy',"frame-ancestors 'none'")
+                self.end_headers();self.wfile.write(b'<a href="/">Studio</a>')
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get('Content-Length','0')))
+                self.server.origin=self.headers.get('Origin')
+                self.send_response(200);self.end_headers();self.wfile.write(b'{}')
+            def log_message(self,*args):pass
+        studio=ThreadingHTTPServer(('127.0.0.1',0),Studio)
+        thread=threading.Thread(target=studio.serve_forever,daemon=True);thread.start()
+        self.addCleanup(studio.server_close);self.addCleanup(studio.shutdown)
+        self.session.operator.update({'studio_port':studio.server_port})
+        monitor=SensorMonitor(self.session);self.addCleanup(monitor.close)
+        url=f'http://127.0.0.1:{monitor.server.server_port}'
+        with urlopen(url+'/studio/') as response:
+            self.assertIn(b'href="/studio/"',response.read())
+            self.assertEqual(response.headers['Content-Security-Policy'],"frame-ancestors 'self'")
+        request=Request(url+'/api/test',data=b'{}',headers={'Origin':url})
+        with urlopen(request) as response:self.assertEqual(response.status,200)
+        self.assertEqual(studio.origin,f'http://127.0.0.1:{studio.server_port}')
+        request.add_header('Origin','http://example.com')
+        with self.assertRaises(HTTPError) as caught:urlopen(request)
+        self.assertEqual(caught.exception.code,403)
 
     def test_stalled_controller_stops(self):
         self.session.request('auto_start'); self.session.drain(self.sim)

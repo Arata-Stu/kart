@@ -1,0 +1,19 @@
+# Full parameter set from control/speed_controller.yaml; sim-only settings.
+# Nominal simulator tuning; do not use these gains as physical vehicle calibration.
+/**/speed_controller:
+  ros__parameters:
+    use_sim_time: true
+    tracking_frame: rear_axle
+    max_steering_rad: 0.45
+    input_timeout_s: 0.15
+    mode_timeout_s: 0.3
+    max_target_speed_mps: 0.45
+    control_rate_hz: 50.0
+    kp: 0.8
+    ki: 0.05
+    kd: 0.0
+    kff: 0.49
+    integral_limit: 0.2
+    derivative_tau_s: 0.1
+    throttle_limit: 0.65
+    brake_limit: 0.3

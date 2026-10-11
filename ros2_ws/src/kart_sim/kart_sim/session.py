@@ -1,7 +1,9 @@
 """Monitor requests are drained on the simulation thread, never in HTTP handlers."""
 from queue import Queue, Empty
+import time
 from .autonomy import WaypointController
 from .recording import SimRecorder
+from .operator_link import OperatorLink
 
 
 class SimSession:
@@ -12,9 +14,14 @@ class SimSession:
         self.manual = (0., 0., 1., 0.)
         self.error = ''
         self.owns_control = False
+        self.operator = OperatorLink()
+        self.kart_active = False
+        self.kart_requested_at = 0.
+        self.invalidate = lambda: None
 
     def request(self, action, value=None):
-        if action not in ('auto_start', 'stop', 'record_start', 'record_stop', 'reset', 'manual'):
+        if action not in ('auto_start', 'stop', 'record_start', 'record_stop', 'reset', 'manual',
+                          'kart_configure','kart_auto','kart_line','kart_refresh','kart_unload'):
             raise ValueError('Unknown action')
         if action == 'manual':
             if not isinstance(value, list) or len(value) != 2:
@@ -30,15 +37,28 @@ class SimSession:
             except Empty:
                 break
             try:
-                if action == 'auto_start':
+                if action.startswith('kart_'):
+                    if action != 'kart_refresh':
+                        self.controller.stop();self.manual=(0.,0.,1.,0.);self.owns_control=True;self.kart_active=False
+                        self.invalidate()
+                    self.operator.request(action,value)
+                    if action == 'kart_auto':
+                        self.kart_active=True;self.kart_requested_at=time.monotonic();self.owns_control=False
+                elif action == 'auto_start':
+                    self.kart_active=False;self.invalidate()
+                    if self.operator.send:self.operator.request('kart_stop')
                     self.controller.start(sim)
                     self.manual = (0., 0., 1., 0.)
                     self.owns_control = True
                 elif action == 'stop':
+                    self.kart_active=False;self.invalidate()
+                    if self.operator.send:self.operator.request('kart_stop')
                     self.owns_control = True
                     self.controller.stop()
                     self.manual = (0., 0., 1., 0.)
                 elif action == 'manual':
+                    self.kart_active=False;self.invalidate()
+                    if self.operator.send:self.operator.request('kart_stop')
                     self.owns_control = True
                     self.controller.stop()
                     steering, throttle = value
@@ -48,6 +68,8 @@ class SimSession:
                 elif action == 'record_stop':
                     self.recorder.stop()
                 elif action == 'reset':
+                    if self.operator.state.get('running'):
+                        raise ValueError('Unload kart bringup before resetting the simulation clock')
                     if self.recorder.writer:
                         raise ValueError('Stop recording before resetting the simulation clock')
                     self.controller.stop()
@@ -57,6 +79,11 @@ class SimSession:
                 self.error = ''
             except Exception as exc:
                 self.error = str(exc)
+        mode_failed=self.operator.state.get('mode',3)!=1 and time.monotonic()-self.kart_requested_at>1.
+        if self.kart_active and (not self.operator.ready() or mode_failed):
+            self.kart_active=False;self.owns_control=True;self.manual=(0.,0.,1.,0.);self.invalidate()
+            self.error='kart readiness/heartbeat lost; stopped'
+            if self.operator.send:self.operator.request('kart_stop')
 
     def output(self, sim):
         return self.controller.output(sim) if self.controller.enabled else self.manual
@@ -73,7 +100,10 @@ class SimSession:
                 self.error += '; finalization failed: '+str(close_error)
 
     def status(self):
-        return dict(autodrive=self.controller.status(), bag=self.recorder.status(), error=self.error)
+        return dict(autodrive=self.controller.status(), bag=self.recorder.status(), error=self.error,
+                    manual_command=list(self.manual),
+                    control_owner='kart' if self.kart_active else 'truth_auto' if self.controller.enabled else 'monitor' if self.owns_control else 'external',
+                    operator=self.operator.status())
 
     def close(self):
         self.controller.stop()

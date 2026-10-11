@@ -547,3 +547,57 @@ nodeの出力型・全parameterは[localization config README](config/localizati
 シミュレーションの変更点・起動例は[sim config README](config/sim/README.md)と
 [kart_sim](../kart_sim/README.md)を参照。simのpublish_truth_tf=falseが必要。
 本入口はsimそのものや実車、操作ノードを起動しない。GPU環境での結合は未検証。
+
+## MuJoCoを2つのterminalで運転する
+
+`sim.launch.py`がセンサ・固定TF・clock・monitorを担当し、
+`sim_bringup.launch.py`がmonitorからの要求で保存地図localizationとrule base制御を起動する。
+手順は[simulation.md](../../../docs/simulation.md#monitorからの地図生成とkart制御)を参照。
+`sim_drive.launch.py`はHDMap server、既存localization、mode manager、command mux、
+pure pursuit、speed controllerだけを起動する。実機のcamera/vehicle/joyは起動しない。
+実行時引数は`map_file`、`map_dir`、`model_dir`、`lane_id`（既定空）、
+`line_type`（centerline）、`enable_vgl`（false）。保存済みlocalization地図とHDMapは必須。
+VGL利用時は対応bundleとGPUに合ったモデルを指定する。
+
+追加ノード`sim_operator`はPythonのプロセス監督で、component化せず別processとして動かす。
+起動直後は未設定・STOP。`sim_bringup.launch.py`の`map_root`/`model_root`引数は、
+空ならYAML値を使い、指定時だけ上書きする。
+
+| 入出力 | 既定topic/service | 型 |
+|---|---|---|
+| 入力 | `/sim/operator/request`, `/sim/operator/heartbeat` | std_msgs/String（JSON） |
+| 入力 | `/operation_mode/state` | kart_interfaces/OperationModeState |
+| 入力 | `/visual_slam/tracking/odometry` | nav_msgs/Odometry |
+| 入力 | `/control/tracking_status` | std_msgs/String |
+| 入力 | `/localization/vslam/diagnostics` | diagnostic_msgs/DiagnosticArray |
+| 出力 | `/sim/operator/status` | std_msgs/String（JSON） |
+| 出力 | `/operation_mode/request` | kart_interfaces/OperationModeRequest |
+| 出力 | `/hdmap/select_lane` | std_msgs/String |
+| client | `/hdmap_server/set_parameters` | rcl_interfaces/SetParameters |
+
+要求JSONは`action`と`value`。actionは`kart_configure`（map/line選択）、`kart_line`
+（lane/line変更）、`kart_auto`、`kart_stop`、`kart_unload`、`kart_refresh`。
+configure値は`map_file/map_dir/model_dir/enable_vgl/lane_id/line_type`の文字列dictionary。
+line値は`[lane_id,line_type]`。探索された資産だけを許可し、固定argvで子launchを起動する。
+地図変更・ライン変更はSTOPで実施する。終了時は所有する子launchとStudioを終了する。
+
+`config/sim/operator.yaml`が全parameterの運用基準。
+
+| parameter | 既定値 | 意味 |
+|---|---|---|
+| use_sim_time | true | ROS header時刻はsim clock |
+| map_root | /workspaces/map | 保存地図・HDMap・VGL bundle探索root |
+| model_root | /workspaces/models | VGLモデル探索root |
+| heartbeat_timeout_s | 2.0 | sim heartbeat・推定・診断・状態の受信期限（steady秒） |
+| status_period_s | 0.2 | 状態送信周期（steady秒） |
+| studio_enabled | true | Map Studioを起動／既存localhost serverを利用 |
+| studio_script | /workspaces/tools/app/start.sh | 信頼済みStudio起動script |
+| studio_port | 8766 | Studioのlocalhost port |
+
+各`config/sim/drive_*.yaml`は対応するcontrol/system/hdmap設定の全parameterを保持する。
+既存package READMEの意味・既定値を引き継ぎ、全ノードの`use_sim_time=true`、
+HDMap centerline速度0.35m/s、追従上限0.45m/s、lookahead 0.35m、操舵上限0.45radへ変更する。
+速度制御はkp=0.8、ki=0.05、kd=0、kff=0.49、throttle_limit=0.65、brake_limit=0.3。
+これらはsim用の仮調整で、実機設定は変更しない。全値は上記YAMLを参照。
+AUTO許可には保存地図へのlocalization、freshなodom/診断/tracking/mode、
+sim camera有効・真値TF無効・操舵上限一致が必要。接続や推定が途切れればSTOPを要求する。

@@ -279,8 +279,11 @@ export function draw() {
     ctx.stroke();
     if (cloudDirty) paintCloud();
     ctx.drawImage(cloudLayer, 0, 0, width, height);
-    if (state.showPath)
-      line(state.cloud?.trajectory, "#a8b6c1", false, true, 1.3);
+    if (state.showPath) {
+      // Keep the recorded trajectory distinct from the muted point cloud.
+      line(state.cloud?.trajectory, "#ffffff", false, true, 4);
+      line(state.cloud?.trajectory, "#d12b83", false, true, 2);
+    }
     const d = state.lane;
     if (d) {
       for (const other of state.doc.lanes) {

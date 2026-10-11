@@ -1,5 +1,6 @@
 """ROS bridge. Simulation owns its clock; actuator input always expires."""
 import time
+import json
 from pathlib import Path
 import numpy as np
 import rclpy
@@ -14,6 +15,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import TransformStamped, PoseStamped
 from sensor_msgs.msg import Image, CameraInfo, Imu
 from std_srvs.srv import Trigger, SetBool
+from std_msgs.msg import String
 from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
 from kart_interfaces.msg import ControlCommand, OperationModeState
 from .core import Simulation
@@ -93,8 +95,43 @@ class SimNode(Node):
             self.viewer.cam.distance=max(c-a,d-b); self.viewer.cam.elevation=-70
         period=self.sim.model.opt.timestep*p['step_count']
         self.timer=self.create_timer(period,self.tick,clock=Clock(clock_type=ClockType.STEADY_TIME))
+        self.operator_pub=self.create_publisher(String,'sim/operator/request',10)
+        self.heartbeat_pub=self.create_publisher(String,'sim/operator/heartbeat',10)
+        self.session.operator.send=lambda action,value=None:self.operator_pub.publish(String(data=json.dumps({'action':action,'value':value})))
+        self.session.invalidate=self.gate.invalidate_command
+        self.create_subscription(String,'sim/operator/status',self.operator_status,10)
+        self.estimated_trace=[];self.truth_trace=[];self.display_origin=None;self.last_estimated_sample=0.
+        self.create_subscription(Odometry,'visual_slam/tracking/odometry',self.estimated_pose,qos_profile_sensor_data)
+        self.next_trace=0.
+        self.last_sim_time=float(self.sim.data.time)
         self.publish_state()
         self.get_logger().info(f"Map: {p['map_file']}; assumptions: {self.sim.map.get('assumptions',[])}")
+
+    def operator_status(self,msg):
+        import json
+        try:
+            state=json.loads(msg.data)
+            if not isinstance(state,dict):raise ValueError('Invalid operator status')
+            if state.get('selection')!=self.session.operator.state.get('selection'):
+                self.display_origin=None;self.estimated_trace=[];self.truth_trace=[]
+            self.session.operator.update(state)
+        except (ValueError,TypeError):self.get_logger().warning('Invalid operator status')
+
+    def estimated_pose(self,msg):
+        # Display-only initial SE(2) alignment. Never passed to the controller.
+        import math
+        now=time.monotonic()
+        if now-self.last_estimated_sample<.2:return
+        self.last_estimated_sample=now
+        pos,quat,_,_=self.sim.state();q=msg.pose.pose.orientation;p=msg.pose.pose.position
+        if not all(math.isfinite(v) for v in (p.x,p.y,q.w,q.x,q.y,q.z)):return
+        yaw=math.atan2(2*(q.w*q.z+q.x*q.y),1-2*(q.y*q.y+q.z*q.z))
+        w,x,y,z=quat;truth_yaw=math.atan2(2*(w*z+x*y),1-2*(y*y+z*z))
+        if self.display_origin is None:self.display_origin=(p.x,p.y,float(pos[0]),float(pos[1]),truth_yaw-yaw)
+        ex,ey,tx,ty,angle=self.display_origin
+        dx,dy=p.x-ex,p.y-ey
+        self.estimated_trace.append([tx+math.cos(angle)*dx-math.sin(angle)*dy,ty+math.sin(angle)*dx+math.cos(angle)*dy])
+        self.estimated_trace=self.estimated_trace[-1200:]
 
     def on_command(self,msg):
         source=msg.header.stamp.sec+msg.header.stamp.nanosec*1e-9
@@ -106,9 +143,17 @@ class SimNode(Node):
         self.gate.accept_mode(msg.mode,source,self.sim.data.time,time.monotonic())
 
     def tick(self):
+        self.heartbeat_pub.publish(String(data=json.dumps({'camera_enabled':self.p['camera_enabled'],
+            'publish_truth_tf':self.p['publish_truth_tf'],'max_steering_rad':self.p['max_steering_rad']})))
         self.session.drain(self.sim)
+        if self.sim.data.time<self.last_sim_time:
+            self.gate.reset();self.display_origin=None;self.estimated_trace=[];self.truth_trace=[]
+        self.last_sim_time=float(self.sim.data.time)
+        if time.monotonic()>=self.next_trace:
+            self.truth_trace.append(self.sim.state()[0][:2].tolist());self.truth_trace=self.truth_trace[-1200:]
+            self.next_trace=time.monotonic()+.2
         if self.monitor and time.monotonic()>=self.next_monitor:
-            self.monitor.update(self.sim); self.next_monitor=time.monotonic()+.2
+            self.monitor.update(self.sim,{'paused':self.paused,'trajectory':{'truth':self.truth_trace,'estimated':self.estimated_trace,'alignment':'display only, initial SE(2), asynchronous samples'}}); self.next_monitor=time.monotonic()+.2
         if self.paused: return
         command=self.session.output(self.sim) if self.session.owns_control else self.gate.output(self.sim.data.time,time.monotonic())
         samples=self.sim.step(*command,steps=self.p['step_count'],collect_sensors=True)
@@ -153,12 +198,16 @@ class SimNode(Node):
         self.imu_pub.publish(msg); self.truth_imu_pub.publish(msg)
 
     def reset(self,request,response):
+        if self.session.operator.state.get('running'):
+            response.success=False;response.message='Unload kart bringup before Reset';return response
         if self.session.recorder.writer:
             response.success=False; response.message='Stop recording before resetting the simulation clock'
             return response
         self.session.controller.stop()
         self.session.manual=(0.,0.,1.,0.)
         self.sim.reset(); self.gate.reset()
+        self.session.owns_control=True;self.session.kart_active=False
+        self.display_origin=None;self.estimated_trace=[];self.truth_trace=[]
         self.publish_state(); response.success=True; response.message='Reset to spawn; commands and mode invalidated; clock rewound.'
         return response
 

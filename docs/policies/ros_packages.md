@@ -310,3 +310,12 @@ ROS非依存previewとROS nodeで同じrosbag2 writerを使い、camera/IMU/cloc
 保存する静的TFはcamera外部姿勢だけとし、map/odom真値を含めない。
 録画・走行開始は独立操作、録画中resetは拒否、停止/終了時にbagを確定する。
 実車のkart_bag_managerの責務と設定は変更しない。
+
+## simと実機の起動・制御所有権
+
+sim sensor/clock/固定vehicle TFはterminal 1の`sim.launch.py`が所有する。
+terminal 2の`sim_bringup.launch.py`はmonitor要求を受け、保存地図localizationと
+sim専用設定のrule base制御を管理する。実機camera/vehicle/Joyを重複起動しない。
+制御設定は`kart_bringup/config/sim/drive_*.yaml`に全parameterを保持し、実機gainと分離する。
+真値周回は収集用。kart AUTOでは真値controllerを停止し、推定姿勢のみで追従する。
+真値`map/odom` TFは配信せず、monitorの真値比較は表示に限る。

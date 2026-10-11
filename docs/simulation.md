@@ -129,3 +129,51 @@ header時刻で対応させ、初期SE(3)だけを合わせる。scale調整は�
 同じコース・物理条件で床/壁/仕切りに非周期の模様を加える。
 [map仕様と起動例](../maps/sim/README.md#vslam比較用の模様付きmap)を参照。
 元bagの画像は変わらないため、このmapで新しいbagを記録してVOを比較する。
+
+## monitorからの地図生成とkart制御
+
+同じIsaac ROS Docker内で2つのterminalを使う。両方でworkspaceをsourceする。
+更新後はrepository rootで`bash scripts/build.sh --packages-up-to kart_bringup kart_sim`を実行する。
+
+Terminal 1（sim、camera、clock、monitor）:
+
+```bash
+source /workspaces/ros2_ws/install/setup.bash
+MUJOCO_GL=egl ros2 launch kart_bringup sim.launch.py \
+  map:=minicar_2026_features map_dir:=/workspaces/maps/sim \
+  camera_enabled:=true monitor_enabled:=true viewer_enabled:=false \
+  publish_truth_tf:=false record_dir:=/workspaces/record/sim_features
+```
+
+Terminal 2（地図生成UIとkart bringup監督）:
+
+```bash
+source /workspaces/ros2_ws/install/setup.bash
+ros2 launch kart_bringup sim_bringup.launch.py \
+  map_root:=/workspaces/map model_root:=/workspaces/models
+```
+
+simの出力するSensor monitor URLを開く。
+
+1. `Truth collection lap`とStart/Stop rosbagで地図生成用bagを取得する。
+2. STOP後、`Open Map Studio (STOP)`で既存Studioをmonitor内に開く。
+   bagからVSLAM map生成・点群captureを行い、HDMapのlane/lineを編集保存する。
+   VGLを使用する場合は同じ地図の公式map_frames/posesと対応GPUモデルからbundleを生成する。
+   詳細は[Map Studio README](../tools/app/README.md)の既存job手順を使う。
+3. 保存先は`map_root`配下に置く。Studioを隠して`Refresh assets`を押し、
+   HDMap・保存localization地図・lane/lineを選ぶ。VGLを使うときはcheckboxと対応modelも選ぶ。
+4. `Load maps / restart (STOP)`を押す。terminal 2にlocalization/制御のlogが出る。
+   保存地図へのlocalizationとtrackingが準備できると`Kart AUTO`が有効になる。
+5. `Kart AUTO`で推定姿勢からrule base制御を行う。STOP、lane/line変更、Unloadもmonitorで操作する。
+   真値周回はデータ取得用の別制御。kart走行へ切り替えると真値controllerは停止する。
+
+Studioはlocalhost:8766を既定で使用し、monitorがproxyする。別のterminalは不要。
+Docker内の両processは同じROS_DOMAIN_IDとDDS設定にする。
+monitorとStudioはlocalhost待受なので、遠隔browserは必要なportを転送する。
+既存Studio serverが同portで起動済みなら再利用する（別アプリのportは指定しない）。
+地図生成jobはSTOP・bringup unload状態で実行し、完了後に読み込む。
+VGL modelはGPU依存。macOS previewだけではIsaac ROS localization/制御は実行できない。
+
+この追加実装の検証はPython単体・launch構成・HTTP連携まで。
+Isaac ROS Dockerのcolcon、DDS、GPU localization、推定姿勢での連続周回は未検証。
+sim用の速度/操舵gainは仮調整で、初回は低速で追従・STOP応答を確認する。
