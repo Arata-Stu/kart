@@ -2,7 +2,7 @@
 
 import math
 
-from .geometry import Corridor, cross, edges, inside, segment_distance
+from .geometry import PathValidationError, Corridor, cross, edges, inside, segment_distance
 
 MODEL = "rear_axle_rectangle_v1"
 
@@ -117,16 +117,19 @@ def validate_line(
         segments = edges(polygon, True)
         if corridor:
             if any(not corridor.contains(p) for p in polygon):
-                raise ValueError(f"長方形車体がコース境界外です（区間{index + 1}）")
+                raise PathValidationError("長方形車体がコース境界外です",line[index],
+                                          line[(index+1)%len(line)],index,
+                                          reason="footprint_outside", footprint=polygon)
             for a, b, edge_box in boundary:
                 if close_boxes(box, edge_box, padding) and (
                     inside(a, polygon)
                     or inside(b, polygon)
                     or any(segment_distance(a, b, c, d) <= padding for c, d in segments)
                 ):
-                    raise ValueError(
-                        f"長方形車体がコース境界に接触します（区間{index + 1}）"
-                    )
+                    raise PathValidationError("長方形車体がコース境界に接触します",line[index],
+                                              line[(index+1)%len(line)],index,
+                                              reason="footprint_collision",footprint=polygon,
+                                              boundary=[list(a),list(b)])
         for key, region, region_box in regions:
             if close_boxes(box, region_box, padding) and (
                 inside(polygon[0], region)

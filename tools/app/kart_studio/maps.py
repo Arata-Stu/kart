@@ -192,7 +192,12 @@ class Maps:
         if revision != document["revision"]:
             raise ValueError("編集内容を保存してから生成してください")
         lane = lanes.select(document, lane_id)
-        result = generate(lane, kind, parameters, check)
+        try:
+            result = generate(lane, kind, parameters, check)
+        except ValueError as exc:
+            if hasattr(exc,"diagnostic"):
+                exc.diagnostic.update(map_id=key,lane_id=lane["id"],revision=revision)
+            raise
         check()
         options = result["settings"]
         footprint.validate_line(

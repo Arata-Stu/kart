@@ -12,6 +12,7 @@ export const state = {
   },
   cloud: null,
   dirty: false,
+  diagnostic: null,
   step: "cloud",
   target: "left",
   selected: -1,
@@ -116,6 +117,7 @@ export function remember() {
   state.redo = [];
 }
 export function edited() {
+  state.diagnostic = null;
   state.dirty = true;
   if (state.target === "obstacle") {
     for (const lane of state.doc.lanes) lane.lines = {};

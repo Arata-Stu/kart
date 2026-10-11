@@ -25,6 +25,7 @@ class Job:
         self.lock = threading.RLock()
         self.process = None
         self.result = None
+        self.diagnostic = None
         self.log_path = root / (self.id + ".log")
         self.state_path = root / (self.id + ".json")
 
@@ -37,6 +38,7 @@ class Job:
                 message=self.message,
                 started=self.started,
                 result=self.result,
+                diagnostic=self.diagnostic,
             )
 
     def check(self):
@@ -159,6 +161,7 @@ class Jobs:
                 job.status = "cancelled"
                 job.log(exc)
             except Exception as exc:
+                job.diagnostic = getattr(exc,"diagnostic",None)
                 job.status = "failed"
                 job.log(exc)
             finally:

@@ -101,6 +101,14 @@ def resample(line, count, closed):
     return result
 
 
+class PathValidationError(ValueError):
+    """JSON-safe location of a rejected candidate; never a publishable line."""
+    def __init__(self, message, a, b, index, **details):
+        self.diagnostic = dict(segment=index + 1, points=[list(a), list(b)], **details)
+        super().__init__(f"{message}（区間{index + 1}, "
+                         f"XY=({a[0]:.3f}, {a[1]:.3f}) → ({b[0]:.3f}, {b[1]:.3f})）")
+
+
 class Corridor:
     def __init__(self, left, right, closed):
         self.left, self.right, self.closed = left, right, closed
@@ -140,9 +148,69 @@ class Corridor:
         simple(line, self.closed)
         for i, (a, b) in enumerate(edges(line, self.closed)):
             if not self.segment_ok(a, b, clearance):
-                raise ValueError(
-                    f"ラインの区間{i + 1}が境界の外、または車幅・余裕に近すぎます"
-                )
+                nearest = min(self.boundaries, key=lambda edge: segment_distance(a, b, *edge))
+                gap = segment_distance(a, b, *nearest)
+                outside = any(not self.contains(p) for p in (a,b,[(a[0]+b[0])/2,(a[1]+b[1])/2]))
+                reason = "生成線がコース境界の外です" if outside else "生成線と境界の距離が不足しています"
+                raise PathValidationError(
+                    f"{reason}: 境界まで{gap:.3f} m / 必要{clearance:.3f} m", a,b,i,
+                    boundary=[list(p) for p in nearest], distance_m=gap,
+                    required_clearance_m=clearance, reason="outside" if outside else "clearance")
+
+
+def monotone_midpoints(left, right, closed, corridor):
+    """Match local stations in order instead of equating whole-loop percentages.
+
+    Only used when uniform pairing fails. Invalid connectors are excluded and
+    the resulting complete path still passes the original corridor validator.
+    """
+    def visible(a,b):
+        # Connector endpoints lie on the walls; validate only its interior.
+        start=[a[k]+1e-4*(b[k]-a[k]) for k in range(2)]
+        end=[b[k]+1e-4*(a[k]-b[k]) for k in range(2)]
+        return corridor.segment_ok(start,end,0)
+    n = len(left)
+    if closed:
+        # A nearby visible cross-section anchors the cyclic seam.
+        candidates = sorted(range(n), key=lambda j: math.dist(left[0], right[j]))
+        start = next((j for j in candidates if visible(left[0],right[j])), None)
+        if start is None:raise ValueError("左右境界を結ぶ断面がありません。境界と始点を確認してください")
+        right = right[start:] + right[:start]
+        left, right = left + left[:1], right + right[:1]
+    size = len(left)
+    costs = [[math.dist(a,b)**2 for b in right] for a in left]
+    # Each iteration excludes every blocked cross-section on the chosen path.
+    for _ in range(8):
+        previous = [math.inf]*size
+        steps = [bytearray(size) for _ in range(size)]
+        for i in range(size):
+            current = [math.inf]*size
+            for j in range(size):
+                cost = costs[i][j]
+                if i == j == 0:current[j] = cost;continue
+                choices = [(previous[j-1]+2*cost,1) if i and j else (math.inf,1),
+                           (previous[j]+cost,2) if i else (math.inf,2),
+                           (current[j-1]+cost,3) if j else (math.inf,3)]
+                current[j],steps[i][j] = min(choices)
+            previous = current
+        if not math.isfinite(previous[-1]):break
+        pairs=[];i=j=size-1
+        while True:
+            pairs.append((i,j))
+            if i == j == 0:break
+            step=steps[i][j]
+            if step in (1,2):i-=1
+            if step in (1,3):j-=1
+        pairs.reverse()
+        blocked=[(i,j) for i,j in pairs if not visible(left[i],right[j])]
+        if blocked:
+            for i,j in blocked:costs[i][j]=math.inf
+            continue
+        line=[[(left[i][k]+right[j][k])/2 for k in range(2)] for i,j in pairs]
+        if closed:line.pop()
+        corridor.validate(line)
+        return line
+    raise ValueError("左右境界の対応付けができません。境界の近接・凹部・始点を確認してください")
 
 
 def centerline(left, right, closed, spacing=0.15):
@@ -182,7 +250,21 @@ def centerline(left, right, closed, spacing=0.15):
         [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
         for a, b in zip(left_samples, right_samples)
     ]
-    corridor.validate(line)
+    try:
+        corridor.validate(line)
+    except PathValidationError as original:
+        try:
+            line = monotone_midpoints(left_samples,right_samples,closed,corridor)
+            length=sum(math.dist(a,b) for a,b in edges(line,closed))
+            line=resample(line,max(12 if closed else 3,min(600,math.ceil(length/spacing))),closed)
+            # Remove station-change kinks without bypassing any geometry/footprint check.
+            line=[[(line[(i-1)%len(line)][k]+2*p[k]+line[(i+1)%len(line)][k])/4 for k in range(2)]
+                  if closed or 0<i<len(line)-1 else p for i,p in enumerate(line)]
+            corridor.validate(line)
+        except ValueError as exc:
+            # Keep the concrete failed location even if correspondence has no solution.
+            if isinstance(exc,PathValidationError):raise
+            raise original from exc
     widths = [
         [
             min(distance(p, a, b) for a, b in edges(right, closed)),

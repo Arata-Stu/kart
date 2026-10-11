@@ -293,6 +293,8 @@ for (const kind of ["centerline", "raceline", "customline"])
     await save();
     if (state.id !== mapId)
       throw Error("地図が切り替わりました。生成し直してください");
+    state.diagnostic = null;
+    emit("view");
     const job = await api("generate", {
       id: state.id,
       kind,
@@ -312,6 +314,12 @@ on("status", status);
 on("document", status);
 on("job-finished", async (e) => {
   const job = e.detail;
+  const diagnostic = job.diagnostic;
+  if (job.status === "failed" && diagnostic?.map_id === state.id &&
+      diagnostic.lane_id === state.laneId && diagnostic.revision === state.doc?.revision && !state.dirty) {
+    state.diagnostic = diagnostic;
+    emit("view");
+  }
   await refreshMaps();
   if (job.status === "succeeded" && job.result?.map) {
     if (
