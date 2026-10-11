@@ -68,7 +68,7 @@ def main(args=None):
                     else:self.studio_error=f'Map Studio script missing: {script}'
             self.assets=inventory(self.get_parameter('map_root').value,self.get_parameter('model_root').value)
             self.child=None; self.pending=None; self.stopping=None; self.error=''; self.selection={}
-            self.heartbeat=0.; self.sim_settings={}; self.localized=False; self.diag_time=0.; self.odom_time=0.; self.tracking=''; self.tracking_time=0.
+            self.heartbeat=0.; self.sim_settings={}; self.localized=False; self.diag_time=0.; self.odom_time=0.; self.tracking=''; self.tracking_time=0.;self.last_tracking_issue=None
             self.mode=3; self.mode_time=0.; self.line_request=None; self.line_future=None
             self.pub=self.create_publisher(String,'sim/operator/status',10)
             self.mode_pub=self.create_publisher(OperationModeRequest,'operation_mode/request',10)
@@ -94,7 +94,10 @@ def main(args=None):
                     and isinstance(self.sim_settings.get('max_steering_rad'),(int,float))
                     and abs(self.sim_settings['max_steering_rad']-.45)<1e-6)
         def mode_cb(self,m):self.mode=m.mode; self.mode_time=time.monotonic()
-        def tracking_cb(self,m):self.tracking=m.data; self.tracking_time=time.monotonic()
+        def tracking_cb(self,m):
+            self.tracking=m.data;self.tracking_time=time.monotonic()
+            if m.data not in ('tracking','zero_speed_target'):
+                self.last_tracking_issue={'status':m.data,'sim_time':self.get_clock().now().nanoseconds*1e-9}
         def diag(self,msg):
             rows=[dict((v.key,v.value) for v in row.values) for row in msg.status if row.hardware_id=='visual_slam']
             self.localized=any(row.get('localized_in_exist_map')=='Yes' and row.get('vo_status')=='OK' for row in rows)
@@ -153,7 +156,7 @@ def main(args=None):
             if self.child and self.stopping is not None and time.monotonic()-self.stopping>8:
                 os.killpg(self.child.pid,signal.SIGKILL)
             if self.pending is not None and self.child is None:
-                self.selection=self.pending;self.pending=None;self.localized=False;self.tracking='';self.diag_time=self.odom_time=self.tracking_time=self.mode_time=0.
+                self.selection=self.pending;self.pending=None;self.localized=False;self.last_tracking_issue=None;self.tracking='';self.diag_time=self.odom_time=self.tracking_time=self.mode_time=0.
                 try:self.child=subprocess.Popen(pipeline_command(self.selection),start_new_session=True)
                 except OSError as exc:self.error=str(exc)
             if self.mode==1 and (time.monotonic()-self.heartbeat>self.timeout or not self.ready()):self.mode_request(3)
@@ -161,7 +164,7 @@ def main(args=None):
             except (OSError,ValueError,KeyError,TypeError) as exc:
                 lines=[];self.error=str(exc);self.mode_request(3)
             state={'connected':True,'running':bool(self.child and self.child.poll() is None),'stopping':self.stopping is not None,
-                   'ready':self.ready(),'sim_ready':self.sim_ready(),'mode':self.mode,'localized':self.localized,'tracking':self.tracking,
+                   'ready':self.ready(),'sim_ready':self.sim_ready(),'mode':self.mode,'localized':self.localized,'tracking':self.tracking,'last_tracking_issue':self.last_tracking_issue,
                    'studio_port':self.studio_port if self.get_parameter('studio_enabled').value else None,
                    'studio_error':self.studio_error if not self.studio or self.studio.poll() is None else f'Studio exited ({self.studio.returncode})',
                    'selection':self.selection,'assets':self.assets,'error':self.error,

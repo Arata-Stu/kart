@@ -39,12 +39,15 @@ class Simulation:
             ET.SubElement(sensor,'gyro',name='d455_gyro',site='d455_imu')
         self.model=mujoco.MjModel.from_xml_string(ET.tostring(root,encoding='unicode'))
         self.data=mujoco.MjData(self.model)
+        self.wall_geoms={i:self.model.geom(i).name for i in range(self.model.ngeom)
+                         if (self.model.geom(i).name or '').startswith(('barrier_','black_curtain_','room_wall_','gate_post_','joint_post_'))}
         self.chassis_id=self.model.body('chassis').id
         self.sensors=SensorSuite(self.model,self.sensor_configs)
         self.reset()
 
     def reset(self):
         mujoco.mj_resetData(self.model,self.data)
+        self.last_wall_contact=None
         x,y,yaw=self.map['spawn']
         rotation=np.array([[math.cos(yaw),-math.sin(yaw),0],
                            [math.sin(yaw),math.cos(yaw),0],[0,0,1]])
@@ -70,6 +73,9 @@ class Simulation:
                     speed=self.data.qvel[self.model.joint('spin_'+wheel).dofadr[0]]
                     self.data.ctrl[self.model.actuator('drive_'+wheel).id]=-brake*math.tanh(speed/.5)
             mujoco.mj_step(self.model,self.data)
+            hits=sorted({self.wall_geoms[g] for contact in self.data.contact
+                         for g in (contact.geom1,contact.geom2) if g in self.wall_geoms})
+            if hits:self.last_wall_contact={'sim_time':float(self.data.time),'geoms':hits}
             if collect_sensors:
                 now=float(self.data.time)
                 imu_due=self.imu_enabled and now+1e-9>=self._imu_due

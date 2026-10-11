@@ -601,3 +601,7 @@ HDMap centerline速度0.35m/s、追従上限0.45m/s、lookahead 0.35m、操舵�
 これらはsim用の仮調整で、実機設定は変更しない。全値は上記YAMLを参照。
 AUTO許可には保存地図へのlocalization、freshなodom/診断/tracking/mode、
 sim camera有効・真値TF無効・操舵上限一致が必要。接続や推定が途切れればSTOPを要求する。
+
+`sim_operator`の状態JSONには`last_tracking_issue`（最後のtracking異常の状態とsim時刻）を
+含める。地図restart時に履歴を消す。起動時の`not_localized`等も記録するため、
+異常履歴だけで走行中の停止原因を断定しない。topic・parameterの変更はない。

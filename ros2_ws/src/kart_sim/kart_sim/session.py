@@ -13,6 +13,7 @@ class SimSession:
         self.requests = Queue(maxsize=64)
         self.manual = (0., 0., 1., 0.)
         self.error = ''
+        self.bev_enabled = False
         self.owns_control = False
         self.operator = OperatorLink()
         self.kart_active = False
@@ -21,8 +22,10 @@ class SimSession:
 
     def request(self, action, value=None):
         if action not in ('auto_start', 'stop', 'record_start', 'record_stop', 'reset', 'manual',
-                          'kart_configure','kart_auto','kart_line','kart_refresh','kart_unload'):
+                          'bev','kart_configure','kart_auto','kart_line','kart_refresh','kart_unload'):
             raise ValueError('Unknown action')
+        if action == 'bev' and type(value) is not bool:
+            raise ValueError('bev requires a boolean')
         if action == 'manual':
             if not isinstance(value, list) or len(value) != 2:
                 raise ValueError('manual requires [steering, throttle]')
@@ -37,7 +40,9 @@ class SimSession:
             except Empty:
                 break
             try:
-                if action.startswith('kart_'):
+                if action == 'bev':
+                    self.bev_enabled=value
+                elif action.startswith('kart_'):
                     if action != 'kart_refresh':
                         self.controller.stop();self.manual=(0.,0.,1.,0.);self.owns_control=True;self.kart_active=False
                         self.invalidate()
@@ -101,7 +106,7 @@ class SimSession:
 
     def status(self):
         return dict(autodrive=self.controller.status(), bag=self.recorder.status(), error=self.error,
-                    manual_command=list(self.manual),
+                    manual_command=list(self.manual), bev_enabled=self.bev_enabled,
                     control_owner='kart' if self.kart_active else 'truth_auto' if self.controller.enabled else 'monitor' if self.owns_control else 'external',
                     operator=self.operator.status())
 

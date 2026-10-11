@@ -17,6 +17,7 @@ PAGE=r'''<!doctype html><meta charset="utf-8"><title>kart_sim monitor</title>
 <div class="status-card" id="bringupStatus"><span>KART BRINGUP</span><strong>接続待ち</strong><small>準備状態を取得しています</small></div>
 <div class="status-card" id="simStatus"><span>SIM</span><strong>接続待ち</strong><small>sim時刻 / 実速度</small></div>
 </div><p id="statusError" role="alert" hidden></p><section><div>Left mono8<br><img id="infra1"></div><div>Right mono8<br><img id="infra2"></div><div>RGB<br><img id="color"></div></section>
+<fieldset><legend>BEV / コース全景</legend><label><input id="showBev" type="checkbox" onchange="sendSimCommand('bev',this.checked)"> 真上視点を表示（描画負荷が増えます）</label><p id="contactStatus">接触状態を取得しています</p><img id="bev" alt="MuJoCoコース全景" hidden style="width:800px;height:auto;max-width:100%"></fieldset>
 <fieldset><legend>Drive / recording</legend><section>
 <button onclick="sendSimCommand('stop')">STOP (all drive)</button>
 <button onclick="sendSimCommand('auto_start')">Data collection lap (truth)</button>
@@ -42,6 +43,8 @@ async function sendSimCommand(action,value){try{const r=await fetch('/command',{
 function statusCard(id,title,detail,tone='idle'){const el=document.getElementById(id);el.querySelector('strong').textContent=title;el.querySelector('small').textContent=detail;el.dataset.tone=tone}
 function renderStatus(s){
  const bag=s.bag||{},op=s.operator||{},auto=s.autodrive||{},owner=s.control_owner,command=s.manual_command||[];
+ const bev=document.getElementById('bev');bev.hidden=!s.bev_enabled;document.getElementById('showBev').checked=!!s.bev_enabled;if(s.bev_enabled&&!s.bev_error)bev.src='/bev.png?t='+Date.now();
+ const hit=s.wall_contact;document.getElementById('contactStatus').textContent=s.bev_error||`壁接触: ${hit?'最後 '+Number(hit.sim_time).toFixed(2)+' s / '+hit.geoms.join(', '):'未検出'} / 制御: ${op.tracking||'未接続'}${op.last_tracking_issue?' / 最後の追従異常: '+op.last_tracking_issue.status+' ('+Number(op.last_tracking_issue.sim_time).toFixed(2)+' s)':''}`;
  statusCard('recordStatus',bag.error?'記録エラー':bag.recording?'● 記録中':bag.finalized?'■ 記録停止・保存済み':'■ 記録停止',`${Number(bag.messages||0).toLocaleString()} messages${bag.path?' / '+bag.path:''}`,bag.error?'error':bag.recording?'recording':'idle');
  let drive='制御入力待ち',tone='idle',detail='外部制御の入力を待っています';
  if(owner==='kart'){drive='Kart AUTO';tone='active';detail='推定姿勢による追従';}
@@ -78,6 +81,7 @@ class SensorMonitor:
     def __init__(self,session=None):
         self.session=session
         self.images={}; self.metadata={}; self.lock=threading.Lock()
+        self.bev_renderer=None;self.bev_error=''
         owner=self
         class Handler(BaseHTTPRequestHandler):
             def proxy_studio(self):
@@ -141,9 +145,36 @@ class SensorMonitor:
 
     def update(self,sim,extra=None):
         images={name:png(frame.values['image']) for name,frame in sim.sensors.latest.items()}
+        if self.session and self.session.bev_enabled:
+            try:
+                import mujoco
+                import math
+                if self.bev_renderer is None:self.bev_renderer=mujoco.Renderer(sim.model,height=480,width=640)
+                camera=mujoco.MjvCamera();mujoco.mjv_defaultCamera(camera)
+                a,b,c,d=sim.map['room']['bounds']
+                camera.lookat[:]=[(a+c)/2,(b+d)/2,0]
+                camera.distance=max((c-a)*.75,d-b)/(2*math.tan(math.radians(float(sim.model.vis.global_.fovy))/2))*1.12
+                camera.elevation=-90;camera.azimuth=90
+                option=mujoco.MjvOption();option.geomgroup[4]=0;option.geomgroup[5]=1
+                self.bev_renderer.update_scene(sim.data,camera=camera,scene_option=option)
+                # Visual marker only: no model geometry or sensor/physics changes.
+                import numpy as np
+                position,quat,_,_=sim.state();w,x,y,z=quat
+                yaw=math.atan2(2*(w*z+x*y),1-2*(y*y+z*z))
+                start=np.array([position[0],position[1],.24])
+                end=start+np.array([.45*math.cos(yaw),.45*math.sin(yaw),0])
+                scene=self.bev_renderer.scene
+                if scene.ngeom<scene.maxgeom:
+                    geom=scene.geoms[scene.ngeom]
+                    mujoco.mjv_initGeom(geom,mujoco.mjtGeom.mjGEOM_ARROW,np.zeros(3),start,np.eye(3).flatten(),np.array([1,.85,0,1]))
+                    mujoco.mjv_connector(geom,mujoco.mjtGeom.mjGEOM_ARROW,.04,start,end)
+                    scene.ngeom+=1
+                images['bev']=png(self.bev_renderer.render().copy());self.bev_error=''
+            except Exception as exc:self.bev_error=str(exc)
         pos,quat,linear,angular=sim.state()
         metadata={'sim_time':float(sim.data.time),'position_m':pos.tolist(),'orientation_wxyz':quat.tolist(),
             'body_velocity_mps':linear.tolist(),'body_angular_velocity_rad_s':angular.tolist(),
+            'bev_error':self.bev_error,'wall_contact':getattr(sim,'last_wall_contact',None),
             'image_stamps':{name:frame.time for name,frame in sim.sensors.latest.items()}}
         if sim.imu_enabled:
             imu=sim.imu_state()
@@ -154,3 +185,4 @@ class SensorMonitor:
 
     def close(self):
         self.server.shutdown(); self.server.server_close(); self.thread.join(timeout=1)
+        if self.bev_renderer is not None:self.bev_renderer.close();self.bev_renderer=None
