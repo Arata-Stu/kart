@@ -65,7 +65,9 @@ class FreshDiagnosticTests(unittest.TestCase):
             def choose(title, values, *args, **kwargs):
                 titles.append(title)
                 if title == "用途": return "eval"
-                if title == "評価するlocalization": return "fresh"
+                if title == "評価するlocalization":
+                    self.assertIn("fresh_vio",values)
+                    return "fresh_vo"
                 if title == "追跡方式": return "0"
                 if title == "再生rosbag": return values[0]
                 self.fail(f"Unexpected selection: {title}")
@@ -78,10 +80,34 @@ class FreshDiagnosticTests(unittest.TestCase):
             self.assertIn("rviz:=true", text)
             self.assertIn("tracking_mode:=0", text)
             self.assertNotIn("map_dir:=", text)
-            self.assertEqual(titles, ["用途", "評価するlocalization", "追跡方式", "再生rosbag"])
+            self.assertEqual(titles, ["用途", "評価するlocalization", "再生rosbag"])
             with patch.object(sys, "argv", ["bringup.py", "--mode", "eval", "--eval-localization", "fresh", "--bag", str(bag), "--tracking-mode", "1", "--dry-run"]):
                 with self.assertRaisesRegex(ValueError, "/realsense/imu"):
                     module.main()
+
+    def test_interactive_vio_uses_imu_without_vgl_or_map(self):
+        topics=['/realsense/infra1/image_rect_raw','/realsense/infra2/image_rect_raw',
+                '/realsense/infra1/camera_info','/realsense/infra2/camera_info','/realsense/imu','/tf_static']
+        with tempfile.TemporaryDirectory() as folder:
+            bag=Path(folder)/'real_bag';bag.mkdir()
+            rows=[{'topic_metadata':{'name':t},'message_count':10} for t in topics]
+            (bag/'metadata.yaml').write_text(yaml.safe_dump({'rosbag2_bagfile_information':{'topics_with_message_count':rows}}))
+            def choose(title,values,*args,**kwargs):
+                if title=='用途':return 'eval'
+                if title=='評価するlocalization':
+                    self.assertIn('fresh_vio',values)
+                    return 'fresh_vio'
+                if title=='再生rosbag':return values[0]
+                self.fail(f'Unexpected selection: {title}')
+            output=io.StringIO()
+            with patch.object(sys,'argv',['bringup.py','--dry-run','--record-dir',folder]),patch.object(sys.stdin,'isatty',return_value=True),patch.object(module,'choose',side_effect=choose),redirect_stdout(output):
+                module.main()
+            text=output.getvalue()
+            self.assertIn('sim_vslam.launch.py',text)
+            self.assertIn('tracking_mode:=1',text)
+            self.assertIn('rviz:=true',text)
+            self.assertNotIn('map_dir:=',text)
+            self.assertNotIn('enable_vgl:=true',text)
 
 
 if __name__ == "__main__":

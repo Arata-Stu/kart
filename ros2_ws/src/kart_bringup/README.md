@@ -439,7 +439,7 @@ E2E launchは有効なmanifestとハッシュ・ハードウェア一致、お�
 
 bringup.shのevalでは「VSLAMのみ」（既定）と「VSLAM＋VGL」を選択する。VSLAMのみはMap Studio出力の`cuvslam_map/*.mdb`が非空の地図を探索し、VGLモデル・vgl_profile.jsonを要求しない。VGL併用は従来通りprepare_vgl_map済みbundleと実行GPU用モデルが必要。非対話CLIは`--eval-localization vslam|vgl|fresh`。
 
-4番目の用途 → 「mapなしVSLAM診断」では、地図・HDMap・VGLモデルを選ばずbagとVO/VIOだけ選ぶ。
+4番目の用途（offline bag評価）では「mapなしVO評価」と「mapなしVIO評価」を直接選べる。地図・HDMap・VGLモデルを選ばずbagだけ選ぶ。実機/simのbagを同じ入口で再実行し、VIOは`/realsense/imu`も必須入力として検査・再生する。両方ともVGLは起動せず、`sim_vslam.launch.py`で可視化・RVizを有効にする。
 `sim_vslam.launch.py`で既存mapを読まず新規SLAMを開始し、RVizに左右画像・観測点群・ランドマーク・軌跡を表示する。
 左右のmono8表示は入力画像そのもの。追加の左右CameraビューではCameraInfoとTFを使い、
 3Dランドマークを画像へ再投影する。抽出器が検出した全2D pixelを表示するものではなく、
@@ -611,3 +611,14 @@ Foxgloveの内部launchは`launch/modules/visualization/foxglove_bridge.launch.p
 旧版から更新するとinstallに古い内部`foxglove.launch.py`が残る場合があるため、
 `install/kart_bringup/share/kart_bringup/launch/modules/visualization/foxglove.launch.py`
 だけを取り除いて再buildする。ノード・topic・parameterは変更しない。
+
+実機bagのVIO評価を非対話で起動する例:
+
+```bash
+bash scripts/bringup.sh --mode eval --eval-localization fresh \
+  --tracking-mode 1 --bag /workspaces/record/e522 --rate 1.0
+```
+
+既存の`--eval-localization fresh --tracking-mode 0|1`は維持する。
+VIOでIMUが記録されていないbagは起動前に拒否する。Map StudioのVIO地図生成を
+追加する変更ではなく、bagの再実行・可視化用。node/topic/parameterの変更はない。

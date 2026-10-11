@@ -114,7 +114,7 @@ def main():
                 "collect": "データ収集 → 後でoffline mapping",
                 "drive": "地図走行（VSLAM + VGL + ライン追従）",
                 "e2e": "E2E（TensorRT、localizationなし）",
-                "eval": "bagでlocalization確認（Notebook・RViz）",
+                "eval": "offline bag評価（VO / VIO / 保存map localization・RViz）",
             }[m],
         )
         if args.mode != "eval":
@@ -157,9 +157,14 @@ def main():
             )
         if args.mode == "eval" and args.eval_localization is None:
             args.eval_localization = choose(
-                "評価するlocalization", ["vslam", "vgl", "fresh"],
+                "評価するlocalization", ["vslam", "vgl"] +
+                (["fresh_vio" if args.tracking_mode == "1" else "fresh_vo"] if args.tracking_mode else ["fresh_vo", "fresh_vio"]),
                 lambda v: {"vslam": "保存mapでVSLAM localization", "vgl": "VSLAM＋VGL（準備済みbundle）",
-                           "fresh": "mapなしVSLAM診断（画像・特徴点群・軌跡）"}[v])
+                           "fresh_vo": "mapなしVO評価（左右画像・特徴点群・軌跡）",
+                           "fresh_vio": "mapなしVIO評価（左右画像＋IMU・特徴点群・軌跡）"}[v])
+            if args.eval_localization in ("fresh_vo", "fresh_vio"):
+                args.tracking_mode = "1" if args.eval_localization == "fresh_vio" else "0"
+                args.eval_localization = "fresh"
         if args.mode == "eval" and args.eval_localization == "fresh" and not args.tracking_mode:
             args.tracking_mode = choose("追跡方式", ["0", "1"], lambda v: "stereo VO（IMUなし）" if v == "0" else "VIO（IMUあり）")
         if args.mode == "drive" or (args.mode == "eval" and args.eval_localization != "fresh"):
