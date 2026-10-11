@@ -117,3 +117,15 @@ VSLAM接続launch/configを用意したが、cuVSLAMのload・VO/VIO追跡は未
 撮影Hzはsim時刻基準。macOSで100ms分の初回描画が約0.36〜0.45秒を要したが、
 GL初期化込みの単発smokeであり、定常性能・30〜90Hzの壁時計達成は未検証。
 本入口はsimのみを起動し、AUTO要求・走行指令を自動発行しない。
+
+## sim真値とVSLAM推定の数値比較
+
+[比較ツールと記録手順](../tools/sim/README.md)を使う。
+元sim bagの`/sim/odometry`と、別bagへ記録した`/visual_slam/tracking/odometry`を
+header時刻で対応させ、初期SE(3)だけを合わせる。scale調整は行わない。
+真値TFをVSLAMへ配信せずに、位置・姿勢・速度・距離比・推定gapを評価する。
+
+見た目を変えた比較には`minicar_2026_features`を使う。
+同じコース・物理条件で床/壁/仕切りに非周期の模様を加える。
+[map仕様と起動例](../maps/sim/README.md#vslam比較用の模様付きmap)を参照。
+元bagの画像は変わらないため、このmapで新しいbagを記録してVOを比較する。

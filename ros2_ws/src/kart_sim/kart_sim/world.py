@@ -40,6 +40,15 @@ def load_map(path):
         for a,b in zip(line['points'],line['points'][1:]):
             if len(a)!=2 or len(b)!=2 or np.linalg.norm(np.array(b)-a) <= max(1e-6,gap):
                 raise ValueError('Invalid wall segment')
+    for spec in doc.get('visual_textures', []):
+        if not isinstance(spec.get('geom'), str) or not spec['geom']:
+            raise ValueError('visual_textures requires geom name')
+        if spec.get('type','2d') not in ('2d','cube'):
+            raise ValueError('Invalid visual texture type')
+        file = (Path(path).resolve().parent / spec['file']).resolve(strict=True)
+        spec['file'] = str(file)
+        if 'rgba' in spec and (len(spec['rgba']) != 4 or any(not 0 <= x <= 1 for x in spec['rgba'])):
+            raise ValueError('Invalid visual texture rgba')
     return doc
 
 def box(world, name, bounds, height, color, bottom=0, **attrs):
@@ -191,6 +200,22 @@ def add_world(root, doc):
         for sign in (-1,1):
             wall(world,f'gate_post_{sign}',[x,y+sign*w/2-.01],[x,y+sign*w/2+.01],z,.02,'white')
         wall(world,'arrow_panel',[x,y-w/2],[x,y+w/2],.19,.03,'black',bottom=z)
+    # Appearance-only textures: reuse existing geoms; no new contacts/geometry.
+    asset = root.find('asset')
+    if asset is None: asset = ET.SubElement(root,'asset')
+    targets = {geom.get('name'):geom for geom in world.findall('geom')}
+    seen = set()
+    for i,spec in enumerate(doc.get('visual_textures', [])):
+        name = spec['geom']
+        if name not in targets or name in seen:
+            raise ValueError(f'Invalid/duplicate visual texture geom: {name}')
+        seen.add(name)
+        texture, material = f'feature_texture_{i}', f'feature_material_{i}'
+        ET.SubElement(asset,'texture',name=texture,type=spec.get('type','2d'),file=spec['file'])
+        ET.SubElement(asset,'material',name=material,texture=texture,
+                      texrepeat='1 1',texuniform='false',specular='0',shininess='0')
+        targets[name].set('material',material)
+        if 'rgba' in spec: targets[name].set('rgba',nums(spec['rgba']))
     # Hide ceiling in overview viewer only; it remains visible to sensor cameras.
     visual=root.find('visual')
     if visual is None: visual=ET.SubElement(root,'visual')

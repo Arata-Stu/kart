@@ -27,6 +27,29 @@ class SimulationTests(unittest.TestCase):
             self.assertAlmostEqual(sim.state()[0][2],sim.parameters.tire_radius,places=3)
             self.assertIn('room_wall_0',[sim.model.geom(i).name for i in range(sim.model.ngeom)])
 
+    def test_feature_map_only_changes_appearance(self):
+        plain=self.make('minicar_2026')
+        feature=self.make('minicar_2026_features')
+        self.assertGreater(feature.model.ntex,plain.model.ntex)
+        self.assertEqual(feature.model.ngeom,plain.model.ngeom)
+        for key in ('geom_pos','geom_quat','geom_size','geom_type','geom_friction',
+                    'geom_contype','geom_conaffinity','geom_priority','body_mass','body_inertia'):
+            np.testing.assert_array_equal(getattr(plain.model,key),getattr(feature.model,key))
+        self.assertEqual(plain.map['autodrive'],feature.map['autodrive'])
+        for _ in range(50):
+            plain.step(throttle=.4,steering=.15)
+            feature.step(throttle=.4,steering=.15)
+        np.testing.assert_array_equal(plain.data.qpos,feature.data.qpos)
+        np.testing.assert_array_equal(plain.data.qvel,feature.data.qvel)
+        for name in ('room_floor','room_wall_0','barrier_0_0','parking_wall_0_0'):
+            self.assertGreaterEqual(feature.model.geom(name).matid[0],0)
+        # Tunnel curtain and tape retain their original solid colors/materials.
+        for i in range(plain.model.ngeom):
+            name=plain.model.geom(i).name
+            if name and name.startswith(('black_curtain','parking_tape','parking_label')):
+                np.testing.assert_array_equal(plain.model.geom(i).rgba,feature.model.geom(i).rgba)
+                np.testing.assert_array_equal(plain.model.geom(i).matid,feature.model.geom(i).matid)
+
     def test_spawn_and_rear_axle(self):
         sim=self.make('minicar_2026')
         np.testing.assert_allclose(sim.state()[0][:2],sim.map['spawn'][:2],atol=1e-10)

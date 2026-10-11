@@ -246,3 +246,13 @@ actionは`auto_start/stop/record_start/record_stop/reset/manual`、manualのみ
 
 2026-10-11: ボタンのinline handlerがHTMLButtonElementの`command`属性と衝突し、
 クリックで要求が送られない不具合を修正。monitorを読み込むsim processを再起動して反映する。
+
+### 模様付きVSLAM比較map
+
+`map:=minicar_2026_features`で床・室内壁・仕切り・駐車場壁に静的な不規則模様を付ける。
+元の`minicar_2026`と形状・接触・摩擦・カメラ・Auto lap経路を揃えた比較用。
+床の明度も変更する。特殊面/黒幕/駐車文字は保持。追加node/topic/parameterはない。
+JSONの`visual_textures`は任意（既定なし）、PNG pathはJSONからの相対で指定する。
+詳細・再生成・起動例は[map仕様](../../../maps/sim/README.md)を参照。
+sourceのJSONを使うなら`map_dir:=/workspaces/maps/sim`、installed版はkart_simをbuild/sourceして使う。
+模様追加によるVSLAM改善はGPU上で別bagを記録して比較する。現場の外観としては扱わない。
