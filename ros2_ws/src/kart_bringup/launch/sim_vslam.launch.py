@@ -45,7 +45,7 @@ def build(context):
                     extra_arguments=[{'use_intra_process_comms':True}])])]
     if show_rviz:
         actions.append(Node(package='rviz2',executable='rviz2',name='rviz2',output='screen',
-            arguments=['--fullscreen','-d',str(root/'sim/vslam.rviz')],parameters=[str(root/'evaluation/rviz.yaml')]))
+            arguments=['-d',str(root/'sim/vslam.rviz')],parameters=[str(root/'evaluation/rviz.yaml')]))
     if command:
         actions += [LogInfo(msg=f'Sim bag replay (filtered, initially paused): {command}'),
             ExecuteProcess(cmd=command,output='screen'),

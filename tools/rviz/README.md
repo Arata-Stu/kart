@@ -14,5 +14,7 @@ QT_QPA_PLATFORM=offscreen python3 tools/rviz/generate_vslam_layout.py > /tmp/vsl
 
 出力を`ros2_ws/src/kart_bringup/config/sim/vslam.rviz`のWindow Geometryへ反映する。
 既存のtopic・表示設定は保持する。
-実際のRVizは`sim_vslam.launch.py`の`--fullscreen`で起動する。Escで通常windowへ戻る。
+実際のRVizは通常window（1600×900）で起動する。
+RVizの`--fullscreen`は全dockを非表示にするため使わない。
+画面いっぱいにする場合はwindowの最大化ボタンを使う（画像・Displaysが残る）。
 Qtの復元検査と、Linux RVizで実際に画像が表示されることは別の検証である。

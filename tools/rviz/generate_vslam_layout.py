@@ -43,6 +43,7 @@ def main():
     QApplication.processEvents()
     assert restored.centralWidget().width()>restored.width()/2
     assert panels['Displays'].width()<restored.centralWidget().width()
+    assert all(not dock.isHidden() for dock in panels.values())
     assert min(panels['Left mono8'].height(),panels['Right mono8'].height())>200
     assert restored.dockWidgetArea(panels['Displays'])==Qt.LeftDockWidgetArea
     for name in panels:

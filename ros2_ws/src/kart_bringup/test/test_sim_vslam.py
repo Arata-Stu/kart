@@ -55,7 +55,8 @@ class SimVslamTests(unittest.TestCase):
         self.assertFalse(params['localize_on_startup'])
         self.assertTrue(all(overrides[k] for k in ('enable_slam_visualization','enable_landmarks_view','enable_observations_view')))
         rviz=next(a for a in actions if a.kind=='Node' and a.kwargs['package']=='rviz2')
-        self.assertIn('--fullscreen',rviz.kwargs['arguments'])
+        # RViz fullscreen forcibly hides all dock widgets, including images.
+        self.assertNotIn('--fullscreen',rviz.kwargs['arguments'])
         args=rviz.kwargs['arguments']
         rviz_config=yaml.safe_load(Path(args[args.index('-d')+1]).read_text())
         self.assertEqual([p['Name'] for p in rviz_config['Panels']],['Displays'])
