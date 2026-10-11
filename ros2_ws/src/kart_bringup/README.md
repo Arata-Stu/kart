@@ -111,6 +111,9 @@ launchに実行時引数を作っていない静的設定は、対応する運�
 
 ## ビルド・起動
 
+`BUILD_TESTING`有効時は`find_package(ament_cmake_pytest REQUIRED)`を読み込んでから
+`ament_add_pytest_test`で各テストを登録する。依存はpackage.xmlのtest_dependに記載。
+
 ```bash
 cd /workspaces/ros2_ws
 colcon build --symlink-install --packages-up-to kart_bringup
