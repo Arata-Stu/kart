@@ -91,6 +91,7 @@ def main():
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--e2e-model-dir", default="")
     parser.add_argument("--eval-localization", choices=("vslam", "vgl", "fresh"), default=None)
+    parser.add_argument("--multicam-mode", choices=("0","1","2"), default="", help="速度・精度: 0=Moderate / 1=Performance / 2=Precision")
     parser.add_argument("--tracking-mode", choices=("0", "1"), default="", help="offline評価: 0=stereo VO / 1=VIO")
     parser.add_argument("--base-frame", default="", help="offline評価の基準TF frame（例: camera_link）")
     parser.add_argument("--imu-frame", default="", help="offline VIO評価のIMU TF frame")
@@ -174,6 +175,12 @@ def main():
                 args.eval_localization = "fresh"
         if args.mode == "eval" and args.eval_localization == "fresh" and not args.tracking_mode:
             args.tracking_mode = choose("追跡方式", ["0", "1"], lambda v: "stereo VO（IMUなし）" if v == "0" else "VIO（IMUあり）")
+        if args.mode in ("drive","eval") and not args.multicam_mode:
+            import yaml
+            from kart_bringup.multicam import LABELS
+            preset='sim/vslam.yaml' if args.mode=='eval' and args.eval_localization=='fresh' else 'localization/cuvslam.yaml'
+            default=str(yaml.safe_load((config/preset).read_text())['/**/visual_slam']['ros__parameters']['multicam_mode'])
+            args.multicam_mode=choose("VSLAM速度・精度",list(LABELS),lambda v:LABELS[v],default=list(LABELS).index(default))
         if args.mode == "drive" or (args.mode == "eval" and args.eval_localization != "fresh"):
             args.map_file = args.map_file or str(
                 choose("HDMap", discover(args.map_root, "hdmap"))
@@ -220,6 +227,8 @@ def main():
             )
         elif args.run_name is None:
             args.run_name = input("run_name [run] > ").strip() or "run"
+    if args.multicam_mode and args.mode not in ('drive','eval'):
+        raise ValueError('--multicam-modeはVSLAMを使用するdrive/evalで指定してください')
     fresh = args.mode == "eval" and args.eval_localization == "fresh"
     if (args.base_frame or args.imu_frame or args.tracking_mode) and args.mode != "eval":
         raise ValueError("--base-frame/--imu-frame/--tracking-modeはoffline evalで使用してください")
@@ -247,11 +256,11 @@ def main():
             raise ValueError("HDMapに存在する--lane-id / --line-typeを選んでください")
         from kart_bringup.localization import resolve
 
-        overrides={}
+        overrides={'multicam_mode':args.multicam_mode} if args.multicam_mode else {}
         if args.mode=="eval":
             import yaml
             base=args.base_frame or yaml.safe_load((config/'evaluation/replay.yaml').read_text())['base_frame']
-            overrides={'base_frame':base,'use_sim_time':True}
+            overrides.update({'base_frame':base,'use_sim_time':True})
             overrides.update({k:getattr(args,k) for k in ('tracking_mode','imu_frame') if getattr(args,k)})
         parameters, _, _, profile = resolve(
             config / "localization", args.map_dir, args.model_dir, overrides=overrides, enable_vgl=not vslam_only
@@ -295,6 +304,7 @@ def main():
         "enable_foxglove": str(args.foxglove).lower(),
         "record_dir": args.record_dir,
         "run_name": args.run_name or "run",
+        "multicam_mode": args.multicam_mode,
     }
     if args.mode in ("drive", "eval") and not fresh:
         values.update(
@@ -321,12 +331,14 @@ def main():
                 "base_frame",
                 "imu_frame",
                 "tracking_mode",
+                "multicam_mode",
             )
         }
     if fresh:
         launch = "sim_vslam.launch.py"
         values = {"bag": args.bag, "rate": args.rate, "tracking_mode": args.tracking_mode,
                   "base_frame": args.base_frame, "imu_frame": args.imu_frame,
+                  "multicam_mode": args.multicam_mode,
                   "visualize": "true", "rviz": "true"}
     elif args.mode == "eval":
         values["enable_vgl"] = str(args.eval_localization == "vgl").lower()

@@ -102,7 +102,7 @@ class ReplayTests(unittest.TestCase):
             spec.loader.exec_module(module)
             args = SimpleNamespace(
                 enable_vgl="false",
-                base_frame="",tracking_mode="",imu_frame="",
+                base_frame="",tracking_mode="",imu_frame="",multicam_mode="",
                 bag="/bag",
                 rate="",
                 map_dir="/bundle",
@@ -135,12 +135,14 @@ class ReplayTests(unittest.TestCase):
             self.assertEqual(actions[0][1]["visualize"], "true")
             self.assertEqual(actions[0][1]["use_sim_time"], "true")
             self.assertEqual(actions[1][1]["use_sim_time"], "true")
-            args.tracking_mode='1';args.imu_frame='camera_imu_optical_frame'
+            args.tracking_mode='1';args.imu_frame='camera_imu_optical_frame';args.multicam_mode='2'
             with patch.object(module,'playback') as player,patch.object(module,'resolve',return_value=({'cuvslam':{'tracking_mode':1}},None,None,None)) as resolver,patch.object(module,'hdmap_choices',return_value=[('lane_001','raceline')]):
                 actions=module.add_evaluation(args)
             self.assertEqual(player.call_args.kwargs['extra_topics'],['/realsense/imu'])
             self.assertEqual(resolver.call_args.args[3]['tracking_mode'],'1')
             self.assertEqual(actions[0][1]['tracking_mode'],'1')
+            self.assertEqual(actions[0][1]['multicam_mode'],'2')
+            self.assertEqual(resolver.call_args.args[3]['multicam_mode'],'2')
             self.assertEqual(actions[0][1]['imu_frame'],'camera_imu_optical_frame')
             self.assertEqual(actions[-1][1]['tracking_mode'],'1')
 

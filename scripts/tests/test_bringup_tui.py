@@ -69,6 +69,11 @@ class FreshDiagnosticTests(unittest.TestCase):
                     self.assertIn("fresh_vio",values)
                     return "fresh_vo"
                 if title == "追跡方式": return "0"
+                if title == "VSLAM速度・精度":
+                    self.assertEqual(values,['0','1','2'])
+                    self.assertEqual(kwargs['default'],1)
+                    self.assertIn('精度重視',args[0]('2'))
+                    return '2'
                 if title == "再生rosbag": return values[0]
                 self.fail(f"Unexpected selection: {title}")
             output = io.StringIO()
@@ -80,7 +85,8 @@ class FreshDiagnosticTests(unittest.TestCase):
             self.assertIn("rviz:=true", text)
             self.assertIn("tracking_mode:=0", text)
             self.assertNotIn("map_dir:=", text)
-            self.assertEqual(titles, ["用途", "評価するlocalization", "再生rosbag"])
+            self.assertEqual(titles, ["用途", "評価するlocalization", "VSLAM速度・精度", "再生rosbag"])
+            self.assertIn('multicam_mode:=2',text)
             with patch.object(sys, "argv", ["bringup.py", "--mode", "eval", "--eval-localization", "fresh", "--bag", str(bag), "--tracking-mode", "1", "--dry-run"]):
                 with self.assertRaisesRegex(ValueError, "/realsense/imu"):
                     module.main()
@@ -97,6 +103,7 @@ class FreshDiagnosticTests(unittest.TestCase):
                 if title=='評価するlocalization':
                     self.assertIn('fresh_vio',values)
                     return 'fresh_vio'
+                if title=='VSLAM速度・精度':return '1'
                 if title=='再生rosbag':return values[0]
                 self.fail(f'Unexpected selection: {title}')
             output=io.StringIO()
@@ -107,6 +114,7 @@ class FreshDiagnosticTests(unittest.TestCase):
             self.assertIn('tracking_mode:=1',text)
             self.assertIn('base_frame:=camera_link',text)
             self.assertIn('imu_frame:=camera_imu_optical_frame',text)
+            self.assertIn('multicam_mode:=1',text)
             self.assertIn('rviz:=true',text)
             self.assertNotIn('map_dir:=',text)
             self.assertNotIn('enable_vgl:=true',text)
@@ -134,6 +142,8 @@ class FreshDiagnosticTests(unittest.TestCase):
             self.assertIn('enable_vgl:=false',text)
             self.assertIn('imu_frame:=camera_imu_optical_frame',text)
             self.assertEqual(resolve.call_args.kwargs['overrides']['tracking_mode'],'1')
+            self.assertEqual(resolve.call_args.kwargs['overrides']['multicam_mode'],'0')
+            self.assertIn('multicam_mode:=0',text)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ def add_evaluation(args):
     settings = yaml.safe_load((root / "evaluation/replay.yaml").read_text())
     base_frame = args.base_frame if args.base_frame != "" else settings["base_frame"]
     overrides={"use_sim_time": "true", "base_frame": base_frame}
-    overrides.update({k:getattr(args,k) for k in ('tracking_mode','imu_frame') if getattr(args,k)!=""})
+    overrides.update({k:getattr(args,k) for k in ('tracking_mode','imu_frame','multicam_mode') if getattr(args,k)!=""})
     parameters,_,_,_=resolve(
         root / "localization",
         args.map_dir,
@@ -47,6 +47,7 @@ def add_evaluation(args):
                 "enable_vgl": args.enable_vgl,
                 "tracking_mode": str(mode),
                 "imu_frame": args.imu_frame,
+                "multicam_mode": args.multicam_mode,
             },
         ),
         include(
@@ -83,6 +84,7 @@ def generate_launch_description():
     args.add_arg("enable_vgl", "false", cli=True)
     args.add_arg("rate", "", cli=True)
     args.add_arg("base_frame", "", cli=True)
+    args.add_arg("multicam_mode", "", cli=True)
     args.add_arg("tracking_mode", "", cli=True)
     args.add_arg("imu_frame", "", cli=True)
     args.add_arg("rviz", "", cli=True)

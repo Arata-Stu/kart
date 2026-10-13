@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from .vgl_assets import validate_bundle
+from .multicam import multicam_value
 
 
 def resolve(
@@ -40,23 +41,26 @@ def resolve(
             f"/**/{node}"
         ]["ros__parameters"]
     overrides = overrides or {}
-    if set(overrides) - {"use_sim_time", "base_frame", "tracking_mode", "imu_frame"}:
+    if set(overrides) - {"use_sim_time", "base_frame", "tracking_mode", "imu_frame", "multicam_mode"}:
         raise ValueError("Unknown localization override")
     for key, value in overrides.items():
         if key == "use_sim_time":
             if str(value).lower() not in ("true", "false"):
                 raise ValueError("use_sim_time must be true or false")
             value = str(value).lower() == "true"
+        elif key == "multicam_mode":
+            value=multicam_value(value)
         elif key == "tracking_mode":
             if str(value) not in ("0","1"):
                 raise ValueError("tracking_mode must be 0 (VO) or 1 (VIO)")
             value=int(value)
         elif not isinstance(value,str) or not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_/]*',value) or value.endswith('/') or '//' in value:
             raise ValueError(f"{key} must be a nonempty TF frame without leading slash")
-        targets=[params["cuvslam"]] if key in ("tracking_mode","imu_frame") else params.values()
+        targets=[params["cuvslam"]] if key in ("tracking_mode","imu_frame","multicam_mode") else params.values()
         for values in targets:
             values[key] = value
     slam, vgl = params["cuvslam"], params["vgl"]
+    slam['multicam_mode']=multicam_value(slam['multicam_mode'])
     for key in (
         "base_frame",
         "map_frame",

@@ -202,6 +202,7 @@ class MissionCompositionTests(unittest.TestCase):
                     "map_file",
                     "lane_id",
                     "line_type",
+                    "multicam_mode",
                 )
             }
             values.update(
@@ -224,6 +225,7 @@ class MissionCompositionTests(unittest.TestCase):
             args.mode = "drive"
             args.lane_id = "lane_001"
             args.line_type = "centerline"
+            args.multicam_mode = "2"
             with (
                 patch.object(
                     module,
@@ -247,6 +249,7 @@ class MissionCompositionTests(unittest.TestCase):
             localization = lu.include.call_args_list[2].kwargs["launch_arguments"]
             self.assertEqual(localization["vslam_container"], "/external/sensors")
             self.assertEqual(localization["create_vslam_container"], "false")
+            self.assertEqual(localization['multicam_mode'],'2')
             lu.component_container.assert_not_called()
             lu.include.reset_mock()
             args.mode = "e2e"

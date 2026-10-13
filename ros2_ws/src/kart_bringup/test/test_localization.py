@@ -137,6 +137,16 @@ class LocalizationTest(unittest.TestCase):
         self.assertFalse(any(topic=='visual_slam/imu' for topic,_ in remaps['vgl']))
         self.assertEqual((self.source/'cuvslam_map/map.mdb').read_text(),'map')
 
+    def test_multicam_mode_is_independent_of_vo_vio_and_vgl(self):
+        for tracking in (0,1):
+            for multicam in (0,1,2):
+                params,_,_,_=resolve(CONFIG,self.source,'',{'tracking_mode':tracking,'multicam_mode':multicam},enable_vgl=False)
+                self.assertEqual(params['cuvslam']['tracking_mode'],tracking)
+                self.assertEqual(params['cuvslam']['multicam_mode'],multicam)
+                self.assertNotIn('multicam_mode',params['vgl'])
+        for value in (-1,3,True,'bad'):
+            with self.assertRaises(ValueError):resolve(CONFIG,self.source,'',{'multicam_mode':value},enable_vgl=False)
+
     def test_mismatched_model_rejected(self):
         self.prepare()
         self.write(self.models / "aliked_lightglue/aliked.onnx", "different")

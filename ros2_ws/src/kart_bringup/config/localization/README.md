@@ -312,3 +312,8 @@ workflow.jsonの全キーにimuを追加し、既定入力は`/realsense/imu`
 remapするのはVIO時のみ。camera_optical_framesとimu_frameへの固定TFが必要。
 imu_frame既定はcamera_gyro_optical_frame。実機のheader/記録TFに合わせて指定する。
 保存地図へのlocalization成功は追跡成功とは別で、診断のlocalized_in_exist_mapを確認する。
+
+`multicam_mode`は0=Moderate、1=Performance、2=Precision。YAMLの既定は1。
+localization/evaluation launchの同名引数は空なら保持し、明示時のみcuVSLAMへ適用する。
+tracking_mode（VO/VIO）とは別の速度・精度設定で、VGL parameterへ混入しない。
+bringup.shのdrive/offline evalで説明付きの選択、または--multicam-mode指定を使う。

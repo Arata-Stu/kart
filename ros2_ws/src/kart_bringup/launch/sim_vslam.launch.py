@@ -9,6 +9,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 from kart_bringup.replay import playback, imu_topics
+from kart_bringup.multicam import multicam_value
 
 
 def build(context):
@@ -26,6 +27,8 @@ def build(context):
             if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_/]*',frame) or frame.endswith('/') or '//' in frame:
                 raise ValueError(f'{key}: specify a TF frame name without a leading slash')
             overrides[key]=frame
+    value=LaunchConfiguration('multicam_mode').perform(context)
+    if value:overrides['multicam_mode']=multicam_value(value)
     visualize=LaunchConfiguration('visualize').perform(context)
     if visualize:
         if visualize.lower() not in ('true','false'): raise ValueError('visualize must be true or false')
@@ -63,4 +66,4 @@ def build(context):
 
 def generate_launch_description():
     return LaunchDescription([*[DeclareLaunchArgument(name,default_value='') for name in
-        ('tracking_mode','base_frame','imu_frame','visualize','rviz','bag','rate')],OpaqueFunction(function=build)])
+        ('tracking_mode','base_frame','imu_frame','multicam_mode','visualize','rviz','bag','rate')],OpaqueFunction(function=build)])

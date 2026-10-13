@@ -52,6 +52,7 @@ class LocalizationLaunchTest(unittest.TestCase):
                 "model_dir",
                 "base_frame",
                 "use_sim_time",
+                "multicam_mode",
                 "tracking_mode",
                 "imu_frame",
                 "visualize",
@@ -81,7 +82,7 @@ class LocalizationLaunchTest(unittest.TestCase):
             enable_vgl="true",
             map_dir="/map",
             model_dir="/model",
-            tracking_mode="",imu_frame="",
+            tracking_mode="",imu_frame="",multicam_mode="",
             base_frame="",
             visualize="",
             use_sim_time=False,
@@ -112,7 +113,7 @@ class LocalizationLaunchTest(unittest.TestCase):
     def test_invalid_assets_start_no_containers(self):
         args = SimpleNamespace(
             enable_vgl="true",
-            map_dir="/map", model_dir="/model", base_frame="", use_sim_time="",tracking_mode="",imu_frame=""
+            map_dir="/map", model_dir="/model", base_frame="", use_sim_time="",tracking_mode="",imu_frame="",multicam_mode=""
         )
         with (
             patch.object(module, "resolve", side_effect=ValueError("bad assets")),
@@ -146,7 +147,7 @@ class LocalizationLaunchTest(unittest.TestCase):
             enable_vgl="true",
             map_dir="/map",
             model_dir="/model",
-            tracking_mode="",imu_frame="",
+            tracking_mode="",imu_frame="",multicam_mode="",
             base_frame="",
             visualize="",
             use_sim_time="",

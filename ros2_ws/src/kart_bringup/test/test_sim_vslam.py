@@ -109,5 +109,13 @@ class SimVslamTests(unittest.TestCase):
             for value in ('/camera_link','camera link','camera//imu','camera/'):
                 with self.assertRaises(ValueError):module.build({key:value})
 
+    def test_precision_choice_does_not_change_tracking_or_inputs(self):
+        module=self.load()
+        for tracking in ('0','1'):
+            actions=module.build({'tracking_mode':tracking,'multicam_mode':'0','rviz':'false'})
+            component=next(a for a in actions if a.kind=='ComposableNodeContainer').kwargs['composable_node_descriptions'][0]
+            self.assertEqual(component.kwargs['parameters'][1],{'tracking_mode':int(tracking),'multicam_mode':0})
+        with self.assertRaises(ValueError):module.build({'multicam_mode':'3'})
+
 
 if __name__=='__main__':unittest.main()

@@ -48,7 +48,8 @@ def add_mission(args):
         load_transforms(root / "vehicle/transforms.yaml", require_camera=True)
         if not params["enable_infra1"] or not params["enable_infra2"]:
             raise ValueError("Drive localization requires stereo infra (infra_fps > 0)")
-        _, _, _, profile = resolve(root / "localization", args.map_dir, args.model_dir)
+        overrides={'multicam_mode':args.multicam_mode} if args.multicam_mode!="" else {}
+        _, _, _, profile = resolve(root / "localization", args.map_dir, args.model_dir,overrides)
         width, height, _ = params["depth_module.infra_profile"].split("x")
         if profile["input_shape"][2:] != [int(height), int(width)]:
             raise ValueError("RealSense resolution differs from VGL map/model shape")
@@ -112,6 +113,7 @@ def add_mission(args):
                 {
                     "map_dir": args.map_dir,
                     "model_dir": args.model_dir,
+                    "multicam_mode": args.multicam_mode,
                     "vslam_container": "/" + cfg["sensor_container"].lstrip("/"),
                     "create_vslam_container": "false",
                 },
@@ -164,6 +166,7 @@ def generate_launch_description():
         "map_file",
         "lane_id",
         "line_type",
+        "multicam_mode",
     ):
         args.add_arg(
             key,

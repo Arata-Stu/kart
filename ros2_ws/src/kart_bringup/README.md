@@ -670,3 +670,32 @@ bash scripts/bringup.sh --mode eval --eval-localization vslam --tracking-mode 1 
 localization/evaluation launchへ直接tracking_mode:=1とimu_frame:=...を指定することもできる。
 VIO追跡と保存地図への再局在は別で、localization成功までは既存のAUTO許可条件を緩めない。
 ROS/GPUでの実地図を用いたVIO実行は未検証。Map StudioのVIO地図生成はこの変更に含めない。
+
+## VSLAMの速度・精度モード
+
+bringup.shでVSLAMを使うdrive/offline evalには「VSLAM速度・精度」の選択を追加。
+mapなしVO/VIO、保存mapのVO/VIO、VGL併用のいずれでも設定できる。
+これは入力方式のtracking_mode（VO/VIO）とは独立したmulticam_mode。
+
+| multicam_mode | 選択画面の説明 |
+|---|---|
+| 0 Moderate | 速度と精度のバランス |
+| 1 Performance | 速度重視・処理負荷を抑える |
+| 2 Precision | 精度重視・処理負荷は増える |
+
+既定候補は対応する運用YAMLの値を読む。現在はlocalization/simとも1。
+`--multicam-mode 0|1|2`で明示した場合は選択を省略する。collect/E2EはVSLAMを
+起動しないためこの指定を拒否する。選択値はcuVSLAMだけへ渡し、VGLには渡さない。
+
+```bash
+bash scripts/bringup.sh --multicam-mode 2
+# VIOとPrecisionを組み合わせたoffline evalをTUIで選ぶ
+bash scripts/bringup.sh --tracking-mode 1 --multicam-mode 2 \
+  --base-frame camera_link --imu-frame camera_imu_optical_frame
+```
+
+mission/localization/evaluation/sim_vslam.launch.pyはmulticam_mode引数を受け付ける。
+launchの既定は空（YAML保持）で、明示指定のみ上書き。値は整数0/1/2を検証する。
+入力topicやTF、bag再生内容、VO/VIO選択は変えない。
+精度・負荷の説明はモードの狙いであり、実bag/GPUでの改善や処理時間を保証しない。
+公式enum対応: [NVIDIA固定版実装](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_visual_slam/blob/e4dc8f59816dfca387bcb92364ecaf9207216475/isaac_ros_cuvslam/src/impl/visual_slam_impl.cpp#L424)。
