@@ -26,7 +26,7 @@ def bias_files(root):
                   if p.is_file() and not any(x.startswith(".") for x in p.relative_to(root).parts))
 
 
-def pipeline_configuration(root, backend="", serial="", bias_file=""):
+def pipeline_configuration(root, backend="", serial="", bias_file="", tensor_config=""):
     root = Path(root)
     selector = root / "openeb_tensor_pipeline.yaml"
     configured = yaml.safe_load(selector.read_text())["/**/tensor_pipeline"]["ros__parameters"]["tensor_backend"]
@@ -35,6 +35,11 @@ def pipeline_configuration(root, backend="", serial="", bias_file=""):
         raise ValueError(f"Invalid EVS backend: {backend}")
     paths = [root / "openeb.yaml", root / f"openeb_tensor_{backend}.yaml",
              root / "openeb_visualization.yaml", selector]
+    if tensor_config:
+        paths[1] = Path(tensor_config).expanduser().resolve()
+        tensor = yaml.safe_load(paths[1].read_text())["/**/event_tensor"]["ros__parameters"]
+        if tensor.get("temporal_interpolation") != "none":
+            raise ValueError("EVS runtime requires temporal_interpolation=none")
     for path in paths:
         if not path.is_file():
             raise ValueError(f"Missing EVS config: {path}")

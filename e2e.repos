@@ -3,4 +3,4 @@ repositories:
   python_ws/dinov3:
     type: git
     url: https://github.com/facebookresearch/dinov3.git
-    version: 6876159a11b4df116f30f667f8c9888617df0751
+    version: adc254450203739c8149213a7a69d8d905b4fcfa

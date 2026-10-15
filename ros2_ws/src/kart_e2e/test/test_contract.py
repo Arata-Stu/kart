@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kart_e2e.contract import SPEC, model_contract
+from kart_e2e.contract import DINOV3_COMMIT, SPEC, model_contract
 
 
 class ContractTests(unittest.TestCase):
@@ -27,6 +27,11 @@ class ContractTests(unittest.TestCase):
             path = root / "metadata.json"
             path.write_text(json.dumps(metadata))
             self.assertEqual(model_contract(root)[1], "steer_only")
+            metadata["model_spec"] = dict(SPEC, encoder_commit="6876159a11b4df116f30f667f8c9888617df0751")
+            path.write_text(json.dumps(metadata))
+            with self.assertRaises(ValueError):
+                model_contract(root)
+            metadata["model_spec"] = SPEC
             metadata["output_shape"] = [1, 2]
             path.write_text(json.dumps(metadata))
             with self.assertRaises(ValueError):
@@ -37,6 +42,11 @@ class ContractTests(unittest.TestCase):
             (root / "model.onnx").write_bytes(b"modified")
             with self.assertRaises(ValueError):
                 model_contract(root)
+
+    def test_source_pin_matches_contract(self):
+        root = next(parent for parent in Path(__file__).resolve().parents
+                    if (parent / "e2e.repos").is_file())
+        self.assertIn("version: " + DINOV3_COMMIT, (root / "e2e.repos").read_text())
 
     def test_missing_directory(self):
         with self.assertRaises(ValueError):

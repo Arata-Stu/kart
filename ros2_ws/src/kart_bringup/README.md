@@ -1,5 +1,35 @@
 # kart_bringup
 
+## 車両特性の手動記録
+
+`tuning_collect.launch.py`は通常のcollect構成に地図なしcuVSLAMを追加する。
+RealSenseとcuVSLAMはmission所有の同じmultithreaded containerへloadする。
+地図・HDMap・VGL・追従制御は不要。録画STARTと走行操作は独立し、AUTO要求を送らない。
+保存地図、mapping、動的TF出版を無効にして局所odometryを記録する。
+
+```bash
+bash /workspaces/scripts/vehicle_tuning.sh collect run_name:=straight_01
+```
+
+独自ノードは追加しない。既存`visual_slam`（`isaac_ros_cuvslam`、
+`nvidia::isaac_ros::visual_slam::VisualSlamNode`）をloadする。
+入力は左右`/realsense/infra{1,2}/image_rect_raw`（sensor_msgs/msg/Image）、
+`/realsense/infra{1,2}/camera_info`（sensor_msgs/msg/CameraInfo）、
+VIO時の`/realsense/imu`（sensor_msgs/msg/Imu）、`/tf_static`（tf2_msgs/msg/TFMessage）。
+画像/IMUはSENSOR_DATA depth 5。主な出力は`/visual_slam/tracking/odometry`
+（nav_msgs/msg/Odometry）と`/localization/vslam/diagnostics`
+（diagnostic_msgs/msg/DiagnosticArray）。外部ノードの全仕様は既存localization説明を参照。
+
+全launch引数の既定は空文字でYAML保持。`device`、`record_dir`、`run_name`はvehicleへ、
+`rgb_fps`、`infra_fps`はカメラへ渡す。`tracking_mode`は0=VO/1=VIO（YAML既定0）、
+`multicam_mode`は0=Moderate/1=Performance/2=Precision（YAML既定1）。
+stereo無効・camera mount未設定は起動前に拒否する。base_frameはbase_link。
+静的値の正本は[config/tuning](config/tuning/README.md)。
+
+記録要件、解析フィルタ、全CLI設定、候補のレビュー手順は
+[車両チューニング](../../../tools/vehicle_tuning/README.md)。
+構成のportableテストは`test/test_tuning.py`。ROS/CUDAロード・実車記録は未検証。
+
 `vehicle.launch.py`でJoy入力・操作解釈・モード管理・mux・任意のUSB bridgeを起動する。
 このpackage自身の処理ノード、入力topic、出力topic、独自ROSパラメータはない。
 以下はlaunchが起動するノードと、構成全体の既定インターフェース。
@@ -717,3 +747,9 @@ launchの既定は空（YAML保持）で、明示指定のみ上書き。値は�
 入力topicやTF、bag再生内容、VO/VIO選択は変えない。
 精度・負荷の説明はモードの狙いであり、実bag/GPUでの改善や処理時間を保証しない。
 公式enum対応: [NVIDIA固定版実装](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_visual_slam/blob/e4dc8f59816dfca387bcb92364ecaf9207216475/isaac_ros_cuvslam/src/impl/visual_slam_impl.cpp#L424)。
+
+EVS encoder専用設定: `modules/sensors/openeb.launch.py`に`evs_tensor_config`引数を追加。
+既定空文字は従来YAML、指定時は生成済みfull tensor YAMLへ置換。時間補間はnoneのみ。
+これはセンサmoduleの明示指定であり、missionへの引数転送は未追加。
+`/event_camera/tensor` (isaac_ros_tensor_msgs/msg/TensorList)のcontent解像度をモデルに合わせる。
+CPU/CUDA/cuda_asyncそれぞれの既存full YAMLをbaseに生成すること。driverコード/既定設定は変更しない。

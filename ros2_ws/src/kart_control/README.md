@@ -1,5 +1,9 @@
 # kart_control
 
+実車の速度ゲイン調整用に、[VSLAMによるオフライン解析](../../../tools/vehicle_tuning/README.md)を用意する。
+`scripts/vehicle_tuning.sh`で記録要件確認・特性推定・既存SpeedPid式に基づく候補試算ができる。
+候補YAMLはレビュー用で、実効parameterを変更しない。現行のノード／topic／parameterは変更しない。
+
 オフライン生成ラインをPure Pursuitで追従し、物理単位の目標舵角・速度を出す。
 既定node名`pure_pursuit`、単独実行`pure_pursuit`、C++ Component `kart_control::PurePursuitNode`。
 `ament_cmake_auto`で構築する。参照ラインは既存`kart_hdmap/hdmap_server`が配信する。

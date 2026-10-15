@@ -53,3 +53,28 @@ CLIを正本としてUIは固定引数の組み立て・ジョブ管理・成果
 学習時のruntime.fixed_throttle/max_throttleをcheckpoint→ONNX metadata→decoderへ継承する。
 TUIはoutput_modeとmodel_specも検証し、RGBなしを拒否する。センサとencoder/TensorRTは同一container。
 E2EモードではVSLAM/VGLを起動せず、AUTOは引き続き利用者の操作で選択する。
+
+## DINOv3版の統一（2026-10-15）
+
+EventStateの20ch EVS蒸留と共通の公式commit `adc254450203739c8149213a7a69d8d905b4fcfa` にRGB/EVSのソース版を揃える。
+`e2e.repos`と`kart_e2e.contract.DINOV3_COMMIT`を同期する。
+既存checkoutは作業変更を確認してからこのcommitへ更新する。重みは別管理。
+旧commitのRGB checkpoint/ONNX metadataはSPEC不一致で拒否される。
+metadataだけを書き換えて再利用しない。旧版との出力一致を確認した明示的移行、
+または新版での学習・ONNX再exportとtarget TensorRT engine再生成が必要。
+今回の変更はソース版の統一のみ。20ch入力・EVS前処理・制御headの対応は別実装。
+実DINOv3重みロード、ONNX、ROS、Jetsonの検証は未実施。
+
+## EVS histogram encoder準備（2026-10-15）
+
+時間補間なし・40ms・10bin・positive→negativeの20chを採用。モデルJSONから
+content解像度160×120/320×240を取得する。driverはFP32 raw counts、mean0/std1を維持。
+`python -m kart_e2e.evs_contract --model-json event_encoder.json --base-config <openeb_tensor_cuda_async.yaml> --output <new.yaml>`
+で全parameterを保持した専用設定を生成する。線形補間モデルと異なる統計解像度は拒否。
+モデルは `kart_e2e.evs_model.load_evs_encoder(weights, repo, device)` でロードし、
+`encode_openeb_counts(encoder, counts)` がpadding→固定正規化→patch tokensを返す。
+上記PythonはPCの学習/比較用。JetsonのROS inferenceへTorchを導入しない。
+入力はTensorList /event_camera/tensor由来の[B,20,Hcontent,Wcontent]、未正規化counts。
+新しいROSノードやtopicは追加しない。ONNX/TensorRT接続と制御headは後続。
+DSEC学習は整列RGBに合わせrectified座標、kart既定driverはraw sensor座標。
+同じ画素座標イベント集合の集計規約は合わせるが、実カメラの校正差は別途評価する。

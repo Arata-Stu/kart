@@ -1,5 +1,9 @@
 # kart
 
+車両の加速・惰行・制動と速度制御の調整:
+[VSLAMによる簡易チューニング](tools/vehicle_tuning/README.md)。
+地図なしの手動記録、bagの品質検査、特性表、モデル上のPID比較と設定候補出力に対応。
+
 初回準備: [セットアップ一覧](docs/setup/README.md) / [Jetsonセットアップ](docs/setup/jetson.md) / [x86_64 Ubuntuセットアップ](docs/setup/x86_64.md)。
 
 ## 用途別bringup

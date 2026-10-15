@@ -12,7 +12,7 @@ def setup(context):
     root = Path(get_package_share_directory("kart_bringup")) / "config/sensors"
     paths, overrides = pipeline_configuration(
         root, *(LaunchConfiguration(key).perform(context)
-                for key in ("evs_backend", "evs_serial", "evs_bias_file")))
+                for key in ("evs_backend", "evs_serial", "evs_bias_file", "evs_tensor_config")))
     return [
         LogInfo(msg=f"OpenEB configs={paths}; overrides={overrides}; packet default OFF"),
         Node(package="openeb_ros2", executable="openeb_tensor_pipeline",
@@ -24,6 +24,6 @@ def setup(context):
 def generate_launch_description():
     return LaunchDescription([
         *(DeclareLaunchArgument(key, default_value="")
-          for key in ("evs_backend", "evs_serial", "evs_bias_file")),
+          for key in ("evs_backend", "evs_serial", "evs_bias_file", "evs_tensor_config")),
         OpaqueFunction(function=setup),
     ])

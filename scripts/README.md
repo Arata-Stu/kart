@@ -1,5 +1,10 @@
 # scripts
 
+`vehicle_tuning.sh collect`は地図なしVSLAMを伴う手動記録、`check` / `analyze` / `tune`は
+読み取り専用のbag解析・PID候補試算の入口です。
+[記録要件・操作手順・検証範囲](../tools/vehicle_tuning/README.md)を参照してください。
+録画開始と走行操作は独立し、候補設定を実車へ自動適用しません。
+
 普段使う入口を直下、補助的なshを役割別に配置します。コマンドはproject rootから実行します。
 
 | 場所 | 用途 | 実行環境 |

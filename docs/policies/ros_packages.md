@@ -326,3 +326,13 @@ simの制御周期・PID dt・制御上の待ち時間はROS clockに従う。
 入力stampのsim秒期限と通信受信のsteady秒watchdogを分離する。
 実機の短い監視期限をsimの低速描画へ流用せず、sim用wall_timeout_sで明示する。
 ROS clock停止中も通信監視を残し、巻戻しでは制御状態を破棄しSTOPから再armする。
+
+## 車両特性の記録・解析
+
+`tuning_collect.launch.py`は既存collectが所有するsensor containerへ地図なしcuVSLAMを追加する。
+通常collectの構成は変えず、記録開始と走行モード操作を独立させる。地図・VGL・追従制御は起動しない。
+静的VSLAM parameterは`kart_bringup/config/tuning/`に全項目を保持し、実効設定を起動ログへ出す。
+解析の速度はodometry twistを記録済み固定TFで車体frameへ変換した値とし、map位置差分や動的map→odomを使わない。
+固定TF欠落・競合をidentityで補わない。VSLAM推定値を真値や実測校正済み速度として扱わない。
+入力時刻、除外条件、採用区間、同定／検証区間と誤差を成果物へ残す。
+PID試算はモデル上の予測であり、ROS結合・実車検証と区別する。候補は別YAMLへ出し実車設定を自動変更しない。

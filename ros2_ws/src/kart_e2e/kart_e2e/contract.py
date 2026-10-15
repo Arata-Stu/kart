@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-DINOV3_COMMIT = "6876159a11b4df116f30f667f8c9888617df0751"
+DINOV3_COMMIT = "adc254450203739c8149213a7a69d8d905b4fcfa"
 SPEC = {
     "schema": 2,
     "encoder": "dinov3_vits16",
