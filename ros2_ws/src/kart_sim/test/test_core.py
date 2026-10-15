@@ -174,6 +174,20 @@ class CommandGateTests(unittest.TestCase):
         gate.accept_mode(3,1.1,1.1,10.1)
         self.assertEqual(gate.output(1.1,10.1),(0,0,0,0))
 
+    def test_slow_sim_uses_separate_wall_watchdog(self):
+        from kart_sim.safety import CommandGate
+        gate=CommandGate(wall_timeout=5.)
+        gate.accept_mode(1, 10, 10, 100)
+        gate.accept_command((0,.5,0,0), 10, 10, 100)
+        # Only 20 ms of physics elapsed during 0.8 s of rendering.
+        self.assertEqual(gate.output(10.02, 100.8), (0,.5,0,0))
+        self.assertEqual(gate.output(10, 104.9), (0,.5,0,0))
+        self.assertEqual(gate.output(10, 105.1), (0,0,0,0))
+        self.assertEqual(gate.output(10.21, 100.1), (0,0,0,0))
+        self.assertEqual(gate.output(0, 100.1), (0,0,0,0))
+        for value in (-1, float('nan'), float('inf')):
+            with self.assertRaises(ValueError):CommandGate(wall_timeout=value)
+
     def test_pause_reset_and_bad_stamps(self):
         from kart_sim.safety import CommandGate
         gate=CommandGate(require_mode=False)

@@ -2,9 +2,12 @@
 import math
 
 class CommandGate:
-    def __init__(self, command_timeout=.2, mode_timeout=.5, require_mode=True):
+    def __init__(self, command_timeout=.2, mode_timeout=.5, require_mode=True, wall_timeout=0.):
         if not math.isfinite(command_timeout) or not math.isfinite(mode_timeout) or min(command_timeout,mode_timeout)<=0:
             raise ValueError('Timeouts must be finite positive values')
+        if not math.isfinite(wall_timeout) or wall_timeout < 0:
+            raise ValueError('wall_timeout must be finite and nonnegative')
+        self.wall_timeout=wall_timeout
         self.command_timeout=command_timeout; self.mode_timeout=mode_timeout; self.require_mode=require_mode
         self.reset()
 
@@ -32,8 +35,8 @@ class CommandGate:
     def output(self,sim_time,steady_time):
         permitted=(not self.require_mode or
             (self.mode in (1,2) and self.mode_received is not None and
-             0<=steady_time-self.mode_received<=self.mode_timeout and
+             0<=steady_time-self.mode_received<=(self.wall_timeout or self.mode_timeout) and
              -1e-6<=sim_time-self.mode_source<=self.mode_timeout))
-        fresh=(self.received is not None and 0<=steady_time-self.received<=self.command_timeout and
+        fresh=(self.received is not None and 0<=steady_time-self.received<=(self.wall_timeout or self.command_timeout) and
                -1e-6<=sim_time-self.source<=self.command_timeout)
         return self.command if permitted and fresh else (0.,0.,0.,0.)

@@ -127,12 +127,18 @@ kart_bringup/config/sim/sim.yamlを使う。
 | monitor_enabled | false | localhostの画像・走行操作・録画monitor。ROS nodeでの起動時固定 |
 | record_dir | record/sim | rosbag2保存親directory。相対パスは起動cwd基準、開始操作時のみ作成 |
 | require_mode | true | modeのAUTO/MANUAL・heartbeatを必須にする。falseは明示的な単体指令テスト用 |
-| command_timeout_s | 0.2 | 指令のsim stamp・steady受信期限、正値 |
-| mode_timeout_s | 0.5 | modeのsim stamp・steady受信期限、正値 |
+| command_timeout_s | 0.2 | 指令のsim stamp期限、正値 |
+| mode_timeout_s | 0.5 | modeのsim stamp期限、正値 |
+| wall_timeout_s | 5.0 | 指令・modeのsteady受信期限。0は各sim stamp期限と同じ値を使う。有限・非負 |
 | step_count | 10 | wall timer一回の物理step数、1..100。各step 0.001秒 |
 | max_steering_rad | 0.45 | 正規化舵角1の中心舵角rad、0より大きく0.6以下、仮値 |
 | wheel_torque_nm | 0.025 | 正規化駆動1の各輪トルクNm、正値、仮値 |
 | use_sim_time | ROS共通false | YAMLはtrue。自身の物理更新timerはsteady clockを使う |
+
+sim用bringupではPure Pursuit/速度PIDの周期とPIDのdtをsim時刻に合わせる。
+描画中に実時間だけが進んでもI/D計算を増やさない。入力stampの期限はsim秒、
+通信受信のwatchdogは独立した実時間5秒。停止中も監視は残り、5秒の受信途絶では
+中立／STOPとなる。巻戻しや長い停止後のAUTOは明示的に再要求する。
 
 物理1000Hz、出版/GUIは100Hz既定。処理が追いつかない場合sim時刻が壁時計より遅れる。
 画像/IMUは物理step内で取得し、timerごとにその間のサンプルを出版する。
@@ -281,7 +287,7 @@ ROSなしpreviewでも真値周回・記録は使えるが、kart制御の操作
 （std_msgs/String JSON）。追加入力は`/sim/operator/status`（std_msgs/String JSON）と
 `/visual_slam/tracking/odometry`（nav_msgs/Odometry）。既存ROS topic/parameterは変更しない。
 heartbeatにはcamera有効、真値TF有効、操舵上限を送る。
-operator状態の受信期限はsteady時刻で2秒。kart AUTOは準備済みoperatorだけに要求し、
+operator状態の受信期限はsteady時刻で5秒。kart AUTOは準備済みoperatorだけに要求し、
 接続・準備状態の喪失、AUTOへの移行失敗ではlocal brakeを適用してSTOPを要求する。
 真値周回・手動・STOPに切り替えるとkart指令を無効化し、sim側が操作を所有する。
 地図を読み込んだbringupがrunningの間は、時刻巻戻しを防ぐためResetを拒否する。

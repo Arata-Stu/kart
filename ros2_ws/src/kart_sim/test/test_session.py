@@ -61,7 +61,7 @@ class SessionTests(unittest.TestCase):
         self.assertIn('require ROS',self.session.error)
         self.session.operator.send=lambda *_:None
         self.session.operator.update({'ready':True,'mode':1})
-        self.session.operator.received-=3
+        self.session.operator.received-=self.session.operator.timeout+1
         self.session.request('kart_auto');self.session.drain(self.sim)
         self.assertFalse(self.session.kart_active)
         self.assertEqual(self.session.output(self.sim),(0.,0.,1.,0.))
@@ -87,6 +87,18 @@ class SessionTests(unittest.TestCase):
             with self.assertRaises(ValueError):self.session.request('truth_speed', value)
             with self.assertRaises(ValueError):self.session.request('kart_speed', value)
         self.assertEqual(self.session.controller.speed, self.session.controller.default_speed)
+
+    def test_slow_auto_acknowledgement_uses_wall_watchdog(self):
+        self.session.operator.send=lambda *_:None
+        self.session.operator.update({'ready':True,'mode':3,'running':True})
+        self.session.request('kart_auto');self.session.drain(self.sim)
+        self.session.kart_requested_at-=2.
+        self.session.drain(self.sim)
+        self.assertTrue(self.session.kart_active)
+        self.session.kart_requested_at-=self.session.operator.timeout
+        self.session.drain(self.sim)
+        self.assertFalse(self.session.kart_active)
+        self.assertTrue(self.session.owns_control)
 
     def test_bag_roundtrip_and_reset_guard(self):
         self.session.request('record_start'); self.session.drain(self.sim)

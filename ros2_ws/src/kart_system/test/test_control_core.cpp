@@ -26,6 +26,12 @@ int main() {
   assert(!fresh(9,10,0.2)); assert(!fresh(10,NEVER,0.2));
   assert(!fresh_stamp(10,0,0.15)); assert(!fresh_stamp(10,9.8,0.15));
   assert(!fresh_stamp(10,10.1,0.15)); assert(fresh_stamp(10,9.9,0.15));
+  // Slow simulator: 20 ms of ROS time during 800 ms of host time.
+  assert(fresh_input(10.02,10,100.8,100,.15,5));
+  assert(!fresh_input(10.02,10,100.8,100,.15)); // Original physical watchdog.
+  assert(!fresh_input(10.02,10,105.1,100,.15,5)); // Actual receive loss.
+  assert(!fresh_input(10.2,10,100.1,100,.15,5)); // ROS-stale still rejected.
+  assert(!fresh_input(0,10,100.1,100,.15,5)); // Clock reset cannot reuse old input.
   auto c=teleop(-1,0.5,0,false,0.08,1,0.3);
   assert(c.steering==1 && c.throttle==0.15 && c.reverse==0);
   assert(neutral(teleop(0.07,0,0,false,0.08,1,0.3)));

@@ -4,3 +4,4 @@
   ros__parameters:
     use_sim_time: true
     command_timeout: 0.15
+    wall_timeout_s: 5.0  # 0 follows command_timeout, sim uses separate wall watchdog

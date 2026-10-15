@@ -6,6 +6,8 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "rcl_interfaces/msg/parameter_descriptor.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp/create_timer.hpp"
+#include "kart_control/timing.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "tf2/exceptions.hpp"
@@ -26,6 +28,9 @@ public:
           param("lookahead_m", 0.8),       param("max_speed_mps", 1.0),
           param("max_cross_track_m", 1.0), param("goal_tolerance_m", 0.1),
           param("deceleration_mps2", 1.0)};
+    wall_timeout_ = param("wall_timeout_s", 0.0);
+    if (!std::isfinite(wall_timeout_) || wall_timeout_ < 0)
+      throw std::invalid_argument("wall_timeout_s must be finite and nonnegative");
     pose_timeout_ = param("pose_timeout_s", 0.2);
     line_timeout_ = param("line_timeout_s", 2.5);
     localization_timeout_ = param("localization_timeout_s", 2.5);
@@ -94,8 +99,18 @@ public:
             diag_stamp_ = rclcpp::Time(m->header.stamp);
           }
         });
-    timer_ = create_wall_timer(std::chrono::duration<double>(1 / rate),
-                               [this] { tick(); });
+    if (get_parameter("use_sim_time").as_bool())
+      timer_ = rclcpp::create_timer(this, get_clock(),
+          rclcpp::Duration::from_seconds(1 / rate), [this] { tick(); });
+    else
+      timer_ = create_wall_timer(std::chrono::duration<double>(1 / rate),
+          [this] { tick(); });
+    watchdog_ = create_wall_timer(std::chrono::milliseconds(100), [this] {
+      if (steady() - pose_received_ > receive_limit(pose_timeout_, wall_timeout_) ||
+          steady() - line_received_ > receive_limit(line_timeout_, wall_timeout_) ||
+          steady() - diag_received_ > receive_limit(localization_timeout_, wall_timeout_))
+        publish({}, "receive_timeout");
+    });
   }
 
 private:
@@ -112,7 +127,7 @@ private:
   bool fresh(rclcpp::Time stamp, double received, double limit) {
     double age = (now() - stamp).seconds();
     return stamp.nanoseconds() > 0 && age >= -0.05 && age <= limit &&
-           steady() - received <= limit;
+           steady() - received <= receive_limit(limit, wall_timeout_);
   }
   void publish(const Result &r, const std::string &reason) {
     ackermann_msgs::msg::AckermannDriveStamped cmd;
@@ -176,7 +191,7 @@ private:
   Settings c_;
   std::string frame_, map_;
   bool closed_{false}, localized_{false};
-  double pose_timeout_, line_timeout_, localization_timeout_;
+  double pose_timeout_, line_timeout_, localization_timeout_, wall_timeout_;
   double pose_received_{0}, line_received_{0}, diag_received_{0};
   rclcpp::Time pose_stamp_{0, 0, RCL_ROS_TIME}, line_stamp_{0, 0, RCL_ROS_TIME},
       diag_stamp_{0, 0, RCL_ROS_TIME};
@@ -192,7 +207,7 @@ private:
       command_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_;
   rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr target_;
-  rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::TimerBase::SharedPtr timer_, watchdog_;
 };
 } // namespace kart_control
 RCLCPP_COMPONENTS_REGISTER_NODE(kart_control::PurePursuitNode)

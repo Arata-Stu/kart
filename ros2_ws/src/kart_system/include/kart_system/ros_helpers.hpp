@@ -34,8 +34,8 @@ inline double number(rclcpp::Node & n, const std::string & key, double value, do
 struct Sample {
   Control msg;
   double received{NEVER};
-  bool available(double steady, double ros, double timeout) const {
-    return fresh(steady,received,timeout) && fresh_stamp(ros,seconds(msg.header.stamp),timeout) && valid(values(msg));
+  bool available(double steady, double ros, double timeout, double wall_timeout=0) const {
+    return fresh_input(ros,seconds(msg.header.stamp),steady,received,timeout,wall_timeout) && valid(values(msg));
   }
 };
 inline void request(rclcpp::Node & node, const rclcpp::Publisher<Request>::SharedPtr & pub,

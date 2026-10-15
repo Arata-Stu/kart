@@ -8,6 +8,7 @@
     input_timeout_s: 0.15
     mode_timeout_s: 0.3
     max_target_speed_mps: 1.5  # Trial ceiling; nominal target remains 0.35 m/s
+    wall_timeout_s: 5.0  # Wall receive watchdog; 0 follows each data timeout
     control_rate_hz: 50.0
     kp: 0.8
     ki: 0.05

@@ -89,7 +89,7 @@ class SimSession:
                 self.error = ''
             except Exception as exc:
                 self.error = str(exc)
-        mode_failed=self.operator.state.get('mode',3)!=1 and time.monotonic()-self.kart_requested_at>1.
+        mode_failed=self.operator.state.get('mode',3)!=1 and time.monotonic()-self.kart_requested_at>self.operator.timeout
         if self.kart_active and (not self.operator.ready() or mode_failed):
             self.kart_active=False;self.owns_control=True;self.manual=(0.,0.,1.,0.);self.invalidate()
             self.error='kart readiness/heartbeat lost; stopped'

@@ -3,7 +3,7 @@ import time
 
 
 class OperatorLink:
-    def __init__(self,timeout=2.):
+    def __init__(self,timeout=5.):
         self.timeout=timeout;self.received=None;self.state={};self.send=None
     def update(self,state):
         if not isinstance(state,dict):raise ValueError('Invalid operator status')

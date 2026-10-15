@@ -61,10 +61,11 @@ package configは単独起動用。use_sim_timeのみROS共通。
 | max_cross_track_m | 1.0 | 正値、ラインからの距離上限 |
 | goal_tolerance_m | 0.1 | 正値、開路終端の停止距離 |
 | deceleration_mps2 | 1.0 | 正値、目標速度減速計算。実減速度保証ではない |
-| pose_timeout_s | 0.2 | odom stamp/受信の期限 |
+| pose_timeout_s | 0.2 | ROS時刻でのodom stamp期限。wall_timeout_s=0なら受信期限にも使用 |
 | line_timeout_s | 2.5 | reference stamp/受信の期限。HDMap既定1Hz |
 | localization_timeout_s | 2.5 | 再局在診断stamp/受信の期限 |
-| control_rate_hz | 30.0 | 壁時計timer周期、正値 |
+| wall_timeout_s | 0.0 | 受信の実時間監視。0は各入力期限を使用、正値は独立したsteady秒の期限 |
+| control_rate_hz | 30.0 | 正値。sim time有効時はROS timer、無効時はwall timer |
 | use_sim_time | false | bagではtrue、clockを供給 |
 
 ## 起動・container
@@ -152,14 +153,24 @@ D項は実測速度の微分へ一次フィルタをかけ、目標値の段差�
 | brake_limit | 0.0 | 可 | ブレーキ出力上限、0..1。既定無効 |
 | tracking_frame | rear_axle | 不可 | 後輪軸中心、Pure Pursuitと一致 |
 | max_steering_rad | 0.0 | 不可 | 0は未校正、正値かつ1.57未満。Pure Pursuitと一致 |
-| input_timeout_s | 0.15 | 不可 | 目標/速度のstamp・受信およびtracking_status受信期限 |
-| mode_timeout_s | 0.3 | 不可 | mode stamp/受信期限 |
+| input_timeout_s | 0.15 | 不可 | ROS時刻での目標/速度stamp期限。wall_timeout_s=0なら受信とtracking_status期限にも使用 |
+| mode_timeout_s | 0.3 | 不可 | ROS時刻でのmode stamp期限。wall_timeout_s=0なら受信期限にも使用 |
 | max_target_speed_mps | 1.0 | 不可 | 超過目標は異常としてSTOP要求 |
-| control_rate_hz | 50.0 | 不可 | 壁時計timer周波数 |
+| wall_timeout_s | 0.0 | 不可 | 受信の実時間監視。0はinput/modeの期限、正値は独立したsteady秒の期限 |
+| control_rate_hz | 50.0 | 不可 | sim time有効時はROS timer、無効時はwall timer周波数 |
 | use_sim_time | false | ROS共通 | bag時true。実車bridgeはfalse |
 
 gainは有限・非負のみ受理する。不正変更は拒否。
 変更が確定した次の制御周期でI/D状態をリセットする（無衝撃切替を保証するものではない）。
+use_sim_timeは起動時に選択する。trueではPure Pursuit/速度制御の周期とPIDのdt、
+AUTO開始の100ms中立待ちをROS時刻に合わせる。falseの周期・PID dtは従来のsteady時刻。
+同じsim時刻を繰り返しても積分しない。時刻巻戻しではPID/入力有効状態を破棄し、
+clock_jumpとしてSTOP要求とラッチを行う。0.2秒を超える制御dtは従来どおり異常。
+実時間の100ms watchdogはROS clock停止中も動作し、受信途絶時に無効出力／STOP要求を行う。
+sim運用ではwall_timeout_s=5.0、実機運用では0.0（従来の短い受信期限）を使用する。
+`/control/speed_diagnostics`（diagnostic_msgs/msg/DiagnosticArray、既存topic）に
+`control_dt_s`を追加し、実際に使用した時間差を示す。診断出力の間引きは実時間のまま。
+
 AUTO以外では中立を配信して積分をリセットする。
 AUTOへの移行時は100ms中立を維持し、既存muxのneutral-input条件に合わせる。
 AUTO中に入力期限切れ/不正値/TF不足/追従無効が起きると中立とSTOP要求を出し、異常をラッチする。

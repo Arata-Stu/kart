@@ -8,6 +8,7 @@ from kart_interfaces.msg import ReferenceLine
 from nav_msgs.msg import Path
 from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult
 from rclpy.node import Node
+from rclpy.clock import Clock, ClockType
 from rclpy.parameter import Parameter
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import String
@@ -76,7 +77,10 @@ class HDMapNode(Node):
         self.paths = {k: self.create_publisher(Path, "hdmap/" + k, qos) for k in KINDS}
         self.create_subscription(String, "hdmap/select_lane", self.choose, 1)
         self.create_service(Trigger, "hdmap/reload", self.reload)
-        self.create_timer(1.0 / self.settings["publish_rate_hz"], self.publish)
+        # The map is static. Keep its heartbeat independent of slow/frozen physics;
+        # header stamps still use the ROS clock, and source geometry is unchanged.
+        self.create_timer(1.0 / self.settings["publish_rate_hz"], self.publish,
+                          clock=Clock(clock_type=ClockType.STEADY_TIME))
         self.add_on_set_parameters_callback(self.validate_parameters)
         self.add_post_set_parameters_callback(self.apply_parameters)
         self.get_logger().info("HDMap settings: " + json.dumps(self.settings))

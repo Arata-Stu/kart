@@ -35,7 +35,7 @@ class SimNode(Node):
     def __init__(self):
         super().__init__('kart_sim')
         defaults={'map_file':'','asset_dir':'','camera_enabled':False,'viewer_enabled':False,
-            'require_mode':True,'command_timeout_s':.2,'mode_timeout_s':.5,
+            'require_mode':True,'command_timeout_s':.2,'mode_timeout_s':.5,'wall_timeout_s':5.,
             'step_count':10,'max_steering_rad':.45,'wheel_torque_nm':.025,
             'camera_rig_file':'','stereo_hz':60.0,'rgb_hz':30.0,'imu_hz':200.0,
             'imu_enabled':True,'publish_truth_tf':True,
@@ -51,7 +51,7 @@ class SimNode(Node):
         self.sim=Simulation(p['map_file'],assets,p['camera_enabled'],p['max_steering_rad'],p['wheel_torque_nm'],
             rig_file=p['camera_rig_file'] or None,stereo_hz=p['stereo_hz'],rgb_hz=p['rgb_hz'],
             imu_hz=p['imu_hz'],imu_enabled=p['imu_enabled'])
-        self.gate=CommandGate(p["command_timeout_s"],p["mode_timeout_s"],p["require_mode"])
+        self.gate=CommandGate(p["command_timeout_s"],p["mode_timeout_s"],p["require_mode"],p["wall_timeout_s"])
         self.paused=False
         from .session import SimSession
         self.session=SimSession(self.sim,p['record_dir'])

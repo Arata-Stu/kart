@@ -3,7 +3,7 @@
     use_sim_time: true
     map_root: /workspaces/map
     model_root: /workspaces/models
-    heartbeat_timeout_s: 2.0
+    heartbeat_timeout_s: 5.0
     status_period_s: 0.2
     studio_enabled: true
     studio_script: /workspaces/tools/app/start.sh

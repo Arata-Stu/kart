@@ -116,6 +116,9 @@ Studioが保存時に形状を検証し、生成・export時に禁止領域と�
 
 選択lane内の`line_type`を`/planning/reference_line`（`kart_interfaces/msg/ReferenceLine`）へ配信する。
 QoSはreliable/transient_local/depth1、既存のpublish_rate_hzと同周期。
+静的地図の再配信timerはsteady clockを使い、headerはROS時刻とする。
+遅いsimでも地図heartbeatの実時間間隔が伸びず、制御側の受信watchdogと整合する。
+再配信は静的参照の状態通知であり、推定姿勢や制御指令のstampは更新しない。
 閉路でも先頭を末尾に重複追加しない。XY/速度の要素数は同じ。
 追加parameterは`line_type=centerline`（動的）と`centerline_speed_mps=0.0`（起動時固定）（有限・非負）。
 Race/Customはprofileのvx_mpsを使用し、Centerlineは明示した一定速度を使う。

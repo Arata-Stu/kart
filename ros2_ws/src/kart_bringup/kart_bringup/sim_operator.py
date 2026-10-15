@@ -60,7 +60,7 @@ def main(args=None):
         def __init__(self):
             super().__init__('sim_operator')
             for key,default in [('map_root','/workspaces/map'),('model_root','/workspaces/models'),
-                                ('heartbeat_timeout_s',2.),('status_period_s',.2),
+                                ('heartbeat_timeout_s',5.),('status_period_s',.2),
                                 ('studio_enabled',True),('studio_script','/workspaces/tools/app/start.sh'),('studio_port',8766)]:self.declare_parameter(key,default)
             self.timeout=float(self.get_parameter('heartbeat_timeout_s').value)
             period=float(self.get_parameter('status_period_s').value)

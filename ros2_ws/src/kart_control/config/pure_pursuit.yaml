@@ -13,4 +13,5 @@
     pose_timeout_s: 0.2
     line_timeout_s: 2.5
     localization_timeout_s: 2.5
+    wall_timeout_s: 0.0  # Wall receive watchdog; 0 follows each data timeout
     control_rate_hz: 30.0

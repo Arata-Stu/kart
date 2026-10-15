@@ -7,6 +7,8 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "rcl_interfaces/msg/parameter_descriptor.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp/create_timer.hpp"
+#include "kart_control/timing.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "tf2/LinearMath/Quaternion.hpp"
@@ -28,6 +30,9 @@ public:
       : Node("speed_controller", options) {
     frame_ = fixed<std::string>("tracking_frame", "rear_axle");
     steering_limit_ = fixed("max_steering_rad", 0.0);
+    wall_timeout_ = fixed("wall_timeout_s", 0.0);
+    if (!std::isfinite(wall_timeout_) || wall_timeout_ < 0)
+      throw std::invalid_argument("wall_timeout_s must be finite and nonnegative");
     timeout_ = fixed("input_timeout_s", 0.15);
     mode_timeout_ = fixed("mode_timeout_s", 0.3);
     max_speed_ = fixed("max_target_speed_mps", 1.0);
@@ -111,9 +116,23 @@ public:
     odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
         "visual_slam/tracking/odometry", rclcpp::SensorDataQoS(),
         [this](nav_msgs::msg::Odometry::ConstSharedPtr m) { measure(*m); });
-    previous_tick_ = steady();
-    timer_ = create_wall_timer(std::chrono::duration<double>(1 / rate_),
-                               [this] { tick(); });
+    sim_time_ = get_parameter("use_sim_time").as_bool();
+    control_time_.advance(sim_time_ ? now().seconds() : steady());
+    if (sim_time_)
+      timer_ = rclcpp::create_timer(this, get_clock(),
+          rclcpp::Duration::from_seconds(1 / rate_), [this] { tick(); });
+    else
+      timer_ = create_wall_timer(std::chrono::duration<double>(1 / rate_),
+          [this] { tick(); });
+    watchdog_ = create_wall_timer(std::chrono::milliseconds(100), [this] {
+      // This remains active when /clock pauses or the simulator disappears.
+      if (was_auto_ &&
+          (steady() - mode_received_ > receive_limit(mode_timeout_, wall_timeout_) ||
+           steady() - target_received_ > receive_limit(timeout_, wall_timeout_) ||
+           steady() - measured_received_ > receive_limit(timeout_, wall_timeout_) ||
+           steady() - status_received_ > receive_limit(timeout_, wall_timeout_)))
+        fault("receive_timeout");
+    });
   }
 
 private:
@@ -141,7 +160,7 @@ private:
              double limit) {
     double age = (now() - rclcpp::Time(stamp)).seconds();
     return rclcpp::Time(stamp).nanoseconds() > 0 && age >= -0.05 &&
-           age <= limit && steady() - received <= limit;
+           age <= limit && steady() - received <= receive_limit(limit, wall_timeout_);
   }
   void measure(const nav_msgs::msg::Odometry &m) {
     measurement_ok_ = false;
@@ -202,6 +221,7 @@ private:
     s.message = state;
     s.level = state == "active" || state == "inactive" ? 0 : 1;
     for (const auto &item : std::vector<std::pair<std::string, double>>{
+             {"control_dt_s", control_dt_},
              {"target_mps", target_.drive.speed},
              {"measured_mps", measured_},
              {"error_mps", target_.drive.speed - measured_},
@@ -233,8 +253,18 @@ private:
     output(why);
   }
   void tick() {
-    double time = steady(), dt = time - previous_tick_;
-    previous_tick_ = time;
+    const double time = sim_time_ ? now().seconds() : steady();
+    const auto elapsed = control_time_.advance(time);
+    if (elapsed.jumped) {
+      was_auto_ = false;
+      tracking_ok_ = false;
+      measurement_ok_ = false;
+      fault("clock_jump");
+      return;
+    }
+    if (!elapsed.advanced) return; // Never integrate twice at a frozen timestamp.
+    const double dt = elapsed.dt;
+    control_dt_ = dt;
     auto updated = read_settings();
     if (!(updated == settings_)) {
       settings_ = updated;
@@ -280,7 +310,7 @@ private:
     }
     if (!fresh(target_.header.stamp, target_received_, timeout_) ||
         target_.header.frame_id != frame_ || !tracking_ok_ ||
-        time - status_received_ > timeout_) {
+        steady() - status_received_ > receive_limit(timeout_, wall_timeout_)) {
       fault("tracking_unavailable");
       return;
     }
@@ -317,13 +347,16 @@ private:
     }
   }
   std::string frame_;
-  double steering_limit_, timeout_, mode_timeout_, max_speed_, rate_;
+  double steering_limit_, timeout_, mode_timeout_, max_speed_, rate_, wall_timeout_;
+  bool sim_time_{false};
+  ControlTime control_time_;
+  double control_dt_{0};
   SpeedPid pid_;
   PidSettings settings_;
   bool tracking_ok_{false}, measurement_ok_{false}, latched_{false},
       was_auto_{false};
   double target_received_{0}, status_received_{0}, mode_received_{0},
-      measured_received_{0}, previous_tick_{0}, last_stop_{0},
+      measured_received_{0}, last_stop_{0},
       last_diagnostic_{0}, measured_{0}, auto_ready_at_{0};
   builtin_interfaces::msg::Time measured_stamp_;
   Mode mode_;
@@ -342,7 +375,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr status_sub_;
   rclcpp::Subscription<Mode>::SharedPtr mode_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
-  rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::TimerBase::SharedPtr timer_, watchdog_;
 };
 } // namespace kart_control
 RCLCPP_COMPONENTS_REGISTER_NODE(kart_control::SpeedControllerNode)

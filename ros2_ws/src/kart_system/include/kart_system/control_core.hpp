@@ -27,6 +27,11 @@ inline bool fresh(double now, double received, double timeout) {
 inline bool fresh_stamp(double now, double stamp, double timeout) {
   return std::isfinite(stamp) && stamp > 0 && stamp <= now + 0.05 && now - stamp <= timeout;
 }
+inline bool fresh_input(double ros, double stamp, double steady, double received,
+                        double timeout, double wall_timeout=0) {
+  return fresh(steady,received,wall_timeout > 0 ? wall_timeout : timeout) &&
+         fresh_stamp(ros,stamp,timeout);
+}
 constexpr double NEVER = -std::numeric_limits<double>::infinity();
 
 // A local latch, deliberately independent of periodic mode messages.

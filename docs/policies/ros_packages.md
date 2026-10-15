@@ -322,3 +322,7 @@ sim専用設定のrule base制御を管理する。実機camera/vehicle/Joyを�
 monitorの速度試験は真値収集用速度とKart AUTO参照速度を独立操作とする。
 Kart速度変更はsim限定opt-inのHDMap parameterで行い、地図形状・停止点・録画・制御所有権を変更しない。
 応答未確認の値を適用済みと表示せず、実速度と目標速度を区別する。
+simの制御周期・PID dt・制御上の待ち時間はROS clockに従う。
+入力stampのsim秒期限と通信受信のsteady秒watchdogを分離する。
+実機の短い監視期限をsimの低速描画へ流用せず、sim用wall_timeout_sで明示する。
+ROS clock停止中も通信監視を残し、巻戻しでは制御状態を破棄しSTOPから再armする。

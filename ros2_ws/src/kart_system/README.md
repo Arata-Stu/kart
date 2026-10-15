@@ -56,6 +56,10 @@ STOP以外の要求stampは500 ms以内が必要。STOPのみstamp省略可。
 
 STOP/PROPOでは指令を配信しない。起動・異常後はSTOPを観測してから新しいHOST遷移を要求する。
 指令の受信時刻と元stampを両方確認し、異常から回復しただけでは再armしない。
+modeの元stampもROS時刻で0.3秒以内をtick時に確認する。
+mode managerの10Hz配信とmuxの100Hz転送・監視は実時間のまま。
+simではwall_timeout_s=5.0とし、遅い描画中に0.15秒の実時間だけで失効させず、
+sim時刻での入力鮮度と実時間での通信断を分離する。元stampは更新しない。
 
 ## パラメータ
 
@@ -106,7 +110,8 @@ operation_mode_manager独自の設定パラメータはない（STOP起動、10 
 
 | ノード | 名前 | 既定値 | 説明 |
 | --- | --- | --- | --- |
-| command_mux | `command_timeout` | `0.15` s | 受信時刻・元stampの有効期間。0.02..0.2 s |
+| command_mux | `command_timeout` | `0.15` s | ROS時刻での元stampの有効期間。0.02..0.2 s。wall_timeout_s=0なら受信期限も兼ねる |
+| command_mux | `wall_timeout_s` | `0.0` s | 0は従来の受信期限（指令0.15、mode 0.3秒）。正値は別の実時間受信監視、最大60秒。sim設定は5.0 |
 
 muxの配信周期100 Hz、mode監視300 msは固定。
 

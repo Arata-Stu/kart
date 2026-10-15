@@ -596,7 +596,7 @@ restart/unloadで試験速度を破棄する。地図/YAMLは書き換えない�
 | use_sim_time | true | ROS header時刻はsim clock |
 | map_root | /workspaces/map | 保存地図・HDMap・VGL bundle探索root |
 | model_root | /workspaces/models | VGLモデル探索root |
-| heartbeat_timeout_s | 2.0 | sim heartbeat・推定・診断・状態の受信期限（steady秒） |
+| heartbeat_timeout_s | 5.0 | sim heartbeat・推定・診断・状態の受信期限（steady秒） |
 | status_period_s | 0.2 | 状態送信周期（steady秒） |
 | studio_enabled | true | Map Studioを起動／既存localhost serverを利用 |
 | studio_script | /workspaces/tools/app/start.sh | 信頼済みStudio起動script |
@@ -608,7 +608,15 @@ HDMap centerline速度0.35m/s、通常の参照速度上限0.45m/s、lookahead 0
 試験速度のためpure_pursuit / speed_controllerの速度上限は1.5m/sとする。
 HDMapの`nominal_speed_limit_mps=0.45`により、試験未指定時のRace/Custom速度上限も維持する。
 速度制御はkp=0.8、ki=0.05、kd=0、kff=0.49、throttle_limit=0.65、brake_limit=0.3。
-これらはsim用の仮調整で、実機設定は変更しない。全値は上記YAMLを参照。
+これらはsim用の仮調整。全値は上記YAMLを参照。
+Pure Pursuitと速度PIDはuse_sim_time=true時にROS timerで実行し、PID dtと
+AUTO開始の中立100msもsim秒で計算する。各stamp期限は従来のsim秒を保持し、
+control/mux/sim actuatorの`wall_timeout_s=5.0`とoperator heartbeat 5秒で
+実時間の受信途絶を監視する。実機用wall_timeout_s=0.0は従来の短い期限を維持する。
+/clock停止中はPIDを積分せず、受信watchdogだけ動作する。5秒以上停止した場合は
+AUTOが解除され得るため、再開後に明示的にAUTOを要求する。
+静的HDMapの再配信は実時間1Hz、headerはsim時刻。
+これは非同期ROS構成であり、physics・推定・制御の完全なlockstepや倍速動作の保証ではない。
 AUTO許可には保存地図へのlocalization、freshなodom/診断/tracking/mode、
 sim camera有効・真値TF無効・操舵上限一致が必要。接続や推定が途切れればSTOPを要求する。
 
