@@ -576,10 +576,18 @@ VGL利用時は対応bundleとGPUに合ったモデルを指定する。
 | client | `/hdmap_server/set_parameters` | rcl_interfaces/SetParameters |
 
 要求JSONは`action`と`value`。actionは`kart_configure`（map/line選択）、`kart_line`
-（lane/line変更）、`kart_auto`、`kart_stop`、`kart_unload`、`kart_refresh`。
+（lane/line変更）、`kart_speed`（動的試験速度）、`kart_auto`、`kart_stop`、`kart_unload`、`kart_refresh`。
 configure値は`map_file/map_dir/model_dir/enable_vgl/lane_id/line_type`の文字列dictionary。
 line値は`[lane_id,line_type]`。探索された資産だけを許可し、固定argvで子launchを起動する。
 地図変更・ライン変更はSTOPで実施する。終了時は所有する子launchとStudioを終了する。
+
+`kart_speed`のvalueは0.05..1.5 m/sの数値、またはnull（地図速度へ復帰）。
+実行中のsim pipelineだけを対象に、`/hdmap_server/set_parameters`
+（`rcl_interfaces/srv/SetParameters`）で`speed_override_mps`を更新する。
+通常走行中も適用でき、走行開始や記録開始は行わない。パラメータ応答成功後だけ
+status JSONの`speed_override_mps`に反映（-1は地図速度、nullは未確認）。
+`speed_pending`は応答待ち。2秒の応答期限超過・拒否時はエラーとSTOP要求。
+restart/unloadで試験速度を破棄する。地図/YAMLは書き換えない。
 
 `config/sim/operator.yaml`が全parameterの運用基準。
 
@@ -596,7 +604,9 @@ line値は`[lane_id,line_type]`。探索された資産だけを許可し、固�
 
 各`config/sim/drive_*.yaml`は対応するcontrol/system/hdmap設定の全parameterを保持する。
 既存package READMEの意味・既定値を引き継ぎ、全ノードの`use_sim_time=true`、
-HDMap centerline速度0.35m/s、追従上限0.45m/s、lookahead 0.35m、操舵上限0.45radへ変更する。
+HDMap centerline速度0.35m/s、通常の参照速度上限0.45m/s、lookahead 0.35m、操舵上限0.45radへ変更する。
+試験速度のためpure_pursuit / speed_controllerの速度上限は1.5m/sとする。
+HDMapの`nominal_speed_limit_mps=0.45`により、試験未指定時のRace/Custom速度上限も維持する。
 速度制御はkp=0.8、ki=0.05、kd=0、kff=0.49、throttle_limit=0.65、brake_limit=0.3。
 これらはsim用の仮調整で、実機設定は変更しない。全値は上記YAMLを参照。
 AUTO許可には保存地図へのlocalization、freshなodom/診断/tracking/mode、

@@ -14,10 +14,9 @@ class WaypointController:
         self.error = ''
         self.laps = 0
         self.progress = 0.
-        self.speed = float(cfg.get('speed_mps', .45))
+        self.default_speed = cfg.get('speed_mps', .45)
+        self.set_speed(self.default_speed)
         self.lookahead = float(cfg.get('lookahead_m', .35))
-        if not math.isfinite(self.speed) or not .05 <= self.speed <= 1.5:
-            raise ValueError('autodrive speed_mps must be 0.05..1.5')
         if not math.isfinite(self.lookahead) or not .15 <= self.lookahead <= 1:
             raise ValueError('autodrive lookahead_m must be 0.15..1')
         if not self.available:
@@ -38,6 +37,13 @@ class WaypointController:
         self.index = 0
         self.last_motion_time = 0.
         self.last_motion_position = None
+
+    def set_speed(self, value):
+        if value is None:
+            value = self.default_speed
+        if type(value) not in (int, float) or not math.isfinite(value) or not .05 <= value <= 1.5:
+            raise ValueError('autodrive speed_mps must be 0.05..1.5')
+        self.speed = float(value)
 
     def start(self, sim):
         if not self.available:

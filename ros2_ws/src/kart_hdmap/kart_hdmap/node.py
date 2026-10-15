@@ -14,6 +14,7 @@ from std_msgs.msg import String
 from std_srvs.srv import Trigger
 from visualization_msgs.msg import MarkerArray
 
+from .speed import validate_speed_override, override_speeds
 from .document import KINDS, load, select
 from .messages import markers, path_message, reference_message
 
@@ -27,13 +28,16 @@ class HDMapNode(Node):
             "lane_id": "",
             "line_type": "centerline",
             "centerline_speed_mps": 0.0,
+            "allow_speed_override": False,
+            "nominal_speed_limit_mps": 0.0,
+            "speed_override_mps": -1.0,
             "publish_rate_hz": 1.0,
             "line_width_m": 0.04,
             "label_height_m": 0.25,
         }
         for key, value in defaults.items():
             self.declare_parameter(
-                key, value, ParameterDescriptor(read_only=key != "line_type")
+                key, value, ParameterDescriptor(read_only=key not in ("line_type", "speed_override_mps"))
             )
         self.settings = {k: self.get_parameter(k).value for k in defaults}
         for key in ("publish_rate_hz", "line_width_m", "label_height_m"):
@@ -46,6 +50,10 @@ class HDMapNode(Node):
         speed = self.settings["centerline_speed_mps"]
         if not math.isfinite(speed) or speed < 0:
             raise ValueError("centerline_speed_mps must be finite and nonnegative")
+        limit = self.settings["nominal_speed_limit_mps"]
+        if not math.isfinite(limit) or limit < 0:
+            raise ValueError("nominal_speed_limit_mps must be finite and nonnegative")
+        validate_speed_override(self.settings["speed_override_mps"], self.settings["allow_speed_override"])
         self.line_type = self.settings["line_type"]
         self.document = load(self.settings["map_file"], self.settings["frame_id"])
         self.selected = self.settings["lane_id"]
@@ -76,6 +84,11 @@ class HDMapNode(Node):
 
     def validate_parameters(self, parameters):
         for parameter in parameters:
+            if parameter.name == "speed_override_mps":
+                try:
+                    validate_speed_override(parameter.value, self.settings["allow_speed_override"])
+                except ValueError as exc:
+                    return SetParametersResult(successful=False, reason=str(exc))
             if parameter.name == "line_type" and (
                 parameter.type_ != Parameter.Type.STRING or parameter.value not in KINDS
             ):
@@ -87,12 +100,14 @@ class HDMapNode(Node):
 
     def apply_parameters(self, parameters):
         # Apply only after the entire parameter transaction has committed.
+        changed = False
         for parameter in parameters:
-            if parameter.name == "line_type":
-                self.line_type = parameter.value
-                self.settings["line_type"] = parameter.value
-                self.publish()
-                break
+            if parameter.name in ("line_type", "speed_override_mps"):
+                self.settings[parameter.name] = parameter.value
+                changed = True
+        if changed:
+            self.line_type = self.settings["line_type"]
+            self.publish()
 
     def choose_line(self, msg):
         result = self.set_parameters_atomically(
@@ -124,15 +139,15 @@ class HDMapNode(Node):
     def publish(self):
         stamp = self.get_clock().now().to_msg()
         lane = select(self.document, self.selected)
-        self.reference_pub.publish(
-            reference_message(
-                lane,
-                self.line_type,
-                self.settings["centerline_speed_mps"],
-                self.document["frame_id"],
-                stamp,
-            )
+        reference = reference_message(
+            lane, self.line_type, self.settings["centerline_speed_mps"],
+            self.document["frame_id"], stamp,
         )
+        reference.speeds = override_speeds(
+            reference.speeds, self.settings["speed_override_mps"],
+            self.settings["nominal_speed_limit_mps"],
+        )
+        self.reference_pub.publish(reference)
         self.marker_pub.publish(
             markers(
                 self.document,

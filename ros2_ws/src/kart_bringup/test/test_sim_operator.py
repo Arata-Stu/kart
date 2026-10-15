@@ -6,12 +6,18 @@ import unittest
 from unittest.mock import patch
 from types import ModuleType, SimpleNamespace
 import yaml
-from kart_bringup.sim_operator import validate_selection, pipeline_command
+from kart_bringup.sim_operator import validate_selection, pipeline_command, trial_speed
 
 PACKAGE=Path(__file__).resolve().parents[1]
 
 
 class OperatorTests(unittest.TestCase):
+    def test_speed_validation_and_restore(self):
+        self.assertEqual(trial_speed(None), -1.)
+        for speed in (.05, .8, 1.5):self.assertEqual(trial_speed(speed), speed)
+        for value in (True, '0.5', -1, 0, 1.51, float('nan'), float('inf')):
+            with self.assertRaises(ValueError):trial_speed(value)
+
     def selection(self):
         return dict(map_file='/maps/a b/map.json',map_dir='/maps/vslam',model_dir='',enable_vgl='false',lane_id='lane_1',line_type='centerline')
     def test_selection_requires_discovered_assets_and_lane(self):

@@ -66,6 +66,28 @@ class SessionTests(unittest.TestCase):
         self.assertFalse(self.session.kart_active)
         self.assertEqual(self.session.output(self.sim),(0.,0.,1.,0.))
 
+    def test_live_speed_change_preserves_drive_and_recording(self):
+        self.session.request('auto_start');self.session.drain(self.sim)
+        self.session.request('truth_speed', .8);self.session.drain(self.sim)
+        self.assertEqual(self.session.controller.speed, .8)
+        self.assertTrue(self.session.controller.enabled)
+        self.assertTrue(self.session.owns_control)
+        self.assertFalse(self.session.recorder.writer)
+        self.session.request('truth_speed', None);self.session.drain(self.sim)
+        self.assertEqual(self.session.controller.speed, self.session.controller.default_speed)
+        sent=[]
+        self.session.operator.send=lambda *v:sent.append(v)
+        self.session.operator.update({'ready':True, 'mode':1, 'running':True})
+        self.session.request('kart_auto');self.session.drain(self.sim)
+        self.session.request('kart_speed', .9);self.session.drain(self.sim)
+        self.assertEqual(sent[-1], ('kart_speed', .9))
+        self.assertTrue(self.session.kart_active)
+        self.assertFalse(self.session.owns_control)
+        for value in (True, 0, 1.51, '0.5', float('nan'), float('inf')):
+            with self.assertRaises(ValueError):self.session.request('truth_speed', value)
+            with self.assertRaises(ValueError):self.session.request('kart_speed', value)
+        self.assertEqual(self.session.controller.speed, self.session.controller.default_speed)
+
     def test_bag_roundtrip_and_reset_guard(self):
         self.session.request('record_start'); self.session.drain(self.sim)
         self.assertTrue(self.session.recorder.writer)

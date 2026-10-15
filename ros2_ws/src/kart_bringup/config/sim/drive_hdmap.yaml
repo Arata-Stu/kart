@@ -7,6 +7,9 @@
     lane_id: ''
     line_type: centerline
     centerline_speed_mps: 0.35
+    allow_speed_override: true  # Opt in to runtime uniform speed trials
+    nominal_speed_limit_mps: 0.45  # Original-speed ceiling; 0: no extra ceiling
+    speed_override_mps: -1.0  # -1: original speed; 0.05..1.5: replace positive speeds
     publish_rate_hz: 1.0
     line_width_m: 0.04
     label_height_m: 0.25

@@ -319,3 +319,6 @@ sim専用設定のrule base制御を管理する。実機camera/vehicle/Joyを�
 制御設定は`kart_bringup/config/sim/drive_*.yaml`に全parameterを保持し、実機gainと分離する。
 真値周回は収集用。kart AUTOでは真値controllerを停止し、推定姿勢のみで追従する。
 真値`map/odom` TFは配信せず、monitorの真値比較は表示に限る。
+monitorの速度試験は真値収集用速度とKart AUTO参照速度を独立操作とする。
+Kart速度変更はsim限定opt-inのHDMap parameterで行い、地図形状・停止点・録画・制御所有権を変更しない。
+応答未確認の値を適用済みと表示せず、実速度と目標速度を区別する。

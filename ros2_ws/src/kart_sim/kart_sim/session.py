@@ -22,8 +22,11 @@ class SimSession:
 
     def request(self, action, value=None):
         if action not in ('auto_start', 'stop', 'record_start', 'record_stop', 'reset', 'manual',
-                          'bev','kart_configure','kart_auto','kart_line','kart_refresh','kart_unload'):
+                          'truth_speed','kart_speed','bev','kart_configure','kart_auto','kart_line','kart_refresh','kart_unload'):
             raise ValueError('Unknown action')
+        if action in ('truth_speed', 'kart_speed') and value is not None:
+            if type(value) not in (int, float) or not .05 <= value <= 1.5:
+                raise ValueError('Trial speed must be 0.05..1.5 m/s, or null to restore')
         if action == 'bev' and type(value) is not bool:
             raise ValueError('bev requires a boolean')
         if action == 'manual':
@@ -40,10 +43,12 @@ class SimSession:
             except Empty:
                 break
             try:
-                if action == 'bev':
+                if action == 'truth_speed':
+                    self.controller.set_speed(value)
+                elif action == 'bev':
                     self.bev_enabled=value
                 elif action.startswith('kart_'):
-                    if action != 'kart_refresh':
+                    if action not in ('kart_refresh', 'kart_speed'):
                         self.controller.stop();self.manual=(0.,0.,1.,0.);self.owns_control=True;self.kart_active=False
                         self.invalidate()
                     self.operator.request(action,value)

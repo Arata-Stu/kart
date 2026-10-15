@@ -119,6 +119,18 @@ QoSはreliable/transient_local/depth1、既存のpublish_rate_hzと同周期。
 閉路でも先頭を末尾に重複追加しない。XY/速度の要素数は同じ。
 追加parameterは`line_type=centerline`（動的）と`centerline_speed_mps=0.0`（起動時固定）（有限・非負）。
 Race/Customはprofileのvx_mpsを使用し、Centerlineは明示した一定速度を使う。
+
+| 速度試験parameter | 既定値 | 動的 | 意味 |
+|---|---|---|---|
+| allow_speed_override | false | 不可 | 試験速度指定の許可。sim運用設定のみtrue |
+| speed_override_mps | -1.0 | 可 | -1は通常速度、0.05..1.5 m/sは正の参照速度を一定値へ置換 |
+| nominal_speed_limit_mps | 0.0 | 不可 | 通常速度の上限、0は追加制限なし。sim運用では0.45 |
+
+`speed_override_mps`はparameter serviceから適用後すぐReferenceLineを再配信する。
+停止点（速度0）、座標、地図ファイルは変更しない。空のlineに点を追加しない。
+allow_speed_override=falseでは-1以外を拒否するため、実機設定の既定動作は変わらない。
+試験速度はnominal上限を置換するが、下流controllerの独立した速度上限は有効。
+速度変更は車両モードを変更しない。追従・速度制御の設定整合は呼び出し側の責務。
 `/hdmap/select_line`（std_msgs/msg/String、reliable/volatile/depth1）で
 centerline/raceline/customlineを選択できる。不明kindは拒否。
 未生成のkindやlane未選択なら空のReferenceLineで以前の選択を無効化する。

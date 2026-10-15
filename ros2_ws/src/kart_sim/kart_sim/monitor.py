@@ -23,6 +23,13 @@ PAGE=r'''<!doctype html><meta charset="utf-8"><title>kart_sim monitor</title>
 <button onclick="sendSimCommand('auto_start')">Data collection lap (truth)</button>
 <button id="kartAuto" onclick="sendSimCommand('kart_auto')" disabled>Kart AUTO (estimated pose)</button>
 <button id="recordStart" onclick="sendSimCommand('record_start')">Start rosbag</button><button id="recordStop" onclick="sendSimCommand('record_stop')">Stop rosbag</button><button onclick="sendSimCommand('reset')">Reset sim</button></section>
+<p><label for="trialSpeed">試験速度 (m/s)</label> <input id="trialSpeed" type="number" min="0.05" max="1.5" step="0.05" value="0.35">
+<button onclick="sendSimCommand('truth_speed',+document.getElementById('trialSpeed').value)">真値周回に適用</button>
+<button onclick="sendSimCommand('truth_speed',null)">真値周回の既定値へ戻す</button>
+<button id="kartSpeedApply" onclick="sendSimCommand('kart_speed',+document.getElementById('trialSpeed').value)">Kart AUTOに適用</button>
+<button id="kartSpeedRestore" onclick="sendSimCommand('kart_speed',null)">地図の速度へ戻す</button></p>
+<p id="trialSpeedStatus">速度設定を取得しています</p>
+<p>速度変更は走行・記録を開始しません。真値周回はカーブで減速します。Kart AUTOは正の経路速度を置換し、停止点を保持します。</p>
 <p>Steering <input id="steering" type="range" min="-1" max="1" step=".05" value="0"> Throttle <input id="throttle" type="range" min="-.5" max=".5" step=".02" value="0"><button onclick="sendSimCommand('manual',[+document.getElementById('steering').value,+document.getElementById('throttle').value])">Apply manual (sim)</button></p></fieldset>
 <fieldset><legend>Terminal 2: kart saved-map bringup</legend><p id="operator">Waiting for sim_bringup</p>
 <p>HDMap <select id="hdmap" onchange="fillLines()"></select></p>
@@ -53,13 +60,16 @@ function renderStatus(s){
  if(s.paused){drive='一時停止';tone='warning';detail='simの物理更新を停止しています';}
  statusCard('driveStatus',drive,detail,tone);
  statusCard('bringupStatus',!op.connected?'未接続':op.stopping?'終了処理中':op.error?'エラー':op.ready?'AUTO準備完了':op.running?'準備中':'待機中',!op.connected?'terminal 2未起動 / 接続切れ':op.error||op.tracking||'保存地図を選んで読み込んでください',op.error?'error':op.ready?'active':op.running?'warning':'idle');
+ const applied=op.speed_override_mps;
+ document.getElementById('trialSpeedStatus').textContent=`真値周回の基準速度: ${Number(auto.speed_mps||0).toFixed(2)} m/s / Kart AUTO: ${op.speed_pending?'変更中':!op.running||applied==null?'未設定・未確認':applied===-1?'地図の速度':Number(applied).toFixed(2)+' m/s'} / 上限 1.50 m/s`;
+ for(const id of ['kartSpeedApply','kartSpeedRestore'])document.getElementById(id).disabled=!op.connected||!op.running||op.stopping||op.speed_pending;
  const v=s.body_velocity_mps||[],speed=Math.hypot(...v);
  statusCard('simStatus',s.paused?'一時停止':'稼働中',`sim ${Number(s.sim_time||0).toFixed(2)} s / 実速度 ${speed.toFixed(2)} m/s`,s.paused?'warning':'active');
  const errors=[s.error,bag.error,auto.error,op.error,op.studio_error].filter(Boolean),error=document.getElementById('statusError');error.hidden=!errors.length;error.textContent=[...new Set(errors)].join('\n');
  document.getElementById('recordStart').disabled=!!bag.recording;
  document.getElementById('recordStop').disabled=!bag.recording;
 }
-function disconnectedStatus(){for(const id of ['recordStatus','driveStatus','bringupStatus','simStatus'])statusCard(id,'状態取得不可','monitorとの接続を確認してください。最後の状態は未確認です。','warning');document.getElementById('kartAuto').disabled=true;}
+function disconnectedStatus(){for(const id of ['recordStatus','driveStatus','bringupStatus','simStatus'])statusCard(id,'状態取得不可','monitorとの接続を確認してください。最後の状態は未確認です。','warning');document.getElementById('kartAuto').disabled=true;for(const id of ['kartSpeedApply','kartSpeedRestore'])document.getElementById(id).disabled=true;}
 function options(id,values){const el=document.getElementById(id),old=el.value;el.replaceChildren();for(const value of values){const o=document.createElement('option');o.value=typeof value==='string'?value:JSON.stringify(value);o.textContent=typeof value==='string'?value:value.join(' / ');el.append(o)}if([...el.options].some(o=>o.value===old))el.value=old}
 function fillLines(){options('line',(assets.lanes||{})[document.getElementById('hdmap').value]||[])}
 function fillMaps(){const vgl=document.getElementById('vgl').checked;options('localmap',assets[vgl?'vgl_bundles':'vslam_maps']||[]);document.getElementById('models').disabled=!vgl}

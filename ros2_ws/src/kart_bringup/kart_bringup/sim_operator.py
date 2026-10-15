@@ -32,6 +32,14 @@ def validate_selection(value, assets):
     return dict(value)
 
 
+def trial_speed(value):
+    if value is None:
+        return -1.0
+    if type(value) not in (int,float) or not math.isfinite(value) or not .05 <= value <= 1.5:
+        raise ValueError('Trial speed must be 0.05..1.5 m/s, or null to restore')
+    return float(value)
+
+
 def pipeline_command(selection):
     return ['ros2','launch','kart_bringup','sim_drive.launch.py']+[f'{k}:={v}' for k,v in selection.items() if v]
 
@@ -70,6 +78,7 @@ def main(args=None):
             self.child=None; self.pending=None; self.stopping=None; self.error=''; self.selection={}
             self.heartbeat=0.; self.sim_settings={}; self.localized=False; self.diag_time=0.; self.odom_time=0.; self.tracking=''; self.tracking_time=0.;self.last_tracking_issue=None
             self.mode=3; self.mode_time=0.; self.line_request=None; self.line_future=None
+            self.speed_future=None; self.speed_request=None; self.speed_override=None; self.speed_started=0.
             self.pub=self.create_publisher(String,'sim/operator/status',10)
             self.mode_pub=self.create_publisher(OperationModeRequest,'operation_mode/request',10)
             self.lane_pub=self.create_publisher(String,'hdmap/select_lane',1)
@@ -118,6 +127,14 @@ def main(args=None):
                     if not self.sim_ready():raise ValueError('Start ROS sim with camera_enabled=true, publish_truth_tf=false, max steering 0.45 rad')
                     selection=validate_selection(value,self.assets)
                     self.mode_request(3);self.pending=selection;self.shutdown_child()
+                elif action=='kart_speed':
+                    if not self.sim_ready() or not self.child or self.child.poll() is not None or self.stopping is not None:
+                        raise ValueError('Sim pipeline is not running')
+                    if self.speed_future is not None:raise ValueError('Speed change already pending')
+                    speed=trial_speed(value)
+                    if not self.line_client.service_is_ready():raise ValueError('HDMap parameter service unavailable')
+                    req=SetParameters.Request();req.parameters=[Parameter(name='speed_override_mps',value=ParameterValue(type=ParameterType.PARAMETER_DOUBLE,double_value=speed))]
+                    self.speed_request=speed;self.speed_started=time.monotonic();self.speed_future=self.line_client.call_async(req)
                 elif action=='kart_line':
                     if not self.child or self.child.poll() is not None or self.stopping is not None:raise ValueError('Pipeline is not running')
                     if self.line_future is not None:raise ValueError('Line change already pending')
@@ -136,6 +153,8 @@ def main(args=None):
                 self.error=''
             except (ValueError,KeyError,TypeError,OSError) as exc:self.error=str(exc);self.mode_request(3)
         def shutdown_child(self):
+            if self.speed_future is not None:self.speed_future.cancel()
+            self.speed_future=None;self.speed_request=None;self.speed_override=None
             if self.line_future is not None:self.line_future.cancel()
             self.line_future=None;self.line_request=None
             if self.child and self.child.poll() is None and self.stopping is None:
@@ -143,6 +162,19 @@ def main(args=None):
                 except ProcessLookupError:pass
                 self.stopping=time.monotonic()
         def tick(self):
+            if self.speed_future is not None:
+                try:
+                    if self.speed_future.done():
+                        result=self.speed_future.result()
+                        if not result.results or not all(r.successful for r in result.results):
+                            raise ValueError('HDMap rejected speed change: '+str([r.reason for r in result.results]))
+                        self.speed_override=self.speed_request
+                        self.speed_future=None;self.speed_request=None
+                    elif time.monotonic()-self.speed_started>2.:
+                        raise ValueError('Speed change timed out; unload/restart bringup to confirm speed state')
+                except Exception as exc:
+                    self.speed_future.cancel();self.speed_future=None;self.speed_request=None;self.speed_override=None
+                    self.error=str(exc);self.mode_request(3)
             if self.line_future is not None and self.line_future.done():
                 try:
                     result=self.line_future.result()
@@ -151,7 +183,7 @@ def main(args=None):
                 except Exception as exc:self.error=str(exc)
                 self.line_future=None;self.line_request=None
             if self.child and self.child.poll() is not None:
-                code=self.child.returncode;self.child=None;self.stopping=None;self.localized=False;self.mode=3
+                code=self.child.returncode;self.shutdown_child();self.child=None;self.stopping=None;self.localized=False;self.mode=3
                 if self.pending is None and code:self.error=f'Pipeline exited ({code}); see terminal 2'
             if self.child and self.stopping is not None and time.monotonic()-self.stopping>8:
                 os.killpg(self.child.pid,signal.SIGKILL)
@@ -167,6 +199,7 @@ def main(args=None):
                    'ready':self.ready(),'sim_ready':self.sim_ready(),'mode':self.mode,'localized':self.localized,'tracking':self.tracking,'last_tracking_issue':self.last_tracking_issue,
                    'studio_port':self.studio_port if self.get_parameter('studio_enabled').value else None,
                    'studio_error':self.studio_error if not self.studio or self.studio.poll() is None else f'Studio exited ({self.studio.returncode})',
+                   'speed_override_mps':self.speed_override,'speed_pending':self.speed_future is not None,
                    'selection':self.selection,'assets':self.assets,'error':self.error,
                    'lines':lines}
             self.pub.publish(String(data=json.dumps(state)))

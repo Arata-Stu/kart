@@ -45,6 +45,25 @@ class SelectionTest(unittest.TestCase):
             self.assertEqual(self.node.line_type, "centerline")
             publish.assert_not_called()
 
+    def test_speed_override_opt_out_and_transaction_rollback(self):
+        with patch.object(self.node, 'publish') as publish:
+            result=self.node.set_parameters_atomically([Parameter('speed_override_mps', value=.8)])
+            self.assertFalse(result.successful)
+            self.assertEqual(self.node.settings['speed_override_mps'], -1.)
+            publish.assert_not_called()
+            # Opt-in setting would normally be supplied at node startup.
+            self.node.settings['allow_speed_override']=True
+            result=self.node.set_parameters_atomically([Parameter('speed_override_mps', value=.8)])
+            self.assertTrue(result.successful)
+            self.assertEqual(self.node.settings['speed_override_mps'], .8)
+            publish.assert_called_once()
+            self.node.add_on_set_parameters_callback(
+                lambda _: SetParametersResult(successful=False, reason='other validator'))
+            result=self.node.set_parameters_atomically([Parameter('speed_override_mps', value=.9)])
+            self.assertFalse(result.successful)
+            self.assertEqual(self.node.settings['speed_override_mps'], .8)
+            self.assertEqual(publish.call_count, 1)
+
     def test_other_validator_rejection_does_not_apply_selection(self):
         self.node.add_on_set_parameters_callback(
             lambda _: SetParametersResult(successful=False, reason="rejected")

@@ -222,6 +222,19 @@ UIで要求受付後、stateの`error`/`bag.error`と実状態を確認する。
 描画/保存がwall timeより遅くなった場合もsim時刻で取得し、実時間60Hzの達成を保証しない。
 
 自動周回はmap JSONの`autodrive.waypoints`（後輪軸XY、m、閉ループ）をPure Pursuitで追従する。
+monitorの「試験速度 (m/s)」から、走行中でも速度を変更できる。
+「真値周回に適用」は内部controllerの基準速度、「Kart AUTOに適用」は
+terminal 2のHDMap参照速度を変更する。開始ボタン・記録開始とは独立し、
+走行所有権を切り替えない。両方を別々に変更・復帰できる。
+HTTP `/command` の `truth_speed` / `kart_speed` actionは数値0.05..1.5、
+nullは各既定値への復帰。真値変更はsim threadで適用し、Kart変更は既存の
+`/sim/operator/request`（`std_msgs/msg/String` JSON）を通じて応答確認する。
+ROSなしpreviewでは真値速度のみ利用可能。新しいtopicはない。
+画面には真値の基準速度、Kart AUTOの応答確認済み試験値／変更中／未確認、
+SIM欄に実速度を表示する。速度の即時達成は保証せず、真値制御はカーブで減速し、
+Kart AUTOは明示的な速度0の停止点・終端停止・localization監視を保持する。
+試験値は地図に保存しない。真値値はsim再起動、Kart値はbringup再起動で戻る。
+
 `speed_mps`既定0.45（0.05..1.5）、`lookahead_m`既定0.35（0.15..1.0）。
 これらはROS parameterではなくmap資産の設定。大会mapに周回経路を追加、空室mapには経路なし。
 曲率による減速と速度比例制御を使い、経路離脱0.65mまたは8 sim秒の停滞で制動する。
