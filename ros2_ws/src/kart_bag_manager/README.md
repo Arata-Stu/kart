@@ -1,5 +1,9 @@
 # kart_bag_manager
 
+固定指令試験の状態`/control/fixed_status`（std_msgs/msg/String）を標準topicsへ含める。
+これは記録対象の追加で、録画START/STOPと走行モードの操作は独立したまま。
+producer・設定・試験手順は[vehicle_tuning](../../../tools/vehicle_tuning/README.md#固定スロットルステアでの記録)。
+
 JetPilotの`jetpilot_bag_tools/bag_manager_node.py`を基にしたrosbag管理。
 保存先の重複回避、MCAP、topic選択、分割、圧縮、QoS override、任意のRAW録画連携を引き継ぐ。
 録画の開始・停止と走行モードは独立。自動録画・走行開始との連動は行わない。
@@ -227,3 +231,6 @@ RAWの相対時刻には各RAWのSDK timestamp shiftを足し、そのoffsetでR
 録画開始ROS時刻をRAWの0へ直接対応させない。
 RAW shift取得ツールはtools/evs_raw_timing（scripts/sensors/evs-raw-timing.sh）。
 USB遅延を含む推定なので、実機で同期精度を確認する。
+
+固定指令試験の条件`/control/fixed_config`（`std_msgs/msg/String`、JSON）を標準topicへ含む。
+同じbag内の条件変更を保存し、録画開始・終了操作は独立のままとする。

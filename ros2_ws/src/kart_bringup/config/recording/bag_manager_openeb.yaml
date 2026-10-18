@@ -14,6 +14,8 @@
     - propo/control_cmd
     - auto/control_cmd
     - vehicle/control_cmd
+    - /control/fixed_config
+    - /control/fixed_status
     - operation_mode/request
     - operation_mode/state
     - bag/request

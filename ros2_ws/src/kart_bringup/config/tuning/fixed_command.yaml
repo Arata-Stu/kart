@@ -1,0 +1,13 @@
+/**/fixed_command:
+  ros__parameters:
+    use_sim_time: false
+    fixed_axes: both  # both / throttle / steering; editable in STOP
+    teleop_timeout_s: 0.15  # Header and receipt deadline for the free axes
+    steering: 0.0  # Normalized, positive left, [-1,1]
+    throttle: 0.0  # Normalized forward effort, not target speed
+    brake: 0.0  # Mutually exclusive with throttle; reverse is manual only in steering mode
+    max_throttle: 0.2
+    control_rate_hz: 50.0
+    mode_timeout_s: 0.3
+    entry_neutral_s: 0.3  # Neutral during AUTO/mux/bridge transition
+    duration_s: 0.0  # 0: hold until mode changes; positive: timed trial then STOP request

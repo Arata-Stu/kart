@@ -122,6 +122,8 @@ form("build-form", async (data) => {
   for (const key of ["left_image", "right_image", "left_info", "right_info"])
     workflow[key] = data[key];
   workflow.ros_domain_id = Number(data.ros_domain_id);
+  workflow.dense_reconstruction = data.dense_reconstruction === "true";
+  workflow.fs_model_res = data.fs_model_res;
   workflow.overrides = {
     tracking_mode: 0,
     base_frame: data.base_frame,
@@ -157,4 +159,26 @@ form("line-settings-form", async (data) => {
   for (const [k, v] of Object.entries(data)) state.settings[k] = Number(v);
   $("line-settings-dialog").close();
   toast("次回の生成に設定を適用します");
+});
+
+action("dense-open", async () => {
+  const data = await api("dense?id=" + encodeURIComponent(state.id));
+  $("dense-info").textContent = data.summary
+    ? `${data.summary.vertices.toLocaleString()} 頂点 / ${data.summary.faces.toLocaleString()} 面 · 地面合わせ後の座標系`
+    : "未生成です。「bagから地図作成」で「VSLAM＋占有地図＋3Dメッシュ」を選び、別の地図名で生成してください。";
+  $("dense-files").replaceChildren();
+  $("dense-preview").hidden = true;
+  for (const file of data.files) {
+    const row = document.createElement("p"), link = document.createElement("a");
+    link.href = file.url;
+    link.download = file.name;
+    link.textContent = `${file.name} (${(file.bytes / 1048576).toFixed(1)} MiB)`;
+    row.append(link);
+    $("dense-files").append(row);
+    if (file.name === "occupancy_map.png") {
+      $("dense-preview").src = file.url;
+      $("dense-preview").hidden = false;
+    }
+  }
+  open("dense-dialog");
 });

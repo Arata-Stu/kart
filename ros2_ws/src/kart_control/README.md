@@ -1,5 +1,79 @@
 # kart_control
 
+## 固定指令による車両特性試験
+
+`kart_control::FixedCommandNode`（node/単独実行`fixed_command`）は、指定した正規化steering・
+throttle・brakeをAUTO中だけ保持する。固定スロットルは固定車速ではない。
+通常は`tuning_collect.launch.py fixed_command:=true`から単独processで起動し、
+カメラ処理と制御timerの実行を分離する。Componentとしても登録する。
+VSLAMの速度や推定状態に依存するフィードバック制御ではない。
+
+起動後に新鮮なSTOPを観測し、その後AUTOに入った場合のみ有効化する。
+AUTO移行後entry_neutral_sの間は全中立を出版し、既存mux/bridgeの中立確認に合わせる。
+MANUAL/STOP/PROPO中もAUTO topicへ中立を出版する。MANUALのteleop操作は既存Joy/muxが担当する。
+mode通信・stamp期限切れ、制御tick途絶、時計逆行、AUTO publisher競合で中立＋STOP要求をラッチし、
+新鮮なSTOPを経るまで再開しない。起動／再起動時に既にAUTOでも開始しない。
+duration_s>0は中立待機終了後の保持秒数、満了すると同じく中立＋STOP要求。
+中立は物理停止の保証ではない。両軸固定時のJoy切断挙動は既存mode manager/Joy仕様に従う。片軸固定ではteleop途絶でSTOP要求。
+VSLAM途絶だけでは固定出力を解除しない。
+
+### 入出力
+
+全て相対topic。以下はroot namespace時。QoSはreliable/volatile。
+標準parameter/rosout等を除き独自service/actionなし。
+
+|方向|topic|型|depth / 周期|
+|---|---|---|---|
+|入力|`/teleop/control_cmd`|`kart_interfaces/msg/ControlCommand`|1、Joyによる非固定軸の入力|
+|出力|`/control/fixed_config`|`std_msgs/msg/String`|1、1Hzと設定変更時のJSON|
+|入力|`/operation_mode/state`|`kart_interfaces/msg/OperationModeState`|1、mode heartbeat|
+|出力|`/auto/control_cmd`|`kart_interfaces/msg/ControlCommand`|1、control_rate_hz（既定50Hz）。stampは生成時刻、frame=base_link。steering固定時のみ手動reverseを使用|
+|出力|`/control/fixed_status`|`std_msgs/msg/String`|1、最大10Hz。active/inactive/auto_entry_neutral/異常理由|
+|条件付き出力|`/operation_mode/request`|`kart_interfaces/msg/OperationModeRequest`|10、AUTO時の異常／満了STOP要求、最大10Hz|
+
+競合検出は分散publisherの完全な仲裁ではない。rule-based、E2E、別の固定publisherと同時起動しない。
+
+### 全parameter
+
+`fixed_axes`・`steering`・`throttle`・`brake`・`duration_s`は新鮮なSTOP中のみ動的変更可能。
+他の試験parameterはread_only。`use_sim_time`はfalseのみ許可する。
+pkg一覧は`config/fixed_command.yaml`、実運用正本は`kart_bringup/config/tuning/fixed_command.yaml`。
+
+|名前|既定|意味|
+|---|---|---|
+|fixed_axes|both|both / throttle / steering。固定対象軸|
+|teleop_timeout_s|0.15|片軸固定時のteleop stamp・steady受信期限秒|
+|use_sim_time|false|実機試験のROS実時間。trueは拒否|
+|steering|0.0|左正[-1,1]の正規化要求|
+|throttle|0.0|前進[0,max_throttle]。brakeとの同時指定不可|
+|brake|0.0|制動要求[0,1]。実際の適用はbridgeのESC状態に従う|
+|max_throttle|0.2|throttle指定の上限。固定値の超過は拒否、手動前進・後退はclip|
+|control_rate_hz|50.0|指令／gateのwall timer Hz、10..100|
+|mode_timeout_s|0.3|modeのROS stamp・steady受信鮮度と制御tick間隔の期限秒|
+|entry_neutral_s|0.3|AUTO移行後の中立秒数、0.1以上|
+|duration_s|0.0|0はモード変更まで保持、正値は試験保持秒数|
+
+別端末で`bash scripts/vehicle_tuning.sh control`を起動すると、固定軸と値を対話変更できる。
+5項目を標準`/fixed_command/set_parameters_atomically`へ一括送信し、範囲・組合せ・STOP鮮度を検証する。
+拒否時は全項目を維持する。受理された値は次の制御tickまたはmode受信時に反映し、次回AUTOで使用する。
+再起動・録画停止は不要。設定はメモリ上のみでYAMLへ保存しない。
+
+|fixed_axes|固定する指令|Joyから使う指令|
+|---|---|---|
+|both|steering / throttle / brake|なし|
+|throttle|throttle / brake|steering|
+|steering|steering|throttle / brake / reverse|
+
+片軸固定ではteleopのstamp・受信鮮度と値域を検証し、途絶／不正時は中立＋STOP要求をラッチする。
+手動前進・後退はmax_throttleでclipする。非固定軸の設定値は保持するが出力へ使わない。
+条件JSONにはrevision・fixed_axes・steering・throttle・brake・duration_s・max_throttleを含め、
+`/control/fixed_config`へ1Hzと変更後最初のtickで出版する。revisionはprocess内連番。
+標準bagは設定と最終車両指令を記録する。既存オフライン解析は設定JSONを採用判定には使わず、
+実際の`/vehicle/control_cmd`で区間抽出する。
+gateのportableテストは`test/test_fixed_command.cpp`。
+ROS Component/単独実行のビルド・実機mux/bridge結合・実走行は未確認。
+起動／録画／解析の手順は[vehicle_tuning](../../../tools/vehicle_tuning/README.md#固定スロットルステアでの記録)。
+
 実車の速度ゲイン調整用に、[VSLAMによるオフライン解析](../../../tools/vehicle_tuning/README.md)を用意する。
 `scripts/vehicle_tuning.sh`で記録要件確認・特性推定・既存SpeedPid式に基づく候補試算ができる。
 候補YAMLはレビュー用で、実効parameterを変更しない。現行のノード／topic／parameterは変更しない。

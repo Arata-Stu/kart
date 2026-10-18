@@ -101,6 +101,7 @@
         </div>
         <div id="inspector-body" class="scroll">
           <section id="panel-cloud">
+            <button id="dense-open" disabled>占有地図・3Dメッシュ</button>
             <button id="vgl-open" disabled>VGL地図を追加生成</button>
             <button id="capture-open" hidden>保存地図から点群を取得</button>
             <div class="eyebrow">POINT CLOUD</div>
@@ -706,19 +707,36 @@
           ><label>走行記録<select name="bag" required></select></label>
         </div>
         <p class="note">
-          NVIDIA公式offline処理（Stereo）でVSLAM地図を保存します。点群取得・HDMap編集は後続工程です。
+          NVIDIA公式offline処理（Stereo）で地図を作成します。HDMap用の特徴点群取得は別工程です。
         </p>
+        <div class="form-grid">
+          <label>生成する成果物<select name="dense_reconstruction">
+            <option value="false">VSLAM地図のみ（従来）</option>
+            <option value="true">VSLAM＋占有地図＋3Dメッシュ</option>
+          </select></label>
+          <label>FoundationStereo<select name="fs_model_res">
+            <option value="low_res">low_res（軽量）</option>
+            <option value="high_res">high_res（高解像度・高負荷）</option>
+          </select></label>
+        </div>
         <details>
           <summary>カメラtopic・TF・ROS domain</summary>
           <div class="form-grid" id="build-detail-fields"></div>
         </details>
         <div class="note">
-          画像はrectified入力として扱います。深度・占有地図・cuVGL生成は実行しません。
+          画像はrectified入力です。追加生成ではFoundationStereoとnvbloxを使います。対応する公式モデルengineを実行環境へ準備してください。cuVGL生成は別工程です。
         </div>
         <div class="dialog-actions">
           <button class="primary" id="build-submit">地図作成を開始</button>
         </div>
       </form>
+    </dialog>
+    <dialog id="dense-dialog">
+      <div class="dialog-title"><h2>占有地図・3Dメッシュ</h2><button type="button" data-close="dense-dialog">×</button></div>
+      <p id="dense-info" class="note"></p>
+      <p class="help">mesh.plyは面を持つ3D形状です。ダウンロードしてPLY対応の3Dビューアで回転・拡大できます。地面合わせ後の座標系なので、HDMapにはそのまま重ねません。before_adjustmentは地面合わせ前です。</p>
+      <div id="dense-files"></div>
+      <img id="dense-preview" alt="生成された占有地図" hidden width="480" />
     </dialog>
     <dialog id="import-dialog">
       <form id="import-form">

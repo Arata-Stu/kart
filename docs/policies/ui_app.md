@@ -90,7 +90,7 @@ ROS/GPU環境とJetsonがない場合、cuVSLAMの実処理と実転送は未確
 
 地図作成はNVIDIA `create_map_offline.py` の `edex compute_poses` に委譲する。
 独自のbag再生・固定drain・save_mapによる生成経路は使わない。
-現段階はStereo rectified入力のみ。深度・占有地図・cuVGL・可視化再生は実行しない。
+地図作成はStereo rectified入力。既定はVSLAMのみ、明示選択で公式depth・occupancy工程を追加し、占有地図と3D meshを保存する。cuVGL・可視化再生は別工程。
 地図生成成功と点群取得成功を分離し、`snapshot_status=pending` の地図を一覧・複製・削除可能にする。
 点群未取得の間は編集・生成・export・HDMap転送・位置合わせを拒否する。
 後続工程として保存地図を可視化ありで再生し、自己位置合わせと最新TFを確認してsnapshotを取得する予定。

@@ -103,6 +103,17 @@ class AnalysisTests(unittest.TestCase):
         data['trim']=[{'steering':0.,'throttle':0.},{'steering':0.,'throttle':.02}]
         with self.assertRaisesRegex(ValueError,'trim changed'): analyze(data,CONFIG)
 
+    def test_auto_trial_cli_requires_explicit_mode(self):
+        data=copy.deepcopy(self.data)
+        for row in data['mode']: row['mode']=1
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);source=root/'auto.json';source.write_text(json.dumps(data))
+            self.assertEqual(main(['analyze','--normalized-json',str(source),'--output',str(root/'manual')]),2)
+            self.assertEqual(main(['analyze','--mode','auto','--normalized-json',str(source),'--output',str(root/'auto')]),0)
+            summary=json.loads((root/'auto/summary.json').read_text())
+            self.assertEqual(summary['config']['allowed_modes'],[1])
+            self.assertGreater(summary['selected_samples'],0)
+
     def test_gap_not_smoothed_and_no_model_from_constant_speed(self):
         data=copy.deepcopy(self.data)
         del data['odom'][100:120]

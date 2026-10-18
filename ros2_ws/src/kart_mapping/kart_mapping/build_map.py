@@ -10,7 +10,11 @@ from pathlib import Path
 
 
 def run(job):
+    from .dense_outputs import options, collect
+
     workflow = job["workflow"]
+    dense, resolution = options(workflow)
+    steps = ["edex", "compute_poses"] + (["depth", "occupancy"] if dense else [])
     output, bag = Path(job["output"]).resolve(), Path(job["bag"])
     if int(os.environ.get("ROS_DOMAIN_ID", "0")) != workflow["ros_domain_id"]:
         raise ValueError("ROS_DOMAIN_ID must match workflow.ros_domain_id")
@@ -56,9 +60,9 @@ def run(job):
         f"--base_link_name={parameters['base_frame']}",
         "--use_raw_image=False",
         "--print_mode=all",
+        *(["--depth_model=foundationstereo", f"--fs_model_res={resolution}"] if dense else []),
         "--steps_to_run",
-        "edex",
-        "compute_poses",
+        *steps,
     ]
     print("Official offline mapping: " + " ".join(command), flush=True)
     subprocess.run(command, check=True)
@@ -84,6 +88,9 @@ def run(job):
         raise ValueError(
             "公式処理後に非空のcuVSLAM .mdb地図を確認できません。直前のファイル一覧とofficial配下のrun_cuvslam_api_launcher.logを確認してください"
         )
+    dense_result = collect(outputs[0].parent) if dense else None
+    if dense_result:
+        print(f"Dense reconstruction: {dense_result}", flush=True)
     # Keep the official shortcut valid when the staging directory is published.
     latest = official / "latest"
     if latest.is_symlink() and latest.resolve() == outputs[0].parent:
@@ -99,7 +106,9 @@ def run(job):
         json.dumps(
             dict(
                 backend="nvidia.create_map_offline",
-                steps=["edex", "compute_poses"],
+                steps=steps,
+                dense=dense_result,
+                fs_model_res=resolution if dense else None,
                 status="vslam_ready",
                 snapshot_status="pending",
                 official_output=str(outputs[0].parent.relative_to(output)),

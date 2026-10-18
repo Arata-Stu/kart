@@ -2,6 +2,16 @@
 
 ## 車両特性の手動記録
 
+`fixed_command:=true throttle:=0.10 steering:=0.0`を追加すると、
+STOP→AUTOで指定した固定操作を保持する`kart_control/fixed_command`を単独processで起動する。
+`fixed_command`未指定は`tuning/launch.json`のfalse。`steering/throttle/brake/duration_s`の既定は
+空文字で`tuning/fixed_command.yaml`を保持する。duration_s=0は無制限、正値は保持秒数。
+`/control/fixed_status`（std_msgs/msg/String）を最大10Hzで出版し、標準bagへ含める。
+固定nodeの終了はlaunch全体を終了させる。走行値の動的変更・自動AUTO要求は行わない。
+MANUALは手動のまま。解析は`--mode auto`を指定する。
+[全ノード仕様](../kart_control/README.md#固定指令による車両特性試験)／
+[試験手順](../../../tools/vehicle_tuning/README.md#固定スロットルステアでの記録)。
+
 `tuning_collect.launch.py`は通常のcollect構成に地図なしcuVSLAMを追加する。
 RealSenseとcuVSLAMはmission所有の同じmultithreaded containerへloadする。
 地図・HDMap・VGL・追従制御は不要。録画STARTと走行操作は独立し、AUTO要求を送らない。
@@ -753,3 +763,20 @@ EVS encoder専用設定: `modules/sensors/openeb.launch.py`に`evs_tensor_config
 これはセンサmoduleの明示指定であり、missionへの引数転送は未追加。
 `/event_camera/tensor` (isaac_ros_tensor_msgs/msg/TensorList)のcontent解像度をモデルに合わせる。
 CPU/CUDA/cuda_asyncそれぞれの既存full YAMLをbaseに生成すること。driverコード/既定設定は変更しない。
+
+### 固定軸の対話切替
+
+`tuning_collect.launch.py fixed_command:=true fixed_axes:=throttle`でスロットルのみ固定できる。
+`fixed_axes`の既定は`both`、他に`steering`。非固定軸はJoy操作。
+別端末で`bash scripts/vehicle_tuning.sh control`を実行し、STOP中に固定対象・
+steering/throttle/brake/duration_sを一括変更する。再起動や録画停止は不要。
+AUTOへの移行と録画はJoyで操作する。変更はYAMLへ保存しない。
+`teleop_timeout_s`の既定は0.15秒、片軸固定の入力途絶でSTOP要求。
+条件は`/control/fixed_config`（std_msgs/msg/String、JSON、1Hzと変更時）へ記録する。
+詳細と全parameterは[kart_control README](../kart_control/README.md)。
+
+### Map Studioの公式dense生成オプション
+
+`config/mapping/workflow.json`に`dense_reconstruction`（既定false）と
+`fs_model_res`（既定low_res、high_resも可）を追加。kart_mappingが公式offline CLIへ渡す。
+ROSノード・topic・launch引数の追加はない。詳細はconfig/mapping/README.md参照。

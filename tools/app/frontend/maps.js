@@ -120,6 +120,7 @@ function status() {
   const pending = state.doc?.snapshot_status === "pending";
   const d = pending ? null : state.lane;
   $("capture-open").hidden = !pending;
+  $("dense-open").disabled = !state.doc;
   for (const id of ["step-bounds", "step-lines"])
     $(id).disabled = !state.doc || pending;
   const busy = state.jobs.some(

@@ -1,5 +1,8 @@
 # scripts
 
+固定操作の収録例: `vehicle_tuning.sh collect fixed_command:=true throttle:=0.10 steering:=0.0`。
+STOP→AUTO中だけ保持し、MANUALは手動操作。解析には`analyze --mode auto`を指定する。
+
 `vehicle_tuning.sh collect`は地図なしVSLAMを伴う手動記録、`check` / `analyze` / `tune`は
 読み取り専用のbag解析・PID候補試算の入口です。
 [記録要件・操作手順・検証範囲](../tools/vehicle_tuning/README.md)を参照してください。
@@ -153,3 +156,14 @@ Jetsonでの初回buildと以後の検証は`bash scripts/vgl_build.sh`（既定
 `--imu-hz`は30〜1000（既定200）、`--rig JSON`で校正を指定。
 macOS GUIにはvenvのmjpythonをSIM_PYTHONへ指定する。ROS起動のHz/TF変更は
 `ros2 launch kart_bringup sim.launch.py`の引数を使う。
+
+### 固定軸の対話切替
+
+`tuning_collect.launch.py fixed_command:=true fixed_axes:=throttle`でスロットルのみ固定できる。
+`fixed_axes`の既定は`both`、他に`steering`。非固定軸はJoy操作。
+別端末で`bash scripts/vehicle_tuning.sh control`を実行し、STOP中に固定対象・
+steering/throttle/brake/duration_sを一括変更する。再起動や録画停止は不要。
+AUTOへの移行と録画はJoyで操作する。変更はYAMLへ保存しない。
+`teleop_timeout_s`の既定は0.15秒、片軸固定の入力途絶でSTOP要求。
+条件は`/control/fixed_config`（std_msgs/msg/String、JSON、1Hzと変更時）へ記録する。
+詳細と全parameterは[kart_control README](../ros2_ws/src/kart_control/README.md)。

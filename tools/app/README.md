@@ -277,7 +277,8 @@ python3 tools/app/make_demo.py --data-root /tmp/kart-studio-demo
 新しい地図はrevision 1から開始し、元地図IDとrevisionを記録する。書き出しキャッシュは複製せず再生成する。
 複製は中止可能なファイルコピーのみで、ROS・GPU処理やbag再生は行わない。コピー分のディスク容量は必要。
 
-現在の地図生成は公式 `create_map_offline.py --steps_to_run edex compute_poses`。
+既定の地図生成は公式 `create_map_offline.py --steps_to_run edex compute_poses`。
+任意でdepth・occupancyを追加し、占有地図と3Dメッシュを生成できる（末尾の説明を参照）。
 VSLAMバイナリ・軌跡・ログを保存し、「VSLAM作成済み・点群未取得」と表示する。
 HDMap用点群は作成しない。点群未取得の地図は複製・削除可能だが、HDMap編集・生成・export・送信は不可。
 後続の可視化あり再生・点群取得は下記の別操作で実行する。従来の0.5倍再生／5秒drainは生成工程から廃止。
@@ -514,3 +515,15 @@ laneセット描画は前後の区間の二等分線を使い、曲がり角で�
 job状態には`diagnostic`を保存する。生成した同じmap/lane/revisionを表示している場合、
 失敗区間を赤、該当境界を黄、車体の検査範囲を赤で地図に重ねる。
 編集・再生成・地図再読込みで表示を消す。失敗した生成線は保存・公開しない。
+
+## 占有地図・3Dメッシュ（任意、2026-10-18）
+
+「bagからVSLAM地図を作成」で「VSLAM＋占有地図＋3Dメッシュ」を選ぶ。
+workflow.jsonのdense_reconstruction=falseが既定、fs_model_resはlow_res（high_resも選択可能）。
+FoundationStereo用の公式engineは事前準備が必要。公式depth→occupancyを追加実行するため処理時間とGPUメモリが増える。
+既存地図の変更ではなく新規地図として作成する。既存地図と比較する場合は同じbagで別名を使う。
+完成後、地図toolbarの「占有地図・3Dメッシュ」でPNGをプレビューし、PLYと座標系関連ファイルをダウンロードできる。
+PLYは外部のPLY対応3Dビューアで確認する。ブラウザ内3D回転表示は未実装。
+mesh.plyは地面合わせ後、mesh_before_adjustment.plyは地面合わせ前。HDMapへ自動重ね合わせしない。
+実体はmap/<地図名>/official/<run>/。頂点・面が空のmeshは生成成功にしない。
+反映にはkart_mappingのbuild/sourceとUI再起動。nvblox_rosを含まない既存イメージはDocker再buildが必要。

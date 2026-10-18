@@ -109,3 +109,15 @@ SENSOR_DATAはbest effort / volatile / depth 5、DEFAULTはreliable / volatile /
 出典はYAML冒頭に記載。診断成功判定は公式5.0実装のhardware_id=visual_slam、
 localized_in_exist_map=Yes、vo_status=OKを使う。
 `capture.json`の全設定とtopic型は[kart_mapping README](../../../kart_mapping/README.md)参照。
+
+## 占有地図・3Dメッシュ（任意、2026-10-18）
+
+「bagからVSLAM地図を作成」で「VSLAM＋占有地図＋3Dメッシュ」を選ぶ。
+workflow.jsonのdense_reconstruction=falseが既定、fs_model_resはlow_res（high_resも選択可能）。
+FoundationStereo用の公式engineは事前準備が必要。公式depth→occupancyを追加実行するため処理時間とGPUメモリが増える。
+既存地図の変更ではなく新規地図として作成する。既存地図と比較する場合は同じbagで別名を使う。
+完成後、地図toolbarの「占有地図・3Dメッシュ」でPNGをプレビューし、PLYと座標系関連ファイルをダウンロードできる。
+PLYは外部のPLY対応3Dビューアで確認する。ブラウザ内3D回転表示は未実装。
+mesh.plyは地面合わせ後、mesh_before_adjustment.plyは地面合わせ前。HDMapへ自動重ね合わせしない。
+実体はmap/<地図名>/official/<run>/。頂点・面が空のmeshは生成成功にしない。
+反映にはkart_mappingのbuild/sourceとUI再起動。nvblox_rosを含まない既存イメージはDocker再buildが必要。

@@ -21,6 +21,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ros-lyrical-isaac-ros-visual-global-localization \
         ros-lyrical-isaac-ros-visual-mapping \
         ros-lyrical-isaac-mapping-ros \
+        ros-lyrical-nvblox-ros \
         ros-lyrical-isaac-ros-launch-utils \
         ros-lyrical-isaac-ros-dnn-image-encoder \
         ros-lyrical-isaac-ros-tensor-rt \

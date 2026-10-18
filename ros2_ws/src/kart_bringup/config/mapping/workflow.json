@@ -12,5 +12,7 @@
       "camera_infra1_optical_frame",
       "camera_infra2_optical_frame"
     ]
-  }
+  },
+  "dense_reconstruction": false,
+  "fs_model_res": "low_res"
 }

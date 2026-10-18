@@ -70,7 +70,62 @@ bash scripts/vehicle_tuning.sh collect run_name:=straight_01
 
 ## データ記録要件
 
-標準`config/recording/bag_manager.yaml`とOpenEB版は以下を既に含むため、録画topicは変更していない。
+### 固定スロットル・ステアでの記録
+
+Jetson Docker内で再ビルド・sourceしてから、他の走行launchを終了し、次を起動する。
+以下の0.10は指定例であり、車両の応答を確認して選ぶ。
+
+```bash
+cd /workspaces
+bash scripts/build.sh --packages-up-to kart_bringup
+source ros2_ws/install/setup.bash
+bash scripts/vehicle_tuning.sh collect fixed_command:=true \
+  throttle:=0.10 steering:=0.0 run_name:=fixed_t010_s000
+```
+
+- `fixed_command`既定false（`tuning/launch.json`）。明示trueで固定指令ノードを追加する。
+- `throttle`、`steering`、`brake`、`duration_s`の引数既定は空文字で
+  `tuning/fixed_command.yaml`の値を保持する。4値のYAML既定は全て0。
+- R1で録画START。×でSTOPを確認し、全入力中立で□を押してAUTOへ切替。
+  中立待機0.3秒後から固定指令を保持する。既定ではAUTO中ずっと継続する。
+- ×でSTOPにすると固定出力を解除。手動で戻すときはSTOP→△でMANUALへ切替。
+  MANUAL中は通常のJoy操作。固定指令がteleopを上書きすることはない。
+- 固定指令を3秒だけ保持する場合は`duration_s:=3.0`を追加する。
+  満了で中立とSTOP要求。次の試行も新鮮なSTOP→AUTOが必要。
+- 設定変更はSTOP中に別端末の`bash scripts/vehicle_tuning.sh control`から実行。再起動不要。
+  1=throttle固定（Joyステア）、2=steering固定（Joy前進・ブレーキ・後退）、3=両方固定。
+  数値を入力すると一括送信する。空入力は現在値維持、q/Ctrl-Cは画面だけ終了する。
+  AUTOへはJoyで入り直す。走行中やSTOP通信途絶時の変更は拒否する。
+  起動時の選択例は`fixed_axes:=throttle throttle:=0.1`。既定は`both`。
+  片軸固定はteleop途絶で中立＋STOP要求。手動前進・後退にもmax_throttle（既定0.2）を適用。
+  duration_s=0はモード変更まで保持、正値は各AUTO試験の保持秒数。
+  設定変更はメモリ上のみ。起動時に既にAUTOでも出力を開始しない。
+- 固定指令の状態`/control/fixed_status`と条件JSON`/control/fixed_config`も標準録画へ含む。
+  同じbag内でSTOP→条件変更→AUTOを繰り返せる。条件別bagにしたい場合だけ録画も区切る。
+  解析は引き続き`--mode auto`で実際の車両指令から区間抽出し、条件JSON自体は自動分類しない。
+  `throttle`と`brake`の同時正値、非有限値、範囲外は起動拒否。
+  固定brakeだけの起動は可能だが、適用はbridge/ESC状態次第であり、この入口だけで
+  「加速後に制動」の自動シーケンスは実行しない。制動同定には通常のMANUAL試験を使う。
+
+AUTO試験の解析は**`--mode auto`**を指定する。既定MANUALのままでは固定指令区間が除外される。
+
+```bash
+bash scripts/vehicle_tuning.sh analyze --mode auto \
+  --bag /workspaces/record/2026-10-16/14-00/fixed_t010_s000 \
+  --output /workspaces/record/analysis/fixed_t010_s000
+```
+
+`--mode manual/auto`で解析対象を明示上書きできる。未指定は解析configのallowed_modesを保持。
+MANUALとAUTOではスロットルトリムの適用が異なるため、試験と同定をモード別に行う。
+ステアを指定した旋回試験も記録できるが、現在の加減速同定は直線用なので、
+操舵・yaw rateの上限を超える区間は解析から除外される。
+モード通信途絶・制御tick途絶・AUTO publisher競合時は中立＋STOP要求をラッチする。
+VSLAMの推定状態では固定指令を制御しない。中立と物理停止は区別する。
+rule-based/E2E/他のAUTO指令publisherとの併用は不可。
+
+### 記録topic
+
+標準`config/recording/bag_manager.yaml`とOpenEB版は以下を含む。固定指令の状態topicも追加済み。
 列挙されているだけでは実データがある保証にならない。`check`と`analyze`で確認する。
 通常の`bringup.sh collect`だけではVSLAMは起動しないので、本専用入口を使う。
 
@@ -87,6 +142,7 @@ bash scripts/vehicle_tuning.sh collect run_name:=straight_01
 | 推奨 | `/realsense/color/image_raw` | `sensor_msgs/msg/Image` | 振動・滑り等の目視照合。解析はmetadata件数のみ、画素展開／動画生成なし |
 | 推奨 | `/vehicle/output_channels` | `std_msgs/msg/Int32MultiArray` | 基板報告PWMの追加確認用。実測PWMではない |
 | 推奨 | `/vehicle/trim/state` | `kart_interfaces/msg/ControlTrim` | トリム値を保存。途中変更／不正値を検出したら解析を拒否 |
+| 固定指令試験時 | `/control/fixed_status` | `std_msgs/msg/String` | active/中立待機/解除理由。解析の採用判定は車両指令・mode・bridge・VO状態を使用 |
 | 自動制御の評価時 | `/control/speed_diagnostics` | `diagnostic_msgs/msg/DiagnosticArray` | active時のtarget_mps。AUTOを解析対象にしたとき速度RMSEを計算 |
 
 stereo画像・CameraInfoも標準bagへ保存される。画像の欠落や露光条件は必要に応じて別途再生して確認する。

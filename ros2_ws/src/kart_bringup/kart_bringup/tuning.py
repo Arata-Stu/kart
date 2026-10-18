@@ -2,9 +2,37 @@
 import json
 from pathlib import Path
 import yaml
-from .mission import composition, sensor_parameters
+from .mission import composition, sensor_parameters, boolean
+import math
 from .multicam import multicam_value
 from .vehicle_tf import load_transforms
+
+
+def fixed_configuration(root, enabled='', overrides=None):
+    root=Path(root)
+    defaults=json.loads((root/'tuning/launch.json').read_text())
+    active=boolean(enabled) if enabled!='' else boolean(defaults['fixed_command'])
+    values=yaml.safe_load((root/'tuning/fixed_command.yaml').read_text())['/**/fixed_command']['ros__parameters']
+    for key,value in (overrides or {}).items():
+        if key not in ('fixed_axes','steering','throttle','brake','duration_s'):
+            raise ValueError('Unknown fixed-command override')
+        if value!='':
+            if not active: raise ValueError('Fixed values require fixed_command:=true')
+            if isinstance(value,bool): raise ValueError(f'{key} must be a finite number')
+            values[key]=str(value) if key=='fixed_axes' else float(value)
+    for key,value in values.items():
+        if key=='fixed_axes':
+            if value not in ('both','throttle','steering'): raise ValueError('Invalid fixed_axes')
+        elif key=='use_sim_time':
+            if value is not False: raise ValueError('Fixed command requires use_sim_time=false')
+        elif type(value) not in (int,float) or not math.isfinite(value):
+            raise ValueError(f'{key} must be a finite number')
+    if (abs(values['steering'])>1 or not 0<=values['throttle']<=values['max_throttle']<=1 or
+        not 0<=values['brake']<=1 or (values['throttle']>0 and values['brake']>0) or
+        not 10<=values['control_rate_hz']<=100 or values['mode_timeout_s']<=0 or values['teleop_timeout_s']<=0 or
+        values['entry_neutral_s']<.1 or values['duration_s']<0):
+        raise ValueError('Invalid fixed command ranges/timing or simultaneous throttle and brake')
+    return active,values
 
 
 def collect_configuration(root, overrides=None):

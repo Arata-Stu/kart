@@ -14,6 +14,7 @@
   <exec_depend>isaac_ros_visual_slam_interfaces</exec_depend>
   <exec_depend>kart_bringup</exec_depend>
   <exec_depend>isaac_mapping_ros</exec_depend>
+  <exec_depend>nvblox_ros</exec_depend>
   <test_depend>ament_cmake_pytest</test_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>

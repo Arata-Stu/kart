@@ -92,6 +92,7 @@ def main(argv=None):
         source.add_argument('--bag',type=Path)
         source.add_argument('--normalized-json',type=Path,help='Portable extracted data/test fixture')
         p.add_argument('--config',type=Path,default=DEFAULT_CONFIG)
+        p.add_argument('--mode',choices=('manual','auto'),help='Select MANUAL/AUTO recording segments; default follows config')
         p.add_argument('--session',type=Path,help='Optional JSON with tire/surface/battery and trial notes')
         p.add_argument('--output',required=True,type=Path)
     p=sub.add_parser('tune',help='Preview gains on a fitted scalar model and export a review-only YAML')
@@ -105,7 +106,9 @@ def main(argv=None):
     args=parser.parse_args(argv)
     try:
         if args.action=='tune': tune(args);return 0
-        cfg=json.loads(args.config.read_text());validate_config(cfg)
+        cfg=json.loads(args.config.read_text())
+        if args.mode: cfg['allowed_modes']={'manual':[2],'auto':[1]}[args.mode]
+        validate_config(cfg)
         data=read_bag(args.bag,cfg) if args.bag else json.loads(args.normalized_json.read_text())
         if args.session:
             notes=json.loads(args.session.read_text())

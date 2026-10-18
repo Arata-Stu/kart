@@ -5,11 +5,12 @@ import fcntl
 import json
 import mimetypes
 import re
+import shutil
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from . import capture, registration, vgl
+from . import capture, registration, vgl, dense
 from .copies import copy_map
 from .e2e import Learning
 from .jobs import Jobs
@@ -69,6 +70,8 @@ class Studio:
                 records=str(self.records),
                 maps=str(self.maps.root),
             )
+        if path == "/api/dense":
+            return dense.catalog(self.maps, key)
         if path == "/api/vgl":
             return vgl.catalog(self, key)
         if path == "/api/e2e/engine":
@@ -229,6 +232,8 @@ class Studio:
                 return dict(
                     path=str(output), files=sorted(p.name for p in output.iterdir())
                 )
+        if path == "/api/dense":
+            return dense.catalog(self.maps, key)
         if path == "/api/vgl":
             key, source, models, output, size = vgl.prepare(self, b)
             return self.jobs.start(
@@ -250,7 +255,8 @@ class Studio:
             key, bag, workflow = self.mapping.validate(b)
             return self.jobs.start(
                 "VSLAM地図作成: " + key,
-                ["map:" + key, "ros:" + str(workflow["ros_domain_id"])],
+                ["map:" + key, "ros:" + str(workflow["ros_domain_id"])]
+                + (["e2e-compute"] if workflow.get("dense_reconstruction") else []),
                 lambda job: self.mapping.build(job, key, bag, workflow),
             )
         if path == "/api/stop":
@@ -303,6 +309,19 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self.trusted()
             url = urlsplit(self.path)
+            if url.path == "/dense-file":
+                query = {k: v[-1] for k, v in parse_qs(url.query).items()}
+                path = dense.artifact(self.server.studio.maps, query.get("id", ""), query.get("file", ""))
+                with path.open("rb") as stream:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/png" if path.suffix == ".png" else "application/octet-stream")
+                    self.send_header("Content-Length", str(path.stat().st_size))
+                    self.send_header("X-Content-Type-Options", "nosniff")
+                    if path.suffix != ".png":
+                        self.send_header("Content-Disposition", f'attachment; filename="{path.name}"')
+                    self.end_headers()
+                    shutil.copyfileobj(stream, self.wfile, length=1024 * 1024)
+                return
             if url.path.startswith("/api/"):
                 query = {k: v[-1] for k, v in parse_qs(url.query).items()}
                 return self.reply(200, self.server.studio.get(url.path, query))

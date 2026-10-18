@@ -16,13 +16,15 @@ ROS_DOMAIN_ID=92 ros2 run kart_mapping build_map --job /absolute/path/job.json
 通常はMap Studioが `bag`（絶対パス）、`output`（一時出力フォルダ）、`workflow`を含むJSONを渡す。
 `workflow`の正本は `kart_bringup/config/mapping/workflow.json`。
 公式CLIを `--steps_to_run edex compute_poses --use_raw_image=False` で呼び出す。
-cuSFM・深度・占有地図・cuVGLは実行しない。独自ROSノード／publisher／subscriber／serviceは起動しない。
+既定ではcuSFM・深度・占有地図・cuVGLは実行しない。dense_reconstruction=trueでは公式のdepth・occupancy工程を追加する。kart独自のROSノード／publisher／subscriber／serviceは追加しない。
 bag検査はrosbag readerで行い、ROSトピック再生はしない。Collectorとmapping.launch.pyは後続のcapture専用で、地図生成では使わない。
 
 ## 設定と入力
 
 | 設定 | 既定値・意味 |
 |---|---|
+| dense_reconstruction | false。trueでFoundationStereo深度＋nvblox占有地図・メッシュを生成 |
+| fs_model_res | low_res。low_res / high_res。公式FoundationStereoモデル解像度 |
 | ros_domain_id | 92。環境変数と一致させる。UI内で排他 |
 | left_image / right_image | `/realsense/infra1/image_rect_raw` / `/realsense/infra2/image_rect_raw`。`sensor_msgs/msg/Image`、rectified入力 |
 | left_info / right_info | `/realsense/infra1/camera_info` / `/realsense/infra2/camera_info`。`sensor_msgs/msg/CameraInfo` |
@@ -113,3 +115,27 @@ bringup `config/mapping/capture.json`が正本。ROS parameterではなくworker
 ROS 5.0上流は表示点群のバッファに上限を持つため、実コースの点群範囲は実データで確認する。
 検証: 成功ゲート・古い診断・追跡喪失・末尾不足のportableテスト、アプリのready遷移と元地図保護の模擬テスト。
 実bag／GPU／localize精度／ROS結合は未確認。
+
+## 公式depth・occupancy工程の利用
+
+UIで追加生成を選ぶと`--depth_model=foundationstereo --fs_model_res=low_res`
+（またはhigh_res）、`--steps_to_run edex compute_poses depth occupancy`を渡す。
+新しい地図名で実行し、既存VSLAM地図には上書きしない。既存地図への追加処理は未実装。
+公式モデルengineは実行GPU向けに事前準備する。ALIKEDとは別資産であり、自動取得やCPU fallbackは行わない。
+必要な外部packageはisaac_mapping_rosとnvblox_ros（Dockerに明記）。モデル不足時は公式処理のログで失敗し、完成扱いにしない。
+
+出典: NVIDIA公式Isaac ROS 5.0 `isaac_ros_mapping_and_localization/isaac_mapping_ros/scripts/create_map_offline.py`
+の`run_depth_inference` / `create_occupancy_map`（2026-10-18確認）。
+https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_mapping_and_localization/blob/main/isaac_mapping_ros/scripts/create_map_offline.py
+内部nvblox設定はインストール済み公式map_creation_config.yamlをそのまま使用し、kart launchでROSノードを直接構成しない。
+従ってこの工程の全内部ROSパラメータをkartへ複製しない。使用APT版・コマンドをmapping_result.jsonへ記録する。
+
+成果物は`official/<run>/`。`mesh.ply`は地面合わせ後の三角形メッシュ、
+`mesh_before_adjustment.ply`は地面合わせ前。`occupancy_map.png/.yaml`、`ground_plane.yaml`と
+存在する`T_world_to_z0.json`も保持する。後処理の地面座標をHDMapのmap frameと同一と仮定しない。
+`mapping_result.json.dense`に頂点数・面数・成果物名を記録する。
+非空mesh（頂点・面）と占有地図PNG/YAML、ground_plane.yamlが揃わなければ失敗とする。
+HDMap編集用snapshotは従来どおり別工程。メッシュの自動点群化・座標変換・オンライン利用は行わない。
+
+検証はtools/app/tests/test_dense_mapping.pyとtest_official_mapping.py。
+公式コマンド引数・成果物検査・ダウンロード範囲はローカルで確認可能だが、FoundationStereo/nvblox実行と生成品質はGPU実機未検証。

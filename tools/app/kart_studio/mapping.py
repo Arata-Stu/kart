@@ -43,6 +43,8 @@ class Mapping:
         if unknown:
             raise ValueError("未知の設定: " + ", ".join(unknown))
         workflow.update(raw)
+        from kart_mapping.dense_outputs import options
+        options(workflow)
         for k in ("left_image", "right_image", "left_info", "right_info"):
             if not re.fullmatch(r"/[A-Za-z0-9_/]+", workflow[k]):
                 raise ValueError("topic名が不正です")
