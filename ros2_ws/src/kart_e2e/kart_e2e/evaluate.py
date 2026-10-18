@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from .contract import model_contract, runtime_settings
+from .contract import model_contract, runtime_settings, input_contract
 
 
 def metrics(predicted, labels):
@@ -57,10 +57,17 @@ def evaluation_session(ort, model):
 
 def evaluate(model_dir, dataset, output):
     import onnxruntime as ort
-    from .model import preprocess
 
     contract, mode = model_contract(model_dir)
     runtime = runtime_settings(model_dir)
+    modality, input_name, shape = input_contract(model_dir)
+    if modality == 'evs':
+        model_meta = json.loads((Path(model_dir) / 'metadata.json').read_text())
+        dataset_meta = json.loads((dataset / 'metadata.json').read_text())
+        if dataset_meta.get('model_spec') != model_meta['model_spec']:
+            raise ValueError('EVS evaluation dataset/model mismatch')
+    else:
+        from .model import preprocess
     session, fallback_reason = evaluation_session(ort, contract["model_file_path"])
     providers = session.get_providers()
     print(f"ONNX Runtime providers: {providers}", flush=True)
@@ -72,17 +79,23 @@ def evaluate(model_dir, dataset, output):
     with (dataset / "samples.jsonl").open() as stream:
         for line in stream:
             row = json.loads(line)
-            image = (dataset / row["image"]).resolve(strict=True)
+            image = (dataset / row["counts" if modality == "evs" else "image"]).resolve(strict=True)
             if not image.is_relative_to(dataset.resolve()):
                 raise ValueError("Image outside evaluation dataset")
-            with Image.open(image) as rgb:
-                # Training adds patch padding; ONNX already embeds that padding.
-                tensor = preprocess(rgb)[:, 4:-4, 6:-6].unsqueeze(0).numpy()
+            if modality == 'evs':
+                tensor = np.load(image, allow_pickle=False)[None]
+                if (list(tensor.shape) != shape or tensor.dtype != np.float32
+                        or not np.isfinite(tensor).all() or (tensor < 0).any()):
+                    raise ValueError('Invalid EVS evaluation counts')
+            else:
+                with Image.open(image) as rgb:
+                    # Training adds patch padding; ONNX already embeds that padding.
+                    tensor = preprocess(rgb)[:, 4:-4, 6:-6].unsqueeze(0).numpy()
             if not rows:
                 for _ in range(warmup_runs):
-                    session.run(["control"], {"image": tensor})
+                    session.run(["control"], {input_name: tensor})
             started = time.perf_counter()
-            prediction = session.run(["control"], {"image": tensor})[0]
+            prediction = session.run(["control"], {input_name: tensor})[0]
             elapsed = (time.perf_counter() - started) * 1000
             if (
                 prediction.shape != (1, 1 if mode == "steer_only" else 2)
@@ -174,7 +187,9 @@ def evaluate(model_dir, dataset, output):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--bag", type=Path, required=True)
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument('--bag', type=Path)
+    source.add_argument('--dataset', type=Path, help='Extracted RGB or EVS dataset')
     p.add_argument("--model", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--image-topic", default="/realsense/color/image_raw")
@@ -185,6 +200,12 @@ def main():
     a = p.parse_args()
     model_contract(a.model)
     runtime_settings(a.model)
+    if a.dataset is not None:
+        evaluate(a.model, a.dataset, a.output)
+        return
+    if input_contract(a.model)[0] == 'evs':
+        p.error('EVS: extract RAW + bag with preprocess_evs, then use --dataset')
+    a.output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".eval-data-", dir=a.output.parent) as tmp:
         dataset = Path(tmp) / "dataset"
         args = [

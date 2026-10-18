@@ -29,3 +29,10 @@ Tensor windowごとにsensor_to_ros_offset_nsをbagへ保存し、整数nsで対
 録画開始ROS時刻とRAWの0を等置しない。Tensor headerとwindow endも区別する。
 RAW splitごとのshift、sensor resetごとのepoch、メタデータsequenceの欠落を確認する。
 packet topic/Tensor本体は標準収集対象外。offsetは受信遅延を含む推定で実機校正が必要。
+
+
+EVS制御dataset抽出器はRawReaderのdo_time_shifting=falseを使い、RAWを最初から
+センサ絶対usで読む。この場合はshift sidecarを加算しない。
+相対us readerを使う別ツールは従来のshift復元式を使う。両方式を混同しない。
+複数stream/epochのRAWはmanifestで対応を明示する。窓は記録済みTensorTimingから取得し、
+教師の対応時刻はTensor stamp、境界は[start,end)。RAW端・splitをまたぐ不完全窓は除外する。

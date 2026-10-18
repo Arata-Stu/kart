@@ -16,15 +16,23 @@ from .model import SPEC, Policy, backbone, preprocess
 
 
 class Samples(Dataset):
-    def __init__(self, roots, mode):
+    def __init__(self, roots, mode, evs_spec=None):
         self.items = []
         self.mode = mode
+        self.evs_spec = evs_spec
         for root in roots:
+            if evs_spec is None and (root / 'metadata.json').exists():
+                if json.loads((root / 'metadata.json').read_text()).get('modality', 'rgb') != 'rgb':
+                    raise ValueError('RGB training cannot consume an EVS dataset; use --modality evs')
+            if evs_spec is not None:
+                meta = json.loads((root / 'metadata.json').read_text())
+                if meta.get('modality') != 'evs' or meta.get('model_spec') != evs_spec:
+                    raise ValueError('EVS dataset/encoder contract mismatch')
             for line in (root / "samples.jsonl").read_text().splitlines():
                 row = json.loads(line)
-                image = (root / row["image"]).resolve(strict=True)
+                image = (root / row["counts" if evs_spec is not None else "image"]).resolve(strict=True)
                 if not image.is_relative_to(root.resolve()):
-                    raise ValueError("Image outside dataset")
+                    raise ValueError("Sample outside dataset")
                 values = [float(row["steering"]), float(row["throttle"])]
                 if (
                     not all(math.isfinite(v) for v in values)
@@ -41,8 +49,17 @@ class Samples(Dataset):
 
     def __getitem__(self, index):
         path, label = self.items[index]
-        with Image.open(path) as image:
-            value = preprocess(image)
+        if self.evs_spec is not None:
+            counts = np.load(path, allow_pickle=False)
+            spec = self.evs_spec
+            if (counts.shape != (20, spec['height'], spec['width'])
+                    or counts.dtype != np.float32 or not np.isfinite(counts).all()
+                    or (counts < 0).any()):
+                raise ValueError('Invalid raw EVS counts')
+            value = torch.from_numpy(counts)
+        else:
+            with Image.open(path) as image:
+                value = preprocess(image)
         return value, torch.tensor(label[:1] if self.mode == "steer_only" else label)
 
 
@@ -70,6 +87,7 @@ def main():
     p.add_argument(
         "--max-throttle", type=float, default=0.2, help="Deployment output ceiling"
     )
+    p.add_argument("--modality", choices=["rgb", "evs"], default="rgb")
     p.add_argument("--finetune", action="store_true")
     p.add_argument("--device", default="cuda")
     p.add_argument("--epochs", type=int, default=20)
@@ -93,12 +111,17 @@ def main():
     random.seed(a.seed)
     np.random.seed(a.seed)
     torch.manual_seed(a.seed)
-    datasets = [Samples(a.train, a.mode), Samples(a.validation, a.mode)]
-    encoder = backbone(a.repo)
-    encoder.load_state_dict(
-        torch.load(a.weights, map_location="cpu", weights_only=True), strict=True
-    )
-    model = Policy(encoder, a.mode, frozen=not a.finetune).to(a.device)
+    if a.modality == 'evs':
+        from .evs_policy import pretrained_policy
+        model = pretrained_policy(a.weights, a.repo, a.mode, frozen=not a.finetune).to(a.device)
+        datasets = [Samples(r, a.mode, model.spec) for r in (a.train, a.validation)]
+    else:
+        datasets = [Samples(a.train, a.mode), Samples(a.validation, a.mode)]
+        encoder = backbone(a.repo)
+        encoder.load_state_dict(
+            torch.load(a.weights, map_location="cpu", weights_only=True), strict=True
+        )
+        model = Policy(encoder, a.mode, frozen=not a.finetune).to(a.device)
     model.runtime = runtime
     optimizer = torch.optim.AdamW(
         (v for v in model.parameters() if v.requires_grad), lr=a.learning_rate
@@ -145,13 +168,15 @@ def main():
         if metrics["validation_mse"] < best:
             best = metrics["validation_mse"]
             state = {
-                "spec": SPEC,
+                "spec": getattr(model, "spec", SPEC),
                 "mode": a.mode,
                 "state_dict": model.state_dict(),
                 "runtime": runtime,
                 "metrics": metrics,
                 "provenance": provenance,
             }
+            if a.modality == 'evs':
+                state.update(modality='evs', evs_metadata=model.evs_metadata)
             temporary = a.output / "best.tmp"
             torch.save(state, temporary)
             temporary.replace(a.output / "best.pt")

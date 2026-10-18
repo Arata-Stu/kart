@@ -11,20 +11,20 @@ E2Eは直接actuator指令なので速度PIDを通さず、既存AUTO command mu
 rule-basedとE2Eを同じAUTO topicへ並列publishしない。現在の切替はSTOP中の
 launch入替で行う。中央の動的source selectorは後続タスク。
 推論既定は`drive_enabled=false`で専用topicへ出力する。車両接続は明示指定。
-AUTO判定・画像／mode鮮度・異常ラッチ・元画像stamp保持は両モード共通。
+AUTO判定・入力／mode鮮度・異常ラッチ・元入力stamp保持は両モード共通。
 復旧時に自動再開しない。中立と物理停止は区別する。
 
 ## 責務・依存
 
 `kart_e2e`内でデータ抽出、model/preprocess、training、ROS adapter、gateを分離する。
 encoderは公式DINOv3の固定commitを`e2e.repos`で取得し、重みは別途用意する。
-JetPilotの小型encoder／head構成を参考にするが、巨大な学習UIやイベント入力を移植しない。
+JetPilotの小型encoder／head構成を参考にし、RGB/EVSの入力契約はkart側で明示管理する。
 TorchはPCでの学習・ONNX変換だけに使い、Jetsonの推論にTorchを導入しない。
 ROS Pythonと異なるinterpreterを暗黙使用せず、同じinterpreterで依存を検証する。
-走行時は公式Isaac ROS画像encoder群・TensorRTNode・kart C++ decoderを同一containerへloadする。
+RGB走行時は公式Isaac ROS画像encoder群・TensorRTNode・kart C++ decoderを同一containerへloadする。
 moduleはload専用、親がcontainer所有を決める。外部containerはmultithreaded必須。
-画像とCameraInfoの同一timestampを使い、制御指令まで元時刻を保持する。
-前処理はantialiasなしresizeへ統一し、パッチpaddingはONNX内の正規化後へ置く。
+RGBは画像とCameraInfoの同一timestampを使い、制御指令まで元時刻を保持する。
+RGB前処理はantialiasなしresizeへ統一し、パッチpaddingはONNX内の正規化後へ置く。
 旧PIL antialias前処理のcheckpointはschema不一致として拒否し、再学習を要求する。
 ONNX exportはchecker・ORT比較後にhash入りmetadataを保存し、launchで契約を検証する。
 vehicle・sensor・localizationの所有は既存launchに維持する。
@@ -51,7 +51,8 @@ CLIを正本としてUIは固定引数の組み立て・ジョブ管理・成果
 ## 起動モデルの契約
 
 学習時のruntime.fixed_throttle/max_throttleをcheckpoint→ONNX metadata→decoderへ継承する。
-TUIはoutput_modeとmodel_specも検証し、RGBなしを拒否する。センサとencoder/TensorRTは同一container。
+TUIはoutput_mode・modality・model_specを検証し、RGBモデルではRGBなしを拒否する。
+RGBはセンサとencoder/TensorRTが同一container、EVSは既存OpenEBのtensor_containerを使う。
 E2EモードではVSLAM/VGLを起動せず、AUTOは引き続き利用者の操作で選択する。
 
 ## DINOv3版の統一（2026-10-15）
@@ -75,6 +76,30 @@ content解像度160×120/320×240を取得する。driverはFP32 raw counts、me
 `encode_openeb_counts(encoder, counts)` がpadding→固定正規化→patch tokensを返す。
 上記PythonはPCの学習/比較用。JetsonのROS inferenceへTorchを導入しない。
 入力はTensorList /event_camera/tensor由来の[B,20,Hcontent,Wcontent]、未正規化counts。
-新しいROSノードやtopicは追加しない。ONNX/TensorRT接続と制御headは後続。
+新しいROSノードやtopicは追加しない。以下の2026-10-18実装で制御headとONNX/TensorRTへ接続する。
 DSEC学習は整列RGBに合わせrectified座標、kart既定driverはraw sensor座標。
 同じ画素座標イベント集合の集計規約は合わせるが、実カメラの校正差は別途評価する。
+
+
+## EVS policy経路（2026-10-18）
+
+RAW＋bagの操作指令／mode／TensorTimingから未正規化counts datasetを生成する。
+既定40ms・10bin・[start,end)・positive→negative・整数sum pooling。
+EventState固定統計はhistogram_version=2を必須とし、解像度と係数をdataset/checkpoint/ONNXに継承する。
+RAW readerはtime shiftingを無効化してセンサ時刻を保持する。Tensor stampを教師時刻として
+過去のMANUAL指令を対応し、stream/epoch不明・reset・重複・不完全窓を推測で補わない。
+単一stream/epochは--rawで対応、複数の場合はmanifestでRAWごとの対応を明示する。
+
+counts padding→固定正規化→EVS encoderのpatch tokens平均→制御headを同じpolicyとして学習/export。
+蒸留encoderの既定は凍結、finetuneは明示指定。制御教師なしのencoderを走行policyとして扱わない。
+EVS ONNX入力はinput_tensor FP32 [1,20,120,160]または[1,20,240,320]、制御出力はRGBと共通。
+model metadataでmodalityを識別し、RGBのSPECを緩めず別契約で検証する。
+JetsonはOpenEBの既存/event_camera/tensor_containerへ公式TensorRT＋既存C++ decoderをloadする。
+RGB encoder・Torch・別の制御gate・別のAUTO producerは追加しない。
+全OpenEB設定はモデルから明示生成して起動時に照合する。TensorRT buildは引き続き明示操作。
+EVS E2EでRGB/Infraともに無効ならRealSense/IMUと空のsensor containerを起動しない。
+
+CLIを実装の正本とし、EVS dataset/学習のWeb UI操作は今回追加しない。
+RAW再構成はオンラインのpacket dropを再現できず、offsetは受信遅延を含む。
+合成データ・ランダム重み・ORT比較を、実RAW/公式蒸留重み/実TensorRT/ROS/車両の確認と区別する。
+操作手順・全CLI引数・追加launch構成はkart_e2e READMEのEVS節へ記載する。

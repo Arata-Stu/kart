@@ -17,6 +17,9 @@ ENV PATH=/usr/local/bin:${PATH}
 ARG OPENEB_GIT_URL=https://github.com/prophesee-ai/openeb.git
 ARG OPENEB_VERSION=5.2.0
 ARG OPENEB_BUILD_JOBS=2
+# RAW dataset extraction uses the system-Python HAL/core bindings. Exclude
+# core_ml: inference remains native TensorRT and needs no SDK Torch stack.
+# OpenEB 5.2.0 cmake/custom_functions/python3.cmake supports Python3_EXECUTABLE.
 
 WORKDIR /opt
 USER root
@@ -73,11 +76,14 @@ RUN set -eux; \
         /opt/openeb/; \
     cmake -S /opt/openeb -B /opt/openeb/build \
         -DBUILD_TESTING=OFF \
-        -DCOMPILE_PYTHON3_BINDINGS=OFF \
+        -DCOMPILE_PYTHON3_BINDINGS=ON \
+        -DPython3_EXECUTABLE=/usr/bin/python3 \
+        '-DMETAVISION_SELECTED_MODULES=base;core;stream;ui' \
         -DCMAKE_BUILD_TYPE=Release; \
     cmake --build /opt/openeb/build --config Release -- -j"${OPENEB_BUILD_JOBS}"; \
     cmake --install /opt/openeb/build; \
     ldconfig; \
+    /usr/bin/python3 -c 'from metavision_core.event_io import RawReader'; \
     rm -rf /opt/openeb /tmp/silky_evcam_plugin_source
 
 ENV CMAKE_PREFIX_PATH=/usr/local:${CMAKE_PREFIX_PATH}

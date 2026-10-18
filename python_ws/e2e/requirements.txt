@@ -7,3 +7,6 @@ Pillow>=11,<12
 # Offline ONNX export + parity check, not used by ROS inference.
 onnx>=1.19,<2
 onnxruntime>=1.23,<2
+
+# Generate full OpenEB runtime config for EVS policies.
+PyYAML>=6,<7

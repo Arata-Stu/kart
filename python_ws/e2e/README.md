@@ -16,3 +16,11 @@ Jetsonの推論はIsaac ROS TensorRTノードを使用し、Torch・ONNX Runtime
 このrequirementsはPCでの学習とONNX export用で、Jetsonには導入しない。
 学習／ROS推論のコード・実行手順は[kart_e2e](../../ros2_ws/src/kart_e2e/README.md)。
 encoderの取得は`vcs import . < e2e.repos`、公式モデル重みは別途準備する。
+
+
+EVS学習も同じTorch環境で`kart_e2e.train --modality evs`を使用する。
+RAW dataset作成だけはOpenEB/Metavisionの`metavision_core.event_io`とROS Pythonが必要。
+EVS Dockerで取得・構築したSDKをsystem-site-packages venvからimportできることを確認する。
+PyYAMLはOpenEB全設定の生成用（ROS側python3-yamlも利用可）。
+入力重みはEventStateのv2 histogram encoder bundle。RGB公式重みを直接指定しない。
+[EVS実行手順](../../ros2_ws/src/kart_e2e/README.md#evs-rawから制御policyまで2026-10-18)。

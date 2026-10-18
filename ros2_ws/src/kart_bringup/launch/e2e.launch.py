@@ -3,7 +3,7 @@
 import isaac_ros_launch_utils as lu
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.e2e import container_config, validate_encoder
-from kart_e2e.contract import model_contract, runtime_settings
+from kart_e2e.contract import model_contract, runtime_settings, input_contract
 
 
 def add_pipeline(args):
@@ -18,6 +18,8 @@ def add_pipeline(args):
         lu.get_path("kart_bringup", "config/e2e/launch.json"),
         {key: getattr(args, key) for key in keys},
     )
+    if input_contract(config["model_dir"])[0] != "rgb":
+        raise ValueError("EVS model: use evs_e2e.launch.py or mission mode=e2e with EVS")
     model_contract(config["model_dir"])
     runtime_settings(config["model_dir"])
     from kart_e2e.engine_cache import require_engine

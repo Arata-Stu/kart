@@ -7,7 +7,7 @@ import os
 import platform
 from pathlib import Path
 
-from .contract import model_contract
+from .contract import model_contract, input_contract
 
 
 def digest(path):
@@ -42,7 +42,7 @@ def fingerprint():
     )
 
 
-def validate_engine(path, mode):
+def validate_engine(path, mode, input_name="image", input_shape=(1, 3, 120, 212)):
     import tensorrt as trt
 
     logger = trt.Logger(trt.Logger.WARNING)
@@ -51,7 +51,7 @@ def validate_engine(path, mode):
     if engine is None:
         raise ValueError("TensorRT engine could not be loaded on this GPU")
     expected = {
-        "image": (trt.TensorIOMode.INPUT, (1, 3, 120, 212)),
+        input_name: (trt.TensorIOMode.INPUT, tuple(input_shape)),
         "control": (trt.TensorIOMode.OUTPUT, (1, 1 if mode == "steer_only" else 2)),
     }
     if engine.num_io_tensors != 2:
@@ -76,7 +76,11 @@ def reusable(model):
             "engine_sha256"
         ] != digest(engine):
             return False
-        validate_engine(engine, mode)
+        modality, name, shape = input_contract(model)
+        if modality == 'rgb':
+            validate_engine(engine, mode)
+        else:
+            validate_engine(engine, mode, name, shape)
         return True
     except (OSError, ValueError, KeyError, RuntimeError, ImportError):
         return False

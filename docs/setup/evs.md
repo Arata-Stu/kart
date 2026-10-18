@@ -2,7 +2,8 @@
 
 2026-10-10。JetPack 7.2 / Isaac ROS 5.0 / ROS 2 Lyrical対象。
 JetPilotのDockerfile.silky_evcamを参考にOpenEB 5.2.0を/usr/localへビルド。
-Python bindingsとE2V/PyTorchは導入しない（ROS C++取得/Tensor生成用）。
+RAW dataset作成用にsystem PythonのHAL/core bindingsを導入する（2026-10-18変更）。
+SDK core_mlとE2V/PyTorchは導入しない。走行推論はC++/TensorRTを使う。
 公式SDK: https://github.com/prophesee-ai/openeb/tree/5.2.0
 
 ## Linuxホスト
@@ -145,3 +146,22 @@ bash scripts/sensors/evs-raw-timing.sh --build /workspaces/record/session/camera
 式は`ros_ns=(raw_relative_us+raw_sensor_shift_us)*1000+sensor_to_ros_offset_ns`。
 学習readerのtime shifting設定を合わせる。推定offsetはUSB遅延を含み同期精度は未検証。
 openeb_ros2のこの追加はローカル変更。別環境へvcs取得するにはcommit/pushとpackages.repos更新が必要。
+
+
+## EVS制御policyのRAW抽出（2026-10-18）
+
+Dockerfile.openebはCOMPILE_PYTHON3_BINDINGS=ON、Python3_EXECUTABLE=/usr/bin/python3で
+base/core/stream/uiを構築し、build時にmetavision_core.event_io.RawReaderのimportを確認する。
+core_mlは選択しない。既存のPython bindingsなしimageはLinuxホストで
+`./scripts/dev.sh --evs --build-local`から再ビルドする必要がある。
+Docker build自体はこの変更のローカル検証では未実施。
+
+[kart_e2e EVS手順](../../ros2_ws/src/kart_e2e/README.md#evs-rawから制御policyまで2026-10-18)で
+RAW＋TensorTiming＋MANUAL教師からdatasetを作成できる。
+この抽出器はtime shiftingを無効にしてセンサ時刻を保持するため、上記sidecarのshiftを加算しない。
+単一stream/epochは--raw、複数の場合は--raw-manifestで各RAWの所属を明示する。
+SDKを使わない学習/exportは通常の学習Pythonでも実行できる。
+
+公式API: [RawReader](https://docs.prophesee.ai/stable/api/python/core/event_io.html)、
+[Timestamp shifting](https://docs.prophesee.ai/stable/data/streaming_decoding/timestamp_shifting.html)。
+OpenEB 5.2.0のCMakeとraw_reader.pyを照合済み。実RAW/SDK/ROS/Jetson動作は未確認。

@@ -113,7 +113,7 @@ class EvsTests(unittest.TestCase):
             spec = importlib.util.spec_from_file_location("evs_launch_test", PACKAGE / "launch/modules/sensors/openeb.launch.py")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-            module.setup({"evs_backend": "cuda", "evs_serial": "E522", "evs_bias_file": "@default"})
+            module.setup({"evs_backend": "cuda", "evs_serial": "E522", "evs_bias_file": "@default", "evs_tensor_config": ""})
         params = node.call_args.kwargs["parameters"]
         self.assertEqual(len(params), 5)
         self.assertEqual(params[-1], {"tensor_backend": "cuda", "serial": "E522", "bias_file": ""})

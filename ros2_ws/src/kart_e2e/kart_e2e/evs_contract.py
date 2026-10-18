@@ -32,6 +32,9 @@ def main():
     a=p.parse_args()
     import yaml
     meta=json.loads(a.model_json.read_text())
+    meta=meta.get("evs_metadata", meta)
+    from .contract import evs_spec
+    evs_spec(meta)
     h,w=validate_metadata(meta)
     config=yaml.safe_load(a.base_config.read_text())
     params=config['/**/event_tensor']['ros__parameters']

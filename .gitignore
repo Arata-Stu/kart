@@ -24,6 +24,9 @@ __pycache__/
 !/weights/dinov3/
 /weights/dinov3/*
 !/weights/dinov3/README.md
+!/weights/evs/
+/weights/evs/*
+!/weights/evs/README.md
 
 # Learning UI generated datasets, checkpoints and ONNX bundles.
 /e2e/

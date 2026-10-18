@@ -31,16 +31,26 @@ def export(policy, output):
     runtime = validate_runtime(policy.runtime)
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
-    model = ExportPolicy(policy.cpu().eval()).eval()
+    is_evs = getattr(policy, 'modality', 'rgb') == 'evs'
+    if is_evs:
+        from .contract import evs_spec
+        spec = evs_spec(policy.evs_metadata)
+        shape = (1, 20, spec['height'], spec['width'])
+        input_name = 'input_tensor'
+        model = policy.cpu().eval()
+    else:
+        spec, shape, input_name = SPEC, (1, 3, 120, 212), 'image'
+        model = ExportPolicy(policy.cpu().eval()).eval()
     generator = torch.Generator().manual_seed(42)
-    example = torch.randn((1, 3, 120, 212), generator=generator)
+    example = (torch.rand(shape, generator=generator) * 5 if is_evs
+               else torch.randn(shape, generator=generator))
     path = output / "model.onnx"
     with torch.inference_mode():
         torch.onnx.export(
             model,
             example,
             str(path),
-            input_names=["image"],
+            input_names=[input_name],
             output_names=["control"],
             opset_version=17,
             dynamo=False,
@@ -58,25 +68,28 @@ def export(policy, output):
     for probe in (
         example,
         torch.zeros_like(example),
-        torch.randn(example.shape, generator=generator),
+        (torch.rand(example.shape, generator=generator) * 20 if is_evs
+         else torch.randn(example.shape, generator=generator)),
     ):
         with torch.inference_mode():
             reference = model(probe).numpy()
-        actual = session.run(["control"], {"image": probe.numpy()})[0]
+        actual = session.run(["control"], {input_name: probe.numpy()})[0]
         np.testing.assert_allclose(actual, reference, rtol=1e-4, atol=1e-5)
         maximum_error = max(maximum_error, float(np.abs(actual - reference).max()))
     metadata = {
         "schema": 1,
-        "model_spec": SPEC,
+        "model_spec": spec,
         "output_mode": policy.mode,
         "runtime": runtime,
-        "input_name": "image",
-        "input_shape": [1, 3, 120, 212],
+        "input_name": input_name,
+        "input_shape": list(shape),
         "output_name": "control",
         "output_shape": [1, 1 if policy.mode == "steer_only" else 2],
         "onnx_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "ort_max_abs_error": maximum_error,
     }
+    if is_evs:
+        metadata.update(modality="evs", evs_metadata=policy.evs_metadata)
     (output / "metadata.json").write_text(json.dumps(metadata, indent=2))
     return metadata
 
@@ -89,7 +102,12 @@ def main():
     p.add_argument("--fixed-throttle", type=float, default=None)
     p.add_argument("--max-throttle", type=float, default=None)
     a = p.parse_args()
-    policy = load_checkpoint(a.checkpoint, a.repo)
+    state = torch.load(a.checkpoint, map_location='cpu', weights_only=True)
+    if state.get('modality') == 'evs':
+        from .evs_policy import load_checkpoint as load_evs_checkpoint
+        policy = load_evs_checkpoint(a.checkpoint, a.repo)
+    else:
+        policy = load_checkpoint(a.checkpoint, a.repo)
     if a.fixed_throttle is not None or a.max_throttle is not None:
         runtime = policy.runtime or {"fixed_throttle": 0.0, "max_throttle": 0.2}
         if (

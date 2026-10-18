@@ -81,6 +81,7 @@ def main():
     parser.add_argument("--no-evs", action="store_true", help="EVSを無効にする")
     parser.add_argument("--evs-backend", choices=("cpu", "cuda", "cuda_async"), default="")
     parser.add_argument("--evs-serial", default="")
+    parser.add_argument("--evs-tensor-config", default="", help="Model-derived full OpenEB tensor YAML")
     parser.add_argument("--evs-bias-file", default="", help=".bias path; @defaultでカメラ既定")
     parser.add_argument("--bias-root", type=Path, default=ROOT / "bias/evs")
     parser.add_argument("--foxglove", action="store_true")
@@ -99,7 +100,7 @@ def main():
     parser.add_argument("--rate", default="")
     args = parser.parse_args()
     from kart_bringup.evs import BACKENDS, DEFAULT_BIAS, bias_files, bias_selection, pipeline_configuration
-    selected_evs = args.evs or any((args.evs_backend, args.evs_serial, args.evs_bias_file))
+    selected_evs = args.evs or any((args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config))
     if args.no_evs and selected_evs:
         raise ValueError("--no-evsとEVS指定は併用できません")
     args.evs = selected_evs
@@ -141,8 +142,6 @@ def main():
                     )
             if args.mode == "drive" and args.infra_fps == "0":
                 raise ValueError("VSLAM/VGLにはInfraが必要です（なしは選択できません）")
-            if args.mode == "e2e" and args.rgb_fps == "0":
-                raise ValueError("E2EにはRGBが必要です")
             args.evs = not args.no_evs and (args.evs or choose(
                 "EVS（Tensor・画像・RAW記録）",
                 [False, True],
@@ -237,7 +236,7 @@ def main():
     if args.mode == "eval" and args.evs:
         raise ValueError("evalでは実EVSを起動しません")
     if args.evs:
-        paths, overrides = pipeline_configuration(config / "sensors", args.evs_backend, args.evs_serial, args.evs_bias_file)
+        paths, overrides = pipeline_configuration(config / "sensors", args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config)
         if args.evs_bias_file and args.evs_bias_file != DEFAULT_BIAS:
             args.evs_bias_file = bias_selection(args.evs_bias_file)
         print(f"EVS: {overrides}; packet topic OFF; configs={paths}")
@@ -276,10 +275,16 @@ def main():
                           {"enable_bridge": "true", "device": args.device})
         print(f"車両基板: {modules['bridge']['effective']['device']}")
     if args.mode == "e2e":
-        from kart_e2e.contract import model_contract, runtime_settings
+        from kart_e2e.contract import model_contract, runtime_settings, input_contract
 
-        if not sensors["enable_color"]:
-            raise ValueError("E2EにはRGBが必要です")
+        modality, _, _ = input_contract(args.e2e_model_dir)
+        if modality == 'evs':
+            from kart_bringup.e2e import validate_evs_tensor
+            if not args.evs:
+                raise ValueError('EVS E2Eには--evsが必要です')
+            validate_evs_tensor(args.evs_tensor_config, args.e2e_model_dir)
+        elif not sensors["enable_color"]:
+            raise ValueError("RGB E2EにはRGBが必要です")
         _, mode = model_contract(args.e2e_model_dir)
         runtime = runtime_settings(args.e2e_model_dir)
         print(f"E2E metadata: {mode}; {runtime}")
@@ -301,6 +306,7 @@ def main():
         "evs_backend": args.evs_backend,
         "evs_serial": args.evs_serial,
         "evs_bias_file": args.evs_bias_file,
+        "evs_tensor_config": args.evs_tensor_config,
         "enable_foxglove": str(args.foxglove).lower(),
         "record_dir": args.record_dir,
         "run_name": args.run_name or "run",

@@ -780,3 +780,38 @@ AUTOへの移行と録画はJoyで操作する。変更はYAMLへ保存しない
 `config/mapping/workflow.json`に`dense_reconstruction`（既定false）と
 `fs_model_res`（既定low_res、high_resも可）を追加。kart_mappingが公式offline CLIへ渡す。
 ROSノード・topic・launch引数の追加はない。詳細はconfig/mapping/README.md参照。
+
+
+## EVS E2E policy（2026-10-18）
+
+[kart_e2eのEVS手順](../kart_e2e/README.md#evs-rawから制御policyまで2026-10-18)に
+RAW dataset・制御head学習・ONNX・TensorRT buildを記載。
+missionのe2eはONNX metadataのmodalityでRGB/EVSを選ぶ。
+EVSにはenable_evs=trueと、モデルから生成した全OpenEB YAMLのevs_tensor_configが必須。
+CLI追加`--evs-tensor-config`、mission追加`evs_tensor_config`は既定空（通常のsensor YAML保持）。
+collectでも指定でき、EVSを有効化してsensor moduleへ渡す。
+
+```bash
+bash scripts/bringup.sh --mode e2e --evs \
+  --e2e-model-dir /workspaces/models/evs_control_v1 \
+  --evs-tensor-config /workspaces/models/evs_control_v1/openeb_tensor.yaml \
+  --rgb-fps 0 --infra-fps 0
+```
+
+EVSのTensorRTNode（e2e_tensor_rt）＋kart_e2e::ControlDecoderNode（e2e_control_decoder）は
+既存/event_camera/tensor_containerへloadし、driverやRGB encoderを重複起動しない。
+RGB/Infraが両方0のEVS E2EではRealSense/IMUと空のsensor containerも起動しない。
+片方が有効ならRealSenseを併用記録できる。localizationは起動しない。
+missionは既存e2e_drive_enabled=trueでAUTO muxへ接続するが、AUTO／録画は自動開始しない。
+
+単体evs_e2e.launch.pyは既存EVS processへのload専用でdrive_enabled=false。
+全引数（すべて既定空＝config保持）はmodel_dir、evs_tensor_config、container_name、input_topic、
+fixed_throttle、drive_enabled、use_sim_time。前2者は必須。
+container_name=/event_camera/tensor_container、input_topic=/event_camera/tensorは構成正本
+config/e2e/evs_launch.jsonで固定。その他の意味・既定実効値は既存decoderと共通。
+全ROS parameterはconfig/e2e/evs_tensor_rt.yamlとcontrol_decoder.yaml。
+TensorRT入力/topic型は/event_camera/tensor / isaac_ros_tensor_msgs/msg/TensorList、
+出力/e2e/tensor_outputは同型、reliable/volatile/depth1。decoderの入出力・QoS・既定値は既存E2Eと同じ。
+独自service/actionは追加なし。ROS標準自動topicは省略。
+既存e2e.launch.pyはRGB専用としてEVSモデルの誤接続を拒否する。
+構成とbinding照合を代替fixtureで検証。実SDK/ROS/Jetson/車両は未確認。

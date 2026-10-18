@@ -195,6 +195,7 @@ class MissionCompositionTests(unittest.TestCase):
                     "record_dir",
                     "run_name",
                     "e2e_model_dir",
+                    "evs_tensor_config",
                     "rgb_fps",
                     "infra_fps",
                     "map_dir",
@@ -255,6 +256,7 @@ class MissionCompositionTests(unittest.TestCase):
             args.mode = "e2e"
             with (
                 patch("kart_e2e.contract.model_contract"),
+                patch("kart_e2e.contract.input_contract", return_value=("rgb", "image", [1, 3, 120, 212])),
                 patch("kart_e2e.contract.runtime_settings"),
                 patch("kart_e2e.engine_cache.require_engine"),
             ):
@@ -266,6 +268,44 @@ class MissionCompositionTests(unittest.TestCase):
             self.assertEqual(inference["container_name"], "/external/sensors")
             self.assertEqual(inference["create_container"], "false")
             self.assertEqual(inference["drive_enabled"], "true")
+            lu.include.reset_mock()
+            args.enable_evs = 'true'
+            args.evs_tensor_config = '/model/openeb.yaml'
+            args.rgb_fps = '0'
+            with (
+                patch('kart_e2e.contract.model_contract'),
+                patch('kart_e2e.contract.runtime_settings'),
+                patch('kart_e2e.contract.input_contract', return_value=('evs', 'input_tensor', [1,20,120,160])),
+                patch('kart_e2e.engine_cache.require_engine'),
+                patch('kart_bringup.evs.pipeline_configuration'),
+                patch('kart_bringup.e2e.validate_evs_tensor'),
+            ):
+                module.add_mission(args)
+            paths = [c.args[1] for c in lu.include.call_args_list]
+            self.assertEqual(paths.count('launch/modules/sensors/openeb.launch.py'), 1)
+            self.assertIn('launch/evs_e2e.launch.py', paths)
+            self.assertNotIn('launch/e2e.launch.py', paths)
+            evs = lu.include.call_args_list[-1].kwargs['launch_arguments']
+            self.assertEqual(evs['evs_tensor_config'], '/model/openeb.yaml')
+            self.assertNotIn('container_name', evs)
+            self.assertNotIn('launch/localization.launch.py', paths)
+            self.assertNotIn('launch/tracking.launch.py', paths)
+            lu.include.reset_mock()
+            args.infra_fps = '0'
+            args.create_sensor_container = 'true'
+            args.sensor_container = 'kart_sensor_container'
+            with (
+                patch('kart_e2e.contract.model_contract'),
+                patch('kart_e2e.contract.runtime_settings'),
+                patch('kart_e2e.contract.input_contract', return_value=('evs', 'input_tensor', [1,20,120,160])),
+                patch('kart_e2e.engine_cache.require_engine'),
+                patch('kart_bringup.evs.pipeline_configuration'),
+                patch('kart_bringup.e2e.validate_evs_tensor'),
+            ):
+                module.add_mission(args)
+            paths = [c.args[1] for c in lu.include.call_args_list]
+            self.assertNotIn('launch/modules/sensors/realsense.launch.py', paths)
+            lu.component_container.assert_not_called()
 
 
 if __name__ == "__main__":

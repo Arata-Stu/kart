@@ -100,3 +100,24 @@ def validate_encoder(path):
                     f"{name}.{key} breaks the exported preprocessing contract"
                 )
     return values
+
+
+def validate_evs_tensor(path, model_dir):
+    """Check the exact startup OpenEB config against ONNX raw-count bindings."""
+    from kart_e2e.contract import input_contract
+
+    modality, name, shape = input_contract(model_dir)
+    if modality != 'evs':
+        raise ValueError('EVS inference requires an EVS model')
+    if not path:
+        raise ValueError('EVS policy requires evs_tensor_config generated from model metadata')
+    values = parameters(path, 'event_tensor')
+    expected = dict(width=shape[3], height=shape[2], bins=10,
+                    window_ms=40.0, stride_ms=4.0, temporal_interpolation='none',
+                    polarity_mode='separate', polarity_layout='polarity_major',
+                    tensor_name=name, channel_mean=[0.0], channel_stddev=[1.0],
+                    subscribe_packets=False)
+    for key, value in expected.items():
+        if values.get(key) != value:
+            raise ValueError(f'OpenEB {key} does not match EVS policy: expected {value}')
+    return values

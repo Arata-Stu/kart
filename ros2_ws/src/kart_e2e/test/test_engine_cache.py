@@ -34,6 +34,7 @@ class EngineCacheTests(unittest.TestCase):
                     ),
                 ),
                 patch("kart_e2e.engine_cache.fingerprint", return_value=hardware),
+                patch("kart_e2e.engine_cache.input_contract", return_value=("rgb", "image", [1, 3, 120, 212])),
                 patch("kart_e2e.engine_cache.validate_engine") as validate,
             ):
                 self.assertFalse(reusable(root))

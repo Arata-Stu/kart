@@ -42,3 +42,21 @@ model_dirからONNX/hashを確認し、model/engine pathと出力modeを明示�
 画像前処理契約の破壊、metadata不一致、未知の起動構成キーはエラー。
 
 [ノード全parameter・起動手順](../../../../kart_e2e/README.md)。
+
+
+## EVS policy
+
+- `evs_launch.json`: load先`/event_camera/tensor_container`、入力`/event_camera/tensor`。
+  model_dirとevs_tensor_configは空で、実行時の必須指定。container/topicは現行direct pipelineに固定。
+- `evs_tensor_rt.yaml`: 上記tensor_rt.yamlと同じ全parameter、入力tensor/binding名だけ`input_tensor`。
+  FP32 raw counts [1,20,120,160]または[1,20,240,320]をmodel metadataで検証する。
+  normalization/paddingはONNX内。image_encoder.yamlは使わない。
+- decoderは既存control_decoder.yamlを共有し、runtime/output_modeをモデルから継承。
+- sensorの全OpenEB YAMLは`python -m kart_e2e.evs_contract`で明示生成し、
+  `evs_tensor_config`で指定する。通常の既定212×120 tensor設定へEVS policyを接続しない。
+- `evs_e2e.launch.py`は既存OpenEB processへTensorRT/decoderだけをloadする。
+  全引数はmodel_dir、evs_tensor_config、container_name、input_topic、fixed_throttle、drive_enabled、use_sim_time。
+  既定空＝JSON/YAML保持。model_dirとevs_tensor_configは必須。
+- 内部inference.launch.pyのinput_topicは未指定時RGBの/e2e/tensor_input、EVSでは/event_camera/tensor。
+  出力/e2e/tensor_outputとdecoderのtopic/QoSは共通。ROS parameter/serviceの追加なし。
+- 詳細手順・検証範囲は[kart_e2e README](../../../../kart_e2e/README.md)を参照。

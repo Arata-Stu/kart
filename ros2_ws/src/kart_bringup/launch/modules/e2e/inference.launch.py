@@ -3,18 +3,19 @@
 import isaac_ros_launch_utils as lu
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.e2e import boolean, parameters
-from kart_e2e.contract import model_contract, runtime_settings
+from kart_e2e.contract import model_contract, runtime_settings, input_contract
 from kart_e2e.engine_cache import require_engine
 
 
 def add_nodes(args):
     root = lu.get_path("kart_bringup", "config/e2e")
     paths, mode = model_contract(args.model_dir)
-    trt = parameters(root / "tensor_rt.yaml")
+    modality, input_name, _ = input_contract(args.model_dir)
+    trt = parameters(root / ('evs_tensor_rt.yaml' if modality == 'evs' else 'tensor_rt.yaml'))
     decoder = parameters(root / "control_decoder.yaml")
     if (
-        trt["input_tensor_names"] != ["image"]
-        or trt["input_binding_names"] != ["image"]
+        trt["input_tensor_names"] != [input_name]
+        or trt["input_binding_names"] != [input_name]
         or trt["output_tensor_names"] != ["control"]
         or trt["output_binding_names"] != ["control"]
         or decoder["output_tensor_name"] != "control"
@@ -43,7 +44,7 @@ def add_nodes(args):
             plugin="nvidia::isaac_ros::dnn_inference::TensorRTNode",
             parameters=[trt],
             remappings=[
-                ("tensor_pub", "/e2e/tensor_input"),
+                ("tensor_pub", args.input_topic or "/e2e/tensor_input"),
                 ("tensor_sub", "/e2e/tensor_output"),
             ],
             extra_arguments=[{"use_intra_process_comms": True}],
@@ -71,6 +72,7 @@ def generate_launch_description():
         "drive_enabled",
         "force_engine_update",
         "use_sim_time",
+        "input_topic",
     ):
         args.add_arg(key, "", cli=True)
     args.add_opaque_function(add_nodes)

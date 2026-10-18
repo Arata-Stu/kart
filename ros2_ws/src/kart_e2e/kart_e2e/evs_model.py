@@ -1,5 +1,5 @@
 """Offline EVS encoder adapter. ROS driver continues to emit raw histograms."""
-from .evs_contract import validate_metadata
+from .contract import evs_spec
 from .event_encoder_model import load_encoder
 from .model import backbone
 
@@ -7,7 +7,7 @@ from .model import backbone
 def load_evs_encoder(weights, repo, device='cpu'):
     import torch
     bundle = torch.load(weights, map_location='cpu', weights_only=True)
-    validate_metadata(bundle['metadata'])
+    evs_spec(bundle['metadata'])
     # Existing kart builder verifies the pinned local source, with no downloads.
     return load_encoder(weights, device=device, backbone_factory=lambda: backbone(repo))
 

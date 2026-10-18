@@ -12,7 +12,7 @@ import tempfile
 import time
 
 from bringup import ROOT, choose
-from kart_e2e.contract import model_contract, runtime_settings
+from kart_e2e.contract import model_contract, runtime_settings, input_contract
 from kart_e2e.engine_cache import digest, fingerprint, reusable, validate_engine
 
 
@@ -105,7 +105,8 @@ def main():
                         raise
             if code:
                 raise RuntimeError(f"TensorRT build失敗（{code}）。ログ: {log_path}")
-            validate_engine(built, mode)
+            _, name, shape = input_contract(model)
+            validate_engine(built, mode, name, shape)
             timing_rows = json.loads(timings.read_text())
             import numpy as np
 

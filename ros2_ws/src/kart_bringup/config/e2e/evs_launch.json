@@ -1,0 +1,6 @@
+{
+  "container_name": "/event_camera/tensor_container",
+  "input_topic": "/event_camera/tensor",
+  "model_dir": "",
+  "evs_tensor_config": ""
+}

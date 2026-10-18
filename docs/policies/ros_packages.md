@@ -262,7 +262,7 @@ Hz選択はprofileのrateだけを明示上書きし、未指定ではYAMLを保
 TUIから録画STARTやAUTO要求を自動送信しない。地図とモデルは一覧探索し、
 HDMapとVSLAM/VGL bundleを別資産として明示選択する。TFを仮値で補わない。
 missionはsensor containerのみを所有し、sensor moduleはloadのみ。
-driveのVSLAM、e2eのimage encoder/TensorRTは実センサと同じcontainerへloadする。
+driveのVSLAM、RGB e2eのimage encoder/TensorRTは実センサと同じcontainerへloadする。
 VGL/vehicle/trackingは各top-level launch所有。下位moduleはloadのみ。
 evalは実センサなしのbag再生なのでlocalization自身がcontainerを所有する。
 
@@ -277,8 +277,11 @@ VOはstereo画像・CameraInfo・固定TF、VIOは加えてIMUだけを再生す
 OpenEB direct tensor pipelineはSDK callbackと3方式のencoder、画像workerを
 同一専用processで所有する。missionがprocessを一度だけ起動し、sensor containerへ
 driverを重複loadしない。EVS TensorRT consumerは専用tensor_containerへ接続する。
-通常RGB E2E起動へのEVSモデル接続は未実装。RAWはbag manager連携、
-Tensorは既定では録画しない。
+EVS E2Eはモデルmetadataで入力契約を識別し、RGB encoderを通さず既存の
+/event_camera/tensor_containerへTensorRT/decoderをloadする。
+RAWはbag manager連携、Tensorは既定では録画しない。
+RAW教師抽出は記録したTensorTimingのstream/epochとセンサ時刻を使い、
+時刻shift無効readerにshiftを二重加算しない。正規化とpaddingはpolicy ONNXが所有する。
 
 EVS packet topicは通常出版しない。可視化とbias調整はpacket配信に依存させない。
 運用biasはproject rootのbias/evsへ置き、bringupで起動時に明示選択する。

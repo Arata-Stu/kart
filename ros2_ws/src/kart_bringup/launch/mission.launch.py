@@ -31,7 +31,7 @@ def add_mission(args):
         "record_dir": args.record_dir,
         "run_name": args.run_name,
     }
-    evs_values = {key: getattr(args, key, "") for key in ("evs_backend", "evs_serial", "evs_bias_file")}
+    evs_values = {key: getattr(args, key, "") for key in ("evs_backend", "evs_serial", "evs_bias_file", "evs_tensor_config")}
     if any(evs_values.values()) and not cfg["enable_evs"]:
         raise ValueError("EVS startup overrides require enable_evs:=true")
     if cfg["enable_evs"]:
@@ -43,7 +43,6 @@ def add_mission(args):
     load(
         root / "bringup.yaml", vehicle
     )  # Validate device/config before any node starts.
-    get_package_share_directory("realsense2_camera")
     if cfg["localization"]:
         load_transforms(root / "vehicle/transforms.yaml", require_camera=True)
         if not params["enable_infra1"] or not params["enable_infra2"]:
@@ -58,20 +57,30 @@ def add_mission(args):
     ):
         raise ValueError("Choose a generated line from the selected HDMap/lane")
     if cfg["e2e"]:
-        from kart_e2e.contract import model_contract, runtime_settings
+        from kart_e2e.contract import model_contract, runtime_settings, input_contract
 
-        if not params["enable_color"]:
-            raise ValueError("E2E requires RGB (rgb_fps > 0)")
+        modality, _, _ = input_contract(args.e2e_model_dir)
+        if modality == 'evs':
+            from kart_bringup.e2e import validate_evs_tensor
+            if not cfg['enable_evs']:
+                raise ValueError('EVS policy requires enable_evs:=true')
+            validate_evs_tensor(args.evs_tensor_config, args.e2e_model_dir)
+        elif not params["enable_color"]:
+            raise ValueError("RGB E2E requires RGB (rgb_fps > 0)")
         model_contract(args.e2e_model_dir)
         runtime_settings(args.e2e_model_dir)
         from kart_e2e.engine_cache import require_engine
         require_engine(args.e2e_model_dir)
+    realsense_enabled = not (cfg['e2e'] and modality == 'evs'
+                             and not any(params[k] for k in ('enable_color', 'enable_infra1', 'enable_infra2')))
+    if realsense_enabled:
+        get_package_share_directory('realsense2_camera')
     actions = [
         lu.log_info(
             f"Mission: {args.mode}; config: {cfg}; recording/AUTO require Joy operation"
         )
     ]
-    if cfg["create_sensor_container"]:
+    if cfg["create_sensor_container"] and realsense_enabled:
         actions.append(
             lu.component_container(
                 cfg["sensor_container"].lstrip("/"),
@@ -88,16 +97,17 @@ def add_mission(args):
             forwarding=False,
         )
 
-    actions.append(
-        include(
-            "modules/sensors/realsense.launch.py",
-            {
-                "container_name": "/" + cfg["sensor_container"].lstrip("/"),
-                "rgb_fps": args.rgb_fps,
-                "infra_fps": args.infra_fps,
-            },
+    if realsense_enabled:
+        actions.append(
+            include(
+                "modules/sensors/realsense.launch.py",
+                {
+                    "container_name": "/" + cfg["sensor_container"].lstrip("/"),
+                    "rgb_fps": args.rgb_fps,
+                    "infra_fps": args.infra_fps,
+                },
+            )
         )
-    )
     if cfg["enable_evs"]:
         actions.append(
             include(
@@ -133,12 +143,14 @@ def add_mission(args):
     if cfg["e2e"]:
         actions.append(
             include(
-                "e2e.launch.py",
+                'evs_e2e.launch.py' if modality == 'evs' else 'e2e.launch.py',
                 {
-                    "container_name": "/" + cfg["sensor_container"].lstrip("/"),
-                    "create_container": "false",
-                    "model_dir": args.e2e_model_dir,
-                    "drive_enabled": str(cfg["e2e_drive_enabled"]).lower(),
+                    **({'evs_tensor_config': args.evs_tensor_config} if modality == 'evs' else {
+                        'container_name': '/' + cfg['sensor_container'].lstrip('/'),
+                        'create_container': 'false',
+                    }),
+                    'model_dir': args.e2e_model_dir,
+                    'drive_enabled': str(cfg['e2e_drive_enabled']).lower(),
                 },
             )
         )
@@ -159,6 +171,7 @@ def generate_launch_description():
         "evs_backend",
         "evs_serial",
         "evs_bias_file",
+        "evs_tensor_config",
         "rgb_fps",
         "infra_fps",
         "map_dir",
