@@ -527,3 +527,38 @@ PLYは外部のPLY対応3Dビューアで確認する。ブラウザ内3D回転�
 mesh.plyは地面合わせ後、mesh_before_adjustment.plyは地面合わせ前。HDMapへ自動重ね合わせしない。
 実体はmap/<地図名>/official/<run>/。頂点・面が空のmeshは生成成功にしない。
 反映にはkart_mappingのbuild/sourceとUI再起動。nvblox_rosを含まない既存イメージはDocker再buildが必要。
+
+### Occupancy grid補助レイヤー
+
+地図を開くと編集キャンバス下端に「占有地図」チェックと不透明度スライダが表示される。
+既定はOFF。不透明度45%。点群・軌跡・HDMapの下へ描画し、点群の高さフィルタとは独立する。
+黒は占有、白は空き、灰は不明という公式出力の配色をそのまま表示する。
+表示は編集の参考用であり、lane・禁止領域の自動変更や衝突判定は行わない。
+
+`GET /api/occupancy-overlay?id=...`は、公式の
+`occupancy_map_before_adjustment.yaml/.png`だけを対象とする。
+地面合わせ前の元map座標のラスタへYAMLのresolution・origin（x,y,yaw）を適用し、
+画像上端からの行方向を反転して描画する。点群に適用済みのmap←odom変換は再適用しない。
+地面合わせ後のoccupancy_map.pngへの暗黙fallbackは行わない。
+成果物なし・読み込み失敗でも点群編集は継続可能。地図切替時には旧画像を消し、遅れて届く旧応答を破棄する。
+PyYAMLを使用（Dockerのpython3-yaml）。複製地図はコピーされたdense成果物を利用する。
+
+検証: `test_occupancy.py`、`node tools/app/tests/test_occupancy.mjs`。
+実データとの重なり精度は利用する地図で確認する必要がある。
+
+### 既存地図への工程別追加生成
+
+「占有地図・3Dメッシュ」を開き、`1. 深度推定` → 完了後に同画面を開いて
+`2. 占有地図・メッシュ生成`を実行する。VSLAMと点群取得・VGLは従来の別操作を使う。
+左右画像とframes_meta.jsonがない地図（点群だけをimportした地図など）では追加生成できない。
+深度生成済みなら工程2だけ実行できる。解像度選択は深度推定にのみ適用する。
+未保存編集は先に保存し、処理中はmap/GPU/ROS domainを既存ジョブ機構で排他する。
+
+`GET /api/dense-steps`は工程の可否を返し、`POST /api/dense-step`はid/revision/step/resolutionを受け取る。
+公式runを`dense_runs/<uuid>`へコピーし、VSLAM工程を呼ばずdepthまたはoccupancyだけを実行する。
+元のofficial_outputは保持し、depth_output/dense_outputをmapping_result.jsonとmap.json.mappingへ登録する。
+コピーには画像・中間成果物の分だけ追加ディスク容量が必要。旧成果物は保持する。
+失敗・キャンセル時は未登録の作業コピーを削除する。成功時のみrevisionを進める。
+深度を再生成した際は旧occupancy/meshを残し、「旧深度の成果物」と表示する。
+新しいoccupancy工程が成功すると新成果物へ切り替える。独立したmesh-only工程はない。
+テスト: test_dense_steps.py（公式処理はmock、GPUでの追加工程は未検証）。

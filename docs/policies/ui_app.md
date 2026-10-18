@@ -168,3 +168,17 @@ HDMapと同じ一時領域で検証・公開し、対応bundleの有無をログ
 GPU固有モデルengineは地図転送に含めず、実行先で準備したモデルをbringupで選択する。
 
 カメラbagのオフラインlocalization評価はcamera_linkを既定基準とする。車体TFを仮定・生成しない。実車localizationのbase_linkとは明示的に区別する。
+
+## Occupancy gridの編集補助表示
+
+点群のみでのHDMap編集を基本とし、公式dense出力は任意の表示レイヤーとする。
+元map座標のbefore_adjustmentラスタのみを既定の対応データとして採用する。
+YAMLの原点・解像度・回転と画像の上下方向を明示的に扱い、地面合わせ後の画像を
+元mapへ無変換で重ねたり、map←odomを二重適用したりしない。
+対応ラスタがなければ表示不可の理由を示し、点群編集は妨げない。
+表示ON/OFF・透過率は閲覧設定であり、保存HDMapや生成ライン・禁止領域を変更しない。
+
+既存地図へのdense追加生成はdepthとoccupancyの2段階とする。
+元official runを作業コピーし、VSLAM地図・点群・HDMap形状は変更しない。
+深度中間成果物は独立して保存し、occupancyの再実行で深度推定を繰り返さない。
+成功した出力だけmanifestへ登録し、失敗・中止では既存の成果物を維持する。

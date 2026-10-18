@@ -162,10 +162,21 @@ form("line-settings-form", async (data) => {
 });
 
 action("dense-open", async () => {
-  const data = await api("dense?id=" + encodeURIComponent(state.id));
+  const selectedMap = state.id;
+  const [data, stages] = await Promise.all([
+    api("dense?id=" + encodeURIComponent(selectedMap)),
+    api("dense-steps?id=" + encodeURIComponent(selectedMap)),
+  ]);
+  if (selectedMap !== state.id) return;
+  $("dense-dialog").dataset.map = selectedMap;
+  $("dense-step-status").textContent = stages.reason ||
+    `深度: ${stages.depth_ready ? "生成済み" : "未生成"} / 占有地図・メッシュ: ${stages.dense_stale ? "旧深度の成果物（再生成可能）" : stages.dense_ready ? "生成済み" : "未生成"}`;
+  $("dense-resolution").value = stages.resolution;
+  $("dense-depth").disabled = !stages.can_depth || !state.config?.environment.ros;
+  $("dense-occupancy").disabled = !stages.can_occupancy || !state.config?.environment.ros;
   $("dense-info").textContent = data.summary
     ? `${data.summary.vertices.toLocaleString()} 頂点 / ${data.summary.faces.toLocaleString()} 面 · 地面合わせ後の座標系`
-    : "未生成です。「bagから地図作成」で「VSLAM＋占有地図＋3Dメッシュ」を選び、別の地図名で生成してください。";
+    : "占有地図・メッシュは未生成です。以下から工程を順番に実行できます。";
   $("dense-files").replaceChildren();
   $("dense-preview").hidden = true;
   for (const file of data.files) {
@@ -182,3 +193,17 @@ action("dense-open", async () => {
   }
   open("dense-dialog");
 });
+
+for (const step of ["depth", "occupancy"])
+  action("dense-" + step, async () => {
+    if ($("dense-dialog").dataset.map !== state.id)
+      throw Error("地図が切り替わりました。ダイアログを開き直してください");
+    if (state.dirty) throw Error("HDMapの編集を保存してから実行してください");
+    const job = await api("dense-step", {
+      id: state.id, revision: state.doc.revision, step,
+      resolution: $("dense-resolution").value,
+    });
+    $("dense-dialog").close();
+    emit("job-started", job);
+    toast("追加生成を開始しました。完了後にこの画面を開くと次の工程へ進めます");
+  });

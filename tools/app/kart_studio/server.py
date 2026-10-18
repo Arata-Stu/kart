@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from . import capture, registration, vgl, dense
+from . import capture, registration, vgl, dense, dense_steps
 from .copies import copy_map
 from .e2e import Learning
 from .jobs import Jobs
@@ -70,6 +70,10 @@ class Studio:
                 records=str(self.records),
                 maps=str(self.maps.root),
             )
+        if path == "/api/occupancy-overlay":
+            return dense.overlay(self.maps, key)
+        if path == "/api/dense-steps":
+            return dense_steps.status(self.maps, key)
         if path == "/api/dense":
             return dense.catalog(self.maps, key)
         if path == "/api/vgl":
@@ -240,6 +244,14 @@ class Studio:
                 "VGL地図生成: " + key,
                 ["map:" + key, "vgl:" + str(output), "e2e-compute"],
                 lambda job: vgl.build(job, source, models, output, size),
+            )
+        if path == "/api/dense-step":
+            name(key)
+            step, resolution = dense_steps.validate(self, key, b)
+            return self.jobs.start(
+                ("深度推定: " if step == "depth" else "占有地図・メッシュ生成: ") + key,
+                ["map:" + key, "e2e-compute", "ros:" + str(self.mapping.defaults['ros_domain_id'])],
+                lambda job: dense_steps.build(self, job, key, b['revision'], step, resolution),
             )
         if path == "/api/capture":
             name(key)

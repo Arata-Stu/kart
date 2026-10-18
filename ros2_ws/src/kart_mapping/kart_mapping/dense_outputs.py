@@ -4,9 +4,9 @@ import os
 from pathlib import Path
 
 
-def require_engine(resolution):
+def require_engine(resolution, workspace=None):
     sizes = {"low_res": "320x736", "high_res": "576x960"}
-    workspace = os.environ.get("ISAAC_ROS_WS")
+    workspace = workspace or os.environ.get("ISAAC_ROS_WS")
     setup = f"bash scripts/setup/foundationstereo.sh --model-res {resolution}"
     if not workspace:
         raise ValueError(f"ISAAC_ROS_WSを指定してください。モデル準備: {setup}")

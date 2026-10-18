@@ -1,4 +1,5 @@
 import { placementPreview } from "./placement.js";
+import { paintOccupancy } from "./occupancy.js";
 import { centers, compatible, movePair, appendPair } from "./paired.js";
 import { $, state, on, emit, remember, edited, undo } from "./api.js";
 const canvas = $("map-canvas"),
@@ -278,6 +279,7 @@ export function draw() {
     }
     ctx.stroke();
     if (cloudDirty) paintCloud();
+    paintOccupancy(ctx, project, scale);
     ctx.drawImage(cloudLayer, 0, 0, width, height);
     if (state.showPath) {
       // Keep the recorded trajectory distinct from the muted point cloud.

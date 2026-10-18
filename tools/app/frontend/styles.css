@@ -329,6 +329,7 @@ canvas {
   background: #9866c0;
 }
 .canvas-status {
+  gap: 8px;
   height: 29px;
   display: flex;
   justify-content: space-between;
@@ -339,6 +340,14 @@ canvas {
   color: var(--muted);
   font-size: 10px;
 }
+#occupancy-note {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#occupancy-opacity { width: 70px; flex-shrink: 0; }
+.canvas-status label { white-space: nowrap; }
 .inspector {
   padding: 0;
 }
