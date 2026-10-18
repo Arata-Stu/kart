@@ -72,6 +72,8 @@ class Studio:
             )
         if path == "/api/occupancy-overlay":
             return dense.overlay(self.maps, key)
+        if path == "/api/mesh-overlay":
+            return dense.mesh_overlay(self.maps, key)
         if path == "/api/dense-steps":
             return dense_steps.status(self.maps, key)
         if path == "/api/dense":

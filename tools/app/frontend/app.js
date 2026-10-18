@@ -11,6 +11,7 @@ import "./obstacles.js";
 import "./copies.js";
 import "./capture.js";
 import "./vgl.js";
+import "./mesh_view.js";
 function page(name) {
   for (const p of ["map", "transfer", "learning"]) {
     $(p + "-page").hidden = p !== name;

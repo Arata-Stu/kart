@@ -7,6 +7,42 @@ from kart_mapping.dense_outputs import DENSE_FILES
 from .storage import read_json, within
 
 
+def mesh_overlay(maps, key):
+    """The official pre-ground mesh uses the original reconstruction map frame."""
+    folder = maps.folder(key)
+    manifest = folder / 'mapping_result.json'
+    result = read_json(manifest) if manifest.is_file() else {}
+    if result.get('backend') != 'nvidia.create_map_offline':
+        raise ValueError('公式offline生成元を確認できないためmeshの座標系を決定できません')
+    doc = maps.load(key)
+    if doc.get('frame') != 'map':
+        raise ValueError('HDMapのframeがmapではありません')
+    filename = 'mesh_before_adjustment.ply'
+    try:
+        path = artifact(maps, key, filename)
+    except (ValueError, OSError) as exc:
+        raise ValueError('地面合わせ前のmeshがありません。占有地図・メッシュを生成してください') from exc
+    if path.stat().st_size > 256 * 1024 * 1024:
+        raise ValueError('meshが256 MiBを超えています。外部PLYビューアを利用してください')
+    with path.open('rb') as stream:
+        header = stream.read(65536).split(b'end_header', 1)
+    if len(header) != 2 or header[0].splitlines()[:1] != [b'ply']:
+        raise ValueError('PLY headerが不正です')
+    counts = {}
+    for line in header[0].splitlines():
+        parts = line.split()
+        if len(parts) == 3 and parts[0] == b'element' and parts[1] in (b'vertex', b'face'):
+            counts[parts[1].decode()] = int(parts[2])
+    if not 0 < counts.get('vertex', 0) <= 5_000_000 or not 0 < counts.get('face', 0) <= 10_000_000:
+        raise ValueError('空のmeshまたはブラウザ表示上限を超えたmeshです')
+    return dict(frame='map', source='before_adjustment', units='m',
+                transform_policy='native_map_no_additional_transform',
+                hdmap_dimension=2, **counts,
+                url='/dense-file?' + urlencode(dict(id=key, file=filename)),
+                bytes=path.stat().st_size,
+                stale=bool(result.get('dense_stale')))
+
+
 def overlay(maps, key):
     """Use the original-map raster only; never guess a ground-frame transform."""
     manifest = maps.folder(key) / "mapping_result.json"
