@@ -51,3 +51,11 @@ CLI（パスを実データに置き換える）:
 実bagの公式metadataとの結合、Docker build、実環境の処理時間・着色品質は未確認。
 頂点カラーなので粗いmeshでは細かい模様が失われる。
 テクスチャUV生成、動体除去、露出補正、RGBによる幾何補正は行わない。
+
+### metadata形式の差異
+
+pose参照カメラは、keyframes_metadataとcamera_params_id_to_camera_paramsのIDを照合し、
+pose・時刻・sensor_to_vehicle_transformが揃うカメラから選ぶ。
+観測数が最多のカメラを選び、同数ならID順で固定する。選択IDはログと結果JSONに記録する。
+左／右の意味は投影に不要なので、バージョンによって表記が異なるstereo_pairのキーに依存しない。
+必ず同じカメラのposeと取付変換を組み合わせ、取付変換がなければidentity補完せず拒否する。

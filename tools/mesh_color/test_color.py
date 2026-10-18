@@ -56,7 +56,7 @@ class ColorTests(unittest.TestCase):
             mesh=root/'mesh.ply';out=root/'colored.ply';meta=root/'frames_meta.json'
             PlyData([PlyElement.describe(vertex,'vertex'),PlyElement.describe(face,'face')]).write(mesh)
             identity=dict(axis_angle=dict(x=0,y=0,z=0,angle_degrees=0),translation=dict(x=0,y=0,z=0))
-            meta.write_text(json.dumps(dict(stereo_pair=[dict(left_camera_param_id='0')],
+            meta.write_text(json.dumps(dict(stereo_pair=[dict(unknown_version_key='0')],
                 camera_params_id_to_camera_params={'0':dict(sensor_meta_data=dict(sensor_to_vehicle_transform=identity))},
                 keyframes_metadata=[dict(camera_params_id='0',timestamp_microseconds=str(ns//1000),camera_to_world=identity)])))
             run(SimpleNamespace(mesh=str(mesh),metadata=str(meta),bag=str(bag),output=str(out),

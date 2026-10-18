@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 import numpy as np
 from core import transform, paint
+from metadata import pose_reference
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'vehicle_tuning'))
 from analysis import static_transform
 
@@ -25,13 +26,12 @@ def run(args):
     from rosbags.typesys import Stores, get_typestore
     mesh_path, meta_path = Path(args.mesh), Path(args.metadata)
     meta = json.loads(meta_path.read_text())
-    # Use one stereo camera to avoid duplicate timestamps. These are the SAME
-    # pre-ground poses supplied to nvblox, not a separate odometry trajectory.
-    left = str(meta['stereo_pair'][0]['left_camera_param_id'])
-    calibration = meta['camera_params_id_to_camera_params'][left]
+    # The same camera's pose and extrinsic cancel to world<-base. Left/right
+    # labels are irrelevant; do not depend on version-specific stereo_pair keys.
+    camera_id, calibration, selected = pose_reference(meta)
+    print(f'Pose reference camera: {camera_id} ({len(selected)} observations)', flush=True)
     base_from_camera = transform(calibration['sensor_meta_data']['sensor_to_vehicle_transform'])
-    frames = sorted([f for f in meta['keyframes_metadata'] if str(f['camera_params_id'])==left],
-                    key=lambda f:int(f['timestamp_microseconds']))
+    frames = sorted(selected, key=lambda f:int(f['timestamp_microseconds']))
     poses = [(int(f['timestamp_microseconds'])*1000,
               transform(f['camera_to_world']) @ np.linalg.inv(base_from_camera)) for f in frames]
     if not poses: raise ValueError('No official mesh camera poses')
@@ -113,6 +113,7 @@ def run(args):
     result=dict(schema=1,frame='map',source='before_adjustment',mesh_sha256=hashlib.sha256(mesh_path.read_bytes()).hexdigest(),
         metadata_sha256=hashlib.sha256(meta_path.read_bytes()).hexdigest(),bag=str(bag),
         image_topic=args.image,info_topic=args.info,base_frame=args.base_frame,rgb_frame=info.header.frame_id,
+        pose_camera_id=camera_id,
         base_from_rgb=base_from_rgb.tolist(),images_used=used,unmatched_images=unmatched,
         colored_vertices=int(np.isfinite(best).sum()),vertices=len(vertices),
         coverage=float(np.isfinite(best).mean()),max_time_difference_s=.02,
