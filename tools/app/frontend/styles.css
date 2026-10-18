@@ -1221,3 +1221,12 @@ summary {
   min-width: 0;
   width: 100%;
 }
+.dense-stages { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.dense-stage { border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.dense-stage strong { display: block; margin-bottom: 12px; font-size: 12px; }
+.dense-badge { display: inline-block; font-size: 11px; margin-left: 6px; color: var(--muted); }
+.dense-stage[data-status="done"] { border-color: #77b59d; background: #f0f8f4; }
+.dense-stage[data-status="done"] .dense-badge { color: #216e4d; }
+.dense-stage[data-status="running"] { border-color: #71a6ce; background: #eef6fc; }
+.dense-stage[data-status="stale"] { border-color: #d7af68; background: #fff8eb; }
+@media (max-width: 650px) { .dense-stages { grid-template-columns: 1fr; } }

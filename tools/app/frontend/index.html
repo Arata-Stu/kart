@@ -740,10 +740,16 @@
       <div class="dialog-title"><h2>占有地図・3Dメッシュ</h2><button type="button" data-close="dense-dialog">×</button></div>
       <p id="dense-info" class="note"></p>
       <p id="dense-step-status" class="note"></p>
-      <div class="actions">
-        <select id="dense-resolution" aria-label="深度モデル解像度"><option value="low_res">Low res</option><option value="high_res">High res</option></select>
-        <button id="dense-depth">1. 深度推定</button>
-        <button id="dense-occupancy">2. 占有地図・メッシュ生成</button>
+      <div class="dense-stages">
+        <section class="dense-stage" id="dense-depth-card">
+          <strong>1. 深度推定 <span id="dense-depth-state" class="dense-badge"></span></strong>
+          <div class="actions"><select id="dense-resolution" aria-label="深度モデル解像度"><option value="low_res">Low res</option><option value="high_res">High res</option></select>
+          <button id="dense-depth">深度を生成</button></div>
+        </section>
+        <section class="dense-stage" id="dense-occupancy-card">
+          <strong>2. 占有地図・メッシュ <span id="dense-occupancy-state" class="dense-badge"></span></strong>
+          <button id="dense-occupancy">占有地図・メッシュを生成</button>
+        </section>
       </div>
       <p class="help">既存のVSLAM・HDMapは保持します。深度を保存すると、次回は工程2だけ実行できます。作業コピー分の空き容量が必要です。</p>
       <p class="help">mesh.plyは面を持つ3D形状です。ダウンロードしてPLY対応の3Dビューアで回転・拡大できます。地面合わせ後の座標系なので、HDMapにはそのまま重ねません。before_adjustmentは地面合わせ前です。</p>

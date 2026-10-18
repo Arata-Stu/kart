@@ -1,4 +1,4 @@
-import { $, state, api, action, toast, emit } from "./api.js";
+import { $, state, api, action, toast, emit, on } from "./api.js";
 import { refreshMaps, loadMap } from "./maps.js";
 const open = (id) => $(id).showModal();
 for (const button of document.querySelectorAll("[data-close]"))
@@ -161,7 +161,29 @@ form("line-settings-form", async (data) => {
   toast("次回の生成に設定を適用します");
 });
 
-action("dense-open", async () => {
+let denseStages = null;
+let denseSubmitting = false;
+function renderDenseStages() {
+  if (!denseStages || $("dense-dialog").dataset.map !== state.id) return;
+  const running = state.jobs.find(j => j.status === "running" &&
+    (j.title === "深度推定: " + state.id || j.title === "占有地図・メッシュ生成: " + state.id));
+  for (const step of ["depth", "occupancy"]) {
+    const done = step === "depth" ? denseStages.depth_ready : denseStages.dense_ready;
+    const stale = step === "occupancy" && denseStages.dense_stale;
+    const active = running?.title.startsWith(step === "depth" ? "深度推定:" : "占有地図・メッシュ生成:");
+    const label = active ? (running.cancel_requested ? "停止要求中" : "実行中") : stale ? "旧深度で生成済み" : done ? "✓ 生成済み" : "未生成";
+    $("dense-" + step + "-state").textContent = label;
+    $("dense-" + step + "-card").dataset.status = active ? "running" : stale ? "stale" : done ? "done" : "pending";
+    const button = $("dense-" + step);
+    button.textContent = active ? "処理中…" : step === "depth"
+      ? done ? "深度を再生成…" : "深度を生成"
+      : done ? "占有地図・メッシュを再生成…" : "占有地図・メッシュを生成";
+    button.classList.toggle("primary", !done && denseStages["can_" + step]);
+    button.disabled = !!running || denseSubmitting || !denseStages["can_" + step] || !state.config?.environment.ros;
+  }
+  $("dense-resolution").disabled = !!running || denseSubmitting;
+}
+async function openDense() {
   const selectedMap = state.id;
   const [data, stages] = await Promise.all([
     api("dense?id=" + encodeURIComponent(selectedMap)),
@@ -169,11 +191,13 @@ action("dense-open", async () => {
   ]);
   if (selectedMap !== state.id) return;
   $("dense-dialog").dataset.map = selectedMap;
+  denseStages = stages;
   $("dense-step-status").textContent = stages.reason ||
     `深度: ${stages.depth_ready ? "生成済み" : "未生成"} / 占有地図・メッシュ: ${stages.dense_stale ? "旧深度の成果物（再生成可能）" : stages.dense_ready ? "生成済み" : "未生成"}`;
   $("dense-resolution").value = stages.resolution;
-  $("dense-depth").disabled = !stages.can_depth || !state.config?.environment.ros;
-  $("dense-occupancy").disabled = !stages.can_occupancy || !state.config?.environment.ros;
+  renderDenseStages();
+  if (!stages.reason && stages.depth_ready && !stages.dense_ready)
+    $("dense-step-status").textContent = "深度推定は完了しています。次は「2. 占有地図・メッシュ」を実行してください。";
   $("dense-info").textContent = data.summary
     ? `${data.summary.vertices.toLocaleString()} 頂点 / ${data.summary.faces.toLocaleString()} 面 · 地面合わせ後の座標系`
     : "占有地図・メッシュは未生成です。以下から工程を順番に実行できます。";
@@ -192,6 +216,11 @@ action("dense-open", async () => {
     }
   }
   open("dense-dialog");
+}
+action("dense-open", openDense);
+on("status", renderDenseStages);
+on("job-finished", async e => {
+  if ($("dense-dialog").open && e.detail.title.endsWith(": " + state.id)) await openDense();
 });
 
 for (const step of ["depth", "occupancy"])
@@ -199,11 +228,26 @@ for (const step of ["depth", "occupancy"])
     if ($("dense-dialog").dataset.map !== state.id)
       throw Error("地図が切り替わりました。ダイアログを開き直してください");
     if (state.dirty) throw Error("HDMapの編集を保存してから実行してください");
+    if (denseSubmitting) return;
+    denseSubmitting = true;
+    renderDenseStages();
+    try {
+    const id = state.id;
+    const latest = await api("dense-steps?id=" + encodeURIComponent(id));
+    if (state.id !== id) throw Error("地図が切り替わりました");
+    const ready = step === "depth" ? latest.depth_ready : latest.dense_ready;
+    if (ready && !confirm(step === "depth"
+      ? `深度推定は既に完了しています。${$("dense-resolution").value}で再生成しますか？\n時間のかかる処理をもう一度実行します。占有地図・メッシュを作るだけならキャンセルして工程2へ進んでください。`
+      : "占有地図・メッシュは既に生成されています。保存済みの深度からもう一度生成しますか？\n成功するまで現在の成果物は保持されます。")) return;
     const job = await api("dense-step", {
-      id: state.id, revision: state.doc.revision, step,
+      id, revision: state.doc.revision, step,
       resolution: $("dense-resolution").value,
     });
     $("dense-dialog").close();
     emit("job-started", job);
     toast("追加生成を開始しました。完了後にこの画面を開くと次の工程へ進めます");
+    } finally {
+      denseSubmitting = false;
+      renderDenseStages();
+    }
   });
