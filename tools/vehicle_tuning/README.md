@@ -295,3 +295,57 @@ PYTHONPATH=ros2_ws/src/kart_bringup python3 -m unittest discover \
 既知の合成加減速モデルの係数回復、区間分離検証、TF回転／原点差、異常除外、
 時刻不整合、因果的な対応、PID出力制限、CLI成果物と上書き拒否、実SQLite3 bagの読出しを確認する。
 実車bag、JetsonのCUDA/cuVSLAM、ROS componentロード・結合、車両の走行は別途確認が必要。
+
+## 公式offline poseの再利用と旋回同定
+
+公式の `compute_poses` が保存した `poses/odom_poses.tum` を読み込み、
+元bagの指令・mode・bridge状態と対応させる。ROS再生、VSLAM再実行、depth/mesh生成は不要。
+公式コードは変更しない。現在はCLIのみで、Map Studioからの操作は未実装。
+
+```bash
+cd /workspaces
+find map -name odom_poses.tum -print
+
+# pose-frameは公式処理の出力body frameを確認して指定する。
+# camera_linkの例。画像optical frameと混同しない。
+bash scripts/vehicle_tuning.sh turn \
+  --bag /workspaces/record/DATE/TIME/RUN \
+  --offline-poses /workspaces/map/MAP/official/RUN/poses/odom_poses.tum \
+  --pose-frame camera_link --wheelbase 0.257 \
+  --output /workspaces/record/analysis/turn_01
+```
+
+パスは実データに置き換える。`--wheelbase`は必須・単位m（0.257は構文例、実測値を使用）。
+AUTO固定指令試験なら`--mode auto`を追加。
+オンラインodom入りbagにも`turn --bag ... --wheelbase ...`を使用できる。
+既存の`analyze`／`check`にも`--offline-poses`と`--pose-frame`を追加できる。
+
+- TUMは秒timestamp＋tx ty tz qx qy qz qw。連続odomのみを採用し、SLAM／最適化キーフレームは拒否。
+  元bagと同じ記録時計を要求し、時刻の自動シフトはしない。offline時はheader時計へ切り替える。
+  区間が重ならなければ拒否。重なりだけでは同じbag由来の証明にはならないので、対応する元bagを選ぶ。
+- 保存された`/tf_static`を用いて `T_world_vehicle=T_world_pose*T_pose_vehicle` として、
+  後輪軸のposeへ変換してから微分する。TF欠落・変更・競合は拒否。identity補完しない。
+- 中心窓（既定0.3秒）の位置・unwrap yawの一次近似から速度・旋回率を算出。
+  窓端、不十分な点数、0.12秒超のgap、速度／旋回率上限超のpose跳躍を除外する。
+  車体z軸の鉛直からの傾き0.2rad超も除外。平面・低滑りの走行が対象。
+- online tracking診断を正常として捏造しない。offlineでは幾何的検査に置き換え、その限界をsummaryに記録。
+  元bagのmode・HOST経路・bridge診断・指令鮮度の検査は維持する。
+- `turn`は操舵・throttle・brakeが一定の区間を分離する。
+  `--max-speed`既定2.0m/s、`--max-yaw-rate`既定2.0rad/s。横速度上限は共通configの0.15m/s。
+  これらは解析用閾値で、実車への走行指令ではない。
+- 曲率 `yaw_rate / 前進速度` と実効舵角 `atan(wheelbase * 曲率)` を出力。
+  左右個別の実舵角ではない。左右それぞれ6区間以上あれば、区間中央値を等重みで一次近似。
+  各側の末尾max(2,区間数/4の整数部)区間を検証に残し、検証RMSE 0.05rad以下、
+  正の傾き、検証指令が学習範囲内の場合のみ当該側usable。両側成立時だけmodel.usable=true。
+  これは同一bag内の検証で、別路面・別速度への汎化保証ではない。
+- 直進のPID候補は生成しない。舵角の遅れ、デッドゾーン、飽和、タイヤパラメータの同定は未対応。
+  一次近似のゼロ交点は外挿参考値であり、ステアトリムとして自動適用しない。
+
+成果物は`report.html`、`samples.csv`、`turning_segments.csv`、
+`model.json`、`summary.json`、`normalized.json`。
+poseのSHA256、指定frame、適用TF、時計、設定、除外理由、検証区間を記録する。
+実機設定の書き換え・走行指令publishは行わない。
+
+合成円運動で取付オフセット補正・曲率回復、TF不足、時刻不一致、
+pose重複／跳躍／gap、オンライン診断必須条件、CLI成果物を単体検証。
+実際の公式TUM・実車bagでの精度検証は別途必要。

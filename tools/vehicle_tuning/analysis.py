@@ -72,9 +72,9 @@ def prepare(data, cfg):
     if data.get('missing_required'):
         raise ValueError('Missing required topics: ' + ', '.join(data['missing_required']))
     prepared, quality = {}, {}
-    required = ('odom', 'command', 'mode', 'vslam', 'bridge', 'path')
+    required = ('odom', 'command', 'mode', 'bridge', 'path') + (() if data.get('offline_pose') else ('vslam',))
     origin = min(r['bag_ns'] for r in data.get('odom', [])) if data.get('odom') else 0
-    for key in (*required, 'imu', 'speed_diagnostics'):
+    for key in dict.fromkeys((*required, 'vslam', 'imu', 'speed_diagnostics')):
         rows = data.get(key, [])
         if key in required and not rows:
             raise ValueError(f'No usable {key} messages (check diagnostic hardware_id)')
@@ -118,7 +118,7 @@ def previous(series, t, age):
     return rows[idx] if idx >= 0 and 0 <= t-times[idx] <= age else None
 
 
-def analyze(data, cfg):
+def analyze(data, cfg, turning=False):
     validate_config(cfg)
     streams, quality, origin = prepare(data, cfg)
     trims = [(r['steering'],r['throttle']) for r in data.get('trim',[])]
@@ -141,7 +141,7 @@ def analyze(data, cfg):
         path = previous(streams['path'], t, cfg['path_max_age_s'])
         omega = tf[:3, :3] @ np.array(od['angular'], float)
         velocity = tf[:3, :3] @ np.array(od['linear'], float) - np.cross(omega, tf[:3, 3])
-        reasons = []
+        reasons = [od['pose_reason']] if od.get('pose_reason') else []
         if not np.isfinite(velocity).all() or not np.isfinite(omega).all():
             reasons.append('nonfinite_odometry')
         elif velocity[0] < cfg['min_speed_mps'] or velocity[0] > cfg['max_speed_mps']:
@@ -158,7 +158,7 @@ def analyze(data, cfg):
             if (not all(math.isfinite(v) for v in values) or abs(values[0]) > 1 or
                     any(v < 0 or v > 1 for v in values[1:]) or sum(v > 0 for v in values[1:]) > 1):
                 reasons.append('invalid_command')
-            if abs(cmd['steering']) > cfg['max_steering']:
+            if not turning and abs(cmd['steering']) > cfg['max_steering']:
                 reasons.append('steering')
             if cmd['reverse'] > 0:
                 reasons.append('reverse')
@@ -168,7 +168,7 @@ def analyze(data, cfg):
         if (mode is None or mode['mode'] not in cfg['allowed_modes'] or
                 not 0 <= (mode['bag_ns']-mode['header_ns'])/1e9 <= cfg['mode_max_age_s']):
             reasons.append('mode')
-        if diag is None or diag['level'] != 0 or diag['values'].get('vo_status') != 'OK':
+        if not data.get('offline_pose') and (diag is None or diag['level'] != 0 or diag['values'].get('vo_status') != 'OK'):
             reasons.append('vslam_not_ok')
         if (bridge is None or bridge['level'] != 0 or
                 bridge['values'].get('host_active') != 'true' or
@@ -200,7 +200,7 @@ def analyze(data, cfg):
     groups, group = [], []
     for row in rows:
         changed = group and (row['mode'] != group[0]['mode'] or
-            any(abs(row[k]-group[0][k]) > cfg['command_change_threshold'] for k in ('throttle','brake')))
+            any(abs(row[k]-group[0][k]) > cfg['command_change_threshold'] for k in (('throttle','brake','steering') if turning else ('throttle','brake'))))
         if row['reason'] or changed:
             if group: groups.append(group)
             group = []
@@ -272,7 +272,8 @@ def analyze(data, cfg):
         kff = {'value': gain, 'steady_segments': len(steady), 'command_rmse': float(np.sqrt(np.mean((gain*v-u)**2))),
                'speed_range_mps': [float(v.min()), float(v.max())],
                'note': 'Origin-constrained u=kff*v; equilibrium approximation, not acceleration feedforward.'}
-    model = fit_model(selected, segments, cfg)
+    model = {'usable': False, 'reason': 'Turning analysis; no longitudinal fit'} if turning else fit_model(selected, segments, cfg)
+    if turning: kff = None
     errors = [r['target_mps']-r['speed_mps'] for r in selected if r['target_mps'] is not None and r['mode']==1]
     warnings = ['VSLAM is an uncalibrated speed proxy, not ground truth.',
                 'Clock/estimator/actuator delays are not separately identified.',
@@ -281,8 +282,9 @@ def analyze(data, cfg):
     for key in ('imu', 'image', 'trim'):
         if not data.get('inventory', {}).get(cfg['topics'][key], {}).get('count') and not data.get(key):
             warnings.append(f'{key} missing: recommended recording requirement not met.')
-    if not selected: warnings.append('No usable straight constant-command segments. Review filters and recording.')
-    summary = {'schema': 1, 'source': data.get('source'), 'clock': cfg['clock'], 'origin_bag_ns': origin,
+    if data.get('offline_pose'): warnings.append('Offline pose derivatives: geometric checks only, no online tracking-status guarantee.')
+    if not selected: warnings.append('No usable constant-command segments. Review filters and recording.')
+    summary = {'schema': 1, 'offline_pose': data.get('offline_pose'), 'source': data.get('source'), 'clock': cfg['clock'], 'origin_bag_ns': origin,
                'headerless_path_clock': 'bag', 'odom_frame': frame, 'odom_child': child,
                'vehicle_frame': cfg['vehicle_frame'], 'static_transform': tf.tolist(),
                'samples': len(rows), 'selected_samples': len(selected), 'segments': len(segments),

@@ -86,11 +86,17 @@ def tune(args):
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     sub=parser.add_subparsers(dest='action',required=True)
-    for action in ('check','analyze'):
+    for action in ('check','analyze','turn'):
         p=sub.add_parser(action,help='Read a bag without publishing ROS topics')
         source=p.add_mutually_exclusive_group(required=True)
         source.add_argument('--bag',type=Path)
         source.add_argument('--normalized-json',type=Path,help='Portable extracted data/test fixture')
+        p.add_argument('--offline-poses',type=Path,help='Official poses/odom_poses.tum; same recording clock as bag')
+        p.add_argument('--pose-frame',help='Body frame of official TUM poses, explicitly verified')
+        if action == 'turn':
+            p.add_argument('--wheelbase',required=True,type=float,help='Measured wheelbase in metres')
+            p.add_argument('--max-speed',type=float,default=2.0)
+            p.add_argument('--max-yaw-rate',type=float,default=2.0)
         p.add_argument('--config',type=Path,default=DEFAULT_CONFIG)
         p.add_argument('--mode',choices=('manual','auto'),help='Select MANUAL/AUTO recording segments; default follows config')
         p.add_argument('--session',type=Path,help='Optional JSON with tire/surface/battery and trial notes')
@@ -108,14 +114,24 @@ def main(argv=None):
         if args.action=='tune': tune(args);return 0
         cfg=json.loads(args.config.read_text())
         if args.mode: cfg['allowed_modes']={'manual':[2],'auto':[1]}[args.mode]
+        if args.action == 'turn':
+            cfg['max_speed_mps']=args.max_speed
+            cfg['max_yaw_rate_rps']=args.max_yaw_rate
+        if args.offline_poses:
+            cfg['clock']='header'
         validate_config(cfg)
         data=read_bag(args.bag,cfg) if args.bag else json.loads(args.normalized_json.read_text())
+        if args.offline_poses:
+            from offline_pose import attach_poses
+            data=attach_poses(data,cfg,args.offline_poses,args.pose_frame)
+        if data.get('offline_pose'):
+            cfg['clock']='header'
         if args.session:
             notes=json.loads(args.session.read_text())
             if not isinstance(notes,dict): raise ValueError('session must be a JSON object')
             data['session']=notes
         if args.action=='check':
-            missing=[k for k in REQUIRED if not data.get(k)]
+            missing=[k for k in REQUIRED if not data.get(k) and not (k=='vslam' and data.get('offline_pose'))]
             result={'source':data.get('source'),'inventory':data.get('inventory',{}),
                     'missing_required_streams':missing,'config':cfg,
                     'note':'Presence check only; analyze additionally checks clocks, frames, freshness and usable segments.'}
@@ -125,6 +141,15 @@ def main(argv=None):
                 body+=table([{'topic':k,**v} for k,v in result['inventory'].items()])
                 page(out/'report.html','kart 記録要件チェック',body,[],[])
             publish(args.output,save);return 2 if missing else 0
+        if args.action == 'turn':
+            from turning import identify, save_report
+            summary,rows,trials=identify(data,cfg,args.wheelbase)
+            summary['session']=data.get('session')
+            def save(out):
+                write_json(out/'normalized.json',data)
+                save_report(out,summary,rows,trials)
+            publish(args.output,save)
+            return 0 if summary['selected_samples'] else 2
         summary,rows,segments,bins=analyze(data,cfg)
         summary['session']=data.get('session')
         summary['analysis_config_sha256']=hashlib.sha256(args.config.read_bytes()).hexdigest()
