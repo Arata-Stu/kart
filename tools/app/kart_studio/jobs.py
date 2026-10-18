@@ -21,6 +21,9 @@ class Job:
         self.title, self.resources = title, resources
         self.status, self.message = "running", "開始しています"
         self.started = time.time()
+        self.started_monotonic = time.monotonic()
+        self.finished = None
+        self.duration_s = None
         self.cancel = threading.Event()
         self.lock = threading.RLock()
         self.process = None
@@ -37,6 +40,9 @@ class Job:
                 status=self.status,
                 message=self.message,
                 started=self.started,
+                finished=self.finished,
+                elapsed_s=self.duration_s if self.duration_s is not None else max(0, time.monotonic() - self.started_monotonic),
+                cancel_requested=self.cancel.is_set(),
                 result=self.result,
                 diagnostic=self.diagnostic,
             )
@@ -93,7 +99,10 @@ class Job:
                     pass
 
     def stop(self):
-        self.cancel.set()
+        with self.lock:
+            if self.status != "running" or self.cancel.is_set():
+                return
+            self.cancel.set()
         self._terminate(signal.SIGINT)
 
         def escalate():
@@ -121,7 +130,8 @@ class Jobs:
                 state = read_json(path)
                 if state["status"] == "running":
                     state.update(
-                        status="interrupted", message="サーバー終了により結果未確認"
+                        status="interrupted", message="サーバー終了により結果未確認",
+                        elapsed_s=None, finished=None,
                     )
                 self.history.append(state)
             except (ValueError, KeyError):
@@ -165,6 +175,9 @@ class Jobs:
                 job.status = "failed"
                 job.log(exc)
             finally:
+                with job.lock:
+                    job.finished = time.time()
+                    job.duration_s = max(0, time.monotonic() - job.started_monotonic)
                 atomic_json(job.state_path, job.info())
                 with self.lock:
                     self.claimed.difference_update(resources)

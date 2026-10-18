@@ -516,6 +516,16 @@ footer button {
   background: #9bb0bb;
   border-radius: 50%;
 }
+#job-stop-active, #job-stop-selected {
+  color: #a33333;
+  border: 1px solid #e4bcbc;
+  border-radius: 4px;
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+#jobs-toggle { min-width: 0; flex: 1; }
+#job-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#job-log-status { font-size: 11px; color: var(--muted); }
 #job-dot.running {
   background: #1c9683;
   box-shadow: 0 0 0 3px #e6f4ed;

@@ -1,7 +1,46 @@
 import { $, state, api, action, item, toast, on, emit } from "./api.js";
+import { duration } from "./job_time.js";
 let selected = null,
   busy = false;
 const known = new Map();
+const stopping = new Set();
+const timeLabel = (job) => `${job.status === "running" ? "経過" : "所要"} ${duration(job.elapsed_s)}`;
+const isStopping = (job) => job.cancel_requested || stopping.has(job.id);
+const statusLabel = (job) => job.status === "running" && isStopping(job) ? "停止要求中" : labels[job.status];
+function stopButtons() {
+  const active = state.jobs.find((job) => job.status === "running");
+  for (const [element, job] of [
+    [$("job-stop-active"), active],
+    [$("job-stop-selected"), state.jobs.find((job) => job.id === selected)],
+  ]) {
+    element.hidden = !job || job.status !== "running";
+    element.disabled = !!job && isStopping(job);
+    element.textContent = job && isStopping(job) ? "停止要求中…" : "処理を停止";
+    element.title = job?.title || "";
+    element.dataset.job = job?.id || "";
+  }
+  const job = state.jobs.find((j) => j.id === selected);
+  $("job-log-status").textContent = job ? `${statusLabel(job)} · ${timeLabel(job)}` : "";
+}
+async function stopJob(id) {
+  if (!id || stopping.has(id)) return;
+  stopping.add(id);
+  stopButtons();
+  try {
+    const result = await api("stop", { id });
+    const job = state.jobs.find((j) => j.id === id);
+    if (job) Object.assign(job, result);
+    toast(result.status === "running" ? "停止を要求しました。終了処理を待っています" : "この処理は終了しています");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    stopping.delete(id);
+    stopButtons();
+    await poll();
+  }
+}
+for (const id of ["job-stop-active", "job-stop-selected"])
+  action(id, () => stopJob($(id).dataset.job));
 const labels = {
   running: "実行中",
   succeeded: "完了",
@@ -11,6 +50,7 @@ const labels = {
 };
 async function showLog(id) {
   selected = id;
+  stopButtons();
   const result = await api("log?id=" + id);
   if (selected !== id) return;
   $("job-log").textContent = result.text;
@@ -56,11 +96,12 @@ export async function poll() {
       known.set(job.id, job.status);
     }
     const running = state.jobs.filter((j) => j.status === "running");
+    stopButtons();
     $("job-dot").classList.toggle("running", !!running.length);
     $("job-summary").textContent = running.length
-      ? `${running.length}件の処理中 · ${running[0].title} · ${running[0].message}`
+      ? `${running.length}件の処理中 · ${running[0].title} · ${statusLabel(running[0])} · ${timeLabel(running[0])}`
       : state.jobs.length
-        ? `${state.jobs[0].title} · ${labels[state.jobs[0].status]}`
+        ? `${state.jobs[0].title} · ${statusLabel(state.jobs[0])} · ${timeLabel(state.jobs[0])}`
         : "処理は実行されていません";
     if (!$("jobs-drawer").hidden) {
       const list = $("job-list");
@@ -70,17 +111,16 @@ export async function poll() {
         row.className = "job-row";
         const button = item(
           job.title,
-          job.status === "running" ? job.message : labels[job.status],
+          `${statusLabel(job)} · ${timeLabel(job)}${job.status === "running" && !isStopping(job) ? " · " + job.message : ""}`,
           () => showLog(job.id),
         );
         button.className = "job-select";
         row.append(button);
         if (job.status === "running") {
           const stop = document.createElement("button");
-          stop.textContent = "中止";
-          stop.addEventListener("click", () =>
-            api("stop", { id: job.id }).catch((e) => toast(e.message, true)),
-          );
+          stop.textContent = isStopping(job) ? "停止要求中…" : "停止";
+          stop.disabled = isStopping(job);
+          stop.addEventListener("click", () => stopJob(job.id));
           row.append(stop);
         }
         list.append(row);

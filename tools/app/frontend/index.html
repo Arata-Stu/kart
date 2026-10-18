@@ -612,11 +612,13 @@
         <span id="job-dot"></span
         ><span id="job-summary">処理は実行されていません</span
         ><span class="muted">ログ・履歴 ↑</span></button
-      ><span>Kart Map Studio</span>
+      ><button id="job-stop-active" hidden>処理を停止</button><span>Kart Map Studio</span>
     </footer>
     <section id="jobs-drawer" hidden>
       <div class="section-title">
         <strong>処理とログ</strong>
+        <span id="job-log-status"></span>
+        <button id="job-stop-selected" hidden>選択中の処理を停止</button>
         <button id="job-log-copy" disabled>ログをコピー</button>
         <button id="jobs-close">閉じる</button>
       </div>
