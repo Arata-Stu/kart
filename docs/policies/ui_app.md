@@ -195,3 +195,7 @@ RGB着色はtools/mesh_colorに分離し、公式offline処理を変更しない
 別のodom軌跡や地面合わせ後poseを暗黙に代入しない。
 元座標・面構造を保持した別PLYを公開し、観測不能頂点は灰色とする。
 UIは着色率を表示する。RGB表示は座標整合性の保証ではない。
+
+RGB着色の既定遮蔽判定はNotebook GPU/EGL深度描画とする。
+CPU ray版はCLIで明示指定した場合のみ使用し、EGL失敗・software renderer時の暗黙fallbackは禁止。
+GPU描画とCPUのbag読込・色割当・保存の実行境界、および実GPU検証の有無を明記する。

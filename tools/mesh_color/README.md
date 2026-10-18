@@ -71,3 +71,52 @@ binary PLYの三角形は固定長memory mapを利用し、面のPython list複�
 入力SHA256は分割読込とし、PLY全体をhash用に再度メモリへ読み込まない。
 すでに近いRGB観測で着色済みの頂点は、遠い観測の遮蔽計算を省略する。
 頂点や面の削減は行わず、元meshの形状を維持する。
+
+## GPU深度バッファ版（既定）
+
+UIとCLIはGPU backendが既定。画面を作らずModernGL/EGLでmeshを描画し、
+撮影カメラから見える最前面の深度を得る。meshは一度だけGPUへ転送する。
+CPUで全頂点へのray交差を列挙する従来方式は --backend cpu の明示指定時だけ使用する。
+EGL失敗・llvmpipe等のsoftware renderer検出時は停止し、CPUへ自動切替しない。
+GPU device番号はCLIの --gpu-device（既定0）。CUDAのdevice番号との一致は保証しない。
+
+- 深度はRGBの縦横2倍で描画し、near=0.05m、far=1000m。
+- optical +Z前/+Y下、OpenGL上下反転、画像pixel centerを明示的に変換。
+- 投影先3×3近傍の最小深度と頂点Zとの差2cm以内だけ着色。
+  遮蔽輪郭からの色漏れを避けるため保守的に判定する。輪郭では未着色が増えることがある。
+- GPUを使うのはmesh投影・深度描画による遮蔽処理。
+  bag読込、画像歪み補正、頂点への色の割当、PLY保存はCPUで行う。
+- ログにGPU vendor/renderer、1画像の投影・着色時間、peak RSSを記録。
+  出力JSONにもbackend、renderer、supersamplingを保存する。
+- 終了／例外時にGL資源を解放。UIの停止は既存のsubprocess停止を使用。
+
+### 既存Notebookコンテナへの追加
+
+Dockerfileのamd64依存へmodernglとlibegl1/libgl1を追加済み。
+再buildを避けたい場合、既存のRGB着色依存が入ったコンテナ内で:
+
+    sudo apt-get update
+    sudo apt-get install -y libegl1 libgl1
+    sudo uv pip install --python /usr/bin/python3 --break-system-packages 'moderngl==5.12.0'
+    cd /workspaces
+    python3 tools/mesh_color/gpu.py
+
+GPU depth OKとGPU名が出れば描画の確認完了。その後UIを再起動して着色する。
+この確認は実bagの座標整合性や着色品質の検証ではない。
+EGLにはNVIDIA Container Toolkitのgraphics capabilityが必要。
+既存isaac-ros-cliのrun_dev.pyはNVIDIA_DRIVER_CAPABILITIES=allを渡している。
+別の起動経路ではcompute,utility,graphicsを指定してコンテナを再作成する。
+コンテナ内で環境変数だけ変更しても、ホストのdriver library mountは追加されない。
+
+出典:
+- https://moderngl.readthedocs.io/en/latest/techniques/headless_ubuntu_18_server.html
+- https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/docker-specialized.html
+
+### 検証
+
+portable testはprojection/pixel center、深度復元、前後面遮蔽、未観測頂点を検証。
+GPUを備えたNotebookでの統合テスト:
+
+    KART_TEST_EGL=1 python3 -m unittest discover -s tools/mesh_color -p test_gpu.py -v
+
+開発環境では実EGLテストは未実行（既定skip）。実meshの処理時間・VRAM量は未測定。

@@ -33,13 +33,29 @@ def stamp(msg):
 
 
 def run(args):
+    from contextlib import ExitStack
+    with ExitStack() as stack:
+        return execute(args, stack)
+
+
+def execute(args, stack):
     if Path(args.output).exists() or Path(args.output+'.json').exists():
         raise ValueError('Output already exists; choose a new output path')
     import cv2
-    import trimesh
     from plyfile import PlyData, PlyElement
     from rosbags.highlevel import AnyReader
     from rosbags.typesys import Stores, get_typestore
+    backend=getattr(args,'backend','gpu')
+    if backend not in ('gpu','cpu'): raise ValueError('backend must be gpu or cpu')
+    renderer=None
+    if backend=='gpu':
+        from gpu import Rasterizer
+        renderer=Rasterizer(getattr(args,'gpu_device',0))
+        stack.callback(renderer.close)
+        log(f'GPU backend: {renderer.vendor} / {renderer.renderer}')
+    else:
+        import trimesh
+        log('CPU ray backendを明示選択（大規模meshでは長時間かかります）')
     mesh_path, meta_path = Path(args.mesh), Path(args.metadata)
     log('公式pose metadataを読み込みます')
     meta = json.loads(meta_path.read_text())
@@ -105,7 +121,12 @@ def run(args):
         if faces.ndim!=2 or faces.shape[1]!=3 or not len(vertices) or not np.isfinite(vertices).all():
             raise ValueError('Finite triangular mesh required')
         log(f'PLY読み込み完了: vertices={len(vertices):,}, faces={len(faces):,}')
-        ray_mesh=trimesh.Trimesh(vertices=vertices,faces=faces,process=False)
+        if renderer:
+            renderer.upload(vertices,faces)
+            ray_mesh=None
+            log('meshをGPUへ転送しました')
+        else:
+            ray_mesh=trimesh.Trimesh(vertices=vertices,faces=faces,process=False)
         log('mesh構築完了。RGB画像を走査します')
         colors=np.full((len(vertices),3),170,dtype=np.uint8)
         best=np.full(len(vertices),np.inf)
@@ -127,17 +148,25 @@ def run(args):
             rgb=np.frombuffer(msg.data,dtype=np.uint8).reshape(msg.height,msg.step)[:,:msg.width*3].reshape(msg.height,msg.width,3)
             if msg.encoding=='bgr8': rgb=rgb[:,:,::-1]
             if len(d) and np.any(d): rgb=cv2.undistort(rgb,k,d)
-            log(f'RGB {used+1}/{args.max_frames}: 投影・遮蔽判定開始（ray batch={getattr(args,"ray_batch",32)}）')
-            last_progress=time.monotonic()
-            def progress(done,total):
-                nonlocal last_progress
-                if time.monotonic()-last_progress >= 5 or done==total:
-                    log(f'RGB {used+1}: vertices {done:,}/{total:,}')
-                    last_progress=time.monotonic()
-            changed=paint(vertices,ray_mesh,rgb,poses[index][1]@base_from_rgb,k,colors,best,
-                          ray_batch=getattr(args,'ray_batch',32),progress=progress)
+            log(f'RGB {used+1}/{args.max_frames}: {backend} 投影・遮蔽判定開始')
+            frame_started=time.monotonic()
+            pose=poses[index][1]@base_from_rgb
+            if renderer:
+                from gpu import paint_depth
+                depth=renderer.depth(pose,k,info.width,info.height)
+                changed=paint_depth(vertices,rgb,pose,k,depth,colors,best)
+            else:
+                last_progress=time.monotonic()
+                def progress(done,total):
+                    nonlocal last_progress
+                    if time.monotonic()-last_progress >= 5 or done==total:
+                        log(f'RGB {used+1}: vertices {done:,}/{total:,}')
+                        last_progress=time.monotonic()
+                changed=paint(vertices,ray_mesh,rgb,pose,k,colors,best,
+                              ray_batch=getattr(args,'ray_batch',32),progress=progress)
             used+=1;last=ns
-            print(f'RGB {used}/{args.max_frames}: updated={changed}, coverage={np.isfinite(best).mean():.1%}',flush=True)
+            log(f'RGB {used}/{args.max_frames}: {time.monotonic()-frame_started:.2f}s, '
+                f'updated={changed}, coverage={np.isfinite(best).mean():.1%}')
             if used>=args.max_frames: break
     if not np.isfinite(best).any():
         raise ValueError('No visible matched vertices; check timestamps, calibration and coordinate frames')
@@ -150,7 +179,8 @@ def run(args):
     for i,n in enumerate(('red','green','blue')): colored[n]=colors[:,i]
     elements=[PlyElement.describe(colored,'vertex') if e.name=='vertex' else e for e in ply.elements]
     PlyData(elements,text=False,byte_order='<').write(args.output)
-    result=dict(schema=1,frame='map',source='before_adjustment',mesh_sha256=file_hash(mesh_path),
+    result=dict(schema=1,backend=backend,gpu_renderer=renderer.renderer if renderer else None,
+        depth_supersampling=2 if renderer else None,frame='map',source='before_adjustment',mesh_sha256=file_hash(mesh_path),
         metadata_sha256=file_hash(meta_path),bag=str(bag),
         image_topic=args.image,info_topic=args.info,base_frame=args.base_frame,rgb_frame=info.header.frame_id,
         pose_camera_id=camera_id,
@@ -171,6 +201,8 @@ if __name__=='__main__':
     parser.add_argument('--info',default='/realsense/color/camera_info')
     parser.add_argument('--max-frames',type=int,default=120)
     parser.add_argument('--ray-batch',type=int,default=32)
+    parser.add_argument('--backend',choices=('gpu','cpu'),default='gpu')
+    parser.add_argument('--gpu-device',type=int,default=0)
     args=parser.parse_args()
     if not 1<=args.max_frames<=2000: parser.error('max-frames must be 1..2000')
     if not 1<=args.ray_batch<=256: parser.error('ray-batch must be 1..256')

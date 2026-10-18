@@ -618,3 +618,7 @@ APIはPOST /api/mesh-color。既存job管理の停止・時間表示を利用す
 公式出力とHDMapは変更せず、color_runs配下へ別成果物を保存する。
 Notebook用の追加依存・時刻／TF／遮蔽判定・既知の限界は
 [RGB着色のREADME](../mesh_color/README.md)を参照。
+
+RGB着色はGPU/EGL深度描画を既定とする。GPU名と画像ごとの処理時間をログへ出す。
+GPUが利用できない場合は停止し、長時間かかるCPU版へ自動fallbackしない。
+Notebookでの依存追加と描画確認コマンドはRGB着色READMEのGPU節を参照。

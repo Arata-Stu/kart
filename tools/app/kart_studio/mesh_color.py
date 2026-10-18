@@ -10,7 +10,7 @@ from .dense import artifact
 
 def validate(studio, key, body):
     import importlib.util
-    missing=[m for m in ('trimesh','rtree','plyfile','cv2','scipy','rosbags') if importlib.util.find_spec(m) is None]
+    missing=[m for m in ('moderngl','plyfile','cv2','scipy','rosbags') if importlib.util.find_spec(m) is None]
     if missing:
         raise ValueError('RGB着色の依存がありません: '+', '.join(missing)+
                          '。NotebookのDockerイメージを更新してください（tools/mesh_color/README.md参照）')
@@ -48,7 +48,7 @@ def build(studio,job,key,body,inputs):
         job.log('終了コード-9の場合はSIGKILLです。最後の処理段階・peak RSSとホストのOOMログを確認してください')
         job.run([sys.executable,str(studio.repo/'tools/mesh_color/run.py'),
                  '--bag',str(bag),'--mesh',str(mesh),'--metadata',str(meta),
-                 '--base-frame',base,'--output',str(output)])
+                 '--base-frame',base,'--backend','gpu','--output',str(output)])
         job.check()
         doc=studio.maps.load(key)
         if doc['revision']!=body['revision']: raise ValueError('実行中に地図が更新されました')

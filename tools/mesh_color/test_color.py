@@ -83,7 +83,7 @@ class ColorTests(unittest.TestCase):
                 camera_params_id_to_camera_params={'0':dict(sensor_meta_data=dict(sensor_to_vehicle_transform=identity))},
                 keyframes_metadata=[dict(camera_params_id='0',timestamp_microseconds=str(ns//1000),camera_to_world=identity)])))
             run(SimpleNamespace(mesh=str(mesh),metadata=str(meta),bag=str(bag),output=str(out),
-                base_frame='rgb_optical',image='/rgb',info='/info',max_frames=1))
+                base_frame='rgb_optical',image='/rgb',info='/info',max_frames=1,backend='cpu'))
             result=PlyData.read(out)
             for axis in 'xyz': np.testing.assert_array_equal(result['vertex'][axis],vertex[axis])
             np.testing.assert_array_equal(result['face']['vertex_indices'][0],[0,1,2])
