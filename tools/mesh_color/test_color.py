@@ -8,6 +8,29 @@ from core import paint, project, transform
 
 
 class ColorTests(unittest.TestCase):
+    def test_ray_batch_and_projection_chunks_preserve_all_vertices(self):
+        from types import SimpleNamespace
+        batches=[]
+        class Rays:
+            def intersects_location(self, origins, directions, multiple_hits):
+                batches.append(len(directions))
+                return origins+directions*2, np.arange(len(directions)), np.zeros(len(directions),int)
+        vertices=np.tile([0.,0.,2.],(8200,1))
+        colors=np.full((8200,3),170,dtype=np.uint8)
+        best=np.full(8200,np.inf)
+        rgb=np.full((21,21,3),42,dtype=np.uint8)
+        count=paint(vertices,SimpleNamespace(ray=Rays()),rgb,np.eye(4),
+            np.array([[10,0,10],[0,10,10],[0,0,1.]]),colors,best,ray_batch=7)
+        self.assertEqual(count,8200)
+        self.assertLessEqual(max(batches),7)
+        self.assertTrue((colors==42).all())
+        self.assertTrue((best==2).all())
+        # Previously colored closer views skip the ray query.
+        batches.clear()
+        self.assertEqual(paint(vertices,SimpleNamespace(ray=Rays()),rgb,np.eye(4),
+            np.array([[10,0,10],[0,10,10],[0,0,1.]]),colors,best),0)
+        self.assertEqual(batches,[])
+
     def test_projection_and_extrinsic(self):
         pose=np.eye(4);pose[:3,3]=[1,2,3]
         k=np.array([[10,0,10],[0,10,10],[0,0,1.]])

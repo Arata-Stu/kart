@@ -45,6 +45,7 @@ def build(studio,job,key,body,inputs):
     try:
         bag,meta,base=inputs
         output=target/'mesh_rgb.ply'
+        job.log('終了コード-9の場合はSIGKILLです。最後の処理段階・peak RSSとホストのOOMログを確認してください')
         job.run([sys.executable,str(studio.repo/'tools/mesh_color/run.py'),
                  '--bag',str(bag),'--mesh',str(mesh),'--metadata',str(meta),
                  '--base-frame',base,'--output',str(output)])
