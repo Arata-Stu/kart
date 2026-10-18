@@ -81,10 +81,11 @@ screenとtmuxはSSH切断後も作業プロセスを維持しますが、Docker�
 
 `sensors/evs-raw-timing.sh --build FILE.raw`はRAW読込み時のtimestamp shiftを取得します（録画停止後、EVSコンテナ内）。
 
-外部リポジトリの更新は `bash scripts/repos.sh pull`。対象はstatusと同じ
-`tools`と`ros2_ws/src/sensing`内のリポジトリで、kart本体は含めません。
-commit固定のdetached HEADは追従ブランチがないためpullで更新できません。
-固定SHAの更新はpackages.reposで管理します。
+外部リポジトリの更新は `bash scripts/repos.sh pull`。対象は`packages.repos`記載のgit repoのみ。
+kart本体や未登録repoは含めません。Python3/PyYAML（vcstoolの依存）を使います。
+40桁commit固定はSKIPし、HEADとの差があれば表示します。固定SHAの変更・checkoutは自動で行いません。
+branch指定はoriginからfetchしてfast-forwardのみ適用します。detached HEADでも、変更がなく
+HEADが追従先の祖先であれば指定branchへ復帰します。別branch・未コミット変更・独自detached commit・分岐は停止し、reset/stashはしません。
 
 `dev.sh`はinput/dialout/plugdevと接続中のevent/ttyACM/ttyUSBデバイスの所有GIDを
 Docker補助グループへ追加します。反映はコンテナ作成時のため、既存コンテナへのattachでは変わりません。

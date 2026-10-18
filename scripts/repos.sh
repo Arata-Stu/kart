@@ -9,6 +9,6 @@ fi
 case "${1:-status}" in
     import) exec vcs import --input packages.repos . ;;
     status) exec vcs status tools ros2_ws/src/sensing ;;
-    pull) exec vcs pull tools ros2_ws/src/sensing ;;
+    pull) exec python3 "$KART_ROOT/scripts/lib/repos.py" ;;
     *) echo 'Usage: scripts/repos.sh [import|status|pull]' >&2; exit 2 ;;
 esac
