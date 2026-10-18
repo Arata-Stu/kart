@@ -106,13 +106,13 @@ action("mesh-open", async () => {
       try {
         viewer = { software: createCanvasViewer(host, geometry, points, paths) };
         updateLayers(); fit();
-        $("mesh-info").textContent = `${doc.title} · map / m · 互換表示（WebGL2初期化不可） · 表示 ${viewer.software.faceCount.toLocaleString()} / ${info.face.toLocaleString()} 面、点群 ${viewer.software.cloudCount.toLocaleString()} 点。間引き・簡易重なり表示のため欠損や遮蔽の精密評価には使わないでください。元データは保持しています。`;
+        $("mesh-info").textContent = `${doc.title} · map / m · ${info.colored ? "RGB着色 " + (info.color_report.coverage * 100).toFixed(1) + "%" : "単色"} · 互換表示（WebGL2初期化不可） · 表示 ${viewer.software.faceCount.toLocaleString()} / ${info.face.toLocaleString()} 面、点群 ${viewer.software.cloudCount.toLocaleString()} 点。間引き・簡易重なり表示のため欠損や遮蔽の精密評価には使わないでください。元データは保持しています。`;
       } finally { geometry.dispose(); }
       return;
     }
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); host.append(renderer.domElement);
     const controls = new OrbitControls(camera, renderer.domElement);
-    const mesh = new T.Mesh(geometry, new T.MeshLambertMaterial({ color: 0xaaaaaa, side: T.DoubleSide, transparent: true, opacity: 0.55, depthWrite: false }));
+    const mesh = new T.Mesh(geometry, new T.MeshBasicMaterial({ vertexColors: !!geometry.getAttribute("color"), color: geometry.getAttribute("color") ? 0xffffff : 0xaaaaaa, side: T.DoubleSide, transparent: true, opacity: 0.55, depthWrite: false }));
     scene.add(mesh, new T.AmbientLight(0xffffff, 1.5));
     const light = new T.DirectionalLight(0xffffff, 2); light.position.set(3, -4, 8); scene.add(light);
     const pg = new T.BufferGeometry(); pg.setAttribute('position', new T.Float32BufferAttribute(points.flat(), 3));
@@ -134,7 +134,7 @@ action("mesh-open", async () => {
     renderer.setSize(host.clientWidth, host.clientHeight, false); camera.aspect = host.clientWidth / host.clientHeight;
     observer.observe(host); controls.addEventListener('change', draw);
     updateLayers(); fit();
-    $("mesh-info").textContent = `${doc.title} · map / m · ${info.face.toLocaleString()} 面 · 点群 ${points.length.toLocaleString()} 点 · HDMap r${doc.revision}${state.dirty ? '（未保存編集を含む）' : ''}${info.stale ? ' · meshは旧深度の成果物' : ''} · 追加TFなし`;
+    $("mesh-info").textContent = `${doc.title} · map / m · ${info.colored ? "RGB着色 " + (info.color_report.coverage * 100).toFixed(1) + "%" : "単色"} · ${info.face.toLocaleString()} 面 · 点群 ${points.length.toLocaleString()} 点 · HDMap r${doc.revision}${state.dirty ? '（未保存編集を含む）' : ''}${info.stale ? ' · meshは旧深度の成果物' : ''} · 追加TFなし`;
   } catch (error) {
     if (ticket !== sequence || abort.signal.aborted) return;
     closeViewer();

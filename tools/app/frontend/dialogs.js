@@ -182,6 +182,8 @@ function renderDenseStages() {
     button.disabled = !!running || denseSubmitting || !denseStages["can_" + step] || !state.config?.environment.ros;
   }
   $("dense-resolution").disabled = !!running || denseSubmitting;
+  $("mesh-color-start").disabled = !denseStages.dense_ready ||
+    state.jobs.some(j => j.status === "running" && j.title.endsWith(": " + state.id));
 }
 async function openDense() {
   const selectedMap = state.id;
@@ -251,3 +253,15 @@ for (const step of ["depth", "occupancy"])
       renderDenseStages();
     }
   });
+
+action("mesh-color-start", async () => {
+  if ($("dense-dialog").dataset.map !== state.id || state.dirty)
+    throw Error("地図を保存してダイアログを開き直してください");
+  if (!confirm("元bagのRGB画像でmeshを着色します。既存の着色がある場合は再生成しますか？"))
+    return;
+  const job = await api("mesh-color", { id: state.id, revision: state.doc.revision,
+    bag: $("mesh-color-bag").value.trim() });
+  $("dense-dialog").close();
+  emit("job-started", job);
+  toast("RGB着色を開始しました。完了後に3D重ね表示を開いてください");
+});

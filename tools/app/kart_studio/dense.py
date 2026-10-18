@@ -18,6 +18,10 @@ def mesh_overlay(maps, key):
     if doc.get('frame') != 'map':
         raise ValueError('HDMapのframeがmapではありません')
     filename = 'mesh_before_adjustment.ply'
+    color = result.get('mesh_color', {})
+    colored = color.get('dense_source') == result.get('dense_output', result.get('official_output'))
+    if colored and color.get('output'):
+        filename = 'mesh_rgb.ply'
     try:
         path = artifact(maps, key, filename)
     except (ValueError, OSError) as exc:
@@ -37,7 +41,7 @@ def mesh_overlay(maps, key):
         raise ValueError('空のmeshまたはブラウザ表示上限を超えたmeshです')
     return dict(frame='map', source='before_adjustment', units='m',
                 transform_policy='native_map_no_additional_transform',
-                hdmap_dimension=2, **counts,
+                hdmap_dimension=2, colored=bool(colored), color_report=color.get('report') if colored else None, **counts,
                 url='/dense-file?' + urlencode(dict(id=key, file=filename)),
                 bytes=path.stat().st_size,
                 stale=bool(result.get('dense_stale')))
@@ -73,6 +77,13 @@ def overlay(maps, key):
 
 
 def artifact(maps, key, filename):
+    if filename == 'mesh_rgb.ply':
+        folder = maps.folder(key)
+        result = read_json(within(folder, 'mapping_result.json'))
+        color = result.get('mesh_color', {})
+        if color.get('dense_source') != result.get('dense_output', result.get('official_output')):
+            raise ValueError('着色meshは旧meshの成果物です。再着色してください')
+        return within(folder, color['output'])
     if filename not in DENSE_FILES:
         raise ValueError("Unknown dense artifact")
     folder = maps.folder(key)
@@ -98,4 +109,9 @@ def catalog(maps, key):
         path = artifact(maps, key, filename)
         files.append(dict(name=filename, bytes=path.stat().st_size,
                           url="/dense-file?" + urlencode(dict(id=key, file=filename))))
+    color = result.get('mesh_color', {})
+    if color.get('output') and color.get('dense_source') == result.get('dense_output', result.get('official_output')):
+        path = artifact(maps, key, 'mesh_rgb.ply')
+        files.append(dict(name='mesh_rgb.ply', bytes=path.stat().st_size,
+                          url='/dense-file?' + urlencode(dict(id=key, file='mesh_rgb.ply'))))
     return dict(summary=summary, files=files)

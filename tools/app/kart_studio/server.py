@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from . import capture, registration, vgl, dense, dense_steps
+from . import capture, registration, vgl, dense, dense_steps, mesh_color
 from .copies import copy_map
 from .e2e import Learning
 from .jobs import Jobs
@@ -246,6 +246,13 @@ class Studio:
                 "VGL地図生成: " + key,
                 ["map:" + key, "vgl:" + str(output), "e2e-compute"],
                 lambda job: vgl.build(job, source, models, output, size),
+            )
+        if path == "/api/mesh-color":
+            name(key)
+            inputs = mesh_color.validate(self, key, b)
+            return self.jobs.start(
+                "mesh RGB着色: " + key, ["map:" + key, "e2e-compute"],
+                lambda job: mesh_color.build(self, job, key, b, inputs),
             )
         if path == "/api/dense-step":
             name(key)

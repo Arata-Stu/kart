@@ -607,3 +607,14 @@ WebGL2初期化が失敗した場合はCanvas 2DによるCPU互換表示へ自�
 表示のみ間引く。面は奥行き順の簡易描画で、点群・HDMapは手前に重ねるため正確な遮蔽判定ではない。
 元PLY・点群・HDMapは変更しない。UIには互換表示と表示数・精密評価不可の注意を明示する。
 テスト: test_mesh_canvas.mjs（CPU投影・描画・レイヤー・解放、描画contextはmock）。
+
+### meshのRGB着色
+
+「占有地図・3Dメッシュ」の工程3で、元bagのRGBを使って既存meshへ頂点色を追加する。
+元bag欄は空欄なら生成時のパス。移動済みならrecord rootからの相対パスを指定。
+完了後の3D重ね表示は着色meshを自動選択し、着色率を表示する。
+点群は従来の紫色、未着色mesh頂点は灰色。CPU互換表示も面平均色に対応。
+APIはPOST /api/mesh-color。既存job管理の停止・時間表示を利用する。
+公式出力とHDMapは変更せず、color_runs配下へ別成果物を保存する。
+Notebook用の追加依存・時刻／TF／遮蔽判定・既知の限界は
+[RGB着色のREADME](../mesh_color/README.md)を参照。

@@ -17,8 +17,15 @@ export function createCanvasViewer(host, geometry, points, paths) {
   const stride = Math.max(1, Math.ceil(faceCount / 12000));
   const triangles = [];
   const read = i => [positions.getX(i), positions.getY(i), positions.getZ(i)];
-  for (let f = 0; f < faceCount; f += stride)
-    triangles.push([0, 1, 2].map(k => read(indices ? indices[f * 3 + k] : f * 3 + k)));
+  const colors = geometry.attributes.color;
+  const srgb = v => Math.round(255 * Math.min(1, Math.max(0, v <= 0.0031308 ? 12.92*v : 1.055*v**(1/2.4)-0.055)));
+  for (let f = 0; f < faceCount; f += stride) {
+    const ids = [0, 1, 2].map(k => indices ? indices[f * 3 + k] : f * 3 + k);
+    const triangle = ids.map(read);
+    triangle.color = colors ? 'rgb(' + ['getX', 'getY', 'getZ'].map(k =>
+      srgb(ids.reduce((sum, i) => sum + colors[k](i), 0) / 3)).join(',') + ')' : '#aab7c3';
+    triangles.push(triangle);
+  }
   const cloudStride = Math.max(1, Math.ceil(points.length / 15000));
   const cloud = points.filter((_, i) => i % cloudStride === 0);
   const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
@@ -45,11 +52,12 @@ export function createCanvasViewer(host, geometry, points, paths) {
       return [w / 2 + pan[0] + q[0] * scale, h / 2 + pan[1] - q[1] * scale, q[2]];
     };
     if (settings.mesh) {
-      const faces = triangles.map(t => t.map(screen));
+      const faces = triangles.map(t => { const face = t.map(screen); face.color = t.color; return face; });
       faces.sort((a, b) => a.reduce((s, p) => s + p[2], 0) - b.reduce((s, p) => s + p[2], 0));
       ctx.globalAlpha = settings.opacity; ctx.fillStyle = '#aab7c3';
       ctx.strokeStyle = '#65788b'; ctx.lineWidth = 0.4;
       for (const t of faces) {
+        ctx.fillStyle = t.color; ctx.strokeStyle = t.color;
         ctx.beginPath(); t.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
         ctx.closePath(); ctx.fill(); ctx.stroke();
       }

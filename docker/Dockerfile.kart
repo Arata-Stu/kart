@@ -135,3 +135,10 @@ COPY --chmod=0755 scripts/kart-device-groups.sh /usr/local/bin/scripts/entrypoin
 COPY scripts/kart-ros.bash /etc/kart/ros.bash
 RUN printf '\nsource /etc/kart/ros.bash\n' >> /etc/bash.bashrc
 WORKDIR /workspaces/ros2_ws
+
+# Notebook offline mesh RGB projection (not needed on Jetson).
+RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+      uv pip install --python /usr/bin/python3 --break-system-packages \
+        'trimesh>=4.4,<5' 'rtree>=1.3,<2' 'plyfile>=1.1,<2' \
+        'opencv-python-headless>=4.10,<5' 'scipy>=1.11,<2'; \
+    fi

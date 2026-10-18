@@ -28,6 +28,22 @@ class MeshOverlayTests(unittest.TestCase):
         self.assertEqual(result['face'], 1)
         self.assertIn('mesh_before_adjustment.ply', result['url'])
 
+    def test_colored_mesh_and_stale_source(self):
+        rgb = self.root / 'color_runs/one/mesh_rgb.ply'
+        rgb.parent.mkdir(parents=True)
+        rgb.write_bytes(self.mesh.read_bytes())
+        self.mapping['mesh_color'] = dict(output='color_runs/one/mesh_rgb.ply',
+            dense_source='dense_runs/one', report={'coverage': .5})
+        atomic_json(self.root / 'mapping_result.json', self.mapping)
+        result = mesh_overlay(self.maps, 'm')
+        self.assertTrue(result['colored'])
+        self.assertIn('mesh_rgb.ply', result['url'])
+        self.mapping['mesh_color']['dense_source'] = 'dense_runs/old'
+        atomic_json(self.root / 'mapping_result.json', self.mapping)
+        result = mesh_overlay(self.maps, 'm')
+        self.assertFalse(result['colored'])
+        self.assertIn('mesh_before_adjustment.ply', result['url'])
+
     def test_never_fallback_to_ground_mesh(self):
         self.mesh.rename(self.run / 'mesh.ply')
         with self.assertRaises(ValueError): mesh_overlay(self.maps, 'm')
