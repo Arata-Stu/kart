@@ -601,3 +601,9 @@ Three.js 0.180.0と公式PLYLoader/OrbitControlsをMITライセンス付きでve
 検証: test_mesh_overlay.py、test_mesh_layers.mjs（ASCII/両endian binary PLY、XY/Z保持）。
 合成地図でブラウザのmesh/点群/HDMap重ね合わせと真上表示を確認。
 実地図におけるVSLAM再localize誤差・形状推定誤差は別途確認が必要。
+
+WebGL2初期化が失敗した場合はCanvas 2DによるCPU互換表示へ自動切替する。
+回転・移動・拡大・レイヤー切替・表示高さは維持するが、最大約12,000面・15,000点へ
+表示のみ間引く。面は奥行き順の簡易描画で、点群・HDMapは手前に重ねるため正確な遮蔽判定ではない。
+元PLY・点群・HDMapは変更しない。UIには互換表示と表示数・精密評価不可の注意を明示する。
+テスト: test_mesh_canvas.mjs（CPU投影・描画・レイヤー・解放、描画contextはmock）。

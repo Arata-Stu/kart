@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import { projectPoint, createCanvasViewer } from '../frontend/mesh_canvas.js';
+assert.deepEqual(projectPoint([1,2,3], [1,2,3], 0, 0), [0,0,0]);
+const top = projectPoint([1,2,3], [0,0,0], 0, Math.PI / 2);
+assert.ok(Math.abs(top[0]-1)<1e-9 && Math.abs(top[1]-2)<1e-9);
+let pending, fills=0, removed=false, disconnected=false;
+const ctx = new Proxy({}, {get: (_, name) => (...args) => {if(name==='fill') fills++;}});
+const canvas = {getContext: () => ctx, style:{}, addEventListener(){}, remove(){removed=true;}};
+globalThis.document = {createElement: () => canvas};
+globalThis.devicePixelRatio = 1;
+globalThis.requestAnimationFrame = callback => {pending=callback; return 1;};
+globalThis.cancelAnimationFrame = () => {};
+globalThis.ResizeObserver = class {observe(){} disconnect(){disconnected=true;}};
+const values = [[0,0,0],[1,0,0],[0,1,0]];
+const geometry = {index:{array:new Uint32Array([0,1,2])},attributes:{position:{
+  count:3,getX:i=>values[i][0],getY:i=>values[i][1],getZ:i=>values[i][2]}}};
+const view = createCanvasViewer({clientWidth:600,clientHeight:400,append(){}}, geometry, values, []);
+pending(); assert.equal(fills,1); assert.equal(view.faceCount,1);
+view.update({mesh:false,cloud:true,lines:true,opacity:0.5,z:0}); pending(); assert.equal(fills,1);
+view.fit(true); pending();
+view.dispose(); assert.ok(removed && disconnected);
+console.log('Canvas projection, layer toggles, render and disposal passed');

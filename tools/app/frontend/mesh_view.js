@@ -1,5 +1,6 @@
 import { $, state, action, on } from "./api.js";
 import { hdmapPaths } from "./mesh_layers.js";
+import { createCanvasViewer } from "./mesh_canvas.js";
 
 const dialog = $("mesh-dialog"), host = $("mesh-viewport");
 let viewer = null, controller = null, owner = null, sequence = 0;
@@ -13,9 +14,12 @@ function closeViewer() {
   sequence++;
   controller?.abort(); controller = null;
   if (viewer) {
+    if (viewer.software) viewer.software.dispose();
+    else {
     viewer.observer.disconnect(); viewer.controls.dispose();
     disposeObject(viewer.scene);
     viewer.renderer.dispose(); viewer.renderer.forceContextLoss();
+    }
     viewer = null;
   }
   host.replaceChildren();
@@ -29,6 +33,7 @@ function draw() {
 }
 function fit(top = false) {
   if (!viewer) return;
+  if (viewer.software) { viewer.software.fit(top); return; }
   const { THREE: T, scene, camera, controls } = viewer;
   const box = new T.Box3().setFromObject(scene);
   if (box.isEmpty()) return;
@@ -42,6 +47,12 @@ function fit(top = false) {
 }
 function updateLayers() {
   if (!viewer) return;
+  if (viewer.software) {
+    viewer.software.update({ mesh: $("mesh-visible").checked, cloud: $("mesh-cloud").checked,
+      lines: $("mesh-hdmap").checked, opacity: Number($("mesh-opacity").value),
+      z: Number.isFinite(Number($("mesh-line-z").value)) ? Number($("mesh-line-z").value) : 0 });
+    return;
+  }
   viewer.mesh.visible = $("mesh-visible").checked;
   viewer.mesh.material.opacity = Number($("mesh-opacity").value);
   viewer.cloud.visible = $("mesh-cloud").checked;
@@ -89,14 +100,21 @@ action("mesh-open", async () => {
     const scene = new T.Scene(); scene.background = new T.Color(0x182331);
     const camera = new T.PerspectiveCamera(45, 1, 0.01, 10000); camera.up.set(0, 0, 1);
     let renderer;
+    const points = cloudData.points.filter(p => p[2] >= lo && p[2] <= hi);
     try { renderer = new T.WebGLRenderer({ antialias: true }); }
-    catch (error) { geometry.dispose(); throw Error('WebGL2が使えません: ' + error.message); }
+    catch (error) {
+      try {
+        viewer = { software: createCanvasViewer(host, geometry, points, paths) };
+        updateLayers(); fit();
+        $("mesh-info").textContent = `${doc.title} · map / m · 互換表示（WebGL2初期化不可） · 表示 ${viewer.software.faceCount.toLocaleString()} / ${info.face.toLocaleString()} 面、点群 ${viewer.software.cloudCount.toLocaleString()} 点。間引き・簡易重なり表示のため欠損や遮蔽の精密評価には使わないでください。元データは保持しています。`;
+      } finally { geometry.dispose(); }
+      return;
+    }
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); host.append(renderer.domElement);
     const controls = new OrbitControls(camera, renderer.domElement);
     const mesh = new T.Mesh(geometry, new T.MeshLambertMaterial({ color: 0xaaaaaa, side: T.DoubleSide, transparent: true, opacity: 0.55, depthWrite: false }));
     scene.add(mesh, new T.AmbientLight(0xffffff, 1.5));
     const light = new T.DirectionalLight(0xffffff, 2); light.position.set(3, -4, 8); scene.add(light);
-    const points = cloudData.points.filter(p => p[2] >= lo && p[2] <= hi);
     const pg = new T.BufferGeometry(); pg.setAttribute('position', new T.Float32BufferAttribute(points.flat(), 3));
     const cloud = new T.Points(pg, new T.PointsMaterial({ color: 0xe88cff, size: 2, sizeAttenuation: false }));
     scene.add(cloud);
