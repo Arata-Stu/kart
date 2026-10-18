@@ -1,5 +1,20 @@
 """Validate optional NVIDIA dense reconstruction outputs without changing map TF."""
 
+import os
+from pathlib import Path
+
+
+def require_engine(resolution):
+    sizes = {"low_res": "320x736", "high_res": "576x960"}
+    workspace = os.environ.get("ISAAC_ROS_WS")
+    setup = f"bash scripts/setup/foundationstereo.sh --model-res {resolution}"
+    if not workspace:
+        raise ValueError(f"ISAAC_ROS_WSを指定してください。モデル準備: {setup}")
+    engine = Path(workspace) / "isaac_ros_assets/models/foundationstereo/deployable_v2.0" / f"foundationstereo_{sizes[resolution]}.engine"
+    if not engine.is_file() or not engine.stat().st_size or not os.access(engine, os.R_OK):
+        raise ValueError(f"FoundationStereo engineが未準備です: {engine}\nモデル準備: {setup}\nVSLAM処理は開始していません。")
+    return engine
+
 DENSE_FILES = (
     "mesh.ply", "mesh_before_adjustment.ply", "occupancy_map.png",
     "occupancy_map.yaml", "occupancy_map_before_adjustment.png",

@@ -122,7 +122,12 @@ UIで追加生成を選ぶと`--depth_model=foundationstereo --fs_model_res=low_
 （またはhigh_res）、`--steps_to_run edex compute_poses depth occupancy`を渡す。
 新しい地図名で実行し、既存VSLAM地図には上書きしない。既存地図への追加処理は未実装。
 公式モデルengineは実行GPU向けに事前準備する。ALIKEDとは別資産であり、自動取得やCPU fallbackは行わない。
-必要な外部packageはisaac_mapping_rosとnvblox_ros（Dockerに明記）。モデル不足時は公式処理のログで失敗し、完成扱いにしない。
+必要な外部packageはisaac_mapping_rosとnvblox_ros（Dockerに明記）。
+事前準備は`bash scripts/setup/foundationstereo.sh`（既定low_res、high_resは`--model-res high_res`）。
+公式installer packageはDockerに含め、モデル取得・engine生成は対象GPU上で別途実行する。
+`ISAAC_ROS_WS/isaac_ros_assets/models/foundationstereo/deployable_v2.0/`の非空・読み取り可能なengineを
+bag検査・VSLAM起動より前に確認し、不足時はsetupコマンドを表示して停止する。
+これはファイルの存在確認であり、GPU/TensorRT互換性の検証ではない。
 
 出典: NVIDIA公式Isaac ROS 5.0 `isaac_ros_mapping_and_localization/isaac_mapping_ros/scripts/create_map_offline.py`
 の`run_depth_inference` / `create_occupancy_map`（2026-10-18確認）。

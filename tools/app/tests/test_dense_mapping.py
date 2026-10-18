@@ -84,6 +84,9 @@ class DenseMappingTests(unittest.TestCase):
         repo = Path(__file__).resolve().parents[3]
         workflow = json.loads((repo / 'ros2_ws/src/kart_bringup/config/mapping/workflow.json').read_text())
         workflow.update(dense_reconstruction=True, fs_model_res='high_res')
+        engine = self.root / 'isaac_ros_assets/models/foundationstereo/deployable_v2.0/foundationstereo_576x960.engine'
+        engine.parent.mkdir(parents=True)
+        engine.write_bytes(b'engine')
         output = self.root / 'output'
         output.mkdir()
         bag = self.root / 'bag'
@@ -99,7 +102,7 @@ class DenseMappingTests(unittest.TestCase):
                 (self.run_dir / 'cuvslam_map/map.mdb').write_bytes(b'map')
                 self.artifacts()
             return SimpleNamespace(stdout='5.0', returncode=0)
-        with patch.dict(os.environ, ROS_DOMAIN_ID='92'), patch.dict('sys.modules', {'kart_mapping.bag_inputs': SimpleNamespace(inspect_bag=lambda *args: None)}), patch('kart_mapping.build_map.subprocess.run', side_effect=execute):
+        with patch.dict(os.environ, ROS_DOMAIN_ID='92', ISAAC_ROS_WS=str(self.root)), patch.dict('sys.modules', {'kart_mapping.bag_inputs': SimpleNamespace(inspect_bag=lambda *args: None)}), patch('kart_mapping.build_map.subprocess.run', side_effect=execute):
             run(dict(workflow=workflow, bag=str(bag), output=str(output)))
         result = json.loads((output / 'mapping_result.json').read_text())
         self.assertEqual(result['dense']['faces'], 1)

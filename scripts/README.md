@@ -24,6 +24,7 @@ STOP→AUTO中だけ保持し、MANUALは手動操作。解析には`analyze --m
 | repos.sh | vcs import／status／pull | ホスト |
 | setup/bluetooth.sh | コントローラーのBluetooth接続 | Linuxホスト／Docker |
 | setup/setup-jtop.sh | jtopの初期導入 | Jetsonホスト |
+| setup/foundationstereo.sh | 深度推定モデル取得・TensorRT engine生成 | 対象GPUのDocker内 |
 | sensors/evs-bias.sh | EVS bias調整ツールのbuild／起動 | EVSコンテナ |
 | tests/test-vehicle.sh | 車両制御のportableテスト | C++コンパイラのある環境 |
 
@@ -168,3 +169,27 @@ AUTOへの移行と録画はJoyで操作する。変更はYAMLへ保存しない
 `teleop_timeout_s`の既定は0.15秒、片軸固定の入力途絶でSTOP要求。
 条件は`/control/fixed_config`（std_msgs/msg/String、JSON、1Hzと変更時）へ記録する。
 詳細と全parameterは[kart_control README](../ros2_ws/src/kart_control/README.md)。
+
+## FoundationStereoの初回setup
+
+NotebookのGPUコンテナで実行する。Dockerには公式installerのみを導入し、
+モデル取得・TensorRT変換はDocker build中には行わない。
+
+```bash
+cd /workspaces
+bash scripts/setup/foundationstereo.sh
+# 高解像度を使う場合
+bash scripts/setup/foundationstereo.sh --model-res high_res
+```
+
+既定は`low_res`（320x736）、`high_res`は576x960。
+`ISAAC_ROS_WS`が未指定ならcheckoutの`ros2_ws`を設定する。
+成果物はその配下の`isaac_ros_assets/models/foundationstereo/deployable_v2.0/`に保存される。
+読み取り可能な非空engineがある場合は、ダウンロード・GPU初期化・利用条件確認をスキップする。
+新規生成時はCUDA初期化を確認し、利用条件への同意後に公式installerを実行する。
+非対話実行では同意済みの場合のみ`--eula`を指定する。apt installは自動実行しない。
+存在チェックはengineのGPU/TensorRT互換性や破損検査を保証しない。
+別GPUやTensorRT変更後は既存engineを別名に退避してから再実行する。
+地図生成はdense有効時だけengineを事前確認し、不足時はVSLAM開始前にsetupコマンドを表示する。
+
+公式手順: https://nvidia-isaac-ros.github.io/v/release-5.0/repositories_and_packages/isaac_ros_dnn_stereo_depth/isaac_ros_foundationstereo/index.html

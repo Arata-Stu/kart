@@ -10,6 +10,8 @@ COPY --from=uv /uv /usr/local/bin/uv
 
 # Project dependencies follow the expensive RealSense build. Isaac ROS 5.0
 # publishes these mapping packages for both noble and noble-jetpack.
+# Install the FoundationStereo model installer only; run model download and
+# TensorRT engine generation explicitly after container startup on the target GPU.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -21,6 +23,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ros-lyrical-isaac-ros-visual-global-localization \
         ros-lyrical-isaac-ros-visual-mapping \
         ros-lyrical-isaac-mapping-ros \
+        ros-lyrical-isaac-ros-foundationstereo-models-install \
         ros-lyrical-nvblox-ros \
         ros-lyrical-isaac-ros-launch-utils \
         ros-lyrical-isaac-ros-dnn-image-encoder \

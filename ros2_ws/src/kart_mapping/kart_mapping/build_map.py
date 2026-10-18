@@ -10,10 +10,12 @@ from pathlib import Path
 
 
 def run(job):
-    from .dense_outputs import options, collect
+    from .dense_outputs import options, collect, require_engine
 
     workflow = job["workflow"]
     dense, resolution = options(workflow)
+    if dense:
+        require_engine(resolution)
     steps = ["edex", "compute_poses"] + (["depth", "occupancy"] if dense else [])
     output, bag = Path(job["output"]).resolve(), Path(job["bag"])
     if int(os.environ.get("ROS_DOMAIN_ID", "0")) != workflow["ros_domain_id"]:
