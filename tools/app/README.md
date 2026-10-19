@@ -747,3 +747,10 @@ RAW/rosbag本体の変更監視は維持し、通常転送のファイル署名�
 EVS特徴量可視化は「特徴量を確認」でEVS実験を選び、同じ入力種別のデータセットを選択する。
 正極性赤/負極性青の入力表示、パッチPCA、ステア感度に加え、正負各10binの20ch一覧を表示する。
 入力表示のlog1pは可視化専用で学習・推論入力には使わない。RAW SDK不要、学習用Pythonで実行する。
+
+制御学習の損失は既定Smooth L1（β=0.1）、MSEも選択可能。
+スケジューラは既定OFF。Plateau選択時は検証lossの停滞でLRを下げる
+（factor=0.5、patience=2、min LR=1e-7）。patience=2は3回の非改善で次epochのLRを低下する。
+学習lossと比較用MSEは両方保存し、best.ptの選定は検証MSEを維持する。
+損失表示はMSE/学習lossを切り替え、epoch表で使用LR/次epoch LRを確認できる。
+既存のMSE履歴も表示可能。これらはRGB Small/Tiny・EVSの制御学習に適用し、Tiny特徴蒸留には適用しない。

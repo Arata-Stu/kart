@@ -817,3 +817,24 @@ EVSでは未正規化20ch countsをモデルの固定padding/mean/stdで処理�
 `kart.evs_features.v1`のreportとinput/PCA/saliency/channels PNG、PCA基底、入力hashを保存する。
 RGB reportとの読み込み互換を維持。GUIで実験を選ぶと同じmodalityのdataset候補を表示する。
 合成counts・ランダム重みで実装検証し、学習済み実データでの定性評価は利用者環境で行う。
+
+### 制御学習のSmooth L1と学習率スケジューラ
+
+RGB Small/Tiny・EVSの制御学習で共通。`--loss smooth_l1`が既定、
+`--smooth-l1-beta 0.1`が既定（正値必須）。正規化指令の誤差がβ未満は二乗項、
+それ以上は線形項になる。MSEと損失値の尺度は異なる。従来比較は`--loss mse`。
+学習・検証の実際の目的関数を`train_loss`/`validation_loss`、比較用MSE・MAEを別途保存する。
+`best.pt`は従来どおり`validation_mse`最小で選び、推論・exportの契約は変更しない。
+
+`--lr-scheduler none`が既定。`plateau`を指定するとReduceLROnPlateauで
+検証の実目的関数`validation_loss`を監視する。`--lr-factor 0.5`、
+`--lr-patience 2`、`--min-lr 1e-7`が既定。
+factorは0より大きく1未満、patienceは0以上、min-lrは0以上かつ有効時に初期LR以下。
+PyTorchのmode=min、threshold=1e-4（relative）、cooldown=0、eps=1e-8を使用する。
+patience=2では改善しないepochが3回続いた時点で低下し、次epochから適用する。
+各epochに使用した`learning_rate`と、更新後の`next_learning_rate`をmetrics.jsonlへ残す。
+run.json/checkpointに損失・β・scheduler設定・監視/選定指標を保存する。
+
+GUIは損失関数・βとschedulerを選択でき、Plateau選択時に詳細値を設定する。
+損失カーブはMSEと実学習lossを切替可能。数値表には使用LRと次epoch LRも表示する。
+過去のMSEのみの履歴は従来どおり表示する。Tinyの第1段階の特徴蒸留は独自目的関数のまま。

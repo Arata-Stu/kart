@@ -15,6 +15,19 @@ from .contract import RGB_ENCODERS
 from .data import load_rgb
 
 
+def regression_loss(prediction, target, kind="smooth_l1", beta=0.1):
+    if kind == "mse":
+        return torch.nn.functional.mse_loss(prediction, target)
+    if kind != "smooth_l1" or not math.isfinite(beta) or beta <= 0:
+        raise ValueError("Expected mse or smooth_l1 with beta > 0")
+    return torch.nn.functional.smooth_l1_loss(prediction, target, beta=beta)
+
+
+def plateau_scheduler(optimizer, *, factor=0.5, patience=2, min_lr=1e-7):
+    return torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=factor, patience=patience, min_lr=min_lr)
+
+
 class Samples(Dataset):
     def __init__(self, roots, mode, evs_spec=None):
         self.items = []
@@ -94,6 +107,12 @@ def main():
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--learning-rate", type=float, default=None,
                    help="AdamW learning rate for all trainable parameters (default: 1e-4 frozen, 1e-5 finetune)")
+    p.add_argument("--loss", choices=["smooth_l1", "mse"], default="smooth_l1")
+    p.add_argument("--smooth-l1-beta", type=float, default=0.1)
+    p.add_argument("--lr-scheduler", choices=["none", "plateau"], default="none")
+    p.add_argument("--lr-factor", type=float, default=0.5)
+    p.add_argument("--lr-patience", type=int, default=2)
+    p.add_argument("--min-lr", type=float, default=1e-7)
     p.add_argument("--num-workers", type=int, default=8)
     p.add_argument("--feature-cache", action=argparse.BooleanOptionalAction, default=True,
                    help="Cache frozen encoder features; bypassed during finetune")
@@ -110,6 +129,12 @@ def main():
         or a.learning_rate <= 0
     ):
         p.error("epochs, batch-size and learning-rate must be positive")
+
+    if (not math.isfinite(a.smooth_l1_beta) or a.smooth_l1_beta <= 0
+            or not math.isfinite(a.lr_factor) or not 0 < a.lr_factor < 1
+            or a.lr_patience < 0 or not math.isfinite(a.min_lr) or a.min_lr < 0
+            or (a.lr_scheduler != "none" and a.min_lr > a.learning_rate)):
+        p.error("beta > 0, 0 < lr-factor < 1, patience >= 0, 0 <= min-lr <= learning-rate required")
 
     from .contract import validate_runtime
 
@@ -140,6 +165,8 @@ def main():
     optimizer = torch.optim.AdamW(
         (v for v in model.parameters() if v.requires_grad), lr=a.learning_rate
     )
+    scheduler = (plateau_scheduler(optimizer, factor=a.lr_factor, patience=a.lr_patience, min_lr=a.min_lr)
+                 if a.lr_scheduler == "plateau" else None)
     if digest(a.weights) != weights_sha:
         raise ValueError("Weights changed while loading")
     effective_cache = a.feature_cache and not a.finetune
@@ -175,23 +202,26 @@ def main():
     provenance["total_parameters"] = sum(v.numel() for v in model.parameters())
     print(f"Training: finetune={a.finetune}; lr={a.learning_rate:g}; "
           f"trainable={provenance['trainable_parameters']}/{provenance['total_parameters']}", flush=True)
+    provenance["selection_metric"] = "validation_mse"
+    provenance["scheduler_metric"] = "validation_loss" if scheduler else None
     provenance["weights_sha256"] = weights_sha
     provenance["feature_cache_effective"] = effective_cache
     provenance["feature_cache_keys"] = cache_keys
     (a.output / "run.json").write_text(json.dumps(provenance, indent=2))
     best = float("inf")
     for epoch in range(a.epochs):
-        metrics = {"epoch": epoch + 1}
+        metrics = {"epoch": epoch + 1, "learning_rate": optimizer.param_groups[0]["lr"]}
         for index, loader in enumerate(loaders):
             model.train(index == 0)
             total = 0.0
+            total_mse = 0.0
             mae = torch.zeros(1 if a.mode == "steer_only" else 2, device=a.device)
             with torch.set_grad_enabled(index == 0):
                 for images, target in loader:
                     target = target.to(a.device, non_blocking=True)
                     inputs = images.to(a.device, non_blocking=True)
                     prediction = model.predict_features(inputs) if effective_cache else model(inputs)
-                    loss = torch.nn.functional.mse_loss(prediction, target)
+                    loss = regression_loss(prediction, target, a.loss, a.smooth_l1_beta)
                     if not torch.isfinite(loss):
                         raise RuntimeError("Non-finite training/validation loss")
                     if index == 0:
@@ -199,10 +229,15 @@ def main():
                         loss.backward()
                         optimizer.step()
                     total += loss.item() * len(images)
+                    total_mse += torch.nn.functional.mse_loss(prediction.detach(), target).item() * len(images)
                     mae += (prediction.detach() - target).abs().sum(0)
             key = "train" if index == 0 else "validation"
-            metrics[key + "_mse"] = total / len(loader.dataset)
+            metrics[key + "_loss"] = total / len(loader.dataset)
+            metrics[key + "_mse"] = total_mse / len(loader.dataset)
             metrics[key + "_mae"] = (mae / len(loader.dataset)).tolist()
+        if scheduler:
+            scheduler.step(metrics["validation_loss"])
+        metrics["next_learning_rate"] = optimizer.param_groups[0]["lr"]
         with (a.output / "metrics.jsonl").open("a") as stream:
             stream.write(json.dumps(metrics) + "\n")
         print(metrics, flush=True)

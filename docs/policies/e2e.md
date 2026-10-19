@@ -179,3 +179,8 @@ RAWの局所的順序乱れは既定5msのbounded reorderで処理する。
 EVS特徴量可視化は学習済みcheckpointの実encoder/headから生成し、countsの固定正規化とpaddingを共有する。
 表示用log圧縮をモデル入力へ適用しない。PCA・感度の表示座標からpaddingを除き、20ch一覧も保持する。
 入力感度は未正規化countsに対するステア勾配としてRGBの正規化入力勾配と区別して記録する。
+
+制御学習はSmooth L1（既定β=0.1）と従来MSEを選択可能とする。
+実目的関数のlossと比較用MSEを混同しない。best checkpointは検証MSE、
+opt-in Plateau schedulerは検証lossを使用する。使用LRと次epoch LRを明示し、
+損失・scheduler設定を成果物へ保存する。Tiny特徴蒸留の目的関数と分ける。

@@ -125,7 +125,14 @@ class Learning:
                 value = row.get(field)
                 if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
                     raise ValueError("Invalid training loss")
-            metrics.append({field: row[field] for field in ("epoch", *fields)})
+            values = {field: row[field] for field in ("epoch", *fields)}
+            for field in ("train_loss", "validation_loss", "learning_rate", "next_learning_rate"):
+                if field in row:
+                    value = row[field]
+                    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+                        raise ValueError("Invalid loss/LR metric")
+                    values[field] = value
+            metrics.append(values)
         if not metrics:
             raise ValueError("損失の記録がありません")
         return dict(id=key, kind=kind, metric="distillation_loss" if kind=="encoders" else "mse", metrics=metrics)
@@ -309,6 +316,16 @@ class Learning:
                                           train=body["train"], validation=body["validation"], epochs=epochs),
                         "resources":["e2e-compute", *source_resources,
                                      *["e2e:datasets:"+item for item in (*body["train"],*body["validation"])]]}
+            loss = body.get("loss", "smooth_l1")
+            scheduler = body.get("lr_scheduler", "none")
+            if loss not in ("smooth_l1", "mse") or scheduler not in ("none", "plateau"):
+                raise ValueError("損失関数またはschedulerが不正です")
+            beta = self.number(body.get("smooth_l1_beta", 0.1), 1e-9, 100)
+            factor = self.number(body.get("lr_factor", 0.5), 1e-9, 0.999999)
+            patience = self.integer(body.get("lr_patience", 2), 0, 100000)
+            minimum_lr = self.number(body.get("min_lr", 1e-7), 0, 1)
+            if scheduler != "none" and minimum_lr > lr:
+                raise ValueError("最低学習率は初期学習率以下にしてください")
             args = [
                 "--train",
                 *map(str, groups[0]),
@@ -335,6 +352,8 @@ class Learning:
                 "--device",
                 cfg["device"],
             ]
+            args += ["--loss", loss, "--smooth-l1-beta", str(beta), "--lr-scheduler", scheduler,
+                     "--lr-factor", str(factor), "--lr-patience", str(patience), "--min-lr", str(minimum_lr)]
             args += ["--modality", modality, "--architecture", architecture, "--num-workers", str(workers), "--cache-dir", str(self.root / '.feature_cache'),
                      "--feature-cache" if feature_cache else "--no-feature-cache"]
             if finetune:
@@ -355,6 +374,8 @@ class Learning:
                     "epochs": epochs,
                     "finetune": finetune,
                     "learning_rate": lr,
+                    "loss": loss, "smooth_l1_beta": beta, "lr_scheduler": scheduler,
+                    "lr_factor": factor, "lr_patience": patience, "min_lr": minimum_lr,
                     "num_workers": workers,
                     "feature_cache": feature_cache,
                     "feature_cache_effective": feature_cache and not finetune,

@@ -13,7 +13,10 @@ export async function showLoss(id, kind="runs") {
   if (token !== request) return;
   selected = id; selectedKind = kind;
   const distill = report.metric === 'distillation_loss';
-  const label = distill ? '特徴蒸留loss' : 'MSE';
+  const hasLoss = !distill && report.metrics.every(row => Number.isFinite(row.train_loss) && Number.isFinite(row.validation_loss));
+  $('e2e-loss-metric-label').hidden = !hasLoss;
+  const objective = hasLoss && $('e2e-loss-metric').value === 'loss';
+  const label = distill ? '特徴蒸留loss' : objective ? 'loss' : 'MSE';
   $('e2e-loss-train-label').textContent = '● 学習' + label;
   $('e2e-loss-val-label').textContent = '● 検証' + label;
   $('e2e-loss-train-heading').textContent = '学習' + label;
@@ -21,8 +24,8 @@ export async function showLoss(id, kind="runs") {
   $('e2e-loss-export').textContent = distill ? 'このTiny encoderで制御学習へ' : 'この実験のONNX exportへ';
   $('e2e-loss-note').textContent = distill
     ? '特徴蒸留lossはMSEとcosine距離の重み付き和。最良epochのencoder.ptを保存。操舵誤差とは異なります。'
-    : '平均二乗誤差（MSE）、平滑化なし。学習損失だけ低下して検証損失が上がる場合は過学習の可能性があります。学習時と検証時はDropout等の動作が異なります。';
-  const rows = report.metrics.map(row => distill ? {...row, train_mse:row.train_loss, validation_mse:row.validation_loss} : row);
+    : (objective ? '学習で使用した損失。スケジューラは検証lossを監視します。' : '比較用の平均二乗誤差（MSE）。') + '平滑化なし。best.ptは検証MSE最小で選定。破線・★は表示指標の最小epochです。学習時と検証時はDropout等の動作が異なります。';
+  const rows = report.metrics.map(row => (distill || objective) ? {...row, train_mse:row.train_loss, validation_mse:row.validation_loss} : row);
   const best = rows.reduce((a,b)=>b.validation_mse<a.validation_mse?b:a);
   const last = rows.at(-1);
   $('e2e-loss-title').textContent = '損失カーブ · ' + id;
@@ -54,7 +57,7 @@ export async function showLoss(id, kind="runs") {
   const body=$('e2e-loss-rows'); body.replaceChildren();
   for (const row of rows) {
     const tr=document.createElement('tr');
-    for (const value of [row.epoch+(row===best?' ★':''),row.train_mse.toPrecision(6),row.validation_mse.toPrecision(6)]) {
+    for (const value of [row.epoch+(row===best?' ★':''),row.train_mse.toPrecision(6),row.validation_mse.toPrecision(6),Number.isFinite(row.learning_rate)?row.learning_rate.toExponential(3):'—',Number.isFinite(row.next_learning_rate)?row.next_learning_rate.toExponential(3):'—']) {
       const td=document.createElement('td'); td.textContent=value;tr.append(td);
     }
     body.append(tr);
@@ -74,3 +77,5 @@ action('e2e-loss-export',()=>{
   $('e2e-export-run').dispatchEvent(new Event('change',{bubbles:true}));
   $('e2e-tab-export').click();
 });
+
+$('e2e-loss-metric').addEventListener('change',()=>{ if(selected) showLoss(selected,selectedKind); });

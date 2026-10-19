@@ -497,6 +497,19 @@
                 min="0.000000001"
             /></label>
           </div>
+          <div class="form-grid">
+            <label>損失関数<select id="e2e-loss-kind"><option value="smooth_l1">Smooth L1</option><option value="mse">MSE（従来）</option></select></label>
+            <label>Smooth L1 β<input id="e2e-loss-beta" type="number" min="0.000000001" step="0.01" value="0.1" /></label>
+          </div>
+          <label>学習率スケジューラ<select id="e2e-lr-scheduler"><option value="none">OFF · 固定学習率</option><option value="plateau">検証lossの停滞時に低下（Plateau）</option></select></label>
+          <div id="e2e-plateau-options" hidden>
+            <div class="form-grid">
+              <label>低下係数<input id="e2e-lr-factor" type="number" min="0.000001" max="0.999999" step="0.1" value="0.5" /></label>
+              <label>patience<input id="e2e-lr-patience" type="number" min="0" value="2" /></label>
+              <label>最低学習率<input id="e2e-min-lr" type="number" min="0" step="0.0000001" value="0.0000001" /></label>
+            </div>
+            <p class="help">検証lossを監視。patience=2では改善しないepochが3回続いた後、次epochの学習率を下げます。best.ptは従来どおり検証MSEで選びます。</p>
+          </div>
           <label>DataLoader workers<input id="e2e-workers" type="number" min="0" max="64" value="8" /></label>
           <label class="check"><input id="e2e-feature-cache" type="checkbox" checked />特徴量キャッシュを使用（backbone凍結時）</label>
           <p id="e2e-cache-help" class="help">初回に特徴量を保存し、同じ入力・重み・前処理なら再利用します。</p>
@@ -1144,10 +1157,11 @@
 <dialog id="e2e-loss-dialog" class="loss-dialog">
   <div class="actions"><h2 id="e2e-loss-title">損失カーブ</h2><button id="e2e-loss-close">閉じる</button></div>
   <p id="e2e-loss-summary"></p>
+  <label id="e2e-loss-metric-label">表示指標<select id="e2e-loss-metric"><option value="mse">MSE · 比較・best.pt選定</option><option value="loss">学習loss · 最適化・scheduler監視</option></select></label>
   <p class="loss-legend"><span id="e2e-loss-train-label">● 学習MSE</span><span id="e2e-loss-val-label">● 検証MSE</span> · 破線＝最良epoch</p>
   <svg id="e2e-loss-chart" viewBox="0 0 880 300" role="img" aria-label="epochごとの学習損失と検証損失"></svg>
   <p id="e2e-loss-note" class="help">平均二乗誤差（MSE）、平滑化なし。学習損失だけが低下して検証損失が上がる場合は、過学習の可能性があります。学習時と検証時ではDropout等の動作が異なります。同じbagを両方に使った場合は未知データへの汎化を評価できません。</p>
-  <details><summary>epochごとの数値</summary><div class="loss-table"><table><thead><tr><th>Epoch</th><th id="e2e-loss-train-heading">学習MSE</th><th id="e2e-loss-val-heading">検証MSE</th></tr></thead><tbody id="e2e-loss-rows"></tbody></table></div></details>
+  <details><summary>epochごとの数値</summary><div class="loss-table"><table><thead><tr><th>Epoch</th><th id="e2e-loss-train-heading">学習MSE</th><th id="e2e-loss-val-heading">検証MSE</th><th>学習率</th><th>次epoch学習率</th></tr></thead><tbody id="e2e-loss-rows"></tbody></table></div></details>
   <button id="e2e-loss-export">この実験のONNX exportへ</button>
 </dialog>
 </body>

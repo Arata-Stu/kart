@@ -226,6 +226,9 @@ action("e2e-start-train", () =>
     epochs: Number($("e2e-epochs").value),
     batch_size: Number($("e2e-batch").value),
     learning_rate: Number($("e2e-lr").value),
+    loss: $("e2e-loss-kind").value, smooth_l1_beta: Number($("e2e-loss-beta").value),
+    lr_scheduler: $("e2e-lr-scheduler").value, lr_factor: Number($("e2e-lr-factor").value),
+    lr_patience: Number($("e2e-lr-patience").value), min_lr: Number($("e2e-min-lr").value),
     modality: $("e2e-train-modality").value,
     architecture: $("e2e-train-modality").value === "evs" ? "dinov3_vits16" : $("e2e-architecture").value,
     encoder: $("e2e-tiny-encoder").value,
@@ -361,4 +364,11 @@ $("e2e-train-modality").addEventListener("change", () => {
   for (const id of ["e2e-train-data", "e2e-validation-data"])
     options(id, catalog.datasets.filter(row => (row.modality || "rgb") === (evs ? "evs" : "rgb")).map(datasetOption), "");
   suggestNames();
+});
+
+$("e2e-lr-scheduler").addEventListener("change", () => {
+  $("e2e-plateau-options").hidden = $("e2e-lr-scheduler").value !== "plateau";
+});
+$("e2e-loss-kind").addEventListener("change", () => {
+  $("e2e-loss-beta").disabled = $("e2e-loss-kind").value !== "smooth_l1";
 });

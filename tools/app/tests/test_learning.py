@@ -178,6 +178,20 @@ class LearningTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'入力種別'):
             self.service.prepare("features",dict(name="wrong",run="event-run",dataset=key))
 
+    def test_training_loss_and_scheduler_options(self):
+        data = self.dataset().relative_to(self.service.root/'datasets').as_posix()
+        body = dict(name='smooth',train=[data],validation=[data],lr_scheduler='plateau',lr_patience=0)
+        plan=self.service.prepare('train',body)
+        self.assertEqual(plan['provenance']['loss'],'smooth_l1')
+        self.assertEqual(plan['provenance']['lr_scheduler'],'plateau')
+        self.assertEqual(plan['args'][plan['args'].index('--smooth-l1-beta')+1],'0.1')
+        for values in (dict(loss='other'),dict(smooth_l1_beta=0),dict(lr_factor=1),
+                       dict(lr_patience=-1),dict(min_lr=.1),dict(lr_scheduler='unknown')):
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                self.service.prepare('train',{**body,**values})
+        legacy=self.service.prepare('train',{**body,'loss':'mse','lr_scheduler':'none'})
+        self.assertEqual(legacy['provenance']['loss'],'mse')
+
     def test_loss_history_and_invalid_records(self):
         import json
         run = self.service.root / "runs/history"
