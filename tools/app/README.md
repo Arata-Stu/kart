@@ -709,3 +709,24 @@ Tinyは192→128→controlのheadを持ち、蒸留用射影を実行モデル�
 蒸留lossと制御MSEのカーブは区別して表示する。Tiny encoderの保存先は
 `e2e/encoders/YYYY-MM-DD/HH-MM-SS/<name>`。整理・ごみ箱から復元できる。
 以降のONNX export、評価、転送、推論は同じ画面と入出力を使う。Tiny蒸留は現在RGB専用。
+
+### EVS 20chのGUI操作
+
+「データセット」の入力種別を「EVS · 20ch」に切り替え、rosbagとNotebook内の
+RAW manifest絶対パスを指定する。manifestは`kart.evs_raw_manifest.v1`形式で、
+RAWとstream/epochの対応を記載する（形式はkart_e2e README参照）。時刻基準は
+EVS選択時にheaderへ切り替わり、sample strideは既定10。固定収集bagは固定AUTOのみを採用する。
+RAW抽出を実行する「学習用Python」にはMetavision/OpenEBのRAW readerが必要。
+
+「学習環境」のEVS encoder PT/JSONの既定パスはrepo内
+`weights/evs/event_encoder.pt`と`weights/evs/event_encoder.json`。
+利用者がEventStateで生成した対応するファイルを配置する。自動ダウンロードはしない。
+「学習」の入力種別もEVSへ切り替えるとEVSデータセットだけが選択でき、
+`train --modality evs`で制御head学習を実行する。epoch=10、workers=8、特徴量キャッシュONが既定。
+全体fine-tuningにも対応し、この場合は特徴量キャッシュを使用しない。RGB Tiny蒸留はEVSに適用しない。
+
+学習後の損失カーブ、ONNX export、転送、整理・ごみ箱は共通。
+EVSのオフライン評価はモデル選択後に作成済みEVSデータセットを選択する。
+RGBは従来どおりbagを直接評価する。特徴量可視化は現在RGBのみ。
+GUIの入力切替とジョブ生成・成果物公開をローカル検証済み。
+実RAW・学習済み20ch重み・GPU/TensorRT・実車での一連の実行は別途検証する。

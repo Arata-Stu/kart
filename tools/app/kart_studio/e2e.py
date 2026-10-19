@@ -43,6 +43,8 @@ class Learning:
                 self.repo
                 / "weights/dinov3/dinov3_vits16_pretrain_lvd1689m-08c60483.pth"
             ),
+            evs_weights=str(self.repo / "weights/evs/event_encoder.pt"),
+            evs_json=str(self.repo / "weights/evs/event_encoder.json"),
             device="cuda",
             model_root="/home/kart/workspaces/kart/models",
         )
@@ -165,6 +167,9 @@ class Learning:
         key = name(body.get("name"))
         python, cfg, env = self.runtime(action)
         common = dict(key=key, python=python, env=env)
+        modality = body.get("modality", "rgb")
+        if modality not in ("rgb", "evs"):
+            raise ValueError("入力種別はRGBまたはEVSです")
         if action == "dataset":
             target = self.target("datasets", key)
             bag = within(self.records, body.get("bag", ""))
@@ -186,6 +191,23 @@ class Learning:
                 for v in topics.values()
             ):
                 raise ValueError("topicは絶対名で指定してください")
+            if modality == "evs":
+                model_json = Path(cfg["evs_json"]).expanduser()
+                if not model_json.is_file():
+                    raise ValueError("学習環境のEVS encoder JSONを確認してください")
+                manifest = Path(body.get("raw_manifest", "")).expanduser()
+                if not manifest.is_absolute() or not manifest.is_file():
+                    raise ValueError("RAW manifestの絶対パスを指定してください")
+                stride = self.integer(body.get("sample_stride", 10), 1, 100000)
+                return {**common, "kind":"datasets", "target":target,
+                        "key":target.relative_to(self.root/"datasets").as_posix(),
+                        "module":"preprocess_evs",
+                        "args":[str(bag), "@OUTPUT@", "--raw-manifest", str(manifest),
+                                "--model-json", str(model_json), "--clock", clock,
+                                "--sample-stride", str(stride), "--max-skew-ms", str(skew),
+                                "--command-topic", topics["command_topic"], "--mode-topic", topics["mode_topic"]],
+                        "provenance":{"bag":str(bag), "modality":"evs", "raw_manifest":str(manifest)},
+                        "resources":["e2e-compute", "record:"+str(bag.relative_to(self.records.resolve()))]}
             args = [str(bag), "@OUTPUT@", "--clock", clock, "--max-skew-ms", str(skew)]
             for topic, value in topics.items():
                 args += ["--" + topic.replace("_", "-"), value]
@@ -196,7 +218,7 @@ class Learning:
                 "target": target,
                 "module": "preprocess_bag",
                 "args": args,
-                "provenance": {"bag": str(bag)},
+                "provenance": {"bag": str(bag), "modality":"rgb"},
                 "resources": ["record:" + str(bag.relative_to(self.records.resolve()))],
             }
         if action in ("train", "distill"):
@@ -214,6 +236,13 @@ class Learning:
                     )
                 groups.append([self.folder("datasets", item) for item in ids])
 
+            for group in groups:
+                for dataset in group:
+                    meta = read_json(within(dataset, "metadata.json"))
+                    if meta.get("modality", "rgb") != modality:
+                        raise ValueError("選択したデータセットの入力種別が一致しません")
+            if action == "distill" and modality != "rgb":
+                raise ValueError("Tiny特徴蒸留はRGBのみ対応しています")
             mode = body.get("mode", "steer_throttle")
             if mode not in ("steer_throttle", "steer_only"):
                 raise ValueError("予測モードが不正です")
@@ -222,7 +251,9 @@ class Learning:
             if architecture not in ("dinov3_vits16", "dinov3_vitt16"):
                 raise ValueError("不明なRGBモデルです")
             source_resources = []
-            weights = Path(cfg["weights"]).expanduser()
+            weights = Path(cfg["evs_weights"] if modality == "evs" else cfg["weights"]).expanduser()
+            if modality == "evs" and architecture != "dinov3_vits16":
+                raise ValueError("EVSは20ch ViT-S encoderを使用します")
             if action == "distill" and body.get("teacher_run"):
                 teacher = self.folder("runs", body["teacher_run"])
                 weights = within(teacher, "best.pt")
@@ -239,7 +270,7 @@ class Learning:
                 )
             if not weights.is_file():
                 raise ValueError(
-                    f"DINOv3公式重みが見つかりません: {weights}。"
+                    f"{'EVS encoder重み' if modality == 'evs' else 'DINOv3公式重み'}が見つかりません: {weights}。"
                     "UI「学習環境」の重みパスをコンテナ内のパスで指定してください"
                 )
             epochs = self.integer(body.get("epochs", 10), 1, 100000)
@@ -296,7 +327,7 @@ class Learning:
                 "--device",
                 cfg["device"],
             ]
-            args += ["--architecture", architecture, "--num-workers", str(workers), "--cache-dir", str(self.root / '.feature_cache'),
+            args += ["--modality", modality, "--architecture", architecture, "--num-workers", str(workers), "--cache-dir", str(self.root / '.feature_cache'),
                      "--feature-cache" if feature_cache else "--no-feature-cache"]
             if finetune:
                 args.append("--finetune")
@@ -308,6 +339,7 @@ class Learning:
                 "args": args,
                 "provenance": {
                     "mode": mode,
+                    "modality": modality,
                     "architecture": architecture,
                     "encoder": body.get("encoder") if architecture=="dinov3_vitt16" else None,
                     "train": body["train"],
@@ -356,6 +388,15 @@ class Learning:
             target = self.target("evaluations", key)
             model = self.folder("models", body.get("model"))
             self.contract(model)
+            if read_json(within(model, "metadata.json")).get("modality") == "evs":
+                dataset = self.folder("datasets", body.get("dataset"))
+                if read_json(within(dataset, "metadata.json")).get("modality") != "evs":
+                    raise ValueError("EVS評価用データセットを選択してください")
+                return {**common, "kind":"evaluations", "target":target,
+                        "key":target.relative_to(self.root/"evaluations").as_posix(),
+                        "module":"evaluate", "args":["--dataset",str(dataset),"--model",str(model),"--output","@OUTPUT@"],
+                        "provenance":{"dataset":body["dataset"],"model":body["model"],"modality":"evs"},
+                        "resources":["e2e-compute","e2e:models:"+body["model"],"e2e:datasets:"+body["dataset"]]}
             # Share extraction validation with dataset creation; do not publish images.
             extraction = self.prepare(
                 "dataset", dict(body, name="eval-" + uuid.uuid4().hex)
@@ -436,7 +477,7 @@ class Learning:
 
             before = (
                 signature(Path(plan["provenance"]["bag"]))
-                if plan["kind"] in ("datasets", "evaluations")
+                if "bag" in plan["provenance"] and plan["kind"] in ("datasets", "evaluations")
                 else None
             )
             job.run(
@@ -495,6 +536,7 @@ class Learning:
             else:
                 _, mode = self.contract(output)
                 metadata["mode"] = mode
+                metadata["modality"] = read_json(output / "metadata.json").get("modality", "rgb")
                 metadata["ort_max_abs_error"] = read_json(output / "metadata.json")[
                     "ort_max_abs_error"
                 ]

@@ -162,3 +162,8 @@ ViT-Sと同じ固定DINOv3実装を用い、Tinyは12層・192次元・3 heads�
 教師を動かすことで損失を下げない。教師と生徒の異なる次元の完全一致を前提にしない。
 蒸留済みencoderのSPEC・教師hash・設定を保存し、モデル契約でSmall/Tinyを区別する。
 既存Small checkpointの互換を保持し、EVS仕様へ暗黙にTinyを適用しない。
+
+EVS 20chのNotebook GUIは既存CLIと同じ前処理・学習・export経路を使用する。
+RGB/EVSを明示選択し、データセットのmodality不一致を学習開始前に拒否する。
+EVS RAWのstream/epoch対応は利用者指定manifestを正本とし推測しない。
+EVSの評価は作成済みデータセットを入力し、RGBのbag直接評価とは入力を分ける。

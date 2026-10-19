@@ -82,6 +82,53 @@ class LearningTests(unittest.TestCase):
         self.service.execute(FakeJob(), plan)
         return self.service.folder("datasets", plan["key"])
 
+    def test_evs_dataset_train_export_and_evaluation_plans(self):
+        self.settings.update(evs_weights=str(self.base / "event_encoder.pt"),
+                             evs_json=str(self.base / "event_encoder.json"))
+        Path(self.settings["evs_weights"]).write_bytes(b"encoder")
+        atomic_json(Path(self.settings["evs_json"]), {})
+        self.service.save_settings(self.settings)
+        manifest = self.base / "raw_manifest.json"
+        atomic_json(manifest, {"schema":"kart.evs_raw_manifest.v1", "files":[]})
+        plan = self.service.prepare("dataset", dict(name="events",bag="bag",modality="evs",
+                                                   raw_manifest=str(manifest),clock="header"))
+        self.assertEqual(plan["module"], "preprocess_evs")
+        self.assertIn(str(manifest), plan["args"])
+        self.assertIn(self.settings["evs_json"], plan["args"])
+        service = self.service
+        class EVSJob(FakeJob):
+            def run(self, args, env=None):
+                self.args = args
+                output = Path(args[4]); output.mkdir()
+                atomic_json(output / "metadata.json", dict(samples=3,modality="evs"))
+                (output / "samples.jsonl").write_text("{}\n" * 3)
+        self.service.execute(EVSJob(), plan)
+        key = plan["key"]
+        self.assertEqual(self.service.catalog()["datasets"][0]["modality"], "evs")
+        train = self.service.prepare("train", dict(name="event-head",modality="evs",train=[key],validation=[key]))
+        self.assertIn("evs", train["args"])
+        self.assertIn(self.settings["evs_weights"], train["args"])
+        self.assertEqual(train["provenance"]["modality"], "evs")
+        with self.assertRaisesRegex(ValueError, "入力種別"):
+            self.service.prepare("train", dict(name="wrong",train=[key],validation=[key]))
+        with self.assertRaisesRegex(ValueError, "RGBのみ"):
+            self.service.prepare("distill", dict(name="wrong",modality="evs",train=[key],validation=[key]))
+        model = service.root / "models/events"; model.mkdir()
+        atomic_json(model / "artifact.json", dict(created=1))
+        atomic_json(model / "metadata.json", dict(modality="evs"))
+        with patch.object(service, "contract", return_value=({}, "steer_only")):
+            evaluation = service.prepare("evaluate", dict(name="event-eval",model="events",dataset=key))
+            self.assertIn("--dataset", evaluation["args"])
+            self.assertNotIn("--bag", evaluation["args"])
+            rgb = self.dataset("rgb").relative_to(service.root / "datasets").as_posix()
+            with self.assertRaisesRegex(ValueError, "EVS評価用"):
+                service.prepare("evaluate", dict(name="wrong",model="events",dataset=rgb))
+        run = service.root / "runs/event-head"; run.mkdir()
+        atomic_json(run / "artifact.json", dict(created=1))
+        (run / "best.pt").write_bytes(b"checkpoint")
+        export = service.prepare("export",dict(name="event-onnx",run="event-head"))
+        self.assertEqual(export["module"], "export_onnx")
+
     def test_loss_history_and_invalid_records(self):
         import json
         run = self.service.root / "runs/history"
@@ -147,6 +194,7 @@ class LearningTests(unittest.TestCase):
         model = self.service.root / "models/example"
         model.mkdir()
         atomic_json(model / "artifact.json", {"created": 1})
+        atomic_json(model / "metadata.json", {})
         with patch.object(self.service, "contract", return_value=({}, "steer_only")):
             plan = self.service.prepare(
                 "evaluate", dict(name="check-v1", model="example", bag="bag")
@@ -185,6 +233,7 @@ class LearningTests(unittest.TestCase):
         legacy = self.service.root / "datasets/legacy"
         legacy.mkdir()
         atomic_json(legacy / "artifact.json", dict(created=1, samples=2, bag="bag"))
+        atomic_json(legacy / "metadata.json", dict(samples=2))
         with patch("kart_studio.e2e.datetime") as clock:
             clock.now.return_value.strftime.return_value = "2026-10-19/12-34-56/"
             first = self.dataset("same")

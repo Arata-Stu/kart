@@ -29,6 +29,8 @@ const fields = [
   "inference_python",
   "encoder_repo",
   "weights",
+  "evs_weights",
+  "evs_json",
   "device",
   "model_root",
 ];
@@ -40,7 +42,7 @@ function suggestNames() {
     input.value = suggestion;
     input.dataset.suggestion = suggestion;
   }
-  const base = ($("e2e-architecture").value === "dinov3_vitt16" ? "dinov3-tiny" : "dinov3") + ($("e2e-mode").value === "steer_only" ? "-steer" : "-control");
+  const base = ($("e2e-train-modality").value === "evs" ? "evs20" : $("e2e-architecture").value === "dinov3_vitt16" ? "dinov3-tiny" : "dinov3") + ($("e2e-mode").value === "steer_only" ? "-steer" : "-control");
   for (const [id, prefix, kind] of [
     ["e2e-distill-name", "dinov3-tiny-encoder", "encoders"],
     ["e2e-run-name", base + ($("e2e-finetune").checked ? "-finetune" : ""), "runs"],
@@ -124,10 +126,12 @@ function render() {
     const entry = document.createElement("div");
     entry.className = "artifact-row";
     entry.append(
-      item(row.name || row.id, (kind !== "datasets" && row.id.includes("/") ? row.id.split("/").slice(0,-1).join(" ") + " · " : "") + detail, () => {
+      item((row.modality === "evs" ? "EVS · " : "") + (row.name || row.id), (kind !== "datasets" && row.id.includes("/") ? row.id.split("/").slice(0,-1).join(" ") + " · " : "") + detail, () => {
         if (kind === "features") return showFeatures(row.id);
         if (kind === "evaluations") return showEvaluation(row.id);
         if (step === "dataset") {
+          $("e2e-train-modality").value = row.modality || "rgb";
+          $("e2e-train-modality").dispatchEvent(new Event("change"));
           setStep("train");
           $("e2e-train-data").value = row.id;
         } else if (kind === "runs") {
@@ -158,22 +162,29 @@ export async function refreshLearning() {
   for (const id of ["e2e-train-data", "e2e-validation-data"])
     options(
       id,
-      data.datasets.map(datasetOption),
+      data.datasets.filter(row => (row.modality || "rgb") === $("e2e-train-modality").value).map(datasetOption),
       "",
     );
+  options("e2e-eval-data", data.datasets.filter(row => row.modality === "evs").map(datasetOption), "EVSデータセットを選択");
   options("e2e-export-run", data.runs, "実験を選択");
   options("e2e-tiny-encoder", data.encoders.map(artifactOption), "蒸留済みTiny encoderを選択");
-  options("e2e-distill-teacher", data.runs.filter(row => !row.architecture || row.architecture === 'dinov3_vits16'), "学習環境の公式ViT-S重み");
-  options("e2e-features-run", data.runs, "学習済み実験を選択");
-  options("e2e-features-data", data.datasets.map(datasetOption), "RGBデータセットを選択");
+  options("e2e-distill-teacher", data.runs.filter(row => row.modality !== "evs" && (!row.architecture || row.architecture === 'dinov3_vits16')), "学習環境の公式ViT-S重み");
+  options("e2e-features-run", data.runs.filter(row => row.modality !== "evs"), "学習済み実験を選択");
+  options("e2e-features-data", data.datasets.filter(row => row.modality !== "evs").map(datasetOption), "RGBデータセットを選択");
   options("e2e-push-model", data.models.map(artifactOption), "モデルを選択");
   options("e2e-eval-model", data.models.map(artifactOption), "モデルを選択");
   options("e2e-engine-history", data.engines, "Notebook engineの結果を選択");
+  updateEvalInput();
   suggestNames();
   render();
 }
 $("e2e-bag").addEventListener("change", suggestNames);
-$("e2e-eval-model").addEventListener("change", suggestNames);
+function updateEvalInput() {
+  const evs = catalog?.models.find(row => row.id === $("e2e-eval-model").value)?.modality === "evs";
+  $("e2e-eval-data-label").hidden = !evs;
+  $("e2e-eval-bag-label").hidden = evs;
+}
+$("e2e-eval-model").addEventListener("change", () => { updateEvalInput(); suggestNames(); });
 $("e2e-mode").addEventListener("change", suggestNames);
 $("e2e-export-run").addEventListener("change", suggestNames);
 function selected(id) {
@@ -192,6 +203,9 @@ action("e2e-create-dataset", () =>
   start("dataset", {
     name: $("e2e-dataset-name").value,
     bag: $("e2e-bag").value,
+    modality: $("e2e-modality").value,
+    raw_manifest: $("e2e-raw-manifest").value,
+    sample_stride: Number($("e2e-sample-stride").value),
     clock: $("e2e-clock").value,
     max_skew_ms: Number($("e2e-skew").value),
     image_topic: $("e2e-image-topic").value,
@@ -210,7 +224,8 @@ action("e2e-start-train", () =>
     epochs: Number($("e2e-epochs").value),
     batch_size: Number($("e2e-batch").value),
     learning_rate: Number($("e2e-lr").value),
-    architecture: $("e2e-architecture").value,
+    modality: $("e2e-train-modality").value,
+    architecture: $("e2e-train-modality").value === "evs" ? "dinov3_vits16" : $("e2e-architecture").value,
     encoder: $("e2e-tiny-encoder").value,
     finetune: $("e2e-finetune").checked,
     feature_cache: $("e2e-feature-cache").checked,
@@ -227,6 +242,7 @@ action("e2e-start-evaluate", () =>
   start("evaluate", {
     name: $("e2e-eval-name").value,
     model: $("e2e-eval-model").value,
+    dataset: $("e2e-eval-data").value,
     bag: $("e2e-eval-bag").value,
     image_topic: $("e2e-image-topic").value,
     command_topic: $("e2e-command-topic").value,
@@ -325,4 +341,17 @@ action('e2e-start-distill', () => start('distill', {
 action('e2e-distill-curve', () => {
   if (!$('e2e-tiny-encoder').value) throw new Error('Tiny encoderを選択してください');
   return showLoss($('e2e-tiny-encoder').value,'encoders');
+});
+
+$("e2e-modality").addEventListener("change", () => {
+  $("e2e-evs-options").hidden = $("e2e-modality").value !== "evs";
+  if ($("e2e-modality").value === "evs") $("e2e-clock").value = "header";
+});
+$("e2e-train-modality").addEventListener("change", () => {
+  const evs = $("e2e-train-modality").value === "evs";
+  $("e2e-rgb-model").hidden = evs;
+  $("e2e-tiny-options").hidden = evs || $("e2e-architecture").value !== "dinov3_vitt16";
+  for (const id of ["e2e-train-data", "e2e-validation-data"])
+    options(id, catalog.datasets.filter(row => (row.modality || "rgb") === (evs ? "evs" : "rgb")).map(datasetOption), "");
+  suggestNames();
 });

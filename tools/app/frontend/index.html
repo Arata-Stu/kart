@@ -354,6 +354,12 @@
       <div class="learning-body">
         <section id="e2e-pane-dataset" class="learning-form">
           <h2>走行記録から教師データを作成</h2>
+          <label>入力種別<select id="e2e-modality"><option value="rgb">RGB</option><option value="evs">EVS · 20ch</option></select></label>
+          <div id="e2e-evs-options" hidden>
+            <label>RAW manifest（Notebook内の絶対パス）<input id="e2e-raw-manifest" placeholder="/workspaces/record/session/raw_manifest.json" /></label>
+            <label>サンプル間隔（timing件数）<input id="e2e-sample-stride" type="number" min="1" value="10" /></label>
+            <p class="help">RAWとstream・epochの対応をmanifestで指定します。EVS SDKを利用できるPython環境が必要です。encoder PT・JSONは「学習環境」で指定してください。</p>
+          </div>
           <label>Notebookのrosbag<button type="button" id="e2e-bag-choose">bagを階層から選択</button></label><input type="hidden" id="e2e-bag" />
           <label
             >データセット名<input
@@ -401,7 +407,8 @@
         </section>
         <section id="e2e-pane-train" class="learning-form" hidden>
           <h2>学習・検証データと条件を選択</h2>
-          <label>RGBモデル<select id="e2e-architecture">
+          <label>入力種別<select id="e2e-train-modality"><option value="rgb">RGB</option><option value="evs">EVS · 20ch EventState encoder</option></select></label>
+          <label id="e2e-rgb-model">RGBモデル<select id="e2e-architecture">
             <option value="dinov3_vits16">DINOv3 ViT-S/16 · 384次元</option>
             <option value="dinov3_vitt16">DINOv3 ViT-Tiny/16 · 192次元（独自構成）</option>
           </select></label>
@@ -526,12 +533,13 @@
           </button>
         </section>
         <section id="e2e-pane-evaluate" class="learning-form" hidden>
-          <h2>ONNXをrosbagでオフライン評価</h2>
+          <h2>ONNXを記録データでオフライン評価</h2>
           <label>ONNXモデル<select id="e2e-eval-model"></select></label>
-          <label>評価rosbag<button type="button" id="e2e-eval-bag-choose">bagを階層から選択</button></label><input type="hidden" id="e2e-eval-bag" />
+          <label id="e2e-eval-bag-label">評価rosbag<button type="button" id="e2e-eval-bag-choose">bagを階層から選択</button></label><input type="hidden" id="e2e-eval-bag" />
+          <label id="e2e-eval-data-label" hidden>EVS評価用データセット<select id="e2e-eval-data"></select></label>
           <label>評価名<input id="e2e-eval-name" maxlength="64" /></label>
           <p class="help">
-            「データセット」の画像・操作・モードtopic、時計、許容時間差を使用。収集設定から自動判定した教師区間を評価します。同じ学習bagも使用できます。
+            RGBは「データセット」の画像・操作・モードtopic、時計、許容時間差を使用。EVSは作成済み20chデータセットを使用。収集設定から自動判定した教師区間を評価します。同じ学習bagも使用できます。
           </p>
           <button id="e2e-start-evaluate" class="primary full">
             評価を開始
@@ -634,6 +642,8 @@
           id="e2e-setting-weights"
           placeholder="/workspaces/weights/dinov3/dinov3_vits16_pretrain_lvd1689m-08c60483.pth"
       /></label>
+      <label>EVS 20ch encoder PT<input id="e2e-setting-evs_weights" placeholder="/workspaces/weights/evs/event_encoder.pt" /></label>
+      <label>EVS encoder JSON<input id="e2e-setting-evs_json" placeholder="/workspaces/weights/evs/event_encoder.json" /></label>
       <div class="form-grid">
         <label
           >学習device<select id="e2e-setting-device">

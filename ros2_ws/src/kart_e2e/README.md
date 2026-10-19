@@ -744,3 +744,16 @@ Notebook UIは「RGBモデル」でTinyを選び、データを選択して第1�
 完了後に蒸留済みTiny encoderを選び、下の通常学習ボタンで第2段階を実行する。
 蒸留損失カーブと制御MSEは別表示。encoderは
 `e2e/encoders/YYYY-MM-DD/HH-MM-SS/<name>`に保存し、ごみ箱/復元・使用中lockに対応する。
+
+### Notebook GUIでのEVS操作
+
+`tools/app`の学習UIから20ch EVSを選択できる。
+「学習環境」でEventState encoder PTと対応するJSONを指定し、
+「データセット」で入力種別EVS・bag・RAW manifest絶対パスを選択する。
+`preprocess_evs`を実行するため、学習用PythonにはRAW reader SDKが必要。
+次に「学習」でEVSへ切り替え、学習・検証データを選択する。
+既定encoder凍結、epoch 10、workers 8、特徴量キャッシュON。
+全体fine-tuning、損失カーブ、ONNX exportは共通操作で使用できる。
+EVSモデルの評価ではbagの代わりに作成済みEVSデータセットを選択する。
+RGB/EVSデータの混在とEVSへのRGB Tiny蒸留を拒否する。
+特徴量可視化はRGB専用。新規ROSノード・topic・parameterはない。
