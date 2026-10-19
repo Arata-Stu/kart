@@ -67,6 +67,7 @@ class LearningTests(unittest.TestCase):
         self.settings.update(
             python=sys.executable,
             inference_python=sys.executable,
+            evs_raw_python=sys.executable,
             encoder_repo=str(self.base),
             weights=str(self.base / "weights.pt"),
             device="cpu",
@@ -94,6 +95,11 @@ class LearningTests(unittest.TestCase):
                                                    raw_manifest=str(manifest),clock="header"))
         auto = self.service.prepare("dataset", dict(name="auto-events",bag="bag",modality="evs"))
         self.assertEqual(auto["module"], "preprocess_evs")
+        self.assertEqual(auto["python"], self.settings["evs_raw_python"])
+        with patch.object(self.service, "settings", return_value=dict(self.settings, evs_raw_python="/missing/python")):
+            with self.assertRaisesRegex(ValueError, "evs_raw_python"):
+                self.service.prepare("dataset", dict(name="bad-env",bag="bag",modality="evs"))
+            self.assertEqual(self.service.prepare("dataset", dict(name="rgb-env",bag="bag"))["python"], sys.executable)
         self.assertNotIn("--raw-manifest", auto["args"])
         self.assertIsNone(auto["provenance"]["raw_manifest"])
         self.assertEqual(plan["module"], "preprocess_evs")

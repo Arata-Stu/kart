@@ -148,6 +148,12 @@ class RawTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'reset'):
             resetting.window(0, 60000)
 
+    def test_numpy2_rejected_before_native_reader_import(self):
+        from kart_e2e.preprocess_evs import RawWindows
+        with patch('kart_e2e.preprocess_evs.np.__version__', '2.5.4'):
+            with self.assertRaisesRegex(ValueError, 'NumPy 1.26'):
+                RawWindows('not-opened.raw')
+
     def test_raw_regression_reports_magnitude_and_position(self):
         from kart_e2e.preprocess_evs import RawWindows
         chunk = self.events.copy()

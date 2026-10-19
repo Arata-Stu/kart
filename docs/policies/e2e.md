@@ -168,3 +168,6 @@ RGB/EVSを明示選択し、データセットのmodality不一致を学習開�
 EVS RAWはbag直下のRAWが1件かつ記録timingのstream/epochが1組なら自動対応する。
 複数RAW・複数stream/epochは名前や時刻から推測せず、明示manifestで対応づける。
 EVSの評価は作成済みデータセットを入力し、RGBのbag直接評価とは入力を分ける。
+
+EVS RAW抽出はOpenEB Pythonバインディングに合わせたNumPy 1.26専用環境を用い、
+NumPy 2の学習・ONNX環境から分離する。import成功だけをイベント読出しの互換性の証拠にしない。

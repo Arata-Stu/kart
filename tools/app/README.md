@@ -717,7 +717,8 @@ Tinyは192→128→controlのheadを持ち、蒸留用射影を実行モデル�
 manifest指定は不要。複数候補・再接続時は詳細設定でRAW manifest絶対パスを指定する。manifestは`kart.evs_raw_manifest.v1`形式で、
 RAWとstream/epochの対応を記載する（形式はkart_e2e README参照）。時刻基準は
 EVS選択時にheaderへ切り替わり、sample strideは既定10。固定収集bagは固定AUTOのみを採用する。
-RAW抽出を実行する「学習用Python」にはMetavision/OpenEBのRAW readerが必要。
+RAW抽出を実行する「EVS RAW抽出用Python」にはMetavision/OpenEBのRAW readerが必要。
+NumPy 1.26.4 / h5py 3.11.0の専用venvを指定し、学習用Pythonとは分離する。
 
 「学習環境」のEVS encoder PT/JSONの既定パスはrepo内
 `weights/evs/event_encoder.pt`と`weights/evs/event_encoder.json`。
@@ -732,6 +733,6 @@ RGBは従来どおりbagを直接評価する。特徴量可視化は現在RGB�
 GUIの入力切替とジョブ生成・成果物公開をローカル検証済み。
 実RAW・学習済み20ch重み・GPU/TensorRT・実車での一連の実行は別途検証する。
 
-EVS抽出時にh5pyで`numpy.dtype size changed`が出る場合は、学習用Pythonの
+EVS抽出時にh5pyで`numpy.dtype size changed`が出る場合は、EVS RAW抽出用Pythonの
 NumPyとapt版h5pyのABI不整合。kart_e2e READMEの「RAW readerのNumPy / h5py ABIエラー」
 を参照。RAWパスやmanifestの変更では解決しない。

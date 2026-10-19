@@ -38,6 +38,8 @@ class Learning:
         result = dict(
             python=os.environ.get("KART_E2E_PYTHON", sys.executable),
             inference_python="/opt/inference/bin/python",
+            evs_raw_python=os.environ.get("KART_EVS_RAW_PYTHON", str(self.repo / ".venv/evs-raw/bin/python")
+                                         if (self.repo / ".venv/evs-raw/bin/python").is_file() else "/opt/evs-raw/bin/python"),
             encoder_repo=str(self.repo / "python_ws/dinov3"),
             weights=str(
                 self.repo
@@ -128,9 +130,10 @@ class Learning:
             raise ValueError("損失の記録がありません")
         return dict(id=key, kind=kind, metric="distillation_loss" if kind=="encoders" else "mse", metrics=metrics)
 
-    def runtime(self, action=None):
+    def runtime(self, action=None, modality="rgb"):
         cfg = self.settings()
         field = (
+            "evs_raw_python" if action == "dataset" and modality == "evs" else
             "inference_python"
             if action in ("export", "evaluate", "build-engine")
             else "python"
@@ -165,7 +168,7 @@ class Learning:
 
     def prepare(self, action, body):
         key = name(body.get("name"))
-        python, cfg, env = self.runtime(action)
+        python, cfg, env = self.runtime(action, body.get("modality", "rgb"))
         common = dict(key=key, python=python, env=env)
         modality = body.get("modality", "rgb")
         if modality not in ("rgb", "evs"):

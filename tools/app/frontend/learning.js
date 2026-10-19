@@ -27,6 +27,7 @@ const labels = {
 const fields = [
   "python",
   "inference_python",
+  "evs_raw_python",
   "encoder_repo",
   "weights",
   "evs_weights",

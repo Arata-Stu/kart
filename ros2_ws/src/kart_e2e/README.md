@@ -762,23 +762,27 @@ RGB/EVSデータの混在とEVSへのRGB Tiny蒸留を拒否する。
 
 ### RAW readerのNumPy / h5py ABIエラー
 
-`numpy.dtype size changed`が`/usr/lib/python3/dist-packages/h5py`で出る場合は、
-実行中のNumPyとapt版h5pyのバイナリが不整合。RAW自動検出・encoder重みとは別の問題。
-`_debian_h5py_mpi`の後続エラーより、先に出たdtypeエラーを確認する。
-EVSイメージでは最終Docker layerでNumPy 2対応h5py wheelを導入し、
-システムPythonから`numpy`・`h5py`・`RawReader`のimportを検査する。
-既存コンテナは次で修復できる（コンテナ内、UIで指定したPythonに合わせる）。
+今回の環境ではNumPy 2.5.4でイベント時刻に不正な巨大値・負値が出てSDKがsegfaultし、
+NumPy 1.26.4では同じRAWの両reader先頭30万イベントが正常だった。
+h5py更新だけではSDKのイベント読み出しの互換性は解決しない。
+EVS RAW抽出は専用venvのNumPy 1.26.4 / h5py 3.11.0を使用し、
+学習・ONNX用Pythonとは分離する。GUIの「EVS RAW抽出用Python」で指定する。
+DockerのEVS最終イメージは`/opt/evs-raw/bin/python`を用意する。
+既存コンテナでは次で作成できる。
 
 ```bash
-sudo /usr/bin/python3 -m pip install --break-system-packages --ignore-installed \
-  --no-deps --only-binary=:all: 'h5py>=3.11,<4'
-/usr/bin/python3 -c 'import numpy, h5py; from metavision_core.event_io import RawReader; print(numpy.__version__, numpy.__file__); print(h5py.__version__, h5py.__file__)'
+uv venv --python /usr/bin/python3 --system-site-packages /workspaces/.venv/evs-raw
+uv pip install --python /workspaces/.venv/evs-raw/bin/python \
+  --no-deps --only-binary=:all: 'numpy==1.26.4' 'h5py==3.11.0'
 ```
 
-`--ignore-installed`でapt管理ファイルは削除せず、`--no-deps`でNumPyを変更しない。
-検査成功後にGUIからデータセット作成を再実行する。
-恒久反映はLinux側で`./scripts/dev.sh --evs --build-local`によりイメージを再buildする。
-Docker build / RAW実行の成功は対象環境で確認すること。
+SDK/ROSをsystem-site-packagesから参照し、NumPy/h5pyだけvenvの版を優先する。
+GUIはrepo配下の`.venv/evs-raw/bin/python`があれば既定に採用し、なければ
+`/opt/evs-raw/bin/python`を使用する。`KART_EVS_RAW_PYTHON`でも既定を指定できる。
+RAW readerはNumPy 2ではSDKを呼ぶ前にエラーにし、専用環境への変更を案内する。
+恒久反映はLinux側で`./scripts/dev.sh --evs --build-local`により再buildする。
+先頭30万イベントの成功は、RAW全体・抽出完了や学習の成功を意味しない。
+Docker buildおよび実RAWの全区間抽出は対象環境で確認する。
 
 RAWの時刻逆行は`RAW timestamp regression`として、ファイル・0始まりevent index・
 chunk内/境界・前後時刻・逆行量（us）・要求窓をエラーへ出力する。

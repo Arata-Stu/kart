@@ -139,6 +139,11 @@ class RawWindows:
     """Sequential, bounded-window reader. Never seek backwards across resets."""
     def __init__(self, path, factory=None):
         if factory is None:
+            if int(np.__version__.split('.')[0]) >= 2:
+                raise ValueError('This OpenEB RAW reader requires the NumPy 1.26 environment. '
+                                 'Select EVS RAW抽出用Python=/workspaces/.venv/evs-raw/bin/python '
+                                 'or /opt/evs-raw/bin/python in the GUI. '
+                                 f'Current NumPy: {np.__version__}')
             from metavision_core.event_io import RawReader
             factory = RawReader
         self.reader = factory(str(path), do_time_shifting=False)
