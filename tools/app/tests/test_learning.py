@@ -142,6 +142,18 @@ class LearningTests(unittest.TestCase):
         export = service.prepare("export",dict(name="event-onnx",run="event-head"))
         self.assertEqual(export["module"], "export_onnx")
 
+    def test_evs_index_signature_does_not_weaken_other_checks(self):
+        from kart_studio.remote_agent import signature
+        bag = self.records / "bag"
+        (bag / "camera.raw").write_bytes(b"raw")
+        before = signature(bag, ignore_raw_indexes=True)
+        normal = signature(bag)
+        (bag / "camera.raw.tmp_index").write_bytes(b"index")
+        self.assertEqual(before, signature(bag, ignore_raw_indexes=True))
+        self.assertNotEqual(normal, signature(bag))
+        (bag / "metadata.yaml").write_text("updated bag")
+        self.assertNotEqual(before, signature(bag, ignore_raw_indexes=True))
+
     def test_loss_history_and_invalid_records(self):
         import json
         run = self.service.root / "runs/history"

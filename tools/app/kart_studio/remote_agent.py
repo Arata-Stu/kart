@@ -25,7 +25,7 @@ def confined(root, relative):
     return path
 
 
-def signature(path):
+def signature(path, *, ignore_raw_indexes=False):
     files = []
     for current, dirs, names in os.walk(path, followlinks=False):
         for entry in dirs + names:
@@ -33,6 +33,9 @@ def signature(path):
             if item.is_symlink():
                 raise ValueError("bag contains a symlink")
             if item.is_file():
+                if (ignore_raw_indexes and item.name.lower().endswith('.raw.tmp_index')
+                        and item.with_suffix('').is_file()):
+                    continue
                 stat = item.stat()
                 files.append(
                     (str(item.relative_to(path)), stat.st_size, stat.st_mtime_ns)

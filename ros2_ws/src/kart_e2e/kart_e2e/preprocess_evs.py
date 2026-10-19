@@ -97,6 +97,20 @@ def bag_records(bag, command_topic, mode_topic, timing_topic, clock):
     return commands, modes, timings
 
 
+def bag_signature(bag):
+    """Track all inputs except SDK-generated RAW seek indexes."""
+    bag = Path(bag)
+    files = {}
+    for path in bag.rglob('*'):
+        if not path.is_file():
+            continue
+        if path.name.lower().endswith('.raw.tmp_index') and path.with_suffix('').is_file():
+            continue
+        stat = path.stat()
+        files[str(path.relative_to(bag))] = (stat.st_size, stat.st_mtime_ns)
+    return files
+
+
 def discover_raw(bag, timings):
     """Use only an unambiguous closed RAW beside the bag metadata."""
     bag = Path(bag).resolve(strict=True)
@@ -339,15 +353,15 @@ def main():
     meta = json.loads(a.model_json.read_text())
     meta = meta.get('evs_metadata', meta)
     evs_spec(meta)
-    def bag_signature():
-        return sorted((str(p.relative_to(a.bag)), p.stat().st_size, p.stat().st_mtime_ns)
-                      for p in a.bag.rglob('*') if p.is_file())
-    before = bag_signature()
+    before = bag_signature(a.bag)
     if not before:
         p.error('No bag files found')
     def guard():
-        if bag_signature() != before:
-            raise ValueError('Bag changed during extraction; stop recording first')
+        after = bag_signature(a.bag)
+        if after != before:
+            changed = sorted(key for key in before.keys() | after.keys() if before.get(key) != after.get(key))
+            raise ValueError('Bag changed during extraction; stop recording first. '
+                             f'Changed files: {changed[:20]}')
     commands, modes, timings = bag_records(a.bag, a.command_topic, a.mode_topic, a.timing_topic, a.clock)
     fixed_configs = read_fixed_configs(a.bag, a.fixed_config_topic)
     print(f"Teacher policy: {TeacherSelection(fixed_configs).metadata()['policy']}")

@@ -484,7 +484,7 @@ class Learning:
             from .remote_agent import signature
 
             before = (
-                signature(Path(plan["provenance"]["bag"]))
+                signature(Path(plan["provenance"]["bag"]), ignore_raw_indexes=plan["module"] == "preprocess_evs")
                 if "bag" in plan["provenance"] and plan["kind"] in ("datasets", "evaluations")
                 else None
             )
@@ -493,7 +493,7 @@ class Learning:
                 env=plan["env"],
             )
             if before is not None and before != signature(
-                Path(plan["provenance"]["bag"])
+                Path(plan["provenance"]["bag"]), ignore_raw_indexes=plan["module"] == "preprocess_evs"
             ):
                 raise ValueError(
                     "処理中にbagが更新されました。録画停止後に再実行してください"

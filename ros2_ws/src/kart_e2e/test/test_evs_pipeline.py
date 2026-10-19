@@ -23,6 +23,23 @@ REPO = os.environ.get('KART_DINOV3_REPO')
 
 @unittest.skipUnless(HAS_NUMPY, 'numpy required')
 class RawDiscoveryTests(unittest.TestCase):
+    def test_bag_signature_ignores_only_raw_sdk_index(self):
+        from kart_e2e.preprocess_evs import bag_signature
+        with tempfile.TemporaryDirectory() as directory:
+            bag = Path(directory)
+            (bag/'camera.raw').write_bytes(b'raw')
+            (bag/'metadata.yaml').write_text('bag')
+            before = bag_signature(bag)
+            (bag/'camera.raw.tmp_index').write_bytes(b'index')
+            self.assertEqual(before, bag_signature(bag))
+            (bag/'camera.raw.tmp_index').write_bytes(b'longer index')
+            self.assertEqual(before, bag_signature(bag))
+            (bag/'other.tmp_index').write_bytes(b'input')
+            self.assertNotEqual(before, bag_signature(bag))
+            (bag/'other.tmp_index').unlink()
+            (bag/'camera.raw').write_bytes(b'changed raw')
+            self.assertNotEqual(before, bag_signature(bag))
+
     def test_single_raw_identity_and_ambiguous_sources(self):
         from kart_e2e.preprocess_evs import discover_raw
         with tempfile.TemporaryDirectory() as directory:
