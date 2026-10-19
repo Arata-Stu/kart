@@ -21,6 +21,33 @@ HAS_TORCH = importlib.util.find_spec('torch') is not None
 REPO = os.environ.get('KART_DINOV3_REPO')
 
 
+@unittest.skipUnless(HAS_NUMPY, 'numpy required')
+class RawDiscoveryTests(unittest.TestCase):
+    def test_single_raw_identity_and_ambiguous_sources(self):
+        from kart_e2e.preprocess_evs import discover_raw
+        with tempfile.TemporaryDirectory() as directory:
+            bag = Path(directory)
+            timing = [dict(stream_id='camera', sensor_epoch=3)]
+            with self.assertRaisesRegex(ValueError, '0件'):
+                discover_raw(bag, timing)
+            raw = bag / 'events.RAW'; raw.write_bytes(b'raw')
+            result = discover_raw(bag, timing * 2)
+            self.assertEqual(result, [dict(path=str(raw.resolve()),stream_id='camera',sensor_epoch=3)])
+            for rows in ([], timing + [dict(stream_id='camera',sensor_epoch=4)],
+                         timing + [dict(stream_id='other',sensor_epoch=3)]):
+                with self.assertRaisesRegex(ValueError, '一意'):
+                    discover_raw(bag, rows)
+            other = bag / 'other.raw'; other.write_bytes(b'raw')
+            with self.assertRaisesRegex(ValueError, '2件'):
+                discover_raw(bag, timing)
+            other.unlink(); raw.write_bytes(b'')
+            with self.assertRaisesRegex(ValueError, '空ファイル'):
+                discover_raw(bag, timing)
+            raw.unlink(); raw.symlink_to(bag / 'metadata.yaml')
+            with self.assertRaisesRegex(ValueError, 'シンボリックリンク'):
+                discover_raw(bag, timing)
+
+
 class MetadataTests(unittest.TestCase):
     def test_resolution_normalization_and_version_fail_closed(self):
         for width in (160, 320):

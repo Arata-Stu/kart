@@ -97,6 +97,23 @@ def bag_records(bag, command_topic, mode_topic, timing_topic, clock):
     return commands, modes, timings
 
 
+def discover_raw(bag, timings):
+    """Use only an unambiguous closed RAW beside the bag metadata."""
+    bag = Path(bag).resolve(strict=True)
+    candidates = sorted(p for p in bag.iterdir() if p.suffix.lower() == '.raw')
+    if len(candidates) != 1:
+        raise ValueError(f'RAW自動検出: {bag} にRAWが{len(candidates)}件あります。'
+                         'RAWが1件の場合のみ自動対応します。複数の場合はRAW manifestを指定してください')
+    raw = candidates[0]
+    if raw.is_symlink() or not raw.is_file() or raw.stat().st_size == 0:
+        raise ValueError('RAW自動検出: 空ファイル・シンボリックリンクは使用できません')
+    identities = {(r['stream_id'], r['sensor_epoch']) for r in timings}
+    if len(identities) != 1:
+        raise ValueError('RAW自動検出: bagのstream/epochが一意ではありません。RAW manifestを指定してください')
+    stream_id, epoch = next(iter(identities))
+    return [dict(path=str(raw), stream_id=stream_id, sensor_epoch=epoch)]
+
+
 def load_manifest(path):
     data = json.loads(Path(path).read_text())
     if data.get('schema') != 'kart.evs_raw_manifest.v1' or not data.get('files'):
@@ -257,7 +274,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('bag', type=Path)
     p.add_argument('output', type=Path)
-    source = p.add_mutually_exclusive_group(required=True)
+    source = p.add_mutually_exclusive_group()
     source.add_argument('--raw-manifest', type=Path)
     source.add_argument('--raw', type=Path, nargs='+',
                         help='RAW files when the bag contains exactly one stream/epoch')
@@ -289,6 +306,9 @@ def main():
     print(f"Teacher policy: {TeacherSelection(fixed_configs).metadata()['policy']}")
     if a.raw_manifest:
         files = load_manifest(a.raw_manifest)
+    elif not a.raw:
+        files = discover_raw(a.bag, timings)
+        print(f"RAW auto-detected: {files[0]['path']}")
     else:
         identities = {(r['stream_id'], r['sensor_epoch']) for r in timings}
         if len(identities) != 1:

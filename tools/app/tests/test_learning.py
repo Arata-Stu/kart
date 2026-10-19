@@ -92,6 +92,10 @@ class LearningTests(unittest.TestCase):
         atomic_json(manifest, {"schema":"kart.evs_raw_manifest.v1", "files":[]})
         plan = self.service.prepare("dataset", dict(name="events",bag="bag",modality="evs",
                                                    raw_manifest=str(manifest),clock="header"))
+        auto = self.service.prepare("dataset", dict(name="auto-events",bag="bag",modality="evs"))
+        self.assertEqual(auto["module"], "preprocess_evs")
+        self.assertNotIn("--raw-manifest", auto["args"])
+        self.assertIsNone(auto["provenance"]["raw_manifest"])
         self.assertEqual(plan["module"], "preprocess_evs")
         self.assertIn(str(manifest), plan["args"])
         self.assertIn(self.settings["evs_json"], plan["args"])

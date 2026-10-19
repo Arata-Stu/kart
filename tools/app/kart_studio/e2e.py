@@ -195,18 +195,22 @@ class Learning:
                 model_json = Path(cfg["evs_json"]).expanduser()
                 if not model_json.is_file():
                     raise ValueError("学習環境のEVS encoder JSONを確認してください")
-                manifest = Path(body.get("raw_manifest", "")).expanduser()
-                if not manifest.is_absolute() or not manifest.is_file():
+                manifest_value = body.get("raw_manifest", "")
+                if not isinstance(manifest_value, str):
+                    raise ValueError("RAW manifestはパス文字列で指定してください")
+                manifest = Path(manifest_value).expanduser() if manifest_value.strip() else None
+                if manifest is not None and (not manifest.is_absolute() or not manifest.is_file()):
                     raise ValueError("RAW manifestの絶対パスを指定してください")
+                raw_args = ["--raw-manifest", str(manifest)] if manifest is not None else []
                 stride = self.integer(body.get("sample_stride", 10), 1, 100000)
                 return {**common, "kind":"datasets", "target":target,
                         "key":target.relative_to(self.root/"datasets").as_posix(),
                         "module":"preprocess_evs",
-                        "args":[str(bag), "@OUTPUT@", "--raw-manifest", str(manifest),
+                        "args":[str(bag), "@OUTPUT@", *raw_args,
                                 "--model-json", str(model_json), "--clock", clock,
                                 "--sample-stride", str(stride), "--max-skew-ms", str(skew),
                                 "--command-topic", topics["command_topic"], "--mode-topic", topics["mode_topic"]],
-                        "provenance":{"bag":str(bag), "modality":"evs", "raw_manifest":str(manifest)},
+                        "provenance":{"bag":str(bag), "modality":"evs", "raw_manifest":str(manifest) if manifest is not None else None},
                         "resources":["e2e-compute", "record:"+str(bag.relative_to(self.records.resolve()))]}
             args = [str(bag), "@OUTPUT@", "--clock", clock, "--max-skew-ms", str(skew)]
             for topic, value in topics.items():

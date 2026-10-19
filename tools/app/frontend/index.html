@@ -356,9 +356,10 @@
           <h2>走行記録から教師データを作成</h2>
           <label>入力種別<select id="e2e-modality"><option value="rgb">RGB</option><option value="evs">EVS · 20ch</option></select></label>
           <div id="e2e-evs-options" hidden>
-            <label>RAW manifest（Notebook内の絶対パス）<input id="e2e-raw-manifest" placeholder="/workspaces/record/session/raw_manifest.json" /></label>
+            <p class="help">選択したbagと同じディレクトリのRAWを自動検出します。</p>
+            <details><summary>RAWの対応を手動指定（複数RAW・再接続時）</summary><label>RAW manifest（省略時は自動検出）<input id="e2e-raw-manifest" placeholder="空欄で自動検出" /></label></details>
             <label>サンプル間隔（timing件数）<input id="e2e-sample-stride" type="number" min="1" value="10" /></label>
-            <p class="help">RAWとstream・epochの対応をmanifestで指定します。EVS SDKを利用できるPython環境が必要です。encoder PT・JSONは「学習環境」で指定してください。</p>
+            <p class="help">RAWが1件、bagのstream・epochが1組なら自動対応します。複数の場合はmanifestを指定してください。EVS SDKを利用できるPython環境が必要です。encoder PT・JSONは「学習環境」で指定してください。</p>
           </div>
           <label>Notebookのrosbag<button type="button" id="e2e-bag-choose">bagを階層から選択</button></label><input type="hidden" id="e2e-bag" />
           <label

@@ -165,5 +165,6 @@ ViT-Sと同じ固定DINOv3実装を用い、Tinyは12層・192次元・3 heads�
 
 EVS 20chのNotebook GUIは既存CLIと同じ前処理・学習・export経路を使用する。
 RGB/EVSを明示選択し、データセットのmodality不一致を学習開始前に拒否する。
-EVS RAWのstream/epoch対応は利用者指定manifestを正本とし推測しない。
+EVS RAWはbag直下のRAWが1件かつ記録timingのstream/epochが1組なら自動対応する。
+複数RAW・複数stream/epochは名前や時刻から推測せず、明示manifestで対応づける。
 EVSの評価は作成済みデータセットを入力し、RGBのbag直接評価とは入力を分ける。

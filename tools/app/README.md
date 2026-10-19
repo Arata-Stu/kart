@@ -713,7 +713,8 @@ Tinyは192→128→controlのheadを持ち、蒸留用射影を実行モデル�
 ### EVS 20chのGUI操作
 
 「データセット」の入力種別を「EVS · 20ch」に切り替え、rosbagとNotebook内の
-RAW manifest絶対パスを指定する。manifestは`kart.evs_raw_manifest.v1`形式で、
+同じディレクトリのRAWを自動検出する。RAWが1件・timingのstream/epochが1組なら
+manifest指定は不要。複数候補・再接続時は詳細設定でRAW manifest絶対パスを指定する。manifestは`kart.evs_raw_manifest.v1`形式で、
 RAWとstream/epochの対応を記載する（形式はkart_e2e README参照）。時刻基準は
 EVS選択時にheaderへ切り替わり、sample strideは既定10。固定収集bagは固定AUTOのみを採用する。
 RAW抽出を実行する「学習用Python」にはMetavision/OpenEBのRAW readerが必要。

@@ -749,7 +749,9 @@ Notebook UIは「RGBモデル」でTinyを選び、データを選択して第1�
 
 `tools/app`の学習UIから20ch EVSを選択できる。
 「学習環境」でEventState encoder PTと対応するJSONを指定し、
-「データセット」で入力種別EVS・bag・RAW manifest絶対パスを選択する。
+「データセット」で入力種別EVS・bagを選択する。bag直下のRAWが1件、
+記録timingのstream/epochが1組なら自動対応する。複数の場合は詳細設定で
+RAW manifest絶対パスを指定する。CLIも`--raw`/`--raw-manifest`省略時は同じ自動検出を使う。
 `preprocess_evs`を実行するため、学習用PythonにはRAW reader SDKが必要。
 次に「学習」でEVSへ切り替え、学習・検証データを選択する。
 既定encoder凍結、epoch 10、workers 8、特徴量キャッシュON。
