@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from kart_e2e.rgb_pipeline_check import main
+
+if __name__ == '__main__':
+    main()

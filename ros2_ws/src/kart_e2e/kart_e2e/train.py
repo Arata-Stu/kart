@@ -8,10 +8,10 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
 from .model import SPEC, Policy, backbone, preprocess
+from .data import load_rgb
 
 
 class Samples(Dataset):
@@ -57,8 +57,7 @@ class Samples(Dataset):
                 raise ValueError('Invalid raw EVS counts')
             value = torch.from_numpy(counts)
         else:
-            with Image.open(path) as image:
-                value = preprocess(image)
+            value = preprocess(load_rgb(path))
         return value, torch.tensor(label[:1] if self.mode == "steer_only" else label)
 
 

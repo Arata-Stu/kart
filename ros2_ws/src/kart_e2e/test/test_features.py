@@ -31,10 +31,13 @@ def test_shared_pca_constant_and_reproducible():
     assert np.all(pca_colors([np.ones((112,4))])[0] == 128)
 
 
-def test_checkpoint_report_and_images(tmp_path):
+@pytest.mark.parametrize("image_format", ["png","npy"])
+def test_checkpoint_report_and_images(tmp_path,image_format):
     dataset=tmp_path/'data'; dataset.mkdir()
-    Image.fromarray(np.random.default_rng(1).integers(0,256,(120,212,3),dtype=np.uint8)).save(dataset/'image.png')
-    rows=[dict(image='image.png',stamp_ns=i*100000000,steering=.1,throttle=.2) for i in range(5)]
+    from kart_e2e.data import save_rgb
+    filename='image.'+image_format
+    save_rgb(Image.fromarray(np.random.default_rng(1).integers(0,256,(120,212,3),dtype=np.uint8)),dataset/filename,image_format)
+    rows=[dict(image=filename,stamp_ns=i*100000000,steering=.1,throttle=.2) for i in range(5)]
     (dataset/'samples.jsonl').write_text(''.join(json.dumps(row)+'\n' for row in rows))
     checkpoint=tmp_path/'best.pt'; checkpoint.write_bytes(b'fixture')
     output=tmp_path/'result'

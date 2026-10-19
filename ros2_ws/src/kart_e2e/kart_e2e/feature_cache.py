@@ -45,7 +45,7 @@ def cached_samples(dataset, model, root, weights_sha, loader_factory, device):
                     spec=getattr(model,'spec',SPEC), torch_version=str(torch.__version__),
                     device=str(device), inputs=[sources[str(path)] for path,_ in dataset.items],
                     implementation={name:digest(code/name) for name in
-                                    ('feature_cache.py','train.py','model.py','evs_policy.py','event_encoder_model.py','contract.py')})
+                                    ('feature_cache.py','train.py','model.py','evs_policy.py','event_encoder_model.py','contract.py','data.py')})
     key = hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest()
     folder = root/key
     with (root/(key+'.lock')).open('a') as lock:

@@ -11,6 +11,7 @@ from PIL import Image
 import torch
 
 from .model import load_checkpoint, preprocess
+from .data import load_rgb
 
 
 def sha256(path):
@@ -90,8 +91,7 @@ def visualize(checkpoint, dataset, repo, output, *, device='cpu', max_frames=12)
         if not source.is_relative_to(dataset):
             raise ValueError('Image outside dataset')
         raw = source.read_bytes()
-        with Image.open(io.BytesIO(raw)) as rgb:
-            value = preprocess(rgb).unsqueeze(0).to(device)
+        value = preprocess(load_rgb(io.BytesIO(raw), suffix=source.suffix)).unsqueeze(0).to(device)
         h,w = value.shape[-2:]
         grid = (h//16,w//16)
         with torch.no_grad():

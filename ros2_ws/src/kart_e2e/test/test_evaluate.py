@@ -38,7 +38,14 @@ class EvaluationTests(unittest.TestCase):
                 )
             )
             (data / "metadata.json").write_text('{"samples":3,"skipped":2}')
+            np.save(data / 'image.npy', np.asarray(Image.open(data/'image.png')), allow_pickle=False)
             for mode in ("steer_only", "steer_throttle"):
+                text=(data/'samples.jsonl').read_text()
+                if mode == 'steer_only':
+                    text=text.replace('image.png','image.npy')
+                else:
+                    text=text.replace('image.npy','image.png')
+                (data/'samples.jsonl').write_text(text)
                 model = root / mode
                 model.mkdir()
                 values = np.array(

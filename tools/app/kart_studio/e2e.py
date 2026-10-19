@@ -429,6 +429,7 @@ class Learning:
                 if data.get("samples", 0) <= 0:
                     raise ValueError("有効なデータがありません")
                 metadata["samples"] = data["samples"]
+                metadata["image_format"] = data.get("image_format", "png")
             elif plan["kind"] == "engines":
                 report = read_json(within(output, "report.json"))
                 if within(output, "model.plan").stat().st_size <= 0:

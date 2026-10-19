@@ -11,9 +11,9 @@ import time
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
 
 from .contract import model_contract, runtime_settings, input_contract
+from .data import load_rgb
 
 
 def metrics(predicted, labels):
@@ -88,9 +88,8 @@ def evaluate(model_dir, dataset, output):
                         or not np.isfinite(tensor).all() or (tensor < 0).any()):
                     raise ValueError('Invalid EVS evaluation counts')
             else:
-                with Image.open(image) as rgb:
-                    # Training adds patch padding; ONNX already embeds that padding.
-                    tensor = preprocess(rgb)[:, 4:-4, 6:-6].unsqueeze(0).numpy()
+                # Training adds patch padding; ONNX already embeds that padding.
+                tensor = preprocess(load_rgb(image))[:, 4:-4, 6:-6].unsqueeze(0).numpy()
             if not rows:
                 for _ in range(warmup_runs):
                     session.run(["control"], {input_name: tensor})

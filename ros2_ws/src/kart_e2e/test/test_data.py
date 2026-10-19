@@ -34,3 +34,26 @@ class DataTests(unittest.TestCase):
         msg.step = 2
         with self.assertRaises(ValueError):
             decode_image(msg)
+
+    def test_rgb_storage_pixels_and_preprocessing_match(self):
+        import io
+        import tempfile
+        from pathlib import Path
+        import numpy as np
+        import torch
+        from PIL import Image
+        from kart_e2e.data import load_rgb, save_rgb
+        from kart_e2e.model import preprocess
+        values = np.random.default_rng(42).integers(0,256,(240,424,3),dtype=np.uint8)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for suffix in ('png','npy'):
+                path=root/('rgb.'+suffix)
+                save_rgb(Image.fromarray(values),path,suffix)
+                np.testing.assert_array_equal(np.asarray(load_rgb(path)),values)
+                torch.testing.assert_close(preprocess(load_rgb(path)),preprocess(Image.fromarray(values)),rtol=0,atol=0)
+                np.testing.assert_array_equal(np.asarray(load_rgb(io.BytesIO(path.read_bytes()),suffix='.'+suffix)),values)
+            for invalid in (values.astype(np.float32), values[:,:,0], np.zeros((2,2,4),dtype=np.uint8)):
+                np.save(root/'bad.npy',invalid,allow_pickle=False)
+                with self.assertRaises(ValueError):
+                    load_rgb(root/'bad.npy')

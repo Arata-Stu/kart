@@ -85,10 +85,10 @@ class SelectionTests(unittest.TestCase):
         rows = [(mode, NS(mode=1), t) for t, _ in modes()]
         stamp = SECOND+400_000_000
         rows += [(fixed, NS(data=json.dumps(config())), SECOND+350_000_000),
-                 (cmd, command(), stamp), (image, NS(), stamp),
+                 (cmd, command(), stamp), (image, NS(encoding='rgb8',width=2,height=1,step=6,data=bytes([255,0,0,0,0,255])), stamp),
                  (mode, NS(mode=2), SECOND+500_000_001),
                  (cmd, command(steering=-0.9), SECOND+550_000_000),
-                 (image, NS(), SECOND+550_000_000)]
+                 (image, NS(encoding='rgb8',width=2,height=1,step=6,data=bytes([255,0,0,0,0,255])), SECOND+550_000_000)]
         class Reader:
             def open(self, *args): pass
             def get_all_topics_and_types(self):
@@ -110,13 +110,15 @@ class SelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(sys.modules, modules):
             target = Path(tmp)/'dataset'
             with patch.object(sys, 'argv', ['extract', 'bag', str(target)]), \
-                    patch('kart_e2e.preprocess_bag.decode_image', return_value=NS(save=lambda _:None)), \
                     contextlib.redirect_stdout(io.StringIO()):
                 main()
             samples = [json.loads(line) for line in (target/'samples.jsonl').read_text().splitlines()]
             self.assertEqual(len(samples), 1)
             self.assertEqual(samples[0]['steering'], .7)
             self.assertEqual(samples[0]['teacher_source'], 'fixed_auto')
+            self.assertTrue(samples[0]['image'].endswith('.npy'))
+            from kart_e2e.data import load_rgb
+            self.assertEqual(load_rgb(target/samples[0]['image']).size, (2,1))
             meta = json.loads((target/'metadata.json').read_text())
             self.assertEqual(meta['teacher_selection']['policy'], 'fixed_auto_only')
             del topic_types[fixed]

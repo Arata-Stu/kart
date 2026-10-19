@@ -14,16 +14,19 @@ class TinyEncoder(torch.nn.Module):
     def forward(self,value):
         return self.proj(value.mean((2,3)))
 
+@pytest.mark.parametrize('image_format', ['png','npy'])
 @pytest.mark.parametrize('finetune,explicit,expected,cache', [(False,None,1e-4,True),(False,None,1e-4,False),(True,None,1e-5,True),(True,2e-6,2e-6,True)])
-def test_cli_update_scope_and_provenance(tmp_path,finetune,explicit,expected,cache):
+def test_cli_update_scope_and_provenance(tmp_path,finetune,explicit,expected,cache,image_format):
     torch.set_num_threads(2)
     torch.manual_seed(42)
     encoder=TinyEncoder()
     initial={k:v.clone() for k,v in encoder.state_dict().items()}
     weights=tmp_path/'weights.pt';torch.save(initial,weights)
     data=tmp_path/'data';data.mkdir()
-    Image.new('RGB',(212,120),(200,100,20)).save(data/'image.png')
-    (data/'samples.jsonl').write_text(json.dumps(dict(image='image.png',steering=.8,throttle=.1))+'\n')
+    from kart_e2e.data import save_rgb
+    filename='image.'+image_format
+    save_rgb(Image.new('RGB',(212,120),(200,100,20)),data/filename,image_format)
+    (data/'samples.jsonl').write_text(json.dumps(dict(image=filename,steering=.8,throttle=.1))+'\n')
     output=tmp_path/'run'
     args=['train','--train',str(data),'--validation',str(data),'--repo',str(tmp_path),
           '--weights',str(weights),'--output',str(output),'--device','cpu','--epochs','1','--num-workers','0','--mode','steer_only']

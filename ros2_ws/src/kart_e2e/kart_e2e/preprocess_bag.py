@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .data import decode_image, previous, previous_record
+from .data import decode_image, save_rgb, previous, previous_record
 from .teacher_selection import TeacherSelection, read_fixed_configs
 
 
@@ -16,6 +16,8 @@ def main():
     parser.add_argument("--command-topic", default="/teleop/control_cmd")
     parser.add_argument("--mode-topic", default="/operation_mode/state")
     parser.add_argument("--fixed-config-topic", default="/teleop/fixed_config")
+    parser.add_argument("--image-format", choices=["npy", "png"], default="npy",
+                        help="RGB storage: uncompressed uint8 HWC NPY (default), or fast lossless PNG")
     parser.add_argument("--clock", choices=["bag", "header"], default="bag")
     parser.add_argument("--max-skew-ms", type=float, default=100)
     args = parser.parse_args()
@@ -73,8 +75,8 @@ def main():
             if source is None:
                 skipped += 1
                 continue
-            name = f"images/{count:08d}.png"
-            decode_image(msg).save(args.output / name)
+            name = f"images/{count:08d}.{args.image_format}"
+            save_rgb(decode_image(msg), args.output / name, args.image_format)
             stream.write(
                 json.dumps(
                     {
@@ -95,6 +97,9 @@ def main():
                 "bag": str(args.bag.resolve()),
                 "output": str(args.output.resolve()),
                 "samples": count,
+                "modality": "rgb",
+                "image_dtype": "uint8",
+                "image_layout": "HWC_RGB",
                 "teacher_selection": selection.metadata(),
                 "skipped": skipped,
             },

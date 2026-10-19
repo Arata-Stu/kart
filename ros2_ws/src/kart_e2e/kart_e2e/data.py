@@ -55,3 +55,35 @@ def decode_image(msg):
     return Image.frombytes(
         mode, (msg.width, msg.height), bytes(msg.data), "raw", raw, msg.step
     ).convert("RGB")
+
+
+def load_rgb(source, *, suffix=None):
+    """Read lossless uint8 HWC RGB NPY or a legacy Pillow image.
+
+    source may be a path or a byte stream (provide suffix for byte streams).
+    Never unpickle NumPy inputs. Keep the original resolution and pixel values.
+    """
+    from pathlib import Path
+    import numpy as np
+    from PIL import Image
+
+    suffix = Path(source).suffix.lower() if suffix is None else suffix.lower()
+    if suffix == '.npy':
+        rgb = np.load(source, allow_pickle=False)
+        if (not isinstance(rgb, np.ndarray) or rgb.dtype != np.uint8
+                or rgb.ndim != 3 or rgb.shape[2] != 3 or min(rgb.shape[:2]) <= 0):
+            raise ValueError('RGB NPY must be uint8 [height,width,3]')
+        return Image.fromarray(np.ascontiguousarray(rgb))
+    with Image.open(source) as image:
+        return image.convert('RGB')
+
+
+def save_rgb(image, path, image_format='npy'):
+    """Uncompressed RGB NPY by default; PNG remains an explicit compatibility option."""
+    import numpy as np
+    if image_format == 'npy':
+        np.save(path, np.asarray(image.convert('RGB'), dtype=np.uint8), allow_pickle=False)
+    elif image_format == 'png':
+        image.save(path, format='PNG', compress_level=1)
+    else:
+        raise ValueError('image_format must be npy or png')

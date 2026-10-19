@@ -158,7 +158,7 @@ exportは固定batch=1、opset17。checkerと3入力のONNX Runtime比較が通�
 
 ### 前処理契約
 
-標準カメラ入力は424×240。抽出PNGは元の解像度を保持する。
+標準カメラ入力は424×240。抽出RGB（既定NPY、任意PNG）は元の解像度を保持する。
 現在は計算量を抑えるため縦横1/2へ縮小し、モデルの固定サイズは変更しない。
 RGB8 → linear resize 212×120（half-pixel、antialiasなし、8bitへ丸め）→ [0,1] →
 ImageNet mean/std → NCHW。ここまでを公式GPU encoderが担当する。
@@ -177,7 +177,7 @@ export対象外。再学習が必要。JetPilot checkpointの直接互換もな�
 任意の`/teleop/fixed_config` (std_msgs/msg/String) は`--fixed-config-topic`で変更可。
 全topicに`--clock bag`受信時計を使うのが既定。`--clock header`は時計同期済みの場合のみ。
 画像以前100ms以内の最新教師を対応（`--max-skew-ms 100`）、modeは300ms以内、採用モードはbagの固定設定から自動判定する（下記）。
-brake/reverse非0・非有限・範囲外を除外。出力はPNG、samples.jsonl、metadata.json。
+brake/reverse非0・非有限・範囲外を除外。出力は圧縮なしRGB NPY（既定）、samples.jsonl、metadata.json。
 RGB/BGR/RGBA/BGRA/mono8の非圧縮画像対応。反応遅れ・撮影と受信時刻の差は自動補正しない。
 同一bag・同一データセットのtrain/validation共有を許可する。自動的な分割は行わない。
 同じ画像を両方に使ったvalidation指標は未知データへの汎化評価にならない。
@@ -626,7 +626,7 @@ UIはfine-tuning中のキャッシュ欄を無効表示し、通常学習に戻�
 
 凍結時のRGB CLS特徴／EVSの正規化・padding後のpatch平均特徴（384次元）をFP32で保存する。
 初回だけencoderを実行し、以降のepoch・同条件の別実験はheadのみ学習する。
-PNG/countsの内容と順序、encoder重みSHA256、モデル仕様、前処理実装、Torch版、deviceが一致した
+RGBファイル/countsの内容と順序、encoder重みSHA256、モデル仕様、前処理実装、Torch版、deviceが一致した
 キャッシュのみ再利用する。ラベルは毎回現在のデータセットから取得する。学習率・epoch・head出力数の
 変更では特徴量を再利用できる。入力・重み等が変われば別キャッシュになり、元のキャッシュは保持する。
 一時領域からatomic公開し、同じキーはfile lockで排他。特徴量ファイルのSHA256とshapeを確認し、
@@ -638,3 +638,51 @@ UIの保存先は`e2e/.feature_cache/<sha256>/`。CLIの`--cache-dir`既定は�
 各DataLoaderに8 workerを使用し、spawnで起動する。学習・検証loaderはそれぞれworkerを保持する。
 CUDA時はpin_memoryとnon_blocking転送を使う。小規模CPU検証には`--num-workers 0`も指定可能。
 保存するbest.ptには従来どおりencoderも含み、export／TensorRT推論時にキャッシュは不要。
+
+
+### RGBデータセットの高速保存形式
+
+新規RGB抽出は`images/00000000.npy`を既定とする。圧縮なしNumPy、uint8、
+`[height,width,3]`、RGB順で、元解像度と画素値を保持する。教師の選択・時刻対応・
+学習前処理・モデル入力契約は変更しない。424×240では1枚約305 KB（headerを含む）。
+metadata.jsonにimage_format=npy、image_dtype=uint8、image_layout=HWC_RGBを記録する。
+
+`e2e_preprocess_bag BAG OUTPUT --image-format png`で互換用PNGを選択できる。
+PNGは画素値を保持しcompress_level=1で高速保存する。`--image-format`既定はnpy。
+既存PNGデータセットもそのまま学習・特徴量可視化・ONNX評価・特徴量キャッシュに使用できる。
+ファイル拡張子で読み分け、NPYはallow_pickle=False、dtypeとshapeを検証する。
+可視化の表示用画像は引き続きPNG。既存データセットの自動変換や上書きは行わない。
+Notebook UIの新規作成およびrosbag評価の一時抽出もNPYとなる。EVS countsの形式は変更しない。
+
+### ROS RGB前処理の数値診断（読み取り専用）
+
+`e2e_rgb_pipeline_check`はROSノードではないオフラインCLIで、独自ROS parameter・publisherはない。
+実機で短い診断bagを記録し、captureはROS環境でシリアライズ済みCPUデータを抽出、
+compareは学習用Torch環境で比較する。別interpreterで実行できる。制御や設定は変更しない。
+
+```bash
+# 通常E2Eが動いている環境で、数秒分を記録してCtrl-C。
+ros2 bag record -o /tmp/kart_rgb_probe_bag \
+  /realsense/color/image_raw /e2e/rgb/image /e2e/tensor_input /e2e/tensor_output
+# ROS環境
+ros2 run kart_e2e e2e_rgb_pipeline_check capture \
+  --bag /tmp/kart_rgb_probe_bag --output /tmp/kart_rgb_probe
+# 学習環境（probeディレクトリをNotebookへ渡して実行してもよい）
+python -m kart_e2e.rgb_pipeline_check compare --probe /tmp/kart_rgb_probe \
+  --output /tmp/kart_rgb_probe_report.json --model-dir /path/to/deployed/model
+```
+
+captureのbag/outputは必須。max-framesは既定16（1〜256）。topic既定は上記4つで、
+`--image-topic/--resized-topic/--input-topic/--prediction-topic`で上書き可能。
+compareのprobe/outputは必須、model-dirは任意（省略時は前処理だけ比較）。
+全ファイルの既存出力を上書きしない。captureのtopic引数は購読先ではなくbag内の読取topic。
+未installの場合は`PYTHONPATH=ros2_ws/src/kart_e2e python -m kart_e2e.rgb_pipeline_check ...`も使える。
+
+同一header stampで画像とtensorを照合する。`normalization_matches`は実際のリサイズ後RGBから
+再計算した正規化・NCHWとROS入力tensorの最大差が1e-5以内かを示す。
+`resize_within_one_lsb`は元RGBの学習前処理とGPUリサイズ後画像を比べ、uint8の丸め差1を許容する。
+許容差はGPU kernelの一致を証明しない。RGB/BGR逆転、二重scale、layout誤りは合成fixtureで検出を確認。
+モデル指定時は、同じONNXをCPUで元RGB／実ROS入力のそれぞれから実行し、操舵への影響と
+記録TensorRT出力との差も数値化する（TensorRT差の合否を自動判定しない）。
+model-dirには実機で使ったmodel.onnx/metadata.jsonを指定し、別モデルとの比較を避ける。
+実ROS TensorListの記録・GPU readback・Jetson実機診断は未検証。capture/compareの単体テストは代替bag fixture。
