@@ -1,6 +1,7 @@
+import { trashButton, installTrash } from "./learning_trash.js";
 import { showEvaluation, showEngine } from "./evaluation.js";
 import { $, state, api, action, on, emit, item, toast } from "./api.js";
-import { nextVersion, datasetOption, datasetName } from "./learning_names.js";
+import { nextVersion, datasetOption, datasetName, artifactOption } from "./learning_names.js";
 let catalog = null;
 let bags = [];
 let step = "dataset";
@@ -112,8 +113,10 @@ function render() {
           : `${row.mode} · ORT最大誤差 ${Number(row.ort_max_abs_error).toExponential(2)}`;
     if (kind === "evaluations")
       detail = `${row.samples} frames · ${row.model} · steer MAE ${row.metrics.steering_command.mae.toFixed(4)}`;
-    list.append(
-      item(kind === "datasets" ? row.name || row.id : row.id, detail, () => {
+    const entry = document.createElement("div");
+    entry.className = "artifact-row";
+    entry.append(
+      item(row.name || row.id, (kind !== "datasets" && row.id.includes("/") ? row.id.split("/").slice(0,-1).join(" ") + " · " : "") + detail, () => {
         if (kind === "evaluations") return showEvaluation(row.id);
         if (step === "dataset") {
           setStep("train");
@@ -124,7 +127,9 @@ function render() {
           suggestNames();
         } else $("e2e-push-model").value = row.id;
       }),
+      trashButton(kind, row, refreshLearning),
     );
+    list.append(entry);
   }
 }
 function setStep(next) {
@@ -151,8 +156,8 @@ export async function refreshLearning() {
       "",
     );
   options("e2e-export-run", data.runs, "実験を選択");
-  options("e2e-push-model", data.models, "モデルを選択");
-  options("e2e-eval-model", data.models, "モデルを選択");
+  options("e2e-push-model", data.models.map(artifactOption), "モデルを選択");
+  options("e2e-eval-model", data.models.map(artifactOption), "モデルを選択");
   options("e2e-engine-history", data.engines, "Notebook engineの結果を選択");
   options(
     "e2e-eval-bag",
@@ -268,3 +273,5 @@ $("e2e-engine-history").addEventListener("change", () =>
     toast(e.message, true),
   ),
 );
+
+installTrash(refreshLearning);

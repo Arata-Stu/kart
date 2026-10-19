@@ -16,12 +16,16 @@ from . import transfers
 from .storage import atomic_json, name, read_json, within
 
 
+KINDS = ("datasets", "runs", "models", "evaluations", "engines")
+DATED = ("datasets", "models", "evaluations")
+
+
 class Learning:
     def __init__(self, repo, base, records, state):
         self.repo, self.records = repo, records
         self.root = (base / "e2e").resolve()
         self.settings_file = state / "e2e.json"
-        for kind in ("datasets", "runs", "models", "evaluations", "engines"):
+        for kind in KINDS:
             (self.root / kind).mkdir(parents=True, exist_ok=True)
         spec = importlib.util.spec_from_file_location(
             "kart_ui_e2e_contract", repo / "ros2_ws/src/kart_e2e/kart_e2e/contract.py"
@@ -62,11 +66,11 @@ class Learning:
 
     def catalog(self):
         result = dict(settings=self.settings(), root=str(self.root))
-        for kind in ("datasets", "runs", "models", "evaluations", "engines"):
+        for kind in KINDS:
             entries = []
             root = self.root / kind
             artifacts = list(root.glob('*/artifact.json'))
-            if kind == 'datasets':
+            if kind in DATED:
                 artifacts += list(root.glob('*/*/*/artifact.json'))
             for artifact in artifacts:
                 path = artifact.parent
@@ -83,14 +87,19 @@ class Learning:
             )
         return result
 
-    def folder(self, kind, key):
-        if kind == 'datasets' and isinstance(key, str) and re.fullmatch(
+    def relative_key(self, kind, key):
+        if kind not in KINDS:
+            raise ValueError("Unknown artifact kind")
+        if kind in DATED and isinstance(key, str) and re.fullmatch(
             r"[0-9]{4}-[0-9]{2}-[0-9]{2}/[0-9]{2}-[0-9]{2}-[0-9]{2}/[A-Za-z0-9][A-Za-z0-9_-]{0,63}", key
         ):
-            relative = key
-        else:
-            relative = name(key)
-        path = within(self.root / kind, relative)
+            return key
+        return name(key)
+
+    def folder(self, kind, key):
+        relative = self.relative_key(kind, key)
+        root = within(self.root, kind)
+        path = within(root, relative)
         within(path, "artifact.json")
         return path
 
@@ -121,10 +130,10 @@ class Learning:
         return str(python), cfg, env
 
     def target(self, kind, key):
-        relative = name(key)
-        if kind == 'datasets':
+        relative = self.relative_key(kind, name(key))
+        if kind in DATED:
             relative = datetime.now().strftime('%Y-%m-%d/%H-%M-%S/') + relative
-        target = within(self.root / kind, relative, exists=False)
+        target = within(within(self.root, kind), relative, exists=False)
         if target.exists():
             raise ValueError("同じ名前の成果物が存在します。別名にしてください")
         return target
@@ -198,7 +207,7 @@ class Learning:
                     f"DINOv3公式重みが見つかりません: {weights}。"
                     "UI「学習環境」の重みパスをコンテナ内のパスで指定してください"
                 )
-            epochs = self.integer(body.get("epochs", 20), 1, 100000)
+            epochs = self.integer(body.get("epochs", 10), 1, 100000)
             batch = self.integer(body.get("batch_size", 32), 1, 4096)
             lr = self.number(body.get("learning_rate", 0.0001), 1e-9, 1)
             fixed = self.number(body.get("fixed_throttle", 0.0), 0, 1)
@@ -248,7 +257,7 @@ class Learning:
                     "validation": body["validation"],
                     "epochs": epochs,
                 },
-                "resources": ["e2e-compute"],
+                "resources": ["e2e-compute", *["e2e:datasets:" + item for item in (*body["train"], *body["validation"])]],
             }
         if action == "build-engine":
             model = self.folder("models", body.get("model"))
@@ -259,10 +268,11 @@ class Learning:
                 "target": self.target("engines", key),
                 "module": "build_engine",
                 "args": ["--model", str(model), "--output", "@OUTPUT@"],
-                "provenance": {"model": model.name},
-                "resources": ["e2e-compute", "e2e:models:" + model.name],
+                "provenance": {"model": body["model"]},
+                "resources": ["e2e-compute", "e2e:models:" + body["model"]],
             }
         if action == "evaluate":
+            target = self.target("evaluations", key)
             model = self.folder("models", body.get("model"))
             self.contract(model)
             # Share extraction validation with dataset creation; do not publish images.
@@ -281,16 +291,17 @@ class Learning:
             return {
                 **common,
                 "kind": "evaluations",
-                "target": self.target("evaluations", key),
+                "target": target,
+                "key": target.relative_to(self.root / "evaluations").as_posix(),
                 "module": "evaluate",
                 "args": args,
                 "provenance": {
                     "bag": extraction["provenance"]["bag"],
-                    "model": model.name,
+                    "model": body["model"],
                 },
                 "resources": [
                     "e2e-compute",
-                    "e2e:models:" + model.name,
+                    "e2e:models:" + body["model"],
                     *extraction["resources"],
                 ],
             }
@@ -303,6 +314,7 @@ class Learning:
             return {
                 **common,
                 "kind": "models",
+                "key": target.relative_to(self.root / "models").as_posix(),
                 "target": target,
                 "module": "export_onnx",
                 "args": [
@@ -332,7 +344,7 @@ class Learning:
 
     def execute(self, job, plan):
         # Recheck confinement before creating the timestamp parents/staging directory.
-        within(self.root / plan["kind"], plan["target"].relative_to(self.root / plan["kind"]), exists=False)
+        within(within(self.root, plan["kind"]), plan["target"].relative_to(self.root / plan["kind"]), exists=False)
         plan["target"].parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(
             prefix=".work-", dir=plan["target"].parent
@@ -413,7 +425,7 @@ class Learning:
         source = self.folder("models", key)
         self.contract(source)
         stage = ".kart-upload-" + uuid.uuid4().hex
-        destination = name(key) + "_" + uuid.uuid4().hex[:8]
+        destination = name(source.name) + "_" + uuid.uuid4().hex[:8]
         with tempfile.TemporaryDirectory(prefix="kart-model-") as directory:
             bundle = Path(directory) / "bundle"
             bundle.mkdir()

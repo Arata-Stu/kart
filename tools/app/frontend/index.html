@@ -452,7 +452,7 @@
               >Epoch<input
                 id="e2e-epochs"
                 type="number"
-                value="20"
+                value="10"
                 min="1" /></label
             ><label
               >Batch<input
@@ -507,7 +507,7 @@
           <label>評価rosbag<select id="e2e-eval-bag"></select></label>
           <label>評価名<input id="e2e-eval-name" maxlength="64" /></label>
           <p class="help">
-            「データセット」の画像・操作・モードtopic、時計、許容時間差を使用。教師付きMANUAL区間だけを評価します。同じ学習bagも使用できます。
+            「データセット」の画像・操作・モードtopic、時計、許容時間差を使用。収集設定から自動判定した教師区間を評価します。同じ学習bagも使用できます。
           </p>
           <button id="e2e-start-evaluate" class="primary full">
             評価を開始
@@ -554,6 +554,7 @@
         <aside class="learning-library">
           <div class="section-title">
             <strong id="e2e-library-title">データセット</strong>
+            <button id="e2e-manage-open" class="quiet">整理・ごみ箱</button>
           </div>
           <div id="e2e-library" class="scroll list"></div>
           <div class="library-foot">
@@ -564,6 +565,17 @@
         </aside>
       </div>
     </main>
+    <dialog id="e2e-manage-dialog">
+      <div class="dialog-heading"><h2>学習成果物の整理</h2><button id="e2e-manage-close">閉じる</button></div>
+      <p>ごみ箱へ移動した成果物は、元の保存先へ復元できます。</p>
+      <label>表示対象<select id="e2e-manage-kind">
+        <option value="trash">ごみ箱</option><option value="datasets">データセット</option>
+        <option value="runs">学習実験</option><option value="models">ONNXモデル</option>
+        <option value="evaluations">評価結果</option><option value="engines">TensorRT計測</option>
+      </select></label>
+      <button id="e2e-manage-refresh">更新</button>
+      <div id="e2e-manage-list" class="scroll"></div>
+    </dialog>
     <dialog id="e2e-settings-dialog">
       <div class="dialog-heading">
         <h2>学習環境 · Notebook</h2>

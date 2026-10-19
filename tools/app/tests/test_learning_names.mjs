@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {nextVersion, artifactOption, datasetOption, datasetName} from '../frontend/learning_names.js';
+assert.equal(nextVersion('2026-10-19/12-00-00/policy-v2', ['2026-10-18/11-00-00/policy-v4']), 'policy-v5');
+assert.equal(nextVersion('policy-eval', ['2026-10-19/12-00-00/policy-eval-v1']), 'policy-eval-v2');
+const row={id:'2026-10-19/12-00-00/policy',name:'policy'};
+assert.deepEqual(artifactOption(row), {...row,group:'2026-10-19',label:'12-00-00 · policy'});
+assert.equal(artifactOption({id:'old'}).label, 'old');
+assert.equal(datasetOption({...row,samples:20}).label, '12-00-00 · policy (20)');
+assert.equal(datasetName({name:'trial 01.mcap'}), 'trial_01');
+console.log('Learning artifact naming: passed');

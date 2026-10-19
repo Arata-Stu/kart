@@ -149,7 +149,7 @@ steer-onlyは学習を`--mode steer_only`にする。encoder既定凍結、`--fi
 Torch CLIをROS外で実行する場合は`PYTHONPATH=ros2_ws/src/kart_e2e python -m kart_e2e.train ...`
 または`-m kart_e2e.export_onnx ...`。rosbag抽出のみROSメッセージ環境が必要。
 
-学習既定: epochs=20, batch-size=32, learning-rate=1e-4, seed=42, device=cuda。
+学習既定: epochs=10, batch-size=32, learning-rate=1e-4, seed=42, device=cuda。
 train/validation/repo/weights/outputは必須。MSEと出力別MAEを保存し最良validationのbest.ptを保存。
 公式重みはstrict load、取得失敗時にrandomへfallbackしない。train/validationは同一bag・同一データセットでも実行可能。
 exportは固定batch=1、opset17。checkerと3入力のONNX Runtime比較が通ってからmetadataを作る。

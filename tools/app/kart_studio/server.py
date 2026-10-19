@@ -86,6 +86,9 @@ class Studio:
         if path == "/api/e2e/evaluation":
             folder = self.learning.folder("evaluations", key)
             return read_json(within(folder, "report.json"))
+        if path == "/api/e2e/trash":
+            from . import e2e_trash
+            return e2e_trash.listing(self.learning)
         if path == "/api/e2e":
             return self.learning.catalog()
         if path == "/api/trash":
@@ -120,6 +123,18 @@ class Studio:
 
     def post(self, path, b):
         key = b.get("id", "")
+        if path in ("/api/e2e/trash", "/api/e2e/restore"):
+            from . import e2e_trash
+            if path.endswith('/restore'):
+                record = e2e_trash.entry(self.learning, b.get('token'))
+                kind, key = record['kind'], record['id']
+            else:
+                kind, key = b.get('kind'), b.get('id')
+                self.learning.folder(kind, key)
+            with self.jobs.guard('e2e-compute', 'e2e-trash', 'e2e:' + kind + ':' + key):
+                if path.endswith('/restore'):
+                    return e2e_trash.restore(self.learning, b['token'])
+                return e2e_trash.move(self.learning, kind, key)
         if path == "/api/e2e/settings":
             return self.learning.save_settings(b)
         if path in (
@@ -145,7 +160,7 @@ class Studio:
             )
         if path == "/api/e2e/push":
             p = profile(b["connection"])
-            key = name(b["id"])
+            key = b["id"]
             from .transfers import remote_path
 
             root = remote_path(b["model_root"])

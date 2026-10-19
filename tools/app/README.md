@@ -357,7 +357,8 @@ marginは前後左右へ加える。UI「ライン生成設定」から3寸法�
 同一日時・同名の上書きは拒否する。学習用・検証用の選択欄は日付でグループ化し、時刻・名前・サンプル数を表示する。
 従来の`e2e/datasets/<name>/`も移動せず一覧・学習に使用できる。内部IDはdatasetsからの相対パスで、
 同じ名前でも日時を含めて区別する。処理中・失敗した一時成果物は一覧に出さない。
-学習実験とモデルは従来どおり`e2e/{runs,models}/<name>`、環境設定は`.kart-studio/e2e.json`。
+ONNXモデルと評価も`e2e/{models,evaluations}/YYYY-MM-DD/HH-MM-SS/<name>/`へ保存する。
+学習実験・TensorRT計測は従来どおり`e2e/{runs,engines}/<name>`、環境設定は`.kart-studio/e2e.json`。
 この自動階層はUIからの作成に適用する。直接実行する抽出CLIのoutput引数は明示指定のまま。
 作業中は同一ファイルシステムの非表示一時directoryを使い、成功時のみrenameして公開する。
 同名成果物の上書きはしない。既存のCLI成果物の任意インポート・成果物削除は今回の対象外。
@@ -468,7 +469,7 @@ Raceline初期値はJetPilot `tools/app/frontend/app.js` と `python_ws/map_tool
 
 ### ONNXのrosbag評価
 
-学習→ONNX export→「4 rosbag評価」→Jetson転送の順で操作できる。モデル・bag・評価名を選び開始する。画像/教師操作/モードtopic・時計・許容差は「1 データセット」の設定を共用する。評価履歴をクリックすると教師と指令予測の時系列グラフ、MAE/RMSE/P95を表示する。全フレームCSVとJSONは`e2e/evaluations/<評価名>/`。モデルとbagを処理資源として固定し、bag内容の変更や評価失敗時には結果を公開しない。転送に合格閾値は設けず、評価結果を人が確認する。評価はCUDA優先のONNX RuntimeでのMANUAL画像・教師比較で、閉ループ走行やJetson上TensorRTの動作を保証しない。
+学習→ONNX export→「4 rosbag評価」→Jetson転送の順で操作できる。モデル・bag・評価名を選び開始する。画像/教師操作/モードtopic・時計・許容差は「1 データセット」の設定を共用する。評価履歴をクリックすると教師と指令予測の時系列グラフ、MAE/RMSE/P95を表示する。全フレームCSVとJSONは`e2e/evaluations/<日付>/<時刻>/<評価名>/`。モデルとbagを処理資源として固定し、bag内容の変更や評価失敗時には結果を公開しない。転送に合格閾値は設けず、評価結果を人が確認する。評価はCUDA優先のONNX RuntimeでのMANUAL画像・教師比較で、閉ループ走行やJetson上TensorRTの動作を保証しない。
 
 学習環境のPythonは用途別に指定する。`python`は学習・データ抽出用、`inference_python`はONNX export・rosbag評価用で既定`/opt/inference/bin/python`。Dockerの既存ONNX/ONNX Runtime環境を利用し、システム側のPyTorchはsystem-site-packages経由で参照する。独自venvだけにPyTorchを入れた場合はexport用Pythonからもtorchをimportできる環境を指定する。既存設定の学習Pythonは保持する。
 
@@ -635,3 +636,23 @@ Notebookでの依存追加と描画確認コマンドはRGB着色READMEのGPU節
 データセット名は選択したrosbagの名前から自動候補を入力する。bagを変更すると候補も追従するが、
 手入力した名前は保持する。英数字・`_`・`-`以外は`_`へ整え、先頭英数字・64文字以内にする。
 変換後に名前が残らない場合は`dataset`を候補にする。日付・時刻の保存階層は別途自動付与する。
+
+学習のEpochはUI・API未指定時ともに10が既定。抽出後に直接使うtrain CLIも同じ既定値とする。
+
+
+### 学習成果物の整理・ごみ箱
+
+学習画面の各一覧の「ごみ箱へ」で、データセット・学習実験・ONNXモデル・評価結果を
+フォルダ単位で`e2e/.trash/<token>/data/`へ移動する。「整理・ごみ箱」では5種類の成果物
+（上記＋TensorRT計測）を切り替えて整理でき、ごみ箱から元の相対パスへ復元できる。
+旧平置き成果物も同じ操作を使える。新しいモデル・評価は日付階層を内部IDに含め、
+日付別の同名モデルの選択・評価・転送を区別する。命名候補にはパスではなく末尾の名前を使う。
+
+UIから開始した学習・export・評価・engine buildの実行中は整理・復元を拒否する。転送中のモデルや
+作成中の対象も資源ロックで保護する。復元先に同じパスがある場合は上書きせず拒否する。
+移動後に空になった日付・時刻フォルダは除去し、復元時に作り直す。
+元bagや依存する別の成果物を一緒に移動することはない。移動した学習データ等への参照は
+履歴に残るため、再利用する場合はその成果物も復元する。
+ごみ箱はアプリ固有で、自動消去・完全削除のUIは設けない（移動だけではディスク容量は減らない）。
+API: GET `/api/e2e/trash`、POST `/api/e2e/trash`（kind/id）、POST `/api/e2e/restore`（token）。
+ローカルfixtureで移動・復元・競合・パス拒否と日付IDのexport/評価/転送を検証する。

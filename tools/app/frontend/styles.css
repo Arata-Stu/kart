@@ -1256,3 +1256,17 @@ summary {
 .learning-library .record-item {
   padding: 12px;
 }
+
+.artifact-row { display: flex; align-items: center; gap: 8px; min-width: 0; margin-bottom: 6px; }
+.artifact-row > .record-item, .artifact-info { flex: 1; min-width: 0; }
+.artifact-row > .artifact-trash { flex-shrink: 0; font-size: 13px; }
+.artifact-info { padding: 10px; overflow-wrap: anywhere; }
+.artifact-info strong { display: block; font-size: 16px; }
+.artifact-info small { display: block; font-size: 13px; margin-top: 6px; }
+.learning-library .section-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#e2e-manage-dialog { width: min(760px, 95vw); }
+#e2e-manage-dialog select { font-size: 16px; }
+#e2e-manage-list { max-height: 50vh; margin-top: 12px; }
+
+#e2e-manage-dialog .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#e2e-manage-dialog label { font-size: 14px; }

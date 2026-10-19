@@ -200,6 +200,8 @@ class LearningTests(unittest.TestCase):
         # Both datasets originate from the same bag; identical dataset selection is also allowed.
         self.service.prepare("train", {**body, "validation": [train]})
         plan = self.service.prepare("train", body)
+        defaults = self.service.prepare("train", {key: value for key, value in body.items() if key != "epochs"})
+        self.assertEqual(defaults["args"][defaults["args"].index("--epochs") + 1], "10")
         job = FakeJob()
         self.service.execute(job, plan)
         self.assertEqual(job.args[job.args.index("--fixed-throttle") + 1], "0.12")
@@ -218,6 +220,91 @@ class LearningTests(unittest.TestCase):
             self.service.prepare(
                 "train", {**body, "name": "nan", "learning_rate": float("nan")}
             )
+
+    def test_dated_export_evaluation_and_source_locks(self):
+        run = self.service.root / 'runs/run'
+        run.mkdir()
+        atomic_json(run / 'artifact.json', dict(created=1))
+        (run / 'best.pt').write_bytes(b'fixture')
+        with patch('kart_studio.e2e.datetime') as clock:
+            clock.now.return_value.strftime.return_value = '2026-10-19/12-34-56/'
+            export = self.service.prepare('export', dict(name='policy', run='run'))
+            self.assertEqual(export['key'], '2026-10-19/12-34-56/policy')
+            class Worker(FakeJob):
+                def run(inner, args, env=None):
+                    output = Path(args[4])
+                    output.mkdir()
+                    (output / 'model.onnx').write_bytes(b'fixture')
+                    atomic_json(output / 'metadata.json', dict(ort_max_abs_error=0))
+            with patch.object(self.service, 'contract', return_value=({}, 'steer_only')):
+                self.service.execute(Worker(), export)
+                evaluation = self.service.prepare('evaluate', dict(name='check', model=export['key'], bag='bag'))
+                engine = self.service.prepare('build-engine', dict(name='benchmark', model=export['key']))
+            self.assertEqual(evaluation['key'], '2026-10-19/12-34-56/check')
+            self.assertEqual(evaluation['provenance']['model'], export['key'])
+            self.assertIn('e2e:models:'+export['key'], evaluation['resources'])
+            self.assertIn('e2e:models:'+export['key'], engine['resources'])
+            self.assertEqual(self.service.catalog()['models'][0]['id'], export['key'])
+            self.assertEqual(self.service.folder('models', export['key']), export['target'])
+
+    def test_trash_roundtrip_all_artifact_kinds(self):
+        from types import SimpleNamespace
+        from kart_studio.server import Studio
+        from kart_studio.jobs import Jobs
+        from kart_studio.e2e import KINDS
+        studio = SimpleNamespace(learning=self.service, jobs=Jobs(self.base/'jobs'))
+        for kind in KINDS:
+            target = self.service.target(kind, 'cleanup')
+            target.mkdir(parents=True)
+            atomic_json(target / 'artifact.json', dict(created=1))
+            (target / 'payload.bin').write_bytes(b'keep original contents')
+            key = target.relative_to(self.service.root/kind).as_posix()
+            removed = Studio.post(studio, '/api/e2e/trash', dict(kind=kind, id=key))
+            self.assertFalse(target.exists())
+            self.assertFalse(self.service.catalog()[kind])
+            self.assertEqual(Studio.get(studio, '/api/e2e/trash', {})[0]['id'], key)
+            restored = Studio.post(studio, '/api/e2e/restore', dict(token=removed['token']))
+            self.assertEqual(restored['id'], key)
+            self.assertEqual((target/'payload.bin').read_bytes(), b'keep original contents')
+            self.assertFalse(Studio.get(studio, '/api/e2e/trash', {}))
+
+    def test_trash_busy_and_conflicting_restore_are_rejected(self):
+        from types import SimpleNamespace
+        from kart_studio.server import Studio
+        from kart_studio.jobs import Jobs
+        from kart_studio import e2e_trash
+        path = self.dataset()
+        key = path.relative_to(self.service.root/'datasets').as_posix()
+        studio = SimpleNamespace(learning=self.service, jobs=Jobs(self.base/'jobs'))
+        for resource in ('e2e-compute', 'e2e:datasets:'+key):
+            with studio.jobs.guard(resource), self.assertRaises(ValueError):
+                Studio.post(studio, '/api/e2e/trash', dict(kind='datasets', id=key))
+            self.assertTrue(path.exists())
+        removed = Studio.post(studio, '/api/e2e/trash', dict(kind='datasets', id=key))
+        path.mkdir(parents=True)
+        with self.assertRaises(ValueError):
+            Studio.post(studio, '/api/e2e/restore', dict(token=removed['token']))
+        self.assertEqual(len(e2e_trash.listing(self.service)), 1)
+        path.rmdir()
+        e2e_trash.restore(self.service, removed['token'])
+        for token in ('../escape', '/tmp/escape', 'bad'):
+            with self.assertRaises(ValueError):
+                e2e_trash.restore(self.service, token)
+        with self.assertRaises(ValueError):
+            e2e_trash.move(self.service, '../models', key)
+
+    def test_cleanup_rejects_symlink_artifact_root(self):
+        from kart_studio import e2e_trash
+        original = self.service.root / 'models'
+        original.rename(self.service.root / 'models-backup')
+        outside = self.base / 'outside'
+        (outside / 'policy').mkdir(parents=True)
+        atomic_json(outside / 'policy/artifact.json', dict(created=1))
+        original.symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            e2e_trash.move(self.service, 'models', 'policy')
+        self.assertTrue((outside/'policy/artifact.json').is_file())
+        self.assertFalse(self.service.catalog()['models'])
 
     def model(self):
         spec = __import__("importlib.util", fromlist=[""]).spec_from_file_location(
@@ -248,6 +335,11 @@ class LearningTests(unittest.TestCase):
     @patch("kart_studio.transfers.request", side_effect=remote_request)
     def test_transfer_only_onnx_with_hash_validation(self, request):
         source = self.model()
+        dated = self.service.root / 'models/2026-10-19/12-34-56/model'
+        dated.parent.mkdir(parents=True)
+        source.rename(dated)
+        source = dated
+        key = '2026-10-19/12-34-56/model'
         (source / "old.plan").write_bytes(b"excluded")
         remote = self.base / "remote"
         remote.mkdir()
@@ -258,7 +350,7 @@ class LearningTests(unittest.TestCase):
             record_root="/record",
             map_root="/map",
         )
-        result = self.service.push(FakeJob(), profile, "model", str(remote))
+        result = self.service.push(FakeJob(), profile, key, str(remote))
         self.assertEqual(
             {p.name for p in Path(result["path"]).iterdir()},
             {"model.onnx", "metadata.json"},
@@ -266,7 +358,7 @@ class LearningTests(unittest.TestCase):
         self.assertEqual(request.call_args.args[1], "publish-model")
         (source / "model.onnx").write_bytes(b"corrupted")
         with self.assertRaises(ValueError):
-            self.service.push(FakeJob(), profile, "model", str(remote))
+            self.service.push(FakeJob(), profile, key, str(remote))
 
     def test_remote_corruption_rejected(self):
         source = self.model()

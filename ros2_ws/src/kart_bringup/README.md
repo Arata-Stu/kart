@@ -872,3 +872,31 @@ bash scripts/bringup.sh --mode e2e --e2e-model-dir /workspaces/models/policy \
 
 0.10は車速ではなく正規化した固定要求。起動だけでは走行せず、□でAUTO、△でMANUAL、×でSTOP。
 C++ gateとlaunch転送・CLIをportable testで確認する。ROS結合・GPU推論・実車操舵は未確認。
+
+## E2E Component配置の確認
+
+標準missionのRGB E2Eは、`/kart_sensor_container`へRealSenseと次の8 Componentをloadする。
+`e2e_resize` → `e2e_format` → `e2e_to_tensor` → `e2e_normalize` → `e2e_planar` →
+`e2e_reshape` → `e2e_tensor_rt` → `e2e_control_decoder`。
+全てuse_intra_process_comms=true。missionがcontainerを所有し、下位encoder/inference launchは
+受け取った同じcontainer名を使う。単独e2e.launchの既定は別の`/kart_e2e_container`で、
+外部センサと共有する場合はcontainer_nameとcreate_container=falseを明示する。
+Joy・mux・bridgeのvehicle containerは別processであり、画像/Tensor pipelineの同居対象ではない。
+
+EVSはOpenEB `openeb_tensor_pipeline` process内にdriver・画像worker・tensor生成と
+`/event_camera/tensor_container` managerを持ち、そこへTensorRT/decoderをloadする。
+OpenEB内部のdriver/tensorノードは直接生成されるため、component一覧にはロードした
+TensorRT/decoderだけが表示されることに注意する。RGBとEVSを互いに同じprocessへ入れる構成ではない。
+
+実行中のROS環境では、次で実際のload先を確認する。
+
+```bash
+ros2 component list
+ros2 node info /e2e_tensor_rt
+ros2 node info /e2e_control_decoder
+```
+
+RGBは1つのsensor containerの下にRealSense＋8個、EVSはtensor_containerの下に
+TensorRT＋decoderが表示されることを照合する。container名を明示上書きした場合はその名前で確認する。
+launch配線はtest_e2e_composition.pyと既存EVS/mission testで検証する。
+これらの静的・stub検証は、実機プロセス・GPU転送・zero-copy性能の実測を代替しない。

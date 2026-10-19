@@ -90,7 +90,7 @@ def main():
     p.add_argument("--modality", choices=["rgb", "evs"], default="rgb")
     p.add_argument("--finetune", action="store_true")
     p.add_argument("--device", default="cuda")
-    p.add_argument("--epochs", type=int, default=20)
+    p.add_argument("--epochs", type=int, default=10)
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--learning-rate", type=float, default=1e-4)
     p.add_argument("--seed", type=int, default=42)
