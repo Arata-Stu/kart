@@ -4,7 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
-from .data import decode_image, previous, valid_label
+from .data import decode_image, previous, previous_record
+from .teacher_selection import TeacherSelection, read_fixed_configs
 
 
 def main():
@@ -14,6 +15,7 @@ def main():
     parser.add_argument("--image-topic", default="/realsense/color/image_raw")
     parser.add_argument("--command-topic", default="/teleop/control_cmd")
     parser.add_argument("--mode-topic", default="/operation_mode/state")
+    parser.add_argument("--fixed-config-topic", default="/teleop/fixed_config")
     parser.add_argument("--clock", choices=["bag", "header"], default="bag")
     parser.add_argument("--max-skew-ms", type=float, default=100)
     args = parser.parse_args()
@@ -57,19 +59,18 @@ def main():
         (commands if topic == args.command_topic else modes).append((stamp, msg))
     commands.sort(key=lambda v: v[0])
     modes.sort(key=lambda v: v[0])
+    selection = TeacherSelection(read_fixed_configs(args.bag, args.fixed_config_topic), modes)
+    print(f"Teacher policy: {selection.metadata()['policy']}")
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output / "images").mkdir()
     count, skipped = 0, 0
     with (args.output / "samples.jsonl").open("w") as stream:
         for _, stamp, msg in records([args.image_topic]):
-            command = previous(commands, stamp, int(args.max_skew_ms * 1e6))
+            record = previous_record(commands, stamp, int(args.max_skew_ms * 1e6))
+            command = record[1] if record is not None else None
             mode = previous(modes, stamp, 300_000_000)
-            if (
-                command is None
-                or mode is None
-                or mode.mode != 2
-                or not valid_label(command)
-            ):
+            source = selection.select(command, mode, stamp, record[0] if record else None)
+            if source is None:
                 skipped += 1
                 continue
             name = f"images/{count:08d}.png"
@@ -78,6 +79,7 @@ def main():
                 json.dumps(
                     {
                         "image": name,
+                        "teacher_source": source,
                         "stamp_ns": stamp,
                         "steering": command.steering,
                         "throttle": command.throttle,
@@ -93,6 +95,7 @@ def main():
                 "bag": str(args.bag.resolve()),
                 "output": str(args.output.resolve()),
                 "samples": count,
+                "teacher_selection": selection.metadata(),
                 "skipped": skipped,
             },
             indent=2,
@@ -100,7 +103,7 @@ def main():
     )
     if not count:
         raise RuntimeError(
-            "No usable MANUAL samples; inspect topics, clock, mode and skew"
+            "No usable human teacher samples; inspect topics, clock, mode and skew"
         )
     print(f"Exported {count} samples; skipped {skipped}")
 

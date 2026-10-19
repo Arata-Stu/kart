@@ -4,11 +4,16 @@ import math
 from bisect import bisect_right
 
 
-def previous(records, stamp, tolerance_ns):
+def previous_record(records, stamp, tolerance_ns):
     index = bisect_right(records, stamp, key=lambda item: item[0]) - 1
     if index < 0 or not 0 <= stamp - records[index][0] <= tolerance_ns:
         return None
-    return records[index][1]
+    return records[index]
+
+
+def previous(records, stamp, tolerance_ns):
+    record = previous_record(records, stamp, tolerance_ns)
+    return record[1] if record is not None else None
 
 
 def valid_label(command):

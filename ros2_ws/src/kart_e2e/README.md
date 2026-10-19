@@ -172,8 +172,9 @@ export対象外。再学習が必要。JetPilot checkpointの直接互換もな�
 `/teleop/control_cmd` (kart_interfaces/msg/ControlCommand)、
 `/operation_mode/state` (kart_interfaces/msg/OperationModeState)。
 `--image-topic/--command-topic/--mode-topic`で変更可。
+任意の`/teleop/fixed_config` (std_msgs/msg/String) は`--fixed-config-topic`で変更可。
 全topicに`--clock bag`受信時計を使うのが既定。`--clock header`は時計同期済みの場合のみ。
-画像以前100ms以内の最新教師を対応（`--max-skew-ms 100`）、modeは300ms以内のMANUAL限定。
+画像以前100ms以内の最新教師を対応（`--max-skew-ms 100`）、modeは300ms以内、採用モードはbagの固定設定から自動判定する（下記）。
 brake/reverse非0・非有限・範囲外を除外。出力はPNG、samples.jsonl、metadata.json。
 RGB/BGR/RGBA/BGRA/mono8の非圧縮画像対応。反応遅れ・撮影と受信時刻の差は自動補正しない。
 同一bag・同一データセットのtrain/validation共有を許可する。自動的な分割は行わない。
@@ -228,7 +229,7 @@ ROS node/topicの変更はない。decoderの全parameterは既存config/control
 
 UIの「4 rosbag評価」でexport済みONNXとbagを選び、評価名を指定する。`e2e_evaluate` / `python -m kart_e2e.evaluate`はROSノードを起動せず、topicをpublishしないオフラインCLI。入力は`--model`（ONNX bundle）、`--bag`、`--output`（新規保存先）が必須。画像topicの既定は`--image-topic /realsense/color/image_raw`、教師操作は`--command-topic /teleop/control_cmd`、モードは`--mode-topic /operation_mode/state`、時計は`--clock bag`、過去ラベル許容差は`--max-skew-ms 100`。UIではデータセット作成欄の抽出設定を共用する。
 
-学習と同じ前処理・教師対応付けでMANUALの有効ラベル付き画像を抽出し、ONNX RuntimeのCUDAを優先して推論する（利用不可・初期化失敗は理由をログに出してCPUへfallback）。ONNX内部にpaddingが含まれるため入力の二重paddingはしない。モデルmetadataのmode・SHA256・固定/最大スロットルを検証し、不正値や範囲外出力は失敗する。steer-onlyは固定スロットルを使用、steer+throttleは予測値へmetadataの最大スロットルを適用する。AUTO切替・watchdog等のオンライン状態機械は再現しない。
+学習と同じ前処理・教師対応付けで自動判定した教師モードの有効ラベル付き画像を抽出し、ONNX RuntimeのCUDAを優先して推論する（利用不可・初期化失敗は理由をログに出してCPUへfallback）。ONNX内部にpaddingが含まれるため入力の二重paddingはしない。モデルmetadataのmode・SHA256・固定/最大スロットルを検証し、不正値や範囲外出力は失敗する。steer-onlyは固定スロットルを使用、steer+throttleは予測値へmetadataの最大スロットルを適用する。AUTO切替・watchdog等のオンライン状態機械は再現しない。
 
 `report.json`にMAE/RMSE/P95絶対誤差（正規化操作値）、抽出件数、スキップ数、モデルSHA256、実際のprovider一覧・CUDA fallback理由・推論平均・中央値・P95・最小・最大（前処理・最初の10回のwarmupを除外）、最大500点の表示用サンプルを保存。`predictions.csv`には全評価フレームの時刻・教師・生出力・上限適用値・推論時間を保存する。データは`e2e/evaluations/<評価名>/`へ公開し、一時画像は終了時に削除する。学習と同じbagでの評価も許可するが、未知のコースへの性能評価ではない。運転成功率やTensorRT実機レイテンシは別途検証する。
 
@@ -297,7 +298,7 @@ Web UIのdataset作成・学習フォームはRGB用。以下のEVS工程はCLI�
   `tensor_stamp_ros_ns`以前の最新操作を教師にする。窓終端・Tensor stamp・bag受信時刻を同一視しない。
   `latest_event_sensor_us`より後のRAWイベントはその窓へ入れない。
 - 教師は`/teleop/control_cmd`（`kart_interfaces/msg/ControlCommand`）、
-  状態は`/operation_mode/state`（`kart_interfaces/msg/OperationModeState`）。MANUAL限定、brake/reverse除外。
+  状態は`/operation_mode/state`（`kart_interfaces/msg/OperationModeState`）。通常bagはMANUAL、固定収集bagは固定AUTO限定（下記）、brake/reverse除外。
   既定は操作・状態のheader時計、教師期限100ms、mode期限300ms。時計を確認した場合のみ`--clock bag`を使う。
 - sequence逆行／重複、epoch逆行、epoch内の窓逆行、RAW内の時刻resetは拒否。
   sequence欠落数はmetadataへ保存し、欠落窓やoffsetを補間しない。
@@ -356,7 +357,8 @@ manifest内の相対pathはmanifestの親directory基準。
 |--raw / --raw-manifest|片方必須|RAW一覧（単一stream/epoch限定）／明示対応JSON|
 |--model-json|必須|EventState encoder JSON。EVS policyのmetadata.jsonも使用可能|
 |--command-topic|/teleop/control_cmd|操作教師|
-|--mode-topic|/operation_mode/state|MANUAL判定|
+|--mode-topic|/operation_mode/state|教師の走行モード判定|
+|--fixed-config-topic|/teleop/fixed_config|任意のstd_msgs/msg/String。bag全体の収集意図と固定AUTO状態の自動判定|
 |--timing-topic|/event_camera/tensor_timing|センサ窓とROS時刻の対応|
 |--clock|header|教師・modeのheaderまたはbag受信時計|
 |--sample-stride|10|stream/epochごとにTimingをN件おきに採用。250Hz記録なら通常25Hz程度|
@@ -504,5 +506,42 @@ bash scripts/bringup.sh --mode collect --auto-fixed-throttle 0.10 --run-name aut
 CLI/launchの旧`manual_fixed_throttle`は`auto_fixed_throttle`へ変更した。
 実運用設定はkart_bringup/config/input/joy_manager.yaml、未指定ならYAMLを保持する。
 TUIの「AUTOスロットル」で通常／固定を選ぶ。collect/drive/e2eで利用可能、evalは不可。
-固定AUTOのbagはAUTOとして記録されるため、MANUAL限定の既存教師抽出には含まれない。
+RGB/EVS教師抽出はbag内の固定AUTO有効設定を自動検出する。固定収集bagでは固定AUTOだけを採用し、MANUALの復帰・調整区間を全て除外する。通常bagは従来どおりMANUALだけを採用する。
 ROS結合・実車動作は未確認。portable testで固定出力、直接切替、異常ラッチ、HOST handshakeを検証する。
+
+
+### 固定AUTO収集の自動判定（RGB／EVS共通）
+
+追加フラグなしで、bagを一度走査してから抽出モードを決定する。
+RGBのevaluate --bagも同じ抽出器を使う。namespace変更時は各CLIの--fixed-config-topicを指定する。
+`/teleop/fixed_config`に`schema=kart.auto_fixed_throttle.v1`かつ`enabled=true`が
+1件でもあれば、bag全体を`fixed_auto_only`として扱う。設定がSTOP/MANUAL中に記録されても
+固定収集の意図として検出する。**このbagのMANUALは復帰・調整であり、全区間を教師から除外する。**
+固定を途中で無効化しても、そのbagのMANUALを教師へ復帰させない。
+AUTO中の人間のsteeringは`/teleop/control_cmd`から値を変えずに採用する。
+通常のE2E自動操舵指令を教師へ代用しない。
+
+各候補ではmodeの鮮度300ms、既存の操作期限（既定100ms）と有効範囲を確認する。
+さらにサンプル以前300ms以内の最新fixed_configが対応schema・enabled・armed・mode=AUTOであり、
+command.throttleが設定throttleと一致すること（絶対誤差1e-6以内）を要求する。
+未来の設定、設定途絶、STOP、brake/reverse、固定値不一致の中立待ちを除外する。
+ゼロ固定も含め、AUTOの連続観測開始からentry_neutral_s（通常0.3秒）は保守的に除外する。
+MANUAL→AUTOの直接切替でも抽出時はこの待ち時間を取る。modeの観測欠落が300msを超えた場合も
+連続観測を取り直す。教師指令が今回のAUTO開始より古い場合も除外し、復帰MANUALの指令を持ち越さない。armedは物理運動や基板ackを証明する値ではない。
+
+固定AUTO有効設定がないbagは`manual_only`で従来動作を維持する。
+旧`kart.manual_fixed_throttle.v1`もMANUAL収集として扱う。
+固定設定topicがない古いbagの収集意図を、ファイル名やthrottle値から推測しない。
+固定AUTOのbagに設定topicを記録し忘れた場合は自動判定できない。
+未知schema・壊れたJSON・型や範囲の異常は、MANUALへの誤フォールバックを避けるため抽出エラーとする。
+
+Stringにはheaderがないため設定だけはbag受信時刻を使う。RGB/EVSの既存clock選択は維持し、
+header選択時も同じROS時計であることが必要。受信遅延を逆補正したり、未来の設定を先取りしない。
+出力metadata.jsonの`teacher_selection.policy`に自動判定結果、`fixed_config_records`に設定件数、
+`accepted`/`rejected`に教師候補の判定内訳を保存する（RAW範囲・画像処理の最終採用数は`samples`）。
+各samples.jsonlにも`teacher_source=fixed_auto|manual`を保存する。
+
+通常と同じコマンドで新しい出力先へ再抽出すれば、既存の固定AUTO bagにも反映される。
+学習済みモデルには遡及反映されないため、抽出後のdatasetで再学習する。
+`test_teacher_selection.py`と`test_evs_pipeline.py`で混在モード、鮮度、設定変更、
+人間のステア保持、旧bag互換、RGB/EVSの抽出を合成入力で確認する。実bag／ROS SDKでの実行は未確認。

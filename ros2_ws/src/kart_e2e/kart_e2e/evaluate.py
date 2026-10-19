@@ -1,4 +1,4 @@
-"""Offline ONNX evaluation on labeled MANUAL frames from a rosbag; no ROS outputs."""
+"""Offline ONNX evaluation on labeled human-driven frames from a rosbag; no ROS outputs."""
 
 import argparse
 import csv
@@ -131,7 +131,7 @@ def evaluate(model_dir, dataset, output):
             if len(rows) % 100 == 0:
                 print(f"Evaluated {len(rows)} frames", flush=True)
     if not rows:
-        raise ValueError("No usable labeled MANUAL frames")
+        raise ValueError("No usable labeled human-driven frames")
     summary = dict(
         schema=1,
         mode=mode,
@@ -195,6 +195,7 @@ def main():
     p.add_argument("--image-topic", default="/realsense/color/image_raw")
     p.add_argument("--command-topic", default="/teleop/control_cmd")
     p.add_argument("--mode-topic", default="/operation_mode/state")
+    p.add_argument("--fixed-config-topic", default="/teleop/fixed_config")
     p.add_argument("--clock", choices=["bag", "header"], default="bag")
     p.add_argument("--max-skew-ms", type=float, default=100)
     a = p.parse_args()
@@ -219,6 +220,7 @@ def main():
             "image_topic",
             "command_topic",
             "mode_topic",
+            "fixed_config_topic",
             "clock",
             "max_skew_ms",
         ):

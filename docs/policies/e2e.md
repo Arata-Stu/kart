@@ -33,7 +33,7 @@ vehicle・sensor・localizationの所有は既存launchに維持する。
 
 画像前処理を学習・推論で共有し、mode・前処理schema・encoder commitをcheckpointへ保存する。
 公式重みはstrict loadし、重み欠落時のrandom fallbackは禁止する。
-bag/header timestampは混用せず、対応許容時間とMANUAL条件で教師抽出する。
+bag/header timestampは混用せず、対応許容時間とbagの収集意図で教師抽出する。fixed_configのみheaderがないためbag受信時計を使う。
 train/validationは同一bag・同一データセットの使用を許可する（自動分割はしない）。
 同一画像を共有する場合、validation指標は未知データへの汎化評価として扱わない。
 推論・学習の単体テストに使うrandom weightsは
@@ -87,7 +87,7 @@ RAW＋bagの操作指令／mode／TensorTimingから未正規化counts dataset�
 既定40ms・10bin・[start,end)・positive→negative・整数sum pooling。
 EventState固定統計はhistogram_version=2を必須とし、解像度と係数をdataset/checkpoint/ONNXに継承する。
 RAW readerはtime shiftingを無効化してセンサ時刻を保持する。Tensor stampを教師時刻として
-過去のMANUAL指令を対応し、stream/epoch不明・reset・重複・不完全窓を推測で補わない。
+過去の人間の操作指令を対応し、stream/epoch不明・reset・重複・不完全窓を推測で補わない。
 単一stream/epochは--rawで対応、複数の場合はmanifestでRAWごとの対応を明示する。
 
 counts padding→固定正規化→EVS encoderのpatch tokens平均→制御headを同じpolicyとして学習/export。
@@ -111,4 +111,10 @@ bringupのauto_fixed_throttleはAUTOで手動ステア＋固定スロットル�
 MANUALは通常操作。正常なAUTO/MANUAL切替はSTOPを挟まず、異常後はSTOP再armを要求する。
 E2Eモデルmetadataは変更せず、固定設定中はmuxがteleop入力をAUTOにも使用する。
 録画と走行切替は独立。条件はteleop/fixed_config、操作はteleop/control_cmdへ記録する。
-この区間はAUTOとして保存される。現在のRGB/EVS抽出はMANUAL限定のため、固定AUTO区間を除外する。
+RGB/EVS抽出はbag全体のfixed_configを先に走査する。
+kart.auto_fixed_throttle.v1のenabled=trueが1件でもあれば固定収集と判定し、
+固定AUTOの人間ステアだけを採用する。MANUALの復帰・調整はbag全区間で除外する。
+有効固定設定がない従来bagはMANUAL抽出を維持する。
+固定AUTO候補は最新過去300ms以内のenabled/armed/AUTO設定と操作throttle一致を要求し、
+AUTO連続観測のentry_neutral_s以内を除外する。未知・不正設定は拒否し、意図を推測しない。
+判定policy、教師候補の採用・除外内訳、サンプルのteacher_sourceを出力に保存する。

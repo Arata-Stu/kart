@@ -156,6 +156,22 @@ class RawTests(unittest.TestCase):
                 extract(files, commands, [(stamp-1, types.SimpleNamespace(mode=1))],
                         [row], metadata(), path / 'no_teacher', reader_factory=self.reader())
             self.assertFalse((path / 'no_teacher').exists())
+            # Fixed-intended bags use only AUTO human steering; MANUAL is recovery.
+            from kart_e2e.teacher_selection import AUTO_SCHEMA
+            fixed = dict(schema=AUTO_SCHEMA, enabled=True, armed=True, throttle=0.1,
+                         speed_scale=0.3, entry_neutral_s=0.3, mode=1)
+            auto_modes = [(stamp-400_000_000+i*100_000_000, types.SimpleNamespace(mode=1))
+                          for i in range(5)]
+            auto_modes.append((stamp+1, types.SimpleNamespace(mode=2)))
+            fixed_output = path / 'fixed_dataset'
+            report = extract(files, commands, auto_modes, [row, self.timing(2, 4000)], metadata(),
+                             fixed_output, sample_stride=1, reader_factory=self.reader(),
+                             fixed_configs=[(stamp-1, fixed)])
+            self.assertEqual(report['samples'], 1)
+            self.assertEqual(report['teacher_selection']['policy'], 'fixed_auto_only')
+            sample = json.loads((fixed_output / 'samples.jsonl').read_text())
+            self.assertEqual(sample['steering'], 0.2)
+            self.assertEqual(sample['teacher_source'], 'fixed_auto')
             # Ambiguous overlapping split files must never duplicate samples.
             with self.assertRaisesRegex(ValueError, 'Overlapping'):
                 extract(files+files, commands, modes, [row], metadata(), path / 'overlap',

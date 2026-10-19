@@ -1,4 +1,4 @@
-"""RAW + recorded TensorTiming + MANUAL commands -> raw-count policy dataset.
+"""RAW + recorded TensorTiming + automatically selected human commands -> raw-count policy dataset.
 
 RAW is decoded with time shifting DISABLED (sensor microseconds). No guessed
 record-start offset, interpolation across epochs, rectification or RGB input.
@@ -14,7 +14,8 @@ import tempfile
 import numpy as np
 
 from .contract import evs_spec
-from .data import previous, valid_label
+from .data import previous, previous_record
+from .teacher_selection import TeacherSelection, read_fixed_configs
 
 
 def histogram(events, start_us, end_us, sensor_shape, content_shape, latest_us=None):
@@ -160,7 +161,9 @@ class RawWindows:
 
 
 def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
-            max_skew_ms=100, reader_factory=None, provenance=None, source_guard=None):
+            max_skew_ms=100, reader_factory=None, provenance=None, source_guard=None,
+            fixed_configs=()):
+    selection = TeacherSelection(fixed_configs, modes)
     spec = evs_spec(meta)
     if sample_stride < 1 or not 0 < max_skew_ms <= 1000:
         raise ValueError('Invalid sample stride/skew')
@@ -205,9 +208,11 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
                 rows = groups[(file['stream_id'], file['sensor_epoch'])][::sample_stride]
                 for row in rows:
                     stamp = row['tensor_stamp_ros_ns']
-                    command = previous(commands, stamp, int(max_skew_ms * 1e6))
+                    record = previous_record(commands, stamp, int(max_skew_ms * 1e6))
+                    command = record[1] if record is not None else None
                     mode = previous(modes, stamp, 300_000_000)
-                    if command is None or mode is None or mode.mode != 2 or not valid_label(command):
+                    source = selection.select(command, mode, stamp, record[0] if record else None)
+                    if source is None:
                         counters['invalid_teacher'] += 1
                         continue
                     start, end = row['window_start_sensor_us'], row['window_end_sensor_us']
@@ -223,20 +228,20 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
                                        (spec['height'], spec['width']), row['latest_event_sensor_us'])
                     name = f'counts/{len(used)-1:08d}.npy'
                     np.save(stage / name, counts, allow_pickle=False)
-                    sample = dict(counts=name, stamp_ns=stamp, steering=command.steering,
+                    sample = dict(counts=name, stamp_ns=stamp, teacher_source=source, steering=command.steering,
                                   throttle=command.throttle, timing=row, raw=file['path'])
                     stream.write(json.dumps(sample) + '\n')
                 with Path(file['path']).open('rb') as source:
                     sha = hashlib.file_digest(source, 'sha256').hexdigest()
                 raw_provenance.append(dict(file, sha256=sha))
         if not used:
-            raise ValueError('No usable MANUAL EVS windows; check RAW coverage/timing/teachers')
+            raise ValueError('No usable human teacher EVS windows; check RAW coverage/timing/teachers')
         for path, signature in signatures.items():
             stat = Path(path).stat()
             if (stat.st_size, stat.st_mtime_ns) != signature:
                 raise ValueError('RAW changed during extraction; stop recording first')
         result = dict(schema=1, modality='evs', model_spec=spec, evs_metadata=meta,
-                      samples=len(used), skipped=dict(counters), timing_sequence_gaps=missing,
+                      samples=len(used), skipped=dict(counters), teacher_selection=selection.metadata(), timing_sequence_gaps=missing,
                       sample_stride=sample_stride, max_skew_ms=max_skew_ms,
                       raw_time_shifting=False, raw_files=raw_provenance,
                       label_time='tensor_stamp_ros_ns', extraction=provenance or {},
@@ -259,6 +264,7 @@ def main():
     p.add_argument('--model-json', type=Path, required=True)
     p.add_argument('--command-topic', default='/teleop/control_cmd')
     p.add_argument('--mode-topic', default='/operation_mode/state')
+    p.add_argument('--fixed-config-topic', default='/teleop/fixed_config')
     p.add_argument('--timing-topic', default='/event_camera/tensor_timing')
     p.add_argument('--clock', choices=['header', 'bag'], default='header')
     p.add_argument('--sample-stride', type=int, default=10)
@@ -279,6 +285,8 @@ def main():
         if bag_signature() != before:
             raise ValueError('Bag changed during extraction; stop recording first')
     commands, modes, timings = bag_records(a.bag, a.command_topic, a.mode_topic, a.timing_topic, a.clock)
+    fixed_configs = read_fixed_configs(a.bag, a.fixed_config_topic)
+    print(f"Teacher policy: {TeacherSelection(fixed_configs).metadata()['policy']}")
     if a.raw_manifest:
         files = load_manifest(a.raw_manifest)
     else:
@@ -296,7 +304,7 @@ def main():
                       str(v) if isinstance(v, Path) else v) for k, v in vars(a).items()}
     result = extract(files, commands, modes, timings, meta, a.output,
                      sample_stride=a.sample_stride, max_skew_ms=a.max_skew_ms,
-                     provenance=provenance, source_guard=guard)
+                     provenance=provenance, source_guard=guard, fixed_configs=fixed_configs)
     print(f"Exported {result['samples']} EVS samples; skipped {result['skipped']}")
 
 
