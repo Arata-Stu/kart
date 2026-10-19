@@ -10,6 +10,7 @@
     - joy/ready
     - joy/status
     - teleop/control_cmd
+    - teleop/fixed_config
     - propo/control_cmd
     - auto/control_cmd
     - vehicle/control_cmd

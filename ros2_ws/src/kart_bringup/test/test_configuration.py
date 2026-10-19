@@ -61,4 +61,26 @@ class ConfigurationTest(unittest.TestCase):
         (self.root/'input/joy_manager.yaml').unlink()
         with self.assertRaises(FileNotFoundError): load(self.path)
 
+    def test_manual_fixed_preserves_yaml_and_explicit_disable(self):
+        self.edit('input/joy_manager.yaml', lambda d: d['/**/kart_joy_manager']['ros__parameters'].update(manual_fixed_throttle=0.1))
+        _, modules = load(self.path, {'manual_fixed_throttle':''})
+        self.assertEqual(modules['joy_manager']['effective']['manual_fixed_throttle'], 0.1)
+        self.assertEqual(modules['joy_manager']['overrides'], {})
+        _, modules = load(self.path, {'manual_fixed_throttle':'-1'})
+        self.assertEqual(modules['joy_manager']['overrides']['manual_fixed_throttle'], -1.0)
+        _, modules = load(self.path, {'manual_fixed_throttle':'0.20'})
+        self.assertEqual(modules['joy_manager']['effective']['manual_fixed_throttle'], 0.2)
+        self.assertIsInstance(modules['joy_manager']['overrides']['manual_fixed_throttle'], float)
+
+    def test_manual_fixed_invalid_values_fail_before_launch(self):
+        for value in ('nan', 'inf', '-0.1', '0.31', 'not-a-number', True):
+            with self.subTest(value=value), self.assertRaises((ValueError, TypeError)):
+                load(self.path, {'manual_fixed_throttle':value})
+        for key in ('enable_joy', 'enable_control'):
+            with self.assertRaises(ValueError):
+                load(self.path, {'manual_fixed_throttle':'0.1', key:'false'})
+        self.edit('input/joy_manager.yaml', lambda d: d['/**/kart_joy_manager']['ros__parameters'].update(manual_fixed_throttle=0.4))
+        with self.assertRaises(ValueError):
+            load(self.path)
+
 if __name__=='__main__': unittest.main()

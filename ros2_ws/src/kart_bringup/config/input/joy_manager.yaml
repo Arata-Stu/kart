@@ -20,3 +20,4 @@
     deadzone: 0.08
     steering_scale: 1.0
     speed_scale: 0.3
+    manual_fixed_throttle: -1.0  # -1: normal triggers; 0..speed_scale: fixed only in MANUAL

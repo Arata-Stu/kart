@@ -1,6 +1,7 @@
 #include "kart_vehicle/bridge_protocol.hpp"
 #include "kart_vehicle/host_session.hpp"
 #include "kart_vehicle/serial_port.hpp"
+#include "kart_system/manual_throttle.hpp"
 #include <cassert>
 #include <iomanip>
 #include <sstream>
@@ -71,6 +72,37 @@ int main() {
   session.stop(); trimmed=session.output({},true,7.06,-1,0,trim,true);
   assert(trimmed.flags==1 && trimmed.steering_milli==0 && trimmed.throttle_milli==0);
   assert(session.esc().state()==EscState::State::unknown);
+  {
+    using namespace kart_system;
+    // Entry grace provides neutral handshake input; the portable bridge refuses
+    // propulsion without HOST acknowledgement.
+    ManualFixedThrottle handshake;
+    handshake.throttle=0.1;
+    handshake.observe(STOP,30,30,0,true,true);
+    handshake.observe(MANUAL,30.1,30.1,0.1,true,true);
+    const kart_system::Command raw{0.4,0.25,0,0};
+    auto result=handshake.command(raw,false,30.11,0.11,true);
+    assert(neutral(result.command));
+    kart_vehicle::HostSession session;
+    session.start(0.1);
+    auto frame=session.output(result.command,true,0.11,1,0);
+    assert(frame.flags & kart_vehicle::HOST_REQUEST);
+    kart_vehicle::StatusFrame status;
+    status.selector=kart_vehicle::RcSelector::automatic;
+    status.active_path=kart_vehicle::ActivePath::automatic;
+    session.status(status);
+    handshake.observe(MANUAL,30.3,30.3,0.3,true,true);
+    handshake.command({},false,30.3,0.3,true);
+    handshake.observe(MANUAL,30.42,30.42,0.42,true,true);
+    result=handshake.command(raw,false,30.42,0.42,true);
+    assert(result.command.throttle==0.1);
+    frame=session.output(result.command,true,0.42,1,0);
+    assert(frame.throttle_milli==100);
+    kart_vehicle::HostSession unacknowledged;
+    unacknowledged.start(0.1);
+    frame=unacknowledged.output(result.command,true,0.42,1,0);
+    assert(frame.throttle_milli==0 && unacknowledged.phase()==kart_vehicle::HostSession::Phase::disarmed);
+  }
   // POSIX pseudo terminal: framing, fragmented status, nonblocking reads, no physical USB.
   int master=posix_openpt(O_RDWR|O_NOCTTY|O_NONBLOCK); assert(master>=0);
   assert(grantpt(master)==0 && unlockpt(master)==0);

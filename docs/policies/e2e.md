@@ -103,3 +103,12 @@ CLIを実装の正本とし、EVS dataset/学習のWeb UI操作は今回追加�
 RAW再構成はオンラインのpacket dropを再現できず、offsetは受信遅延を含む。
 合成データ・ランダム重み・ORT比較を、実RAW/公式蒸留重み/実TensorRT/ROS/車両の確認と区別する。
 操作手順・全CLI引数・追加launch構成はkart_e2e READMEのEVS節へ記載する。
+
+
+## MANUAL固定スロットル教師
+
+bringupのmanual_fixed_throttleを明示指定すると、MANUALで手動操舵＋固定スロットルを記録できる。
+Joy managerが固定後の指令を既存teleop/control_cmdへ出すため、RGB/EVSのMANUAL教師抽出に別経路を作らない。
+新鮮なSTOP→MANUAL、進入時0.3秒中立、キャンセル／異常時のSTOPラッチはkart_systemで管理する。
+AUTOのE2E fixed_throttleやモデルmetadataは別設定で、MANUAL固定値から上書きしない。
+記録開始・MANUAL進入・記録停止を自動連動させない。値は車速や補正後PWMではない。

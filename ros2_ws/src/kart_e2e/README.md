@@ -473,3 +473,17 @@ PYTHONPATH=ros2_ws/src/kart_e2e \
 KART_DINOV3_REPO=/workspaces/python_ws/dinov3 \
 python -m pytest -q ros2_ws/src/kart_e2e/test
 ```
+
+
+## MANUAL固定スロットルでの教師収集
+
+`bash scripts/bringup.sh --mode collect --manual-fixed-throttle 0.10`で、
+MANUAL中に手動ステア＋固定throttleを記録できる。EVS RAWを併用する場合は`--evs`を追加する。
+既定は通常R2/L2操作。TUIでも通常／固定を選べる。E2E起動中のMANUALにも同じ引数を使える。
+値は補正前の正規化指令で、車速ではない。AUTOのモデルruntime設定とは独立する。
+
+中立→△MANUAL→0.3秒中立→固定出力。×STOP、○ブレーキ、L2で解除してSTOPへ戻り、
+ボタンを離しただけでは再開しない。記録は標準bringupのR1開始/L1停止で走行と独立。
+固定後の`/teleop/control_cmd`と`/teleop/fixed_config`をbagへ保存するため、
+既存RGB/EVSのMANUAL教師抽出はそのまま使用する。
+[全設定・起動・検証範囲](../kart_bringup/README.md#manual固定スロットルでのデータ収集)。

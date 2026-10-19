@@ -208,6 +208,7 @@ class MissionCompositionTests(unittest.TestCase):
             }
             values.update(
                 mode="collect",
+                manual_fixed_throttle="0.10",
                 enable_bridge="false",
                 create_sensor_container="false",
                 sensor_container="/external/sensors",
@@ -221,6 +222,8 @@ class MissionCompositionTests(unittest.TestCase):
                     "launch/vehicle.launch.py",
                 ],
             )
+            vehicle_args = lu.include.call_args_list[-1].kwargs['launch_arguments']
+            self.assertEqual(vehicle_args['manual_fixed_throttle'], '0.10')
             lu.component_container.assert_not_called()
             lu.include.reset_mock()
             args.mode = "drive"

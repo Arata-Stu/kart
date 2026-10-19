@@ -75,7 +75,7 @@ class EvsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             bias = Path(folder).resolve() / "indoor.bias"
             bias.write_text("178 % bias_diff_off\n")
-            answers = iter(("collect", "30", "60", True, "cpu", bias, False))
+            answers = iter(("collect", "30", "60", True, "cpu", bias, False, "normal"))
             def choose(title, values, label=str, default=0):
                 print(title)
                 return next(answers)

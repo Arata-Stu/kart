@@ -12,6 +12,8 @@ common=(-std=c++17 -Wall -Wextra -Wpedantic -UNDEBUG
 "$kart_build/control"
 "$cxx" "${common[@]}" "$kart_root/ros2_ws/src/kart_system/test/test_joy_controls.cpp" -o "$kart_build/joy_controls"
 "$kart_build/joy_controls"
+"$cxx" "${common[@]}" "$kart_root/ros2_ws/src/kart_system/test/test_manual_throttle.cpp" -o "$kart_build/manual_throttle"
+"$kart_build/manual_throttle"
 "$cxx" "${common[@]}" -pthread "$kart_root/ros2_ws/src/kart_vehicle/test/test_bridge_core.cpp" \
   "$kart_root/ros2_ws/src/kart_vehicle/src/bridge_protocol.cpp" -o "$kart_build/bridge"
 "$kart_build/bridge"

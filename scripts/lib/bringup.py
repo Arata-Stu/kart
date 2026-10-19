@@ -89,6 +89,8 @@ def main():
     parser.add_argument(
         "--dry-run", action="store_true", help="選択・検証とコマンド表示のみ"
     )
+    parser.add_argument("--manual-fixed-throttle", type=float, default=None,
+                        help="MANUAL throttle command: -1 normal, 0..speed_scale fixed (not vehicle speed)")
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--e2e-model-dir", default="")
     parser.add_argument("--eval-localization", choices=("vslam", "vgl", "fresh"), default=None)
@@ -226,6 +228,24 @@ def main():
             )
         elif args.run_name is None:
             args.run_name = input("run_name [run] > ").strip() or "run"
+    if args.mode == 'eval' and args.manual_fixed_throttle is not None:
+        raise ValueError('--manual-fixed-throttleは実車のcollect/drive/e2eで指定してください')
+    if interactive and args.mode != 'eval' and args.manual_fixed_throttle is None:
+        from kart_bringup.configuration import load
+        _, modules = load(config / 'bringup.yaml')
+        fixed = modules['joy_manager']['effective']['manual_fixed_throttle']
+        limit = modules['joy_manager']['effective']['speed_scale']
+        selection = choose('MANUALスロットル', ['normal', 'fixed'],
+                           lambda v: '通常（R2/L2操作）' if v == 'normal' else '固定値で収集（ステア手動）',
+                           default=int(fixed >= 0))
+        if selection == 'normal':
+            args.manual_fixed_throttle = -1.0
+        else:
+            default = fixed if fixed >= 0 else ''
+            raw = input(f'固定スロットル 0..{limit}' + (f' [{default}]' if default != '' else '') + ' > ').strip()
+            if not raw and default == '':
+                raise ValueError('固定スロットルの値を入力してください')
+            args.manual_fixed_throttle = float(raw or default)
     if args.multicam_mode and args.mode not in ('drive','eval'):
         raise ValueError('--multicam-modeはVSLAMを使用するdrive/evalで指定してください')
     fresh = args.mode == "eval" and args.eval_localization == "fresh"
@@ -268,12 +288,18 @@ def main():
         width, height, _ = sensors["depth_module.infra_profile"].split("x")
         if not vslam_only and profile["input_shape"][2:] != [int(height), int(width)]:
             raise ValueError("VGLモデルとInfra解像度が一致しません")
-    if args.mode != "eval" and not args.no_bridge:
+    if args.mode != "eval":
         from kart_bringup.configuration import load
 
-        _, modules = load(config / "bringup.yaml",
-                          {"enable_bridge": "true", "device": args.device})
-        print(f"車両基板: {modules['bridge']['effective']['device']}")
+        _, modules = load(config / "bringup.yaml", {
+            "enable_bridge": str(not args.no_bridge).lower(), "device": args.device,
+            "manual_fixed_throttle": '' if args.manual_fixed_throttle is None else str(args.manual_fixed_throttle),
+        })
+        if not args.no_bridge:
+            print(f"車両基板: {modules['bridge']['effective']['device']}")
+        fixed = modules['joy_manager']['effective']['manual_fixed_throttle']
+        print('MANUALスロットル: ' + ('通常（R2/L2）' if fixed < 0 else
+              f'固定 {fixed:.6f}（△でMANUAL、0.3秒中立後に前進、ステア手動、○/L2/×で解除・STOP）'))
     if args.mode == "e2e":
         from kart_e2e.contract import model_contract, runtime_settings, input_contract
 
@@ -298,6 +324,7 @@ def main():
         playback(config,args.bag,args.rate,extra_topics=imu_topics(config,args.tracking_mode or "0"))
     values = {
         "mode": args.mode,
+        "manual_fixed_throttle": None if args.manual_fixed_throttle is None else str(args.manual_fixed_throttle),
         "rgb_fps": args.rgb_fps,
         "infra_fps": args.infra_fps,
         "enable_bridge": str(not args.no_bridge).lower(),
@@ -373,7 +400,7 @@ def main():
         print(
             f"保存先: {args.record_dir}/<日付>/<起動時刻>/{args.run_name or 'run'}（最初のSTARTで生成）"
         )
-        print("録画はL1開始/R1停止。起動ではAUTOに切り替えません。終了はCtrl-C。")
+        print("録画はJoy設定の開始/停止ボタンで操作（標準bringupはR1開始/L1停止）。起動では録画・AUTOを開始しません。終了はCtrl-C。")
     if args.mode == "drive":
         print(
             "車体→カメラTFは別途必要です。仮TFは配信しません。舵角・PIDの実車設定も確認してください。"

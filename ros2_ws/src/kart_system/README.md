@@ -24,6 +24,7 @@ QoSはすべてvolatile、keep-last。R=reliable、BE=best effort、数字=depth
 | 入力 | `/joy` | `sensor_msgs/msg/Joy` | R/1 | 正規化した軸・ボタン |
 | 入力 | `/joy/ready` | `std_msgs/msg/Bool` | R/1 | 入力・profileが有効かつ設定中でないこと |
 | 入力 | `/operation_mode/state` | `kart_interfaces/msg/OperationModeState` | R/1 | 現在モード |
+| 出力 | `/teleop/fixed_config` | `std_msgs/msg/String` | R/1 | 10 Hz、固定スロットル設定とMANUAL gateの状態（JSON） |
 | 出力 | `/teleop/control_cmd` | `kart_interfaces/msg/ControlCommand` | R/1 | 有効なJoy受信時に手動指令を配信。元stampを保持 |
 | 出力 | `/operation_mode/request` | `kart_interfaces/msg/OperationModeRequest` | R/10 | モード切替・入力喪失時のSTOP要求 |
 | 出力 | `/bag/request` | `kart_interfaces/msg/BagRequest` | R/10 | L1 START / R1 STOP。走行モードと独立 |
@@ -94,6 +95,7 @@ sim時刻での入力鮮度と実時間での通信断を分離する。元stamp
 | `deadzone` | `0.08` | ステア入力の不感帯。0..0.5、外側を再正規化 |
 | `steering_scale` | `1.0` | ステア倍率。0.01..1 |
 | `speed_scale` | `0.3` | 正負スロットル倍率。0.01..1。車速[m/s]ではない |
+| `manual_fixed_throttle` | `-1.0` | MANUAL収集用の固定正規化指令。-1で通常操作、0..speed_scaleで固定。起動時固定 |
 
 スロットルは`(R2 − L2) × speed_scale`。各トリガー0.01以下を0とし、負側は`reverse`へ格納する。
 両方同量なら相殺するが、モード要求時には両トリガーを離す必要がある。
@@ -131,3 +133,40 @@ ros2 run kart_system kart_command_mux
 `colcon test --packages-select kart_system`でcontrol_core・joy_controlsを実行する。
 ROSを使わないテストはプロジェクトrootの`./scripts/tests/test-vehicle.sh`でも実行可能。
 単体テストはmacOSで確認済み。ROS上の結合ビルド・実機動作は未検証。
+
+
+## MANUAL固定スロットル収集
+
+JoyManagerNode内の`ManualFixedThrottle`で手動操舵＋固定スロットルを生成する。
+`manual_fixed_throttle=-1.0`（既定）は通常のR2/L2操作を維持する。
+明示的に0..speed_scaleを指定すると、新鮮なSTOPを観測し、中立のJoy/readyが有効なまま
+新しいMANUALへ入った場合だけ有効になる。MANUAL進入後0.3秒は全軸中立を配信し、
+muxとbridgeの中立armを妨げない。その後はステアが手動、R2に関係なく指定throttleを使用する。
+0.10は正規化要求0.10でありspeed_scaleをさらに掛けず、固定車速でもない。
+起動時からMANUAL、非中立入力での外部MANUAL要求、AUTO→MANUAL直接遷移では有効にならない。
+AUTO/PROPO/STOPでは固定値を注入しない。E2EのAUTO throttleや他のAUTO producerは変更しない。
+
+×STOP、○ブレーキ、L2入力（0.01より大きい値）は固定出力を解除してSTOP要求を送る。
+○はbrake=1を優先し、L2は前進を中立化してreverseを要求しない。
+ボタンを離しても再開せず、STOPを観測後に全入力を中立にして△を押す。
+Joy/ready/任意deadman喪失、不正入力、mode stamp/受信の300ms失効、ROS時計巻戻し、
+300ms超の制御処理途絶でも中立＋STOPとなる。Joy/readyの100ms監視は既存と同じ。
+固定値はread-onlyで、動作中には変更しない。変更はSTOPしてlaunchを終了・値を指定して再起動する。
+
+固定有効時はSTOP/MANUALでD-pad上下のthrottle trim要求を送らず、ステアtrimだけを維持する。
+値はbridge補正前の要求で、既存のinitial_throttle_trim・外部からのtrim要求・ESC状態処理はbridgeが所有する。
+実際の補正値は`/vehicle/trim/state`で確認する。中立と物理停止、固定指令と実速度は区別する。
+
+`/teleop/control_cmd`には固定後の要求を元Joy stampで配信するため、既存RGB/EVSの
+MANUAL教師抽出をそのまま使える。異常時の中立／ブレーキだけは検出時刻を付ける。
+`/teleop/fixed_config`は`kart.manual_fixed_throttle.v1` JSONを10Hzで配信する。
+フィールドはenabled、throttle（無効時-1）、speed_scale、entry_neutral_s（0.3）、mode、armed。
+armedはgateの許可状態で、実際の車速・物理停止・bridgeのHOST成立を表さない。
+既定namespaceでは上記topic、namespace変更時は他のteleop topicと同じ相対名で解決する。
+service/actionは追加なし。録画の開始・停止は独立したまま。
+
+bringup標準設定の録画ボタンはR1開始/L1停止（本pkg基準YAMLはL1開始/R1停止）。
+起動例と操作手順は[kart_bringup](../kart_bringup/README.md#manual固定スロットルでのデータ収集)。
+`test_manual_throttle.cpp`は固定値・中立期間・STOP再arm・時計／入力異常・ブレーキ優先を検証する。
+`./scripts/tests/test-vehicle.sh`でも実行する。bridge handshakeとの組合せはkart_vehicleのportable testで検証する。
+これらはROS非依存テストで、ROS結合・実車確認ではない。

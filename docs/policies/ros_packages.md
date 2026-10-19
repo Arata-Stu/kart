@@ -355,3 +355,14 @@ MANUALのJoy制御は維持し、STOPを観測してからAUTOへ入った場合
 試験時間0はモード変更まで継続、正値は満了で中立とSTOP要求。
 録画は独立操作。VSLAM品質を固定出力の制御条件とせず、解析側で不良推定区間を除外する。
 AUTO試験は解析のmodeを明示して扱い、固定指令と実車速度／実舵角を混同しない。
+
+
+## MANUAL固定スロットルの収集
+
+MANUALの定値throttleはJoy managerの明示opt-inで合成し、別のMANUAL/AUTO publisherを追加しない。
+未指定は通常R2/L2、固定値は0..speed_scaleの正規化要求。学習教師へも固定後の要求を残す。
+新鮮なSTOP→MANUALと中立Joyを要求し、進入0.3秒は全軸中立としてmux/bridgeのarmを維持する。
+○ブレーキ・L2・×STOP・入力／mode失効・時計異常で解除してSTOPを要求し、自動復帰しない。
+固定設定は起動時だけ変更し、値変更はSTOP後の再起動。D-padのthrottle trim要求は固定有効中に送らない。
+bridgeの補正・ESC処理をJoy側で再実装しない。固定指令と固定車速を区別する。
+録画と走行操作は独立。MANUAL教師とteleop/fixed_configを標準bagに含める。

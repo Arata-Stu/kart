@@ -132,3 +132,8 @@ macOSでprotocol・arm制御・擬似端末の単体テスト、実firmwareパ�
 ESCモデルの全20遷移、負入力保持、専用brake拒否、制御権喪失、整数化境界を単体テスト済み。
 再実行: `scripts/tests/test-vehicle.sh /path/to/kart_bridge_board`（project rootから、実機アクセスなし）。
 ROS結合ビルド、実USB再接続、CH3切替・ESC動作は未検証。
+
+
+portableなbridge_core testに、MANUAL固定スロットルの0.3秒中立からHOST handshakeへの
+組合せ確認を追加した。HOST未成立の非中立入力は引き続き拒否する。
+bridge実装・parameter・topicは変更しない。このテストはROS/基板/実車動作の確認ではない。

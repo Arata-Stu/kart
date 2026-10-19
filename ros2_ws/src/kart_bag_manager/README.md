@@ -234,3 +234,15 @@ USB遅延を含む推定なので、実機で同期精度を確認する。
 
 固定指令試験の条件`/control/fixed_config`（`std_msgs/msg/String`、JSON）を標準topicへ含む。
 同じbag内の条件変更を保存し、録画開始・終了操作は独立のままとする。
+
+
+## MANUAL固定スロットルの記録
+
+通常/OpenEBのpkg基準configとbringupの標準topicsへ`teleop/fixed_config`を追加する。
+既定の`/teleop/fixed_config`は`std_msgs/msg/String`、Joy managerがreliable/volatile/depth1・10Hzで
+`kart.manual_fixed_throttle.v1` JSONを配信する。schema、enabled、throttle、speed_scale、
+entry_neutral_s、mode、armedを保存する。armedはgate状態で、実車の走行・停止確認ではない。
+record子プロセスのQoSは既存の自動適応／overrideに従う。
+`/teleop/control_cmd`の教師は固定値適用後の要求。MANUAL modeのまま既存RGB/EVS抽出を使える。
+manager自身の入出力・parameterは追加せず、topics既定値への追加だけを行う。
+録画と走行開始・停止は従来どおり独立。[操作手順](../kart_bringup/README.md#manual固定スロットルでのデータ収集)。
