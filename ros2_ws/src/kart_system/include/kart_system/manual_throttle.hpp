@@ -7,8 +7,8 @@ struct ManualThrottleResult {
   bool stop{false};
 };
 
-// Explicit opt-in for MANUAL data collection. Authority uses the actual STOP ->
-// MANUAL transition; a node restart or input recovery must not start propulsion.
+// Explicit opt-in for AUTO data collection. Authority uses the actual STOP ->
+// AUTO transition; a node restart or input recovery must not start propulsion.
 class ManualFixedThrottle {
 public:
   double throttle{-1.0};
@@ -25,12 +25,12 @@ public:
     mode_=mode; mode_stamp_=stamp;
     if (!valid_mode(mode) || !fresh_stamp(ros,stamp,0.3) ||
         (std::isfinite(previous_stamp) && stamp<previous_stamp)) {trip(); return;}
-    if (mode==STOP) {last_ros_=last_steady_=NEVER;}
-    authority_.observe(mode,steady,mode==MANUAL && healthy && neutral_input);
-    if (mode==MANUAL && previous!=MANUAL && authority_.active()) {entered_=steady;}
+    if (mode==STOP || (mode==AUTO && previous!=AUTO)) {last_ros_=last_steady_=NEVER;}
+    authority_.observe(mode,steady,healthy && (neutral_input || host_mode(previous)));
+    if (mode==AUTO && previous!=AUTO && authority_.active()) {entered_= previous==MANUAL ? steady-ENTRY_NEUTRAL_S : steady;}
   }
   bool allowed(double ros, double steady, bool healthy) {
-    if (mode_!=MANUAL) {return false;}
+    if (mode_!=AUTO) {return false;}
     if ((std::isfinite(last_ros_) && ros<last_ros_) ||
         (std::isfinite(last_steady_) && (steady<last_steady_ || steady-last_steady_>0.3))) {trip();}
     last_ros_=ros; last_steady_=steady;
@@ -38,7 +38,7 @@ public:
   }
   ManualThrottleResult command(Command raw, bool reverse_pressed,
                                double ros, double steady, bool healthy) {
-    if (!enabled() || mode_!=MANUAL) {return {raw,false};}
+    if (!enabled() || mode_!=AUTO) {return {raw,false};}
     if (!allowed(ros,steady,healthy) || !valid(raw)) {trip(); return {{},true};}
     if (raw.brake>0 || reverse_pressed) {
       trip();
@@ -51,7 +51,7 @@ public:
     return {raw,false};
   }
   void trip() {authority_.trip();}
-  bool active() const {return enabled() && mode_==MANUAL && authority_.active();}
+  bool active() const {return enabled() && mode_==AUTO && authority_.active();}
 private:
   Authority authority_;
   uint8_t mode_{0};

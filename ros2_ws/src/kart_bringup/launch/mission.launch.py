@@ -30,7 +30,7 @@ def add_mission(args):
         "device": args.device,
         "record_dir": args.record_dir,
         "run_name": args.run_name,
-        "manual_fixed_throttle": getattr(args, "manual_fixed_throttle", ""),
+        "auto_fixed_throttle": getattr(args, "auto_fixed_throttle", ""),
     }
     evs_values = {key: getattr(args, key, "") for key in ("evs_backend", "evs_serial", "evs_bias_file", "evs_tensor_config")}
     if any(evs_values.values()) and not cfg["enable_evs"]:
@@ -168,7 +168,7 @@ def generate_launch_description():
         "device",
         "record_dir",
         "run_name",
-        "manual_fixed_throttle",
+        "auto_fixed_throttle",
         "e2e_model_dir",
         "evs_backend",
         "evs_serial",

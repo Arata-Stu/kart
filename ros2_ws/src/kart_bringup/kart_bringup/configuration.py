@@ -10,7 +10,7 @@ NODE_NAMES = {
 }
 BOOL_KEYS = ('composed', 'enable_joy', 'enable_control', 'enable_bridge', 'enable_bag_manager', 'enable_jetson_stats')
 RUNTIME_KEYS = (*BOOL_KEYS, 'container_name', 'namespace', 'bag_shutdown_timeout',
-                'profile', 'device', 'record_dir', 'bag_config', 'run_name', 'session_layout', 'manual_fixed_throttle')
+                'profile', 'device', 'record_dir', 'bag_config', 'run_name', 'session_layout', 'auto_fixed_throttle')
 
 
 def load(path, overrides=None):
@@ -76,22 +76,24 @@ def load(path, overrides=None):
             raise ValueError('session_layout must be true or false')
         for key in ('overrides', 'effective'):
             modules['bag_manager'][key]['session_layout'] = overrides['session_layout'] == 'true'
-    if 'manual_fixed_throttle' in overrides:
-        value = overrides['manual_fixed_throttle']
+    if 'auto_fixed_throttle' in overrides:
+        value = overrides['auto_fixed_throttle']
         if isinstance(value, bool):
-            raise ValueError('manual_fixed_throttle must be numeric')
+            raise ValueError('auto_fixed_throttle must be numeric')
         value = float(value)
         for key in ('overrides', 'effective'):
-            modules['joy_manager'][key]['manual_fixed_throttle'] = value
+            modules['joy_manager'][key]['auto_fixed_throttle'] = value
     joy = modules['joy_manager']['effective']
-    fixed = joy['manual_fixed_throttle']
+    fixed = joy['auto_fixed_throttle']
     limit = joy['speed_scale']
     if (type(fixed) not in (int, float) or not math.isfinite(fixed)
             or type(limit) not in (int, float) or not math.isfinite(limit) or not 0.01 <= limit <= 1
             or not (fixed == -1 or 0 <= fixed <= limit)):
-        raise ValueError('manual_fixed_throttle must be -1 (normal) or 0..speed_scale')
+        raise ValueError('auto_fixed_throttle must be -1 (normal) or 0..speed_scale')
     if fixed >= 0 and not (settings['enable_joy'] and settings['enable_control']):
-        raise ValueError('manual_fixed_throttle requires enable_joy=true and enable_control=true')
+        raise ValueError('auto_fixed_throttle requires enable_joy=true and enable_control=true')
+    for key in ('effective', 'overrides'):
+        modules['command_mux'][key]['auto_use_teleop'] = fixed >= 0
     if settings['enable_bridge']:
         if not modules['bridge']['effective'].get('device'):
             raise ValueError('bridge requires device in vehicle/bridge.yaml or device:=...')

@@ -10,8 +10,8 @@ public:
       // STOP is fail-closed and may be sent without a timestamp from the CLI.
       if (!valid_mode(msg->mode) || (msg->mode != STOP &&
           !fresh_stamp(now().seconds(),seconds(msg->header.stamp),0.5))) {return;}
-      // Host entry must start at STOP; repeated host requests never constitute rearming.
-      if (host_mode(msg->mode) && mode_ != STOP && mode_ != msg->mode) {return;}
+      // Initial entry requires STOP; healthy HOST modes may hand over directly.
+      if (host_mode(msg->mode) && mode_ != STOP && !host_mode(mode_)) {return;}
       mode_=msg->mode; source_=msg->source; publish();
     });
     timer_=create_wall_timer(std::chrono::milliseconds(100),[this] {publish();});
@@ -27,6 +27,7 @@ private:
 class CommandMuxNode : public rclcpp::Node {
 public:
   explicit CommandMuxNode(const rclcpp::NodeOptions & options) : Node("command_mux",options) {
+    fixed_auto_=declare_parameter<bool>("auto_use_teleop",false,fixed());
     timeout_=number(*this,"command_timeout",0.15,0.02,0.2);
     wall_timeout_=number(*this,"wall_timeout_s",0.0,0.0,60.0);
     pub_=create_publisher<Control>("vehicle/control_cmd",rclcpp::QoS(1).reliable());
@@ -38,8 +39,8 @@ public:
     mode_sub_=create_subscription<Mode>("operation_mode/state",1,[this](Mode::ConstSharedPtr msg) {
       if (!valid_mode(msg->mode) || !fresh_stamp(now().seconds(),seconds(msg->header.stamp),0.3)) {trip("invalid_mode"); return;}
       mode_stamp_=seconds(msg->header.stamp);
-      const auto & input = msg->mode == AUTO ? automatic_ : manual_;
-      gate_.observe(msg->mode,steady_now(),input.available(steady_now(),now().seconds(),timeout_,wall_timeout_) && neutral(values(input.msg)));
+      const auto & input = msg->mode == AUTO && !fixed_auto_ ? automatic_ : manual_;
+      gate_.observe(msg->mode,steady_now(),input.available(steady_now(),now().seconds(),timeout_,wall_timeout_) && (gate_.active() || neutral(values(input.msg))));
       if (host_mode(msg->mode) && !gate_.active()) {trip("arming_requires_stop_and_neutral_input");}
     });
     timer_=create_wall_timer(std::chrono::milliseconds(10),[this] {tick();});
@@ -51,12 +52,13 @@ private:
   }
   void tick() {
     if (!host_mode(gate_.mode())) {return;}
-    const auto & input=gate_.mode()==AUTO ? automatic_ : manual_;
+    const auto & input=gate_.mode()==AUTO && !fixed_auto_ ? automatic_ : manual_;
     if (!gate_.check(steady_now(),wall_timeout_ > 0 ? wall_timeout_ : 0.3,
         fresh_stamp(now().seconds(),mode_stamp_,0.3) && input.available(steady_now(),now().seconds(),timeout_,wall_timeout_))) {trip("input_or_mode_timeout"); return;}
     // Preserve source time; never rejuvenate an upstream command.
     pub_->publish(input.msg);
   }
+  bool fixed_auto_{false};
   double timeout_{0.15}, wall_timeout_{0}, mode_stamp_{0}, last_stop_{NEVER}; Authority gate_; Sample automatic_,manual_;
   rclcpp::Publisher<Control>::SharedPtr pub_;
   rclcpp::Publisher<Request>::SharedPtr request_pub_;

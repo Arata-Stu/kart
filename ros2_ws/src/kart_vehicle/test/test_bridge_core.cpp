@@ -79,7 +79,7 @@ int main() {
     ManualFixedThrottle handshake;
     handshake.throttle=0.1;
     handshake.observe(STOP,30,30,0,true,true);
-    handshake.observe(MANUAL,30.1,30.1,0.1,true,true);
+    handshake.observe(AUTO,30.1,30.1,0.1,true,true);
     const kart_system::Command raw{0.4,0.25,0,0};
     auto result=handshake.command(raw,false,30.11,0.11,true);
     assert(neutral(result.command));
@@ -91,9 +91,9 @@ int main() {
     status.selector=kart_vehicle::RcSelector::automatic;
     status.active_path=kart_vehicle::ActivePath::automatic;
     session.status(status);
-    handshake.observe(MANUAL,30.3,30.3,0.3,true,true);
+    handshake.observe(AUTO,30.3,30.3,0.3,true,true);
     handshake.command({},false,30.3,0.3,true);
-    handshake.observe(MANUAL,30.42,30.42,0.42,true,true);
+    handshake.observe(AUTO,30.42,30.42,0.42,true,true);
     result=handshake.command(raw,false,30.42,0.42,true);
     assert(result.command.throttle==0.1);
     frame=session.output(result.command,true,0.42,1,0);

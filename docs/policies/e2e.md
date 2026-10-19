@@ -105,10 +105,10 @@ RAW再構成はオンラインのpacket dropを再現できず、offsetは受信
 操作手順・全CLI引数・追加launch構成はkart_e2e READMEのEVS節へ記載する。
 
 
-## MANUAL固定スロットル教師
+## AUTO固定スロットルの記録
 
-bringupのmanual_fixed_throttleを明示指定すると、MANUALで手動操舵＋固定スロットルを記録できる。
-Joy managerが固定後の指令を既存teleop/control_cmdへ出すため、RGB/EVSのMANUAL教師抽出に別経路を作らない。
-新鮮なSTOP→MANUAL、進入時0.3秒中立、キャンセル／異常時のSTOPラッチはkart_systemで管理する。
-AUTOのE2E fixed_throttleやモデルmetadataは別設定で、MANUAL固定値から上書きしない。
-記録開始・MANUAL進入・記録停止を自動連動させない。値は車速や補正後PWMではない。
+bringupのauto_fixed_throttleはAUTOで手動ステア＋固定スロットルを合成する。
+MANUALは通常操作。正常なAUTO/MANUAL切替はSTOPを挟まず、異常後はSTOP再armを要求する。
+E2Eモデルmetadataは変更せず、固定設定中はmuxがteleop入力をAUTOにも使用する。
+録画と走行切替は独立。条件はteleop/fixed_config、操作はteleop/control_cmdへ記録する。
+この区間はAUTOとして保存される。現在のRGB/EVS抽出はMANUAL限定のため、固定AUTO区間を除外する。

@@ -820,57 +820,34 @@ Jetsonの通常buildは`kart_sim`を探索対象から除外する。simを使�
 `--with-sim`で明示的に含める。実機用bringupの起動ではsim packageは不要。
 
 
-## MANUAL固定スロットルでのデータ収集
+## AUTO固定スロットル・手動ステア
 
-通常collect、E2E走行中のMANUAL、drive中のMANUALで利用できる。
-新しいAUTOノードを追加せず、既存kart_system::JoyManagerNode（/kart_joy_manager）が
-固定値と手動ステアを合成し、`/teleop/control_cmd`へ配信する。
-独自ノード・service/actionは追加しない。AUTOの出力設定やE2Eモデルmetadataは変更しない。
+`auto_fixed_throttle=-1.0`（既定）は通常動作。0..speed_scale（標準上限0.3）を
+指定すると、□AUTOで固定throttle＋手動ステア、△MANUALで通常R2/L2＋手動ステアになる。
+AUTO中もステアを操作でき、△でSTOPを挟まずMANUALへ直接引き継げる。
+正常なMANUAL→AUTOも直接切替可能。STOPからの初回進入は全入力中立が必要で、
+AUTO初回進入は0.3秒中立を配信してmux/bridgeのHOST handshakeを待つ。
+直接切替時は中立待ちを挟まない。×はSTOP、固定AUTO中の○はbrake優先＋STOP、L2は中立＋STOP。
+入力途絶・異常・再起動後はSTOPから再armし、モード変更だけで異常解除しない。
+固定値は速度ではなく補正前の正規化要求で、起動時固定。変更はSTOP後に再起動する。
+
+JoyManagerNodeが`/teleop/control_cmd`（kart_interfaces/msg/ControlCommand、reliable/depth1）へ
+元Joy stampで合成指令を出版する。bringupは固定設定からcommand_muxの
+`auto_use_teleop`（bool、ノード既定false）を導出し、有効時はAUTOでもこの入力を選ぶ。
+この間はE2Eなどの`/auto/control_cmd`を車両へ流さない。
+`/teleop/fixed_config`（std_msgs/msg/String、reliable/volatile/depth1、10Hz）は
+`kart.auto_fixed_throttle.v1`、enabled、throttle、speed_scale、entry_neutral_s、mode、armedを記録する。
+armedは論理的許可で、実車速度や基板ackを示さない。独自service/actionは追加なし。
+MANUALは通常のthrottle trim、固定AUTOは既存bridgeのAUTO補正規則を使用する。
+録画はR1開始／L1停止（bringup標準）で、走行モード操作とは独立。
 
 ```bash
-cd /workspaces
-bash scripts/bringup.sh --mode collect \
-  --manual-fixed-throttle 0.10 --run-name e2e_manual_fixed_010
-
-# EVS RAWも記録する場合（EVS Docker）
-bash scripts/bringup.sh --mode collect --evs \
-  --manual-fixed-throttle 0.10 --run-name evs_manual_fixed_010
-
-# E2EのAUTOと切り替えつつMANUALを固定する場合
-bash scripts/bringup.sh --mode e2e \
-  --e2e-model-dir /workspaces/models/e2e_v1 --manual-fixed-throttle 0.10
+bash scripts/bringup.sh --mode collect --auto-fixed-throttle 0.10 --run-name auto_fixed_010
+# EVSの場合は --evs を追加
 ```
 
-`bash scripts/bringup.sh`の対話選択にも「MANUALスロットル」を追加した。
-通常（R2/L2）／固定値で収集を選び、固定時は値を入力する。起動前に実効値を表示する。
-CLIの`--manual-fixed-throttle`、mission.launch.pyとvehicle.launch.pyの`manual_fixed_throttle`は
-未指定／空ならYAMLを保持。`-1`は通常操作、`0`はスロットル0固定、正値は固定要求。
-上限はJoy managerのspeed_scale（標準0.3）。NaN・無限値・負の小数・上限超えを起動前に拒否する。
-固定有効時はenable_joy=trueとenable_control=trueが必要。offline evalでは指定を拒否する。
-
-実運用の正本は`config/input/joy_manager.yaml`の`manual_fixed_throttle: -1.0`。
-ノードの既定値も-1.0、起動時固定で動的変更不可。引数は指定したときだけこの値を上書きする。
-既存`speed_scale`、軸・ボタン・Joy/ready監視は同じYAMLと[kart_system README](../kart_system/README.md)を参照。
-
-操作（標準bringupのボタン割当）:
-
-1. STOPのまま起動し、R1で録画開始。
-2. 全軸・トリガー・○を中立にして△でMANUALへ入る。
-3. 0.3秒の中立期間後、R2を離していても指定スロットルで前進し、ステアだけ手動になる。
-4. ×でSTOPに戻し、L1で録画停止。録画停止自体では走行モードを変えない。
-
-○はブレーキ優先でSTOP要求、L2も固定前進を解除してSTOP要求（後退しない）。
-解除しても自動再開せず、中立→新しいSTOP→MANUALが必要。
-入力途絶・mode失効・時計異常も中立＋STOP。固定有効中はD-pad上下のthrottle trim要求を無効化する。
-bridgeの既存初期trim・外部trim・ESC処理は維持するため、指定値は補正前の正規化要求であり固定車速ではない。
-値を変更する際はSTOPして再起動する。通常操作へ戻す明示指定は`--manual-fixed-throttle -1`。
-
-|方向|既定topic|型|QoS・内容|
-|---|---|---|---|
-|Joy manager出力／mux入力|/teleop/control_cmd|kart_interfaces/msg/ControlCommand|既存reliable publisher depth1、手動ステア＋固定後throttle、元Joy stamp|
-|Joy manager出力／標準bag対象|/teleop/fixed_config|std_msgs/msg/String|reliable/volatile/depth1、10Hz。schema、enabled、throttle、speed_scale、entry_neutral_s、mode、armed|
-
-追加の実運用ROS parameterはmanual_fixed_throttleだけ。他の入出力・既定値は既存Joy managerと同じ。
-通常／OpenEBの両bag profileに固定設定topicを追加し、操作教師も固定後の値を記録する。
-CLI/TUI、設定継承・範囲拒否、mission→vehicle転送、C++ gateとbridge handshakeをportable testで検証。
-ROS build・実node結合・実車の前進／STOPは未確認。
+CLI/launchの旧`manual_fixed_throttle`は`auto_fixed_throttle`へ変更した。
+実運用設定はkart_bringup/config/input/joy_manager.yaml、未指定ならYAMLを保持する。
+TUIの「AUTOスロットル」で通常／固定を選ぶ。collect/drive/e2eで利用可能、evalは不可。
+固定AUTOのbagはAUTOとして記録されるため、MANUAL限定の既存教師抽出には含まれない。
+ROS結合・実車動作は未確認。portable testで固定出力、直接切替、異常ラッチ、HOST handshakeを検証する。

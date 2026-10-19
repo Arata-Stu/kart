@@ -14,7 +14,9 @@ int main() {
   assert(!a.check(6.4,0.3,true)); // Mode publisher loss.
   assert(!a.observe(MANUAL,6.5,true));
   a.observe(STOP,7,true); assert(a.observe(AUTO,8,true));
-  assert(!a.observe(MANUAL,8.1,true)); // Requires intermediate STOP.
+  assert(a.observe(MANUAL,8.1,true)); // Healthy live handover preserves authority.
+  assert(a.observe(AUTO,8.2,true));
+  a.trip(); assert(!a.observe(MANUAL,8.3,true)); // Fault cannot be bypassed.
   a.observe(STOP,9,true); assert(a.observe(AUTO,10,true));
   assert(!a.check(10.1,0.3,false)); // Command timeout/invalid input.
   assert(!a.observe(AUTO,10.2,true));

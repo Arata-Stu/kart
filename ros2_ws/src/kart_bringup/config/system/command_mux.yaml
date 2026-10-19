@@ -1,5 +1,6 @@
 /**/command_mux:
   ros__parameters:
     use_sim_time: false
+    auto_use_teleop: false  # bringup derives true from auto_fixed_throttle >= 0
     command_timeout: 0.15
     wall_timeout_s: 0.0  # 0 follows command_timeout, sim uses separate wall watchdog

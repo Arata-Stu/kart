@@ -55,7 +55,7 @@ public:
     mode_sub_=create_subscription<Mode>("operation_mode/state",1,[this](Mode::ConstSharedPtr msg) {
       if (!valid_mode(msg->mode) || !fresh_stamp(now().seconds(),seconds(msg->header.stamp),0.3)) {trip("invalid_mode"); return;}
       const bool before=gate_.active();
-      const bool permit=healthy() && status_->active_path==ActivePath::disabled;
+      const bool permit=healthy() && (gate_.active() || status_->active_path==ActivePath::disabled);
       gate_.observe(msg->mode,steady_now(),permit);
       if (!gate_.active()) {
         session_.stop();

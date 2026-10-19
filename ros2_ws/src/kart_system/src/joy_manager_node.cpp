@@ -25,12 +25,12 @@ public:
     teleop_.deadzone=number(*this,"deadzone",0.08,0,0.5);
     teleop_.steering_scale=number(*this,"steering_scale",1.0,0.01,1);
     teleop_.speed_scale=number(*this,"speed_scale",0.3,0.01,1);
-    manual_fixed_.throttle=number(*this,"manual_fixed_throttle",-1.0,-1.0,1.0);
+    manual_fixed_.throttle=number(*this,"auto_fixed_throttle",-1.0,-1.0,1.0);
     if (!manual_fixed_.valid_settings(teleop_.speed_scale)) {
-      throw std::invalid_argument("manual_fixed_throttle must be -1 (disabled) or 0..speed_scale");
+      throw std::invalid_argument("auto_fixed_throttle must be -1 (disabled) or 0..speed_scale");
     }
     fixed_config_pub_=create_publisher<std_msgs::msg::String>("teleop/fixed_config",rclcpp::QoS(1).reliable());
-    RCLCPP_INFO(get_logger(),"MANUAL fixed throttle: %s; value=%.6f; limit(speed_scale)=%.6f",
+    RCLCPP_INFO(get_logger(),"AUTO fixed throttle: %s; value=%.6f; limit(speed_scale)=%.6f",
       manual_fixed_.enabled() ? "enabled" : "disabled",manual_fixed_.throttle,teleop_.speed_scale);
     pub_=create_publisher<Control>("teleop/control_cmd",rclcpp::QoS(1).reliable());
     request_pub_=create_publisher<Request>("operation_mode/request",10);
@@ -46,7 +46,7 @@ public:
     joy_sub_=create_subscription<sensor_msgs::msg::Joy>("joy",1,[this](sensor_msgs::msg::Joy::ConstSharedPtr msg) {on_joy(*msg);});
     timer_=create_wall_timer(std::chrono::milliseconds(10),[this] {
       if (!input_healthy()) {lose_input();}
-      else if (manual_fixed_.enabled() && mode_==MANUAL &&
+      else if (manual_fixed_.enabled() && mode_==AUTO &&
                !manual_fixed_.allowed(now().seconds(),steady_now(),!blocked_)) {
         stop_fixed({},"joy_manager:fixed_throttle_mode_unavailable");
       }
@@ -64,7 +64,7 @@ private:
   }
   void publish_fixed_config() {
     std_msgs::msg::String msg;
-    msg.data="{\"schema\":\"kart.manual_fixed_throttle.v1\",\"enabled\":"+
+    msg.data="{\"schema\":\"kart.auto_fixed_throttle.v1\",\"enabled\":"+
       std::string(manual_fixed_.enabled() ? "true" : "false")+
       ",\"throttle\":"+std::to_string(manual_fixed_.throttle)+
       ",\"entry_neutral_s\":"+std::to_string(ManualFixedThrottle::ENTRY_NEUTRAL_S)+
@@ -80,8 +80,8 @@ private:
   }
   void lose_input() {
     buttons_.reset(); neutral_input_=false; manual_fixed_.trip();
-    if (mode_==MANUAL) {
-      if (manual_fixed_.enabled()) {stop_fixed({},"joy_manager:fixed_throttle_input_unavailable"); return;}
+    if (mode_==MANUAL || (mode_==AUTO && manual_fixed_.enabled())) {
+      if (manual_fixed_.enabled() && mode_==AUTO) {stop_fixed({},"joy_manager:fixed_throttle_input_unavailable"); return;}
       blocked_=true;
       if (steady_now()-last_stop_>=0.1) {request(*this,request_pub_,STOP,"joy_manager:input_unavailable"); last_stop_=steady_now();}
     }
@@ -101,24 +101,28 @@ private:
       RCLCPP_INFO(get_logger(),"Bag request: %s",actions->bag_stop ? "STOP" : "START");
     }
     if (actions->stop) {
-      if (manual_fixed_.enabled() && mode_==MANUAL) {stop_fixed({},"joy_manager:stop_button");}
+      if (manual_fixed_.enabled() && mode_==AUTO) {stop_fixed({},"joy_manager:stop_button");}
       else {blocked_=true; request(*this,request_pub_,STOP,"joy_manager:stop_button");}
       return;
     }
-    if (!actions->deadman) {if (mode_==MANUAL) {lose_input();} return;}
+    if (!actions->deadman) {if (host_mode(mode_)) {lose_input();} return;}
     if (blocked_) {return;}
     if ((mode_==STOP || mode_==MANUAL) && (actions->steering_delta!=0 || actions->throttle_delta!=0)) {
       kart_interfaces::msg::ControlTrim trim; trim.header=joy.header;
       trim.steering=actions->steering_delta;
-      trim.throttle=manual_fixed_.enabled() ? 0 : actions->throttle_delta;
+      trim.throttle=actions->throttle_delta;
       if (trim.steering!=0 || trim.throttle!=0) {trim_pub_->publish(trim);}
+    }
+    if (actions->manual && mode_==AUTO) {
+      request(*this,request_pub_,MANUAL,"joy_manager:manual_takeover");
+      Control msg; msg.header=joy.header; set_values(msg,teleop_.command(joy.axes,actions->brake)); pub_->publish(msg); return;
     }
     const auto raw=teleop_.command(joy.axes,actions->brake);
     const auto result=manual_fixed_.command(raw,joy.axes[teleop_.reverse_axis]>0.01,
       now().seconds(),steady_now(),input_healthy() && !blocked_);
     if (result.stop) {stop_fixed(result.command,"joy_manager:fixed_throttle_cancelled"); return;}
     Control msg; msg.header=joy.header; set_values(msg,result.command); pub_->publish(msg);
-    if (teleop_.can_arm(joy.axes,actions->brake) && mode_==STOP) {
+    if ((mode_==STOP && teleop_.can_arm(joy.axes,actions->brake)) || host_mode(mode_)) {
       if (actions->manual) {request(*this,request_pub_,MANUAL,"joy_manager:manual_button");}
       else if (actions->automatic) {request(*this,request_pub_,AUTO,"joy_manager:auto_button");}
     }

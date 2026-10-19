@@ -35,7 +35,8 @@ inline bool fresh_input(double ros, double stamp, double steady, double received
 constexpr double NEVER = -std::numeric_limits<double>::infinity();
 
 // A local latch, deliberately independent of periodic mode messages.
-// Restart/fault requires observing STOP, then a NEW host-mode transition.
+// Restart/fault requires STOP then a NEW host-mode transition.
+// Healthy active HOST authority survives a direct AUTO/MANUAL handover.
 class Authority {
 public:
   bool observe(uint8_t mode, double now, bool permit) {
@@ -45,7 +46,8 @@ public:
     if (mode == STOP) {active_ = false; saw_stop_ = true; return false;}
     if (!host_mode(mode)) {trip(); return false;}
     if (previous != mode) {
-      active_ = previous == STOP && saw_stop_ && permit;
+      active_ = permit && ((previous == STOP && saw_stop_) ||
+        (host_mode(previous) && active_));
       saw_stop_ = false;
     }
     return active_;

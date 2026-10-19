@@ -134,6 +134,10 @@ ESCモデルの全20遷移、負入力保持、専用brake拒否、制御権喪�
 ROS結合ビルド、実USB再接続、CH3切替・ESC動作は未検証。
 
 
-portableなbridge_core testに、MANUAL固定スロットルの0.3秒中立からHOST handshakeへの
+portableなbridge_core testに、AUTO固定スロットルの0.3秒中立からHOST handshakeへの
 組合せ確認を追加した。HOST未成立の非中立入力は引き続き拒否する。
 bridge実装・parameter・topicは変更しない。このテストはROS/基板/実車動作の確認ではない。
+
+正常なHOST稼働中のAUTO↔MANUALはAuthorityを保持して直接切替する。
+この切替ではHostSession/ESC履歴を再初期化せず、操舵と通常手動操作への引継ぎを許可する。
+異常・通信途絶・再接続後のSTOP再arm要件は維持する。
