@@ -37,6 +37,9 @@ def test_cli_update_scope_and_provenance(tmp_path,finetune,explicit,expected,cac
     with patch.object(sys,'argv',args),patch('kart_e2e.train.backbone',return_value=encoder):
         main()
     report=json.loads((output/'run.json').read_text())
+    assert report['effective_precision']=='fp32' and not report['amp_enabled']
+    assert not report['grad_scaler_enabled']
+    assert report['precision']=='auto'
     assert report['learning_rate']==expected and report['finetune']==finetune
     assert report['loss']==('mse' if image_format=='npy' else 'smooth_l1')
     assert report['selection_metric']=='validation_mse'

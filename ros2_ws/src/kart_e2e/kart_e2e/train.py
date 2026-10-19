@@ -104,6 +104,8 @@ def main():
     p.add_argument("--initialization", choices=["pretrained", "scratch"], default="pretrained")
     p.add_argument("--finetune", action="store_true", help="Update the full backbone and control head")
     p.add_argument("--device", default="cuda")
+    p.add_argument("--precision", choices=["auto", "fp32", "bf16", "fp16"], default="auto",
+                   help="CUDA AMP: auto prefers native BF16, otherwise FP16; CPU auto uses FP32")
     p.add_argument("--epochs", type=int, default=None, help="Default 10 pretrained / 50 scratch")
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--learning-rate", type=float, default=None,
@@ -149,6 +151,11 @@ def main():
             or a.lr_patience < 0 or not math.isfinite(a.min_lr) or a.min_lr < 0
             or (a.lr_scheduler != "none" and a.min_lr > a.learning_rate)):
         p.error("beta > 0, 0 < lr-factor < 1, patience >= 0, 0 <= min-lr <= learning-rate required")
+
+    from .precision import resolve_precision, autocast_context
+    effective_precision = resolve_precision(a.precision, a.device)
+    scaler = torch.amp.GradScaler("cuda", enabled=effective_precision == "fp16")
+    print(f"Precision: requested={a.precision}; effective={effective_precision}; grad_scaler={scaler.is_enabled()}", flush=True)
 
     from .contract import validate_runtime
 
@@ -220,6 +227,10 @@ def main():
     provenance["total_parameters"] = sum(v.numel() for v in model.parameters())
     print(f"Training: finetune={a.finetune}; lr={a.learning_rate:g}; "
           f"trainable={provenance['trainable_parameters']}/{provenance['total_parameters']}", flush=True)
+    provenance["effective_precision"] = effective_precision
+    provenance["amp_enabled"] = effective_precision != "fp32"
+    provenance["grad_scaler_enabled"] = scaler.is_enabled()
+    provenance["feature_cache_precision"] = "fp32" if effective_cache else None
     provenance["selection_metric"] = "validation_mse"
     provenance["scheduler_metric"] = "validation_loss" if scheduler else None
     provenance["weights_sha256"] = weights_sha
@@ -238,14 +249,18 @@ def main():
                 for images, target in loader:
                     target = target.to(a.device, non_blocking=True)
                     inputs = images.to(a.device, non_blocking=True)
-                    prediction = model.predict_features(inputs) if effective_cache else model(inputs)
-                    loss = regression_loss(prediction, target, a.loss, a.smooth_l1_beta)
+                    with autocast_context(effective_precision):
+                        prediction = model.predict_features(inputs) if effective_cache else model(inputs)
+                    # Loss and comparison metrics stay FP32; casts preserve gradients.
+                    prediction = prediction.float()
+                    loss = regression_loss(prediction, target.float(), a.loss, a.smooth_l1_beta)
                     if not torch.isfinite(loss):
                         raise RuntimeError("Non-finite training/validation loss")
                     if index == 0:
-                        optimizer.zero_grad()
-                        loss.backward()
-                        optimizer.step()
+                        optimizer.zero_grad(set_to_none=True)
+                        scaler.scale(loss).backward()
+                        scaler.step(optimizer)
+                        scaler.update()
                     total += loss.item() * len(images)
                     total_mse += torch.nn.functional.mse_loss(prediction.detach(), target).item() * len(images)
                     mae += (prediction.detach() - target).abs().sum(0)
@@ -256,6 +271,8 @@ def main():
         if scheduler:
             scheduler.step(metrics["validation_loss"])
         metrics["next_learning_rate"] = optimizer.param_groups[0]["lr"]
+        if scaler.is_enabled():
+            metrics["grad_scale"] = scaler.get_scale()
         with (a.output / "metrics.jsonl").open("a") as stream:
             stream.write(json.dumps(metrics) + "\n")
         print(metrics, flush=True)

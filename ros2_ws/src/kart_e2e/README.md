@@ -241,13 +241,13 @@ UIの「4 rosbag評価」でexport済みONNXとbagを選び、評価名を指定
 
 ### Notebook TensorRT build
 
-UI「rosbag評価」の「NotebookでTensorRT build・速度計測」は選択ONNXを`python -m kart_e2e.build_engine --model <bundle> --output <新規ディレクトリ>`で処理する。ROSノード・topicは追加しない。x86_64限定、`trtexec`はPATHまたは`/usr/src/tensorrt/bin/trtexec`から利用し、ONNXのSHA256/入出力契約を検証する。精度はtrtexec既定、形状は固定1×3×120×212。`--warmUp=500 --duration=3 --exportTimes=<file>`で合成入力の計測を行い、engine・timings.json・report.jsonを`e2e/engines/<name>/`へ保存する。reportはONNX/engineバイト数、ビルド＋計測合計秒、GPU情報、利用可能なcomputeMs/latencyMs/h2dMs/d2hMs統計、再現コマンドを含む。詳細TensorRTバージョン・GPU計測ログはUIジョブログに残る。未対応オプションやGPU不足は失敗として表示し、engineを成功公開しない。
+UI「ONNX export」の「NotebookでTensorRT build・速度計測」は選択ONNXを`python -m kart_e2e.build_engine --model <bundle> --output <新規ディレクトリ>`で処理する。ROSノード・topicは追加しない。x86_64限定、`trtexec`はPATHまたは`/usr/src/tensorrt/bin/trtexec`から利用し、ONNXのSHA256/入出力契約を検証する。精度はFP32（既定、TF32無効）またはFP16を選択。RGB形状は固定1×3×120×212、EVSはbundleの20ch形状を使用する。`--warmUp=500 --duration=3 --exportTimes=<file>`で合成入力の計測を行い、engine・timings.json・report.jsonを`e2e/engines/<name>/`へ保存する。reportはONNX/engineバイト数、ビルド＋計測合計秒、GPU情報、利用可能なcomputeMs/latencyMs/h2dMs/d2hMs統計、再現コマンドを含む。詳細TensorRTバージョン・GPU計測ログはUIジョブログに残る。未対応オプションやGPU不足は失敗として表示し、engineを成功公開しない。
 
 Notebook engineはJetsonへ転送しない。既存の転送機能は引き続きONNXとmetadataのみを送信する。合成入力のTensorRT計測はrosbagでの精度検証ではなく、engineの数値一致も別途必要。
 
 ## E2E TensorRT事前build
 
-Jetsonのkartコンテナ内で`bash /workspaces/scripts/e2e_trt.sh`を実行する。`/workspaces/models`以下の転送済みONNX bundleをfzfで選択する。直接指定は`bash /workspaces/scripts/e2e_trt.sh /workspaces/models/<モデル名>`、探索先変更は`--models-root <dir>`。`KART_TRT_PYTHON`既定は`/opt/inference/bin/python`。ROS起動・車両指令publishは行わない。
+Jetsonのkartコンテナ内で`bash /workspaces/scripts/e2e_trt.sh`を実行する。`/workspaces/models`以下の転送済みONNX bundleをfzfで選択し、次にFP32/FP16を選択する。直接指定は`bash /workspaces/scripts/e2e_trt.sh /workspaces/models/<モデル名>`、探索先変更は`--models-root <dir>`。`KART_TRT_PYTHON`既定は`/opt/inference/bin/python`。ROS起動・車両指令publishは行わない。
 
 FP32が既定。TensorRT 10では`--fp16`も指定可能、TensorRT 11以降ではこのフラグを拒否する。`--force`で再buildする。モデル配下の`model_<ONNX SHA先頭12桁>.plan`と同名`.json`にハッシュ・GPU UUID/名前・アーキテクチャ・CUDAドライバ・TensorRT版を保存する。`.build.log`と`.timings.json`には詳細ログと合成入力による速度計測を保存。warmup 500ms、計測3秒で、GPU compute/latencyの平均・中央値・P95が得られる場合に表示する。FP16の精度一致やrosbag走行性能はこの計測では検証しない。稼働中の推論を止めてから実行する。
 
@@ -885,3 +885,56 @@ ViT-B事前学習済み重みは「学習環境」の専用欄で設定する。
 RGB Small/Tiny/Base/CNNの復元・export・評価・オフライン特徴量可視化を共通経路で扱う。
 CNNのPCAは16画素strideの畳み込み空間特徴でありViTのpatch tokenとは構造が異なる。
 EVSのモデル/初期化契約は変更しない。ROSノード・topic・parameter追加なし。
+
+### AMP（混合精度）学習
+
+制御学習の`--precision`は`auto`（既定）/`fp32`/`bf16`/`fp16`。
+GUIの「学習精度」でも同じ値を指定する。RGB Small/Tiny/Base・CNN・EVSの
+head学習／全体fine-tuning／RGB scratchに共通で適用する。Tiny第1段階の特徴蒸留は対象外。
+
+- auto: CPUはFP32。CUDAは選択したdeviceのnative BF16（compute capability 8以上かつ
+  `is_bf16_supported()`）を優先し、非対応ならFP16を使う。
+- fp32: AMPなし。従来比較用。
+- bf16: CUDA native BF16必須。CPU・非対応GPUでは明示エラー。
+- fp16: CUDA必須。`torch.amp.GradScaler`を併用し、非有限勾配時はPyTorch標準のstepスキップ・scale調整を行う。
+
+forwardだけautocastし、出力をFP32へcastした後、loss・比較MSE・MAEをFP32で計算する。
+backwardはautocast外。model自体をhalfへ変換せず、parameter/state_dictはFP32を維持する。
+optimizerは`zero_grad(set_to_none=True)`を使用する。
+特徴量キャッシュの初回encoder計算はFP32を維持し、キャッシュ内容をAMP設定で変更しない。
+キャッシュ使用時のAMPはheadに適用する。全体更新では従来どおりキャッシュを無効化する。
+
+run.jsonとcheckpoint provenanceに要求`precision`、`effective_precision`、`amp_enabled`、
+`grad_scaler_enabled`、`feature_cache_precision`を保存する。FP16ではmetrics.jsonlに`grad_scale`も記録する。
+起動ログとGUI実験一覧に実効精度を表示する。既存のFP32 checkpoint復元・export契約は維持する。
+AMPの検証forwardもautocastするため、指標集計がFP32でもFP32 forwardと完全一致する保証はない。
+`--precision fp32`との精度比較と、対象GPUでの処理時間・メモリ計測を行うこと。
+CPU/モックによる選択・学習互換テスト済み。CUDA上のBF16/FP16学習テストはGPUがある場合のみ実行する。
+
+### TensorRT build精度の選択
+
+学習時AMPとTensorRT build精度は独立。ONNXは従来どおりFP32入出力を使用する。
+FP16 buildは内部の低精度演算を許可する指定で、全layerのFP16化を保証するものではない。
+ビルド後にRGB/EVSそれぞれのtensor名・shape・FP32入出力をdeserializeして検証する。
+
+Notebook GUIは「ONNX export」画面の「NotebookでTensorRT build・速度計測」で
+モデルとFP32/FP16を選択する。既定FP32。`build_engine --precision fp32|fp16`も共通。
+FP16は`trtexec --fp16`、FP32は`--noTF32`を使用する（本経路は従来のTensorRT精度フラグ向け）。
+精度をreport.jsonとUI履歴に保存し、異なる精度のNotebook engineは別成果物へ保存する。
+
+Jetsonは次でモデル選択→build精度選択の順にfzfを表示する。
+
+```bash
+bash scripts/e2e_trt.sh
+# モデルを指定して精度だけ対話選択
+bash scripts/e2e_trt.sh /workspaces/models/policy
+# 自動実行や精度を固定する場合、従来フラグで精度選択を省略
+bash scripts/e2e_trt.sh /workspaces/models/policy --fp16
+bash scripts/e2e_trt.sh /workspaces/models/policy --fp32
+```
+
+モデルのengine保存先は従来どおり1つ。要求精度と検証済みreportが一致すると再利用し、
+異なる精度を選ぶと再buildする。新engineの検証成功後に置換し、失敗時は旧engineを保持する。
+CLIの精度メニューの先頭はFP32。`--force`で同じ精度も再buildできる。
+ROS TensorRT nodeの入出力設定は変更不要。学習AMPからbuild精度を暗黙に決めない。
+ローカルテストでメニュー順・flags・精度記録・cache判定を確認。実GPU/Jetsonのbuildは別途検証する。

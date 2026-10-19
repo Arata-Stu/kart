@@ -765,3 +765,15 @@ scratchは重み不要。CNNはDINOソースも不要。同じデータ分割・
 seedの既定42、scratch学習率の既定1e-4。epochとLRは上書き可能。
 実験一覧にarchitectureと初期化を表示し、損失表示・export・評価・可視化・整理は共通操作。
 入力前処理は既存RGBと共通。CNNの構成はkart_e2e READMEを参照。
+
+制御学習の「学習精度」は既定AMP自動。CUDAではnative BF16優先、非対応ならFP16＋GradScaler、
+CPUはFP32になる。FP32/BF16/FP16の明示指定も可能で、非対応モードはエラーにする。
+実効精度はジョブログ・run.json・checkpoint・実験一覧へ保存する。
+loss/比較指標・保存重みはFP32。初回特徴量キャッシュはFP32を維持する。
+Tiny特徴蒸留の第1段階は対象外。変更は新しい学習ジョブから適用し、実行中ジョブは変更しない。
+
+TensorRT build操作は「ONNX export」画面にまとめている。
+「NotebookでTensorRT build・速度計測」を開き、buildするONNXとFP32/FP16を選択する。
+既定FP32（TF32無効）、FP16は内部演算のFP16を許可。どちらもFP32入出力を検証する。
+学習AMPとは独立した選択で、精度を成果物名・report・履歴・結果表示に残す。
+Notebook engineはJetsonへ転用せず、Jetson側の`e2e_trt.sh`でモデル→FP32/FP16の順に選択して再buildする。

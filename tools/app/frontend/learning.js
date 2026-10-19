@@ -120,7 +120,7 @@ function render() {
       kind === "datasets"
         ? `${row.id.includes("/") ? row.id.split("/").slice(0, -1).join(" ") + " · " : ""}${row.samples.toLocaleString()} samples · ${row.bag.split("/").pop()}`
         : kind === "runs"
-          ? `${row.architecture || "dinov3_vits16"} · ${row.initialization === "scratch" ? "scratch" : row.finetune ? "全体fine-tuning" : "head学習"} · ${row.mode} · epoch ${row.metrics?.epoch ?? "—"} · val MSE ${row.metrics?.validation_mse?.toPrecision(4) ?? "—"}`
+          ? `${row.architecture || "dinov3_vits16"} · ${row.effective_precision || "fp32"} · ${row.initialization === "scratch" ? "scratch" : row.finetune ? "全体fine-tuning" : "head学習"} · ${row.mode} · epoch ${row.metrics?.epoch ?? "—"} · val MSE ${row.metrics?.validation_mse?.toPrecision(4) ?? "—"}`
           : `${row.mode} · ORT最大誤差 ${Number(row.ort_max_abs_error).toExponential(2)}`;
     if (kind === "evaluations")
       detail = `${row.samples} frames · ${row.model} · steer MAE ${row.metrics.steering_command.mae.toFixed(4)}`;
@@ -175,7 +175,8 @@ export async function refreshLearning() {
   updateFeatureDatasets();
   options("e2e-push-model", data.models.map(artifactOption), "モデルを選択");
   options("e2e-eval-model", data.models.map(artifactOption), "モデルを選択");
-  options("e2e-engine-history", data.engines, "Notebook engineの結果を選択");
+  options("e2e-engine-model", data.models.map(artifactOption), "buildするモデルを選択");
+  options("e2e-engine-history", data.engines.map(row=>({...row,label:`${row.name || row.id} · ${(row.precision || "fp32").toUpperCase()}`})), "Notebook engineの結果を選択");
   updateEvalInput();
   suggestNames();
   render();
@@ -234,6 +235,7 @@ action("e2e-start-train", () =>
     architecture: $("e2e-train-modality").value === "evs" ? "dinov3_vits16" : $("e2e-architecture").value,
     initialization: $("e2e-train-modality").value === "evs" ? "pretrained" : $("e2e-initialization").value,
     seed: Number($("e2e-seed").value),
+    precision: $("e2e-precision").value,
     encoder: $("e2e-tiny-encoder").value,
     finetune: $("e2e-finetune").checked,
     feature_cache: $("e2e-feature-cache").checked,
@@ -289,6 +291,7 @@ action("e2e-settings-save", async () => {
 });
 on("job-finished", async ({detail:job}) => {
   if (catalog) await refreshLearning();
+  if (job.status === 'succeeded' && job.result?.kind === 'models') $("e2e-engine-model").value = job.result.id;
   if (job.status === 'succeeded' && job.result?.kind === 'encoders') $("e2e-tiny-encoder").value = job.result.id;
   if (job.status === 'succeeded' && ['runs','encoders'].includes(job.result?.kind) &&
       step === 'train' && !$("learning-page").hidden && !document.querySelector('dialog[open]'))
@@ -298,9 +301,10 @@ on("connection", render);
 
 action("e2e-build-engine", () =>
   start("build-engine", {
-    model: $("e2e-eval-model").value,
+    model: $("e2e-engine-model").value,
+    precision: $("e2e-engine-precision").value,
     name: nextVersion(
-      ($("e2e-eval-model").value || "model").slice(0, 42) + "-notebook-trt",
+      ($("e2e-engine-model").value || "model").slice(0, 36) + "-trt-" + $("e2e-engine-precision").value,
       catalog.engines.map((r) => r.id),
     ),
   }),

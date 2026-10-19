@@ -361,6 +361,12 @@ class Learning:
                 "--device",
                 cfg["device"],
             ]
+            precision = body.get("precision", "auto")
+            if precision not in ("auto", "fp32", "bf16", "fp16"):
+                raise ValueError("学習精度はauto / fp32 / bf16 / fp16です")
+            if precision in ("bf16", "fp16") and not cfg["device"].startswith("cuda"):
+                raise ValueError("BF16/FP16の明示指定にはCUDAが必要です。CPUでは自動またはFP32を選択してください")
+            args += ["--precision", precision]
             seed = self.integer(body.get("seed", 42), 0, 2147483647)
             args += ["--initialization", initialization, "--seed", str(seed)]
             if not scratch:
@@ -381,7 +387,7 @@ class Learning:
                     "mode": mode,
                     "modality": modality,
                     "architecture": architecture,
-                    "initialization": initialization, "seed": seed,
+                    "initialization": initialization, "seed": seed, "precision": precision,
                     "encoder": body.get("encoder") if architecture=="dinov3_vitt16" and not scratch else None,
                     "train": body["train"],
                     "validation": body["validation"],
@@ -397,6 +403,9 @@ class Learning:
                 "resources": ["e2e-compute", *source_resources, *["e2e:datasets:" + item for item in (*body["train"], *body["validation"])]],
             }
         if action == "build-engine":
+            precision = body.get("precision", "fp32")
+            if precision not in ("fp16", "fp32"):
+                raise ValueError("TensorRT build精度はfp16またはfp32です")
             model = self.folder("models", body.get("model"))
             self.contract(model)
             return {
@@ -404,8 +413,8 @@ class Learning:
                 "kind": "engines",
                 "target": self.target("engines", key),
                 "module": "build_engine",
-                "args": ["--model", str(model), "--output", "@OUTPUT@"],
-                "provenance": {"model": body["model"]},
+                "args": ["--model", str(model), "--output", "@OUTPUT@", "--precision", precision],
+                "provenance": {"model": body["model"], "precision": precision},
                 "resources": ["e2e-compute", "e2e:models:" + body["model"]],
             }
         if action == "features":
@@ -555,7 +564,7 @@ class Learning:
                 if within(output, "model.plan").stat().st_size <= 0:
                     raise ValueError("Empty TensorRT engine")
                 metadata.update(
-                    mode=report["mode"], engine_size_bytes=report["engine_size_bytes"]
+                    mode=report["mode"], engine_size_bytes=report["engine_size_bytes"], precision=report.get("precision", "fp32")
                 )
             elif plan["kind"] == "evaluations":
                 report = read_json(within(output, "report.json"))
@@ -581,6 +590,9 @@ class Learning:
                 import json
 
                 metadata["metrics"] = json.loads(rows[-1])
+                run_info = within(output, "run.json", exists=False)
+                if plan["kind"] == "runs" and run_info.is_file():
+                    metadata["effective_precision"] = read_json(run_info).get("effective_precision", "fp32")
             else:
                 _, mode = self.contract(output)
                 metadata["mode"] = mode

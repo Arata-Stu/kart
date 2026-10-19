@@ -47,9 +47,11 @@ def main():
     paths, mode = model_contract(model)
     runtime_settings(model)
     engine = Path(paths["engine_file_path"])
-    precision = "fp16" if args.fp16 else "fp32"
+    precision = ("fp16" if args.fp16 else "fp32") if (args.fp16 or args.fp32) else choose(
+        "TensorRT build精度", ["fp32", "fp16"],
+        label=lambda value: "FP32 · 基準精度" if value == "fp32" else "FP16 · 内部演算のFP16を許可（入出力FP32）")
     hardware = fingerprint()
-    if args.fp16 and int(hardware["tensorrt"].split(".")[0]) >= 11:
+    if precision == "fp16" and int(hardware["tensorrt"].split(".")[0]) >= 11:
         raise ValueError(
             "TensorRT 11以降は--fp16フラグ非対応です。既定のFP32で実行してください"
         )
@@ -80,7 +82,7 @@ def main():
                 "--duration=3",
                 f"--exportTimes={timings}",
             ]
-            if args.fp16:
+            if precision == "fp16":
                 command.append("--fp16")
             elif int(hardware["tensorrt"].split(".")[0]) < 11:
                 command.append("--noTF32")
@@ -123,6 +125,7 @@ def main():
                 schema=1,
                 hardware=hardware,
                 precision=precision,
+                io_dtype="fp32",
                 onnx_sha256=digest(paths["model_file_path"]),
                 engine_sha256=digest(built),
                 engine_size_bytes=built.stat().st_size,

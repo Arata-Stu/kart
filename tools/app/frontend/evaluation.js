@@ -87,5 +87,5 @@ export async function showEngine(id) {
   }
   const report = await api("e2e/engine?id=" + encodeURIComponent(id));
   if ($("e2e-engine-history").value !== id) return;
-  root.textContent = `ONNX ${(report.onnx_size_bytes / 1048576).toFixed(1)} MiB / engine ${(report.engine_size_bytes / 1048576).toFixed(1)} MiB\nBuild＋計測 ${report.total_build_and_benchmark_s.toFixed(1)} s\nGPU: ${report.gpu}\n合成入力の計測（ms、rosbag精度評価とは別）\n${JSON.stringify(report.timing_ms, null, 2)}`;
+  root.textContent = `Build精度: ${(report.precision || "fp32").toUpperCase()}（入出力 FP32）\nONNX ${(report.onnx_size_bytes / 1048576).toFixed(1)} MiB / engine ${(report.engine_size_bytes / 1048576).toFixed(1)} MiB\nBuild＋計測 ${report.total_build_and_benchmark_s.toFixed(1)} s\nGPU: ${report.gpu}\n合成入力の計測（ms、rosbag精度評価とは別）\n${JSON.stringify(report.timing_ms, null, 2)}`;
 }

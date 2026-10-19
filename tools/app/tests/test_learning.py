@@ -219,6 +219,32 @@ class LearningTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'RGB'):
             self.service.prepare('distill',{**body,'architecture':'dinov3_vits16'})
 
+    def test_amp_request_validation_and_routing(self):
+        data=self.dataset().relative_to(self.service.root/'datasets').as_posix()
+        body=dict(name='amp',train=[data],validation=[data])
+        auto=self.service.prepare('train',body)
+        self.assertEqual(auto['args'][auto['args'].index('--precision')+1],'auto')
+        self.assertEqual(auto['provenance']['precision'],'auto')
+        for precision in ('bf16','fp16','invalid'):
+            with self.assertRaises(ValueError):
+                self.service.prepare('train',{**body,'precision':precision})
+        self.service.save_settings(dict(self.settings,device='cuda:1'))
+        for precision in ('auto','fp32','bf16','fp16'):
+            plan=self.service.prepare('train',{**body,'precision':precision})
+            self.assertEqual(plan['args'][plan['args'].index('--precision')+1],precision)
+            self.assertEqual(plan['provenance']['precision'],precision)
+
+    def test_engine_precision_is_separate_from_training_precision(self):
+        model=self.service.root/'models/policy';model.mkdir()
+        atomic_json(model/'artifact.json',dict(created=1))
+        with patch.object(self.service,'contract',return_value=({},'steer_only')):
+            for precision in ('fp16','fp32'):
+                plan=self.service.prepare('build-engine',dict(name='build-'+precision,model='policy',precision=precision))
+                self.assertEqual(plan['args'][plan['args'].index('--precision')+1],precision)
+                self.assertEqual(plan['provenance']['precision'],precision)
+            with self.assertRaisesRegex(ValueError,'TensorRT'):
+                self.service.prepare('build-engine',dict(name='bad',model='policy',precision='auto'))
+
     def test_loss_history_and_invalid_records(self):
         import json
         run = self.service.root / "runs/history"

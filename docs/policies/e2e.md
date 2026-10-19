@@ -191,3 +191,14 @@ scratchはencoderも更新し、既定50 epoch・LR1e-4、重み読込と特徴�
 CNNは4段stride2 Conv/GroupNorm/GELU＋global meanと既存headを使う。
 前処理・損失・評価契約を共通化し、architecture/初期化/seed/学習parameter数を保存する。
 モデル間の比較はbag分割とテスト条件を揃え、学習途中と収束後の比較を区別する。
+
+制御学習のAMPは要求精度と実効精度を分けて記録する。
+autoはCUDA native BF16を優先、非対応時FP16＋GradScaler、CPUではFP32。
+明示BF16/FP16の非対応環境を暗黙fallbackしない。forwardのみautocastし、loss/指標/保存parameterはFP32。
+キャッシュはFP32で構築し、学習精度を変えても同じキャッシュ契約を保つ。
+速度と精度の効果は対象GPUで計測し、CPU互換テストからGPU性能を推定しない。
+
+TensorRTの内部演算精度は学習AMPと独立して明示選択する。
+Notebook build UIはONNX export工程に配置し、FP16/FP32をreportと履歴に保存する。
+Jetson build CLIはモデル→精度の順に選択し、明示--fp16/--fp32では精度メニューを省略する。
+FP16でもFP32の入出力契約を維持・検証し、モデルごとの既存engineを精度差で誤再利用しない。

@@ -514,6 +514,13 @@
             </div>
             <p class="help">検証lossを監視。patience=2では改善しないepochが3回続いた後、次epochの学習率を下げます。best.ptは従来どおり検証MSEで選びます。</p>
           </div>
+          <label>学習精度<select id="e2e-precision">
+            <option value="auto">AMP 自動 · CUDAはBF16優先、CPUはFP32</option>
+            <option value="fp32">FP32 · AMP OFF</option>
+            <option value="bf16">AMP BF16 · 対応CUDA GPUのみ</option>
+            <option value="fp16">AMP FP16 · GradScaler併用</option>
+          </select></label>
+          <p class="help">loss・MSE・MAEはFP32で計算。重みはFP32で保存します。特徴量キャッシュの初回作成はFP32を維持します。Tiny第1段階の特徴蒸留には適用しません。</p>
           <label>乱数seed<input id="e2e-seed" type="number" min="0" max="2147483647" value="42" /></label>
           <label>DataLoader workers<input id="e2e-workers" type="number" min="0" max="64" value="8" /></label>
           <label class="check"><input id="e2e-feature-cache" type="checkbox" checked />特徴量キャッシュを使用（backbone凍結時）</label>
@@ -551,6 +558,21 @@
           <button id="e2e-start-export" class="primary full">
             ONNXをexport
           </button>
+          <details>
+            <summary>NotebookでTensorRT build・速度計測</summary>
+            <p class="help">
+              Notebook
+              GPU向けengineを別保存し、合成入力で計測します。JetsonへはONNXを転送し、Jetson側で再buildします。
+            </p>
+            <label>buildするONNXモデル<select id="e2e-engine-model"></select></label>
+            <label>TensorRT build精度<select id="e2e-engine-precision"><option value="fp32">FP32 · 基準精度</option><option value="fp16">FP16 · 内部演算のFP16を許可</option></select></label>
+            <p class="help">どちらも入出力tensorはFP32です。学習のAMP設定とは独立しています。</p>
+            <button id="e2e-build-engine" type="button" class="full">
+              NotebookでTensorRT build
+            </button>
+            <label>結果<select id="e2e-engine-history"></select></label>
+            <pre id="e2e-engine-result" style="white-space: pre-wrap"></pre>
+          </details>
         </section>
         <section id="e2e-pane-evaluate" class="learning-form" hidden>
           <h2>ONNXを記録データでオフライン評価</h2>
@@ -568,18 +590,7 @@
             CUDA優先のONNX
             Runtimeによる記録画像の予測比較です。実走行の成功率・JetsonのTensorRT速度は評価しません。
           </p>
-          <details>
-            <summary>NotebookでTensorRT build・速度計測</summary>
-            <p class="help">
-              上で選択したONNXを使用。Notebook
-              GPU向けengineを別保存し、合成入力で計測します。JetsonへはONNXを転送し、Jetson側で再buildします。
-            </p>
-            <button id="e2e-build-engine" type="button" class="full">
-              NotebookでTensorRT build
-            </button>
-            <label>結果<select id="e2e-engine-history"></select></label>
-            <pre id="e2e-engine-result" style="white-space: pre-wrap"></pre>
-          </details>
+
           <div id="e2e-eval-result">
             完了後、右の評価履歴を選択してください。
           </div>
