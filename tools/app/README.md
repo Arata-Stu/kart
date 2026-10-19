@@ -2,7 +2,7 @@
 
 Notebookでbagを受信し、Isaac ROS cuVSLAMの地図・点群からHDMapと走行ラインを作成する。
 **地図 / 転送 / 学習**の3画面。Jetsonのbringup・車両操作機能は持たない。
-学習画面からデータセット作成・DINOv3学習・ONNX export・Jetsonモデル転送を実行できる。
+学習画面からデータセット作成・DINOv3学習・ONNX export・オフライン評価・RGB特徴量確認・Jetsonモデル転送を実行できる。
 [設計方針](../../docs/policies/ui_app.md)に対象と座標契約を記載。
 
 ## 起動
@@ -656,3 +656,18 @@ UIから開始した学習・export・評価・engine buildの実行中は整理
 ごみ箱はアプリ固有で、自動消去・完全削除のUIは設けない（移動だけではディスク容量は減らない）。
 API: GET `/api/e2e/trash`、POST `/api/e2e/trash`（kind/id）、POST `/api/e2e/restore`（token）。
 ローカルfixtureで移動・復元・競合・パス拒否と日付IDのexport/評価/転送を検証する。
+
+
+### RGB特徴量を確認する
+
+「学習 → 特徴量を確認」で学習済み実験とRGBデータセットを選び、可視化を実行する。
+確認枚数は既定12（1〜64）、全区間から均等抽出する。完了後に右の結果を開くと、
+RGB、パッチ特徴PCA、ステア出力の入力感度を並べ、フレームを切り替えられる。
+PCAは特徴の違い、赤い入力感度は局所勾配であり、走行性能そのものではない。
+学習環境のPython・device・DINOv3ソース設定を使用し、best.ptの実際の重みを読み込む。
+結果は`e2e/features/YYYY-MM-DD/HH-MM-SS/<name>`へ保存し、ごみ箱・復元に対応する。
+現在はRGB専用。ONNX/TensorRT実行時の特徴量やEVSの表示は対象外。
+
+データセット作成・rosbag評価のbag選択は「bagを階層から選択」でNotebookのrecord配下をツリー表示する。
+転送画面と同様にフォルダを展開し、▣のbagを選択する。選択後は相対パスを表示し、
+同名bagも親フォルダで区別する。データセット名候補は選択bag名から引き続き自動入力する。

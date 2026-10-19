@@ -346,6 +346,7 @@
         <button id="e2e-tab-evaluate">
           4 rosbag評価 <small id="e2e-count-evaluations">0</small>
         </button>
+        <button id="e2e-tab-features">特徴量を確認</button>
         <button id="e2e-tab-push">
           5 Jetson転送 <small id="e2e-count-models">0</small>
         </button>
@@ -353,7 +354,7 @@
       <div class="learning-body">
         <section id="e2e-pane-dataset" class="learning-form">
           <h2>走行記録から教師データを作成</h2>
-          <label>Notebookのrosbag<select id="e2e-bag"></select></label>
+          <label>Notebookのrosbag<button type="button" id="e2e-bag-choose">bagを階層から選択</button></label><input type="hidden" id="e2e-bag" />
           <label
             >データセット名<input
               id="e2e-dataset-name"
@@ -504,7 +505,7 @@
         <section id="e2e-pane-evaluate" class="learning-form" hidden>
           <h2>ONNXをrosbagでオフライン評価</h2>
           <label>ONNXモデル<select id="e2e-eval-model"></select></label>
-          <label>評価rosbag<select id="e2e-eval-bag"></select></label>
+          <label>評価rosbag<button type="button" id="e2e-eval-bag-choose">bagを階層から選択</button></label><input type="hidden" id="e2e-eval-bag" />
           <label>評価名<input id="e2e-eval-name" maxlength="64" /></label>
           <p class="help">
             「データセット」の画像・操作・モードtopic、時計、許容時間差を使用。収集設定から自動判定した教師区間を評価します。同じ学習bagも使用できます。
@@ -531,6 +532,15 @@
           <div id="e2e-eval-result">
             完了後、右の評価履歴を選択してください。
           </div>
+        </section>
+        <section id="e2e-pane-features" class="learning-form" hidden>
+          <h2>RGBと学習済み特徴量を比較</h2>
+          <label>学習済み実験<select id="e2e-features-run"></select></label>
+          <label>RGBデータセット<select id="e2e-features-data"></select></label>
+          <label>保存名<input id="e2e-features-name" maxlength="64" /></label>
+          <label>確認フレーム数<input id="e2e-features-max" type="number" min="1" max="64" value="12" /></label>
+          <p class="help">データ全体から均等に選択。学習済みbest.ptを使用し、RGB・パッチ特徴PCA・ステアの入力感度を並べます。完了後、右の結果を選択してください。現在はRGBに対応しています。</p>
+          <button id="e2e-start-features" class="primary full">特徴量を可視化</button>
         </section>
         <section id="e2e-pane-push" class="learning-form" hidden>
           <h2>検証済みモデルをJetsonへ送信</h2>
@@ -571,7 +581,7 @@
       <label>表示対象<select id="e2e-manage-kind">
         <option value="trash">ごみ箱</option><option value="datasets">データセット</option>
         <option value="runs">学習実験</option><option value="models">ONNXモデル</option>
-        <option value="evaluations">評価結果</option><option value="engines">TensorRT計測</option>
+        <option value="features">特徴量の確認結果</option><option value="evaluations">評価結果</option><option value="engines">TensorRT計測</option>
       </select></label>
       <button id="e2e-manage-refresh">更新</button>
       <div id="e2e-manage-list" class="scroll"></div>
@@ -1083,5 +1093,17 @@
       </p>
     </dialog>
     <script type="module" src="app.js"></script>
-  </body>
+  <dialog id="e2e-features-dialog" class="feature-dialog">
+  <div class="actions"><h2>RGBと特徴量</h2><button id="e2e-features-close">閉じる</button></div>
+  <p id="e2e-features-source" class="help"></p>
+  <p class="help">PCAの色は特徴の違いを表します。同じ結果内で基準を共有します。赤はステア出力の局所的な入力感度です。注意領域や走行の正しさを保証する表示ではありません。</p>
+  <label>フレーム<input id="e2e-features-slider" type="range" min="0" value="0" /></label>
+  <p id="e2e-features-info"></p><div id="e2e-features-images" class="feature-images"></div>
+</dialog>
+<dialog id="e2e-bag-dialog" class="bag-picker-dialog">
+  <div class="actions"><h2>Notebookのrosbagを選択</h2><button id="e2e-bag-close">閉じる</button></div>
+  <p class="help">フォルダを展開してbagを選択してください。▣がbagです。</p>
+  <ul id="e2e-bag-tree" class="remote-tree" aria-label="Notebookのrecordフォルダ"></ul>
+</dialog>
+</body>
 </html>

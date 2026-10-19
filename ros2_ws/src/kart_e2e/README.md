@@ -578,3 +578,27 @@ AUTO進入前の画像、不正な値、受信途絶、mode失効は引き続き
 許容値の上限は50msで、有限値を要求する。ログにもimage_future_tolerance_msを出す。
 C++ gateで2.1ms、5ms境界、境界超過、150ms超過、非有限stamp、異常ラッチを検証する。
 ROS/GPUの実機再走行は未確認。センサstampが未来になった理由そのものは別途時刻同期を確認する。
+
+### RGB特徴量のオフライン確認
+
+Notebook学習UIの「特徴量を確認」で学習済み実験（best.pt）、RGBデータセット、
+確認枚数（既定12、1〜64）を選択する。全区間から均等に選択し、結果履歴を開くと
+RGB（モデル入力212×120）、DINOv3パッチ特徴のPCA、ステア出力の入力勾配を並べて表示する。
+フレームスライダーで教師と予測も確認できる。学習環境のPython・device・encoder_repoを使用する。
+
+```bash
+python -m kart_e2e.features --checkpoint /path/to/run/best.pt \
+  --dataset /path/to/dataset --repo /path/to/dinov3 \
+  --output /path/to/new-result --device cpu --max-frames 12
+# ROS環境にinstallした場合は ros2 run kart_e2e e2e_features も同じ引数
+```
+
+ROSノードではなくオフラインCLIで、ROS topic・独自ROS parameterはない。
+checkpoint/dataset/repo/outputは必須。deviceはcpu、max-framesは12が既定。
+重みのダウンロードは行わず学習済みcheckpointを読み込む。現在はRGB専用。
+`e2e/features/YYYY-MM-DD/HH-MM-SS/<name>`にreport.json、画像、PCA基底を保存し、
+checkpoint・manifest・入力画像のSHA256を記録する。UIのごみ箱・復元にも対応する。
+PCAの基底と色範囲、入力感度の強度基準は結果内で共通。別結果の色は直接比較できない。
+PCAは空間的な特徴の違いであり、制御headがその領域を使った証明ではない。
+赤い入力感度は実際のステア出力の局所勾配で、attentionや走行成功率とは異なる。
+PyTorch checkpointの確認であり、ONNX/TensorRTとの数値同等性はexport時の検証を用いる。

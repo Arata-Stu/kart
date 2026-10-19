@@ -16,8 +16,8 @@ from . import transfers
 from .storage import atomic_json, name, read_json, within
 
 
-KINDS = ("datasets", "runs", "models", "evaluations", "engines")
-DATED = ("datasets", "models", "evaluations")
+KINDS = ("datasets", "runs", "models", "evaluations", "engines", "features")
+DATED = ("datasets", "models", "evaluations", "features")
 
 
 class Learning:
@@ -271,6 +271,25 @@ class Learning:
                 "provenance": {"model": body["model"]},
                 "resources": ["e2e-compute", "e2e:models:" + body["model"]],
             }
+        if action == "features":
+            run = self.folder("runs", body.get("run"))
+            dataset = self.folder("datasets", body.get("dataset"))
+            checkpoint = within(run, "best.pt")
+            within(dataset, "samples.jsonl")
+            target = self.target("features", key)
+            maximum = self.integer(body.get("max_frames", 12), 1, 64)
+            repo = Path(cfg["encoder_repo"]).expanduser()
+            if not repo.is_dir():
+                raise ValueError("DINOv3ソースのパスを確認してください")
+            return {**common, "kind": "features", "target": target,
+                    "key": target.relative_to(self.root / "features").as_posix(),
+                    "module": "features",
+                    "args": ["--checkpoint", str(checkpoint), "--dataset", str(dataset),
+                             "--repo", str(repo), "--output", "@OUTPUT@",
+                             "--device", cfg["device"], "--max-frames", str(maximum)],
+                    "provenance": {"run": body["run"], "dataset": body["dataset"]},
+                    "resources": ["e2e-compute", "e2e:runs:" + body["run"],
+                                  "e2e:datasets:" + body["dataset"]]}
         if action == "evaluate":
             target = self.target("evaluations", key)
             model = self.folder("models", body.get("model"))
@@ -396,6 +415,14 @@ class Learning:
                     mode=report["mode"],
                     metrics=report["metrics"],
                 )
+            elif plan["kind"] == "features":
+                report = read_json(within(output, "report.json"))
+                if report.get("schema") != "kart.rgb_features.v1" or not 1 <= report.get("frame_count", 0) <= 64:
+                    raise ValueError("Invalid feature report")
+                for frame in report["frames"]:
+                    for kind in ("rgb", "pca", "saliency"):
+                        within(output, frame[kind])
+                metadata.update(frame_count=report["frame_count"], mode=report["mode"])
             elif plan["kind"] == "runs":
                 within(output, "best.pt")
                 rows = within(output, "metrics.jsonl").read_text().splitlines()

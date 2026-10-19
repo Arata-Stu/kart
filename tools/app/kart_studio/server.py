@@ -83,6 +83,8 @@ class Studio:
         if path == "/api/e2e/engine":
             folder = self.learning.folder("engines", key)
             return read_json(within(folder, "report.json"))
+        if path == "/api/e2e/features":
+            return read_json(within(self.learning.folder("features", key), "report.json"))
         if path == "/api/e2e/evaluation":
             folder = self.learning.folder("evaluations", key)
             return read_json(within(folder, "report.json"))
@@ -143,10 +145,12 @@ class Studio:
             "/api/e2e/export",
             "/api/e2e/evaluate",
             "/api/e2e/build-engine",
+            "/api/e2e/features",
         ):
             action = path.rsplit("/", 1)[1]
             plan = self.learning.prepare(action, b)
             titles = {
+                "features": "RGB特徴量の可視化",
                 "dataset": "データセット作成",
                 "train": "DINOv3学習",
                 "export": "ONNX export",
@@ -345,6 +349,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self.trusted()
             url = urlsplit(self.path)
+            if url.path == "/e2e-feature-image":
+                query = {k: v[-1] for k, v in parse_qs(url.query).items()}
+                filename = query.get("file", "")
+                if not re.fullmatch(r"frames/[0-9]{4}/(?:rgb|pca|saliency)\.png", filename):
+                    raise ValueError("Invalid feature image")
+                folder = self.server.studio.learning.folder("features", query.get("id", ""))
+                return self.reply(200, within(folder, filename).read_bytes(), "image/png")
             if url.path == "/dense-file":
                 query = {k: v[-1] for k, v in parse_qs(url.query).items()}
                 path = dense.artifact(self.server.studio.maps, query.get("id", ""), query.get("file", ""))

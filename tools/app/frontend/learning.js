@@ -1,7 +1,10 @@
+import { installBagPicker } from "./bag_picker.js";
+import { showFeatures } from "./features.js";
 import { trashButton, installTrash } from "./learning_trash.js";
 import { showEvaluation, showEngine } from "./evaluation.js";
 import { $, state, api, action, on, emit, item, toast } from "./api.js";
 import { nextVersion, datasetOption, datasetName, artifactOption } from "./learning_names.js";
+const refreshBagPicker = installBagPicker();
 let catalog = null;
 let bags = [];
 let step = "dataset";
@@ -11,12 +14,14 @@ const kinds = {
   export: "runs",
   push: "models",
   evaluate: "evaluations",
+  features: "features",
 };
 const labels = {
   datasets: "データセット",
   runs: "学習済み実験",
   models: "ONNXモデル",
   evaluations: "オフライン評価",
+  features: "特徴量の確認結果",
 };
 const fields = [
   "python",
@@ -38,6 +43,7 @@ function suggestNames() {
     $("e2e-mode").value === "steer_only" ? "dinov3-steer" : "dinov3-control";
   for (const [id, prefix, kind] of [
     ["e2e-run-name", base, "runs"],
+    ["e2e-features-name", ($("e2e-features-run").value || base) + "-features", "features"],
     ["e2e-model-name", $("e2e-export-run").value || base, "models"],
     [
       "e2e-eval-name",
@@ -101,7 +107,7 @@ function render() {
         ? "最初のデータセットを作成してください。"
         : kind === "runs"
           ? "学習が完了すると、実験と最終epochの指標が表示されます。"
-          : "ONNXの変換・検証が完了すると表示されます。";
+          : kind === "features" ? "可視化が完了すると、ここから比較画像を開けます。" : "ONNXの変換・検証が完了すると表示されます。";
     list.append(p);
   }
   for (const row of catalog[kind]) {
@@ -113,10 +119,12 @@ function render() {
           : `${row.mode} · ORT最大誤差 ${Number(row.ort_max_abs_error).toExponential(2)}`;
     if (kind === "evaluations")
       detail = `${row.samples} frames · ${row.model} · steer MAE ${row.metrics.steering_command.mae.toFixed(4)}`;
+    if (kind === "features") detail = `${row.frame_count} frames · ${row.run} · ${row.dataset}`;
     const entry = document.createElement("div");
     entry.className = "artifact-row";
     entry.append(
       item(row.name || row.id, (kind !== "datasets" && row.id.includes("/") ? row.id.split("/").slice(0,-1).join(" ") + " · " : "") + detail, () => {
+        if (kind === "features") return showFeatures(row.id);
         if (kind === "evaluations") return showEvaluation(row.id);
         if (step === "dataset") {
           setStep("train");
@@ -144,11 +152,7 @@ export async function refreshLearning() {
   const [data, records] = await Promise.all([api("e2e"), api("records")]);
   catalog = data;
   bags = records;
-  options(
-    "e2e-bag",
-    records.map((r) => ({ id: r.id, label: r.name + " · " + r.id })),
-    "bagを選択",
-  );
+  refreshBagPicker(records);
   for (const id of ["e2e-train-data", "e2e-validation-data"])
     options(
       id,
@@ -156,14 +160,11 @@ export async function refreshLearning() {
       "",
     );
   options("e2e-export-run", data.runs, "実験を選択");
+  options("e2e-features-run", data.runs, "学習済み実験を選択");
+  options("e2e-features-data", data.datasets.map(datasetOption), "RGBデータセットを選択");
   options("e2e-push-model", data.models.map(artifactOption), "モデルを選択");
   options("e2e-eval-model", data.models.map(artifactOption), "モデルを選択");
   options("e2e-engine-history", data.engines, "Notebook engineの結果を選択");
-  options(
-    "e2e-eval-bag",
-    records.map((r) => ({ id: r.id, label: r.id })),
-    "bagを選択",
-  );
   suggestNames();
   render();
 }
@@ -275,3 +276,9 @@ $("e2e-engine-history").addEventListener("change", () =>
 );
 
 installTrash(refreshLearning);
+
+$("e2e-features-run").addEventListener("change", suggestNames);
+action("e2e-start-features", () => start("features", {
+  name: $("e2e-features-name").value, run: $("e2e-features-run").value,
+  dataset: $("e2e-features-data").value, max_frames: Number($("e2e-features-max").value),
+}));

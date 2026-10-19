@@ -959,7 +959,7 @@ summary {
 }
 .learning-steps {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
   max-width: 1160px;
 }
@@ -1270,3 +1270,18 @@ summary {
 
 #e2e-manage-dialog .dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 #e2e-manage-dialog label { font-size: 14px; }
+
+.feature-dialog { width: min(1100px, 94vw); max-height: 92vh; overflow: auto; }
+.feature-dialog h2 { margin-right: auto; }
+.feature-dialog input[type=range] { width: 100%; }
+.feature-images { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
+.feature-images figure { margin: 0; }
+.feature-images img { width: 100%; aspect-ratio: 212 / 120; object-fit: contain; background: #18212a; }
+.feature-images figcaption { font-size: 16px; padding: 8px 0; }
+@media(max-width:700px) { .feature-images { grid-template-columns: 1fr; } }
+
+.bag-picker-dialog { width: min(780px,94vw); max-height: 88vh; }
+.bag-picker-dialog h2 { margin-right: auto; }
+#e2e-bag-tree { max-height: 58vh; overflow: auto; }
+#e2e-bag-tree .remote-tree-row { font-size: 16px; padding: 10px 12px; }
+#e2e-bag-choose, #e2e-eval-bag-choose { display: block; width: 100%; text-align: left; font-size: 16px; overflow-wrap: anywhere; }
