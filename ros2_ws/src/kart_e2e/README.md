@@ -938,3 +938,62 @@ bash scripts/e2e_trt.sh /workspaces/models/policy --fp32
 CLIの精度メニューの先頭はFP32。`--force`で同じ精度も再buildできる。
 ROS TensorRT nodeの入出力設定は変更不要。学習AMPからbuild精度を暗黙に決めない。
 ローカルテストでメニュー順・flags・精度記録・cache判定を確認。実GPU/Jetsonのbuildは別途検証する。
+
+### INT8校正とFP32比較benchmark
+
+GUIの「ONNX export」→「NotebookでTensorRT build・速度計測」で元のFP32モデルと
+「INT8 · 校正＋FP32との比較」を選ぶ。校正用・比較評価用データセットを選択し実行すると、
+校正、FP32/INT8 engine build、同一入力のnative TensorRT比較を一括実行する。
+RGB・20ch EVSに対応する。EVSはdatasetとモデルのmodel_spec一致を必須とする。
+学習に使ったデータを校正に使ってよい。評価との重複も許可し、入力ファイルパスの重複を表示する。
+未知データでの精度を評価する場合は別走行を使う。画像内容が同じ別ファイルは重複判定されない。
+
+校正はONNX Runtime MinMax static Q/DQ、signed INT8・zero-point=0、activation per-tensor、
+weight per-channel。静的重みを持つConv/Gemm/MatMulを対象とし、head、attentionのactivation間MatMul、
+正規化、Softmaxは対象外。全layerのINT8化や速度向上は保証しない。
+INT8 buildはQ/DQを使い、浮動小数点層に`--fp16`を許可する。比較元は`--noTF32`のFP32。
+どちらも外部入出力はFP32。`--int8`だけで未校正モデルを量子化する経路は用意しない。
+
+| CLI引数 | 既定値・意味 |
+|---|---|
+| `--model` | 必須、元のFP32 ONNX bundle |
+| `--calibration` | 必須、校正用dataset |
+| `--evaluation` | benchmarkでは必須、比較用dataset |
+| `--output` | 必須、新規出力ディレクトリ（上書き不可） |
+| `--calibration-samples` / `--evaluation-samples` | 各256、seedによる非復元抽出の上限、1〜100000 |
+| `--seed` | 42、抽出seed、0〜2147483647 |
+| `--warmup` | 10、各engine各passの事前実行、1〜1000 |
+| `--repeats` | 3、同じ入力を反復、1〜20 |
+
+```bash
+# GPUのkart Docker。Pythonにはtorch/Pillow/onnx/onnxruntime/TensorRT/CUDA runtimeが必要。
+python -m kart_e2e.int8_benchmark \
+  --model /workspaces/models/fp32-policy \
+  --calibration /workspaces/e2e/datasets/2026-10-19/10-00-00/train \
+  --evaluation /workspaces/e2e/datasets/2026-10-19/11-00-00/eval \
+  --output /workspaces/models/int8-policy
+```
+
+`ros2 run kart_e2e e2e_int8_benchmark`も同じ引数。ROSノードではなくオフラインCLIで、topic入出力なし。
+CLIはJetsonでも利用可能だが、RGB前処理には学習と同じtorchが必要。通常はNotebookで校正する。
+GPUがなければ失敗し、CPU速度へ暗黙fallbackしない。
+校正のみなら`python -m kart_e2e.int8_quantize --model ... --calibration ... --output ...`
+（または`ros2 run kart_e2e e2e_int8_quantize`）。追加引数`--samples=256`、`--seed=42`。
+こちらはCPUで実行可能だがTensorRT精度・速度比較は行わない。
+
+benchmarkはbatch=1で同じ実入力を順に与える。passごとにFP32/INT8の順を入れ替え、
+一度に一つのengineをGPUへロードする。前処理・warmup・buildを除き、
+CUDA eventによる演算時間と、H2D＋実行＋D2H＋同期のwall時間の平均・中央値・P95を保存する。
+指令と生出力の教師MAE/RMSE/P95/MSE、INT8−FP32誤差差分、予測差、速度比、engineサイズを記録。
+steer-onlyのthrottleはモデルmetadataの固定値。結果は閉ループ走行評価ではない。
+
+UI出力は`e2e/models/<日付>/<時刻>/<名前>/`。元ONNXを残し、rootに校正済み`model.onnx`とmetadata、
+`benchmark/report.json`・`predictions.csv`・`fp32/model.plan`・`int8/model.plan`・layer情報を保存する。
+入力・モデルのSHA256、抽出行、GPU/driver/TensorRT情報も保持する。失敗・入力変更時は成果物を公開しない。
+比較結果はUIに自動表示し、同じモデルライブラリからごみ箱へ移動できる。
+Jetson転送にはrootのONNXとmetadataだけを使い、Notebookのengineは転送しない。
+`bash scripts/e2e_trt.sh`で校正済みモデルを選ぶとINT8 buildを自動選択する（明示`--int8`も可）。
+校正済みモデルに`--fp32`/`--fp16`を指定すると拒否する。元モデルは従来のFP32/FP16選択のまま。
+
+検証範囲：CPUで実Q/DQ生成・ORT推論、契約、比較集計とCUDA呼出しのmockテスト。
+実NVIDIA GPUでのTensorRT build・校正済み学習モデルの精度/速度・実車走行は別途確認する。

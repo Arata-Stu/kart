@@ -85,6 +85,9 @@ class Studio:
         if path == "/api/e2e/engine":
             folder = self.learning.folder("engines", key)
             return read_json(within(folder, "report.json"))
+        if path == "/api/e2e/int8-benchmark":
+            folder = self.learning.folder("models", q.get("id", ""))
+            return read_json(within(folder, "benchmark/report.json"))
         if path == "/api/e2e/features":
             return read_json(within(self.learning.folder("features", key), "report.json"))
         if path == "/api/e2e/evaluation":
@@ -148,6 +151,7 @@ class Studio:
             "/api/e2e/export",
             "/api/e2e/evaluate",
             "/api/e2e/build-engine",
+            "/api/e2e/quantize",
             "/api/e2e/features",
         ):
             action = path.rsplit("/", 1)[1]
@@ -160,6 +164,7 @@ class Studio:
                 "export": "ONNX export",
                 "evaluate": "rosbagオフライン評価",
                 "build-engine": "Notebook TensorRT build",
+                "quantize": "INT8校正＋FP32比較benchmark",
             }
             return self.jobs.start(
                 titles[action] + ": " + plan["key"],

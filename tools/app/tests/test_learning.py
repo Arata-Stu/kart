@@ -237,6 +237,7 @@ class LearningTests(unittest.TestCase):
     def test_engine_precision_is_separate_from_training_precision(self):
         model=self.service.root/'models/policy';model.mkdir()
         atomic_json(model/'artifact.json',dict(created=1))
+        atomic_json(model/'metadata.json',{})
         with patch.object(self.service,'contract',return_value=({},'steer_only')):
             for precision in ('fp16','fp32'):
                 plan=self.service.prepare('build-engine',dict(name='build-'+precision,model='policy',precision=precision))
@@ -244,6 +245,27 @@ class LearningTests(unittest.TestCase):
                 self.assertEqual(plan['provenance']['precision'],precision)
             with self.assertRaisesRegex(ValueError,'TensorRT'):
                 self.service.prepare('build-engine',dict(name='bad',model='policy',precision='auto'))
+
+    def test_int8_plan_datasets_defaults_locks_and_rejection(self):
+        data=self.dataset().relative_to(self.service.root/'datasets').as_posix()
+        model=self.service.root/'models/policy';model.mkdir()
+        atomic_json(model/'artifact.json',dict(created=1))
+        atomic_json(model/'metadata.json',{})
+        body=dict(name='int8-test',model='policy',calibration=data,evaluation=data)
+        with patch.object(self.service,'contract',return_value=({},'steer_only')):
+            plan=self.service.prepare('quantize',body)
+            self.assertEqual(plan['module'],'int8_benchmark')
+            self.assertEqual(plan['kind'],'models')
+            self.assertEqual(plan['args'][plan['args'].index('--calibration-samples')+1],'256')
+            self.assertIn('e2e:models:policy',plan['resources'])
+            self.assertIn('e2e:datasets:'+data,plan['resources'])
+            for field in ('calibration_samples','evaluation_samples','warmup','repeats'):
+                with self.assertRaises(ValueError): self.service.prepare('quantize',{**body,field:0})
+            atomic_json(model/'metadata.json',dict(modality='evs'))
+            with self.assertRaisesRegex(ValueError,'種別'): self.service.prepare('quantize',body)
+            atomic_json(model/'metadata.json',dict(quantization={'format':'QDQ','precision':'int8'}))
+            with self.assertRaisesRegex(ValueError,'FP32'): self.service.prepare('quantize',body)
+            with self.assertRaisesRegex(ValueError,'FP32'): self.service.prepare('build-engine',body)
 
     def test_loss_history_and_invalid_records(self):
         import json

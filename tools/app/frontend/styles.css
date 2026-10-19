@@ -1297,3 +1297,7 @@ summary {
 .loss-table { max-height: 220px; overflow: auto; }
 .loss-table td, .loss-table th { padding: 8px 16px; text-align: right; }
 #e2e-loss-export { margin-top: 12px; }
+
+.int8-comparison { width: 100%; border-collapse: collapse; font-size: 14px; }
+.int8-comparison th, .int8-comparison td { padding: 8px 5px; border-bottom: 1px solid #dde4e8; text-align: right; font-variant-numeric: tabular-nums; }
+.int8-comparison th:first-child, .int8-comparison td:first-child { text-align: left; }

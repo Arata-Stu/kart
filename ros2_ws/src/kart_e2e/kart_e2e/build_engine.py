@@ -13,12 +13,15 @@ from .contract import model_contract, input_contract
 from .engine_cache import validate_engine
 
 
-def build(model, output, precision="fp32"):
-    if precision not in ("fp16", "fp32"):
-        raise ValueError("TensorRT precision must be fp16 or fp32")
-    if platform.machine().lower() not in ("x86_64", "amd64"):
+def build(model, output, precision="fp32", *, notebook_only=True):
+    if precision not in ("fp16", "fp32", "int8"):
+        raise ValueError("TensorRT precision must be fp16, fp32 or calibrated int8")
+    if notebook_only and platform.machine().lower() not in ("x86_64", "amd64"):
         raise ValueError("Notebook engine build is restricted to x86_64")
     contract, mode = model_contract(model)
+    quantized = bool(json.loads((Path(model)/"metadata.json").read_text()).get("quantization"))
+    if quantized != (precision == "int8"):
+        raise ValueError("INT8 build requires a calibrated Q/DQ model; use the original model for FP32/FP16")
     executable = shutil.which("trtexec") or "/usr/src/tensorrt/bin/trtexec"
     if not Path(executable).is_file():
         raise ValueError(
@@ -35,7 +38,9 @@ def build(model, output, precision="fp32"):
         "--duration=3",
         f"--exportTimes={timings}",
     ]
-    command.append("--fp16" if precision == "fp16" else "--noTF32")
+    command.append("--fp16" if precision in ("fp16", "int8") else "--noTF32")
+    if precision == "int8":
+        command.append("--profilingVerbosity=detailed")
     print("TensorRT build + synthetic benchmark: " + " ".join(command), flush=True)
     started = time.perf_counter()
     subprocess.run(command, check=True)
@@ -78,7 +83,7 @@ def build(model, output, precision="fp32"):
         precision=precision,
         io_dtype="fp32",
         architecture=platform.machine(),
-        scope="notebook_only_synthetic_inputs_not_rosbag_accuracy_or_jetson_performance",
+        scope="local_gpu_synthetic_input_build_probe_not_accuracy_or_other_gpu_performance",
         onnx_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
         onnx_size_bytes=source.stat().st_size,
         engine_size_bytes=engine.stat().st_size,
@@ -97,7 +102,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--model", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
-    p.add_argument("--precision", choices=["fp16", "fp32"], default="fp32")
+    p.add_argument("--precision", choices=["fp16", "fp32", "int8"], default="fp32")
     args = p.parse_args()
     build(args.model, args.output, args.precision)
 

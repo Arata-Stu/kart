@@ -202,3 +202,13 @@ TensorRTの内部演算精度は学習AMPと独立して明示選択する。
 Notebook build UIはONNX export工程に配置し、FP16/FP32をreportと履歴に保存する。
 Jetson build CLIはモデル→精度の順に選択し、明示--fp16/--fp32では精度メニューを省略する。
 FP16でもFP32の入出力契約を維持・検証し、モデルごとの既存engineを精度差で誤再利用しない。
+
+INT8は代表データによる対称signed Q/DQ静的校正とし、FP32入出力を維持する。
+静的重みのConv/Linearを対象とし、制御head・activation間attention MatMul・正規化・Softmaxは除外する。
+UIのINT8操作は校正と同一GPU・同一評価入力のFP32/INT8 native TensorRT比較を一体で実行する。
+校正用と評価用を独立選択し、重複は禁止せず入力パスの重複をreportに明示する。
+元モデルを上書きせずQ/DQモデルを別保存し、校正済みモデルをFP32へ戻したと誤表示しない。
+精度差は教師とのMAE/RMSE/P95と予測差、速度はwarmup・前処理を除くCUDA event演算時間と
+同期した転送込み時間を記録する。FP32はTF32無効、INT8の浮動小数点fallbackはFP16許可と明示する。
+CPU ORTの数値preflightをGPU速度比較の代用にしない。対象GPUでのbuild/benchmark成功と
+閉ループ実走行の成否を区別し、自動走行開始や量子化モデルへの自動切替は行わない。

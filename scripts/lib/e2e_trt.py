@@ -23,6 +23,7 @@ def main():
     precision = parser.add_mutually_exclusive_group()
     precision.add_argument("--fp16", action="store_true")
     precision.add_argument("--fp32", action="store_true")
+    precision.add_argument("--int8", action="store_true", help="Build a calibrated Q/DQ INT8 model")
     parser.add_argument(
         "--force", action="store_true", help="Rebuild a verified existing engine"
     )
@@ -47,9 +48,20 @@ def main():
     paths, mode = model_contract(model)
     runtime_settings(model)
     engine = Path(paths["engine_file_path"])
-    precision = ("fp16" if args.fp16 else "fp32") if (args.fp16 or args.fp32) else choose(
-        "TensorRT build精度", ["fp32", "fp16"],
-        label=lambda value: "FP32 · 基準精度" if value == "fp32" else "FP16 · 内部演算のFP16を許可（入出力FP32）")
+    quantization = json.loads((model / "metadata.json").read_text()).get("quantization")
+    if quantization:
+        if quantization.get("format") != "QDQ" or quantization.get("precision") != "int8":
+            raise ValueError("未対応の量子化形式です")
+        if args.fp16 or args.fp32:
+            raise ValueError("校正済みINT8モデルはFP32/FP16へ戻せません。元のモデルを選択してください")
+        precision = "int8"
+        print("校正済みQ/DQモデル: INT8 build（浮動小数点層はFP16を許可、入出力FP32）")
+    else:
+        if args.int8:
+            raise ValueError("先に学習UIでINT8校正＋FP32比較を実行してください")
+        precision = ("fp16" if args.fp16 else "fp32") if (args.fp16 or args.fp32) else choose(
+            "TensorRT build精度", ["fp32", "fp16"],
+            label=lambda value: "FP32 · 基準精度" if value == "fp32" else "FP16 · 内部演算のFP16を許可（入出力FP32）")
     hardware = fingerprint()
     if precision == "fp16" and int(hardware["tensorrt"].split(".")[0]) >= 11:
         raise ValueError(
@@ -82,7 +94,7 @@ def main():
                 "--duration=3",
                 f"--exportTimes={timings}",
             ]
-            if precision == "fp16":
+            if precision in ("fp16", "int8"):
                 command.append("--fp16")
             elif int(hardware["tensorrt"].split(".")[0]) < 11:
                 command.append("--noTF32")

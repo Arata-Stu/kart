@@ -8,7 +8,7 @@ from kart_e2e.build_engine import build
 
 class EngineTests(unittest.TestCase):
     def test_build_command_report_and_nonempty_engine(self):
-        for precision in ("fp32", "fp16"):
+        for precision in ("fp32", "fp16", "int8"):
             with self.subTest(precision=precision):
                 self.check_build(precision)
 
@@ -17,12 +17,13 @@ class EngineTests(unittest.TestCase):
             root = Path(tmp)
             binary = root / "trtexec"
             binary.touch()
+            (root/"metadata.json").write_text(json.dumps({"quantization":{"format":"QDQ","precision":"int8"}} if precision=="int8" else {}))
             onnx = root / "model.onnx"
             onnx.write_bytes(b"fixture")
 
             def execute(args, **kwargs):
                 self.assertIn("--duration=3", args)
-                self.assertEqual("--fp16" in args, precision == "fp16")
+                self.assertEqual("--fp16" in args, precision in ("fp16", "int8"))
                 self.assertEqual("--noTF32" in args, precision == "fp32")
                 engine = Path(
                     next(

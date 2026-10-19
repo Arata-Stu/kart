@@ -777,3 +777,16 @@ TensorRT build操作は「ONNX export」画面にまとめている。
 既定FP32（TF32無効）、FP16は内部演算のFP16を許可。どちらもFP32入出力を検証する。
 学習AMPとは独立した選択で、精度を成果物名・report・履歴・結果表示に残す。
 Notebook engineはJetsonへ転用せず、Jetson側の`e2e_trt.sh`でモデル→FP32/FP16の順に選択して再buildする。
+
+### INT8校正＋FP32比較
+
+ONNX exportのTensorRT build精度にINT8を追加。元のFP32モデルと同じ入力種別の
+校正用・比較評価用datasetを選ぶ。既定は各256件・seed42・warmup10回・3反復。
+実行すると対称Q/DQ INT8校正、FP32/INT8の両engine build、同一実入力のnative TensorRT比較を行う。
+ステア/スロットルのMAE・RMSE・P95とFP32との差、転送込み/GPU演算の中央値・P95、速度比、サイズを表示する。
+INT8の浮動小数点層はFP16を許可し、FP32比較元はTF32を無効にする。入出力tensorはFP32。
+校正・評価が同じ入力パスを含む場合はその旨を表示する。CPUによるGPU速度の代用はしない。
+GPUのあるkart Dockerが必要。校正済みモデルと比較結果は日付・時刻別のmodels配下へ保存し、
+比較成功時に結果を自動表示する。元モデルを残し、ライブラリから整理・削除可能。
+JetsonへはQ/DQ ONNXとmetadataを転送し、`e2e_trt.sh`でINT8として再buildする。
+詳細・CLIは[kart_e2e README](../../ros2_ws/src/kart_e2e/README.md)を参照。

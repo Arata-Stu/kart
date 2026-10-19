@@ -34,5 +34,5 @@ export function datasetName(record) {
 export function artifactOption(row) {
   const parts = row.id.split('/');
   return {...row, group:parts.length===3 ? parts[0] : '従来の成果物',
-    label:`${parts.length===3 ? parts[1]+' · ' : ''}${row.name || parts.at(-1)}`};
+    label:`${parts.length===3 ? parts[1]+' · ' : ''}${row.name || parts.at(-1)}${row.quantization ? ' · INT8' : ''}`};
 }

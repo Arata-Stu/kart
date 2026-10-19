@@ -562,16 +562,30 @@
             <summary>NotebookでTensorRT build・速度計測</summary>
             <p class="help">
               Notebook
-              GPU向けengineを別保存し、合成入力で計測します。JetsonへはONNXを転送し、Jetson側で再buildします。
+              GPU向けengineを別保存します。FP32/FP16は合成入力の速度、INT8は実データでFP32との精度・速度を比較します。JetsonへはONNXを転送し、Jetson側で再buildします。
             </p>
             <label>buildするONNXモデル<select id="e2e-engine-model"></select></label>
-            <label>TensorRT build精度<select id="e2e-engine-precision"><option value="fp32">FP32 · 基準精度</option><option value="fp16">FP16 · 内部演算のFP16を許可</option></select></label>
-            <p class="help">どちらも入出力tensorはFP32です。学習のAMP設定とは独立しています。</p>
+            <label>TensorRT build精度<select id="e2e-engine-precision"><option value="fp32">FP32 · 基準精度</option><option value="fp16">FP16 · 内部演算のFP16を許可</option><option value="int8">INT8 · 校正＋FP32との比較</option></select></label>
+            <p class="help">すべて入出力tensorはFP32です。学習のAMP設定とは独立しています。</p>
+            <div id="e2e-int8-options" hidden>
+              <label>校正用データセット<select id="e2e-int8-calibration"></select></label>
+              <label>比較評価用データセット<select id="e2e-int8-evaluation"></select></label>
+              <label>校正サンプル上限<input id="e2e-int8-calibration-samples" type="number" min="1" max="100000" value="256" /></label>
+              <label>評価サンプル上限<input id="e2e-int8-evaluation-samples" type="number" min="1" max="100000" value="256" /></label>
+              <details><summary>計測設定</summary>
+                <label>抽出seed<input id="e2e-int8-seed" type="number" min="0" value="42" /></label>
+                <label>各engineのwarmup回数<input id="e2e-int8-warmup" type="number" min="1" max="1000" value="10" /></label>
+                <label>比較の反復数<input id="e2e-int8-repeats" type="number" min="1" max="20" value="3" /></label>
+              </details>
+              <p class="help">実データで校正し、同じ評価入力をFP32とINT8のTensorRTで比較します。INT8対象外の層はFP16を許可します。校正と評価が重なる場合は結果に表示します。モデルはINT8の別成果物として日付・時刻別に保存します。速度はこのGPUでの値です。</p>
+            </div>
             <button id="e2e-build-engine" type="button" class="full">
               NotebookでTensorRT build
             </button>
             <label>結果<select id="e2e-engine-history"></select></label>
             <pre id="e2e-engine-result" style="white-space: pre-wrap"></pre>
+            <label>INT8比較結果<select id="e2e-int8-history"></select></label>
+            <div id="e2e-int8-result" aria-live="polite"></div>
           </details>
         </section>
         <section id="e2e-pane-evaluate" class="learning-form" hidden>

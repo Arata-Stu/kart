@@ -143,7 +143,7 @@ class Learning:
         field = (
             "evs_raw_python" if action == "dataset" and modality == "evs" else
             "inference_python"
-            if action in ("export", "evaluate", "build-engine")
+            if action in ("export", "evaluate", "build-engine", "quantize")
             else "python"
         )
         python = Path(cfg[field]).expanduser()
@@ -402,12 +402,45 @@ class Learning:
                 },
                 "resources": ["e2e-compute", *source_resources, *["e2e:datasets:" + item for item in (*body["train"], *body["validation"])]],
             }
+        if action == "quantize":
+            model = self.folder("models", body.get("model"))
+            self.contract(model)
+            meta = read_json(within(model, "metadata.json"))
+            if meta.get("quantization"):
+                raise ValueError("INT8校正には元のFP32モデルを選択してください")
+            datasets = []
+            for field in ("calibration", "evaluation"):
+                dataset = self.folder("datasets", body.get(field))
+                dataset_meta = read_json(within(dataset, "metadata.json"))
+                if dataset_meta.get("modality", "rgb") != meta.get("modality", "rgb"):
+                    raise ValueError("モデルと校正・評価データセットの入力種別が一致しません")
+                if meta.get("modality") == "evs" and dataset_meta.get("model_spec") != meta["model_spec"]:
+                    raise ValueError("EVS校正・評価データのSPECが一致しません")
+                datasets.append(dataset)
+            target = self.target("models", key)
+            calibration_samples = self.integer(body.get("calibration_samples", 256), 1, 100000)
+            evaluation_samples = self.integer(body.get("evaluation_samples", 256), 1, 100000)
+            seed = self.integer(body.get("seed", 42), 0, 2147483647)
+            warmup = self.integer(body.get("warmup", 10), 1, 1000)
+            repeats = self.integer(body.get("repeats", 3), 1, 20)
+            return {**common, "kind":"models", "target":target,
+                    "key":target.relative_to(self.root/"models").as_posix(), "module":"int8_benchmark",
+                    "args":["--model",str(model),"--calibration",str(datasets[0]),"--evaluation",str(datasets[1]),
+                            "--output","@OUTPUT@","--calibration-samples",str(calibration_samples),
+                            "--evaluation-samples",str(evaluation_samples),"--seed",str(seed),
+                            "--warmup",str(warmup),"--repeats",str(repeats)],
+                    "provenance":{"source_model":body["model"],"calibration":body["calibration"],
+                                  "evaluation":body["evaluation"],"quantization":"int8"},
+                    "resources":["e2e-compute","e2e:models:"+body["model"],
+                                 "e2e:datasets:"+body["calibration"],"e2e:datasets:"+body["evaluation"]]}
         if action == "build-engine":
             precision = body.get("precision", "fp32")
             if precision not in ("fp16", "fp32"):
                 raise ValueError("TensorRT build精度はfp16またはfp32です")
             model = self.folder("models", body.get("model"))
             self.contract(model)
+            if read_json(within(model, "metadata.json")).get("quantization"):
+                raise ValueError("校正済みINT8モデルは元のFP32/FP16モデルへ戻せません")
             return {
                 **common,
                 "kind": "engines",
@@ -594,6 +627,16 @@ class Learning:
                 if plan["kind"] == "runs" and run_info.is_file():
                     metadata["effective_precision"] = read_json(run_info).get("effective_precision", "fp32")
             else:
+                if plan["module"] == "int8_benchmark":
+                    comparison = read_json(within(output, "benchmark/report.json"))
+                    if comparison.get("schema") != "kart.int8_benchmark.v1" or comparison.get("samples", 0) < 1:
+                        raise ValueError("Invalid INT8 benchmark report")
+                    for filename in ("benchmark/fp32/model.plan", "benchmark/int8/model.plan", "benchmark/predictions.csv"):
+                        within(output, filename)
+                    metadata["benchmark_summary"] = dict(
+                        steering_mae_delta=comparison["metric_delta_int8_minus_fp32"]["steering_command"]["mae"],
+                        speedup_wall_median=comparison["speedup_wall_median"],
+                        speedup_gpu_median=comparison["speedup_gpu_median"])
                 _, mode = self.contract(output)
                 metadata["mode"] = mode
                 metadata["modality"] = read_json(output / "metadata.json").get("modality", "rgb")

@@ -2,7 +2,7 @@ import { showLoss } from "./loss_curve.js";
 import { installBagPicker } from "./bag_picker.js";
 import { showFeatures } from "./features.js";
 import { trashButton, installTrash } from "./learning_trash.js";
-import { showEvaluation, showEngine } from "./evaluation.js";
+import { showEvaluation, showEngine, showInt8 } from "./evaluation.js";
 import { $, state, api, action, on, emit, item, toast } from "./api.js";
 import { nextVersion, datasetOption, datasetName, artifactOption } from "./learning_names.js";
 const refreshBagPicker = installBagPicker();
@@ -175,8 +175,10 @@ export async function refreshLearning() {
   updateFeatureDatasets();
   options("e2e-push-model", data.models.map(artifactOption), "モデルを選択");
   options("e2e-eval-model", data.models.map(artifactOption), "モデルを選択");
-  options("e2e-engine-model", data.models.map(artifactOption), "buildするモデルを選択");
+  options("e2e-engine-model", data.models.filter(row => !row.quantization).map(artifactOption), "buildする元のFP32モデルを選択");
   options("e2e-engine-history", data.engines.map(row=>({...row,label:`${row.name || row.id} · ${(row.precision || "fp32").toUpperCase()}`})), "Notebook engineの結果を選択");
+  options("e2e-int8-history", data.models.filter(row => row.quantization).map(artifactOption), "INT8比較結果を選択");
+  updateInt8Inputs();
   updateEvalInput();
   suggestNames();
   render();
@@ -291,7 +293,11 @@ action("e2e-settings-save", async () => {
 });
 on("job-finished", async ({detail:job}) => {
   if (catalog) await refreshLearning();
-  if (job.status === 'succeeded' && job.result?.kind === 'models') $("e2e-engine-model").value = job.result.id;
+  if (job.status === 'succeeded' && job.result?.kind === 'models') {
+    const quantized = catalog.models.find(row => row.id === job.result.id)?.quantization;
+    if (quantized) { $("e2e-int8-history").value = job.result.id; await showInt8(job.result.id); }
+    else { $("e2e-engine-model").value = job.result.id; updateInt8Inputs(); }
+  }
   if (job.status === 'succeeded' && job.result?.kind === 'encoders') $("e2e-tiny-encoder").value = job.result.id;
   if (job.status === 'succeeded' && ['runs','encoders'].includes(job.result?.kind) &&
       step === 'train' && !$("learning-page").hidden && !document.querySelector('dialog[open]'))
@@ -299,16 +305,32 @@ on("job-finished", async ({detail:job}) => {
 });
 on("connection", render);
 
-action("e2e-build-engine", () =>
-  start("build-engine", {
-    model: $("e2e-engine-model").value,
-    precision: $("e2e-engine-precision").value,
-    name: nextVersion(
-      ($("e2e-engine-model").value || "model").slice(0, 36) + "-trt-" + $("e2e-engine-precision").value,
-      catalog.engines.map((r) => r.id),
-    ),
-  }),
-);
+function updateInt8Inputs() {
+  if (!catalog) return;
+  const modality = catalog.models.find(row => row.id === $("e2e-engine-model").value)?.modality || "rgb";
+  for (const field of ["calibration", "evaluation"])
+    options("e2e-int8-" + field, catalog.datasets.filter(row => (row.modality || "rgb") === modality).map(datasetOption), "データセットを選択");
+}
+$("e2e-engine-model").addEventListener("change", updateInt8Inputs);
+$("e2e-engine-precision").addEventListener("change", () => {
+  const int8 = $("e2e-engine-precision").value === "int8";
+  $("e2e-int8-options").hidden = !int8;
+  $("e2e-build-engine").textContent = int8 ? "INT8校正＋FP32比較を実行" : "NotebookでTensorRT build";
+});
+action("e2e-build-engine", () => {
+  const precision = $("e2e-engine-precision").value;
+  const body = {model: $("e2e-engine-model").value, precision,
+    name: nextVersion(($("e2e-engine-model").value || "model").split("/").at(-1).slice(0, 36) + "-trt-" + precision,
+      (precision === "int8" ? catalog.models : catalog.engines).map(r => r.id))};
+  if (precision === "int8") {
+    body.calibration = $("e2e-int8-calibration").value;
+    body.evaluation = $("e2e-int8-evaluation").value;
+    for (const field of ["calibration-samples", "evaluation-samples", "seed", "warmup", "repeats"])
+      body[field.replaceAll("-", "_")] = Number($("e2e-int8-" + field).value);
+  }
+  return start(precision === "int8" ? "quantize" : "build-engine", body);
+});
+$("e2e-int8-history").addEventListener("change", () => showInt8($("e2e-int8-history").value).catch(e => toast(e.message, true)));
 $("e2e-engine-history").addEventListener("change", () =>
   showEngine($("e2e-engine-history").value).catch((e) =>
     toast(e.message, true),
