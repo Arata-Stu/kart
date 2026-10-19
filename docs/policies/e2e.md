@@ -184,3 +184,10 @@ EVS特徴量可視化は学習済みcheckpointの実encoder/headから生成し�
 実目的関数のlossと比較用MSEを混同しない。best checkpointは検証MSE、
 opt-in Plateau schedulerは検証lossを使用する。使用LRと次epoch LRを明示し、
 損失・scheduler設定を成果物へ保存する。Tiny特徴蒸留の目的関数と分ける。
+
+RGB baseline比較は事前学習済みとscratchを初期化方法で明示する。
+scratchはencoderも更新し、既定50 epoch・LR1e-4、重み読込と特徴量キャッシュを禁止する。
+事前学習済みは既定10 epochを維持する。ViT-Bの公式factory・専用重みパスを使用し、
+CNNは4段stride2 Conv/GroupNorm/GELU＋global meanと既存headを使う。
+前処理・損失・評価契約を共通化し、architecture/初期化/seed/学習parameter数を保存する。
+モデル間の比較はbag分割とテスト条件を揃え、学習途中と収束後の比較を区別する。

@@ -754,3 +754,14 @@ EVS特徴量可視化は「特徴量を確認」でEVS実験を選び、同じ�
 学習lossと比較用MSEは両方保存し、best.ptの選定は検証MSEを維持する。
 損失表示はMSE/学習lossを切り替え、epoch表で使用LR/次epoch LRを確認できる。
 既存のMSE履歴も表示可能。これらはRGB Small/Tiny・EVSの制御学習に適用し、Tiny特徴蒸留には適用しない。
+
+### RGB baseline比較
+
+RGBモデルにViT-B（768次元）と小規模CNN（192次元）を追加。
+「初期化」でscratchを選ぶと既定50 epoch、全体学習、特徴量キャッシュ無効。
+CNNはscratch固定。事前学習済みは既定10 epochを維持する。
+ViT-B重みは「学習環境」の専用欄（既定repo内`weights/dinov3/dinov3_vitb16.pth`）へ設定する。
+scratchは重み不要。CNNはDINOソースも不要。同じデータ分割・損失・seedを選んで比較する。
+seedの既定42、scratch学習率の既定1e-4。epochとLRは上書き可能。
+実験一覧にarchitectureと初期化を表示し、損失表示・export・評価・可視化・整理は共通操作。
+入力前処理は既存RGBと共通。CNNの構成はkart_e2e READMEを参照。

@@ -413,7 +413,11 @@
           <label id="e2e-rgb-model">RGBモデル<select id="e2e-architecture">
             <option value="dinov3_vits16">DINOv3 ViT-S/16 · 384次元</option>
             <option value="dinov3_vitt16">DINOv3 ViT-Tiny/16 · 192次元（独自構成）</option>
+            <option value="dinov3_vitb16">DINOv3 ViT-B/16 · 768次元</option>
+            <option value="simple_cnn">小規模CNN · 192次元（scratch）</option>
           </select></label>
+          <label id="e2e-init-options">初期化<select id="e2e-initialization"><option value="pretrained">事前学習済みencoder</option><option value="scratch">scratch · ランダム初期化から全体学習</option></select></label>
+          <p id="e2e-scratch-help" class="help" hidden>scratchは既定50 epoch、全体学習、特徴量キャッシュなし。重みファイルは読み込みません。学習用と検証・テスト用はbag単位で分けて比較してください。</p>
           <div class="form-grid">
             <label
               >学習用<select
@@ -510,6 +514,7 @@
             </div>
             <p class="help">検証lossを監視。patience=2では改善しないepochが3回続いた後、次epochの学習率を下げます。best.ptは従来どおり検証MSEで選びます。</p>
           </div>
+          <label>乱数seed<input id="e2e-seed" type="number" min="0" max="2147483647" value="42" /></label>
           <label>DataLoader workers<input id="e2e-workers" type="number" min="0" max="64" value="8" /></label>
           <label class="check"><input id="e2e-feature-cache" type="checkbox" checked />特徴量キャッシュを使用（backbone凍結時）</label>
           <p id="e2e-cache-help" class="help">初回に特徴量を保存し、同じ入力・重み・前処理なら再利用します。</p>
@@ -517,7 +522,7 @@
             ><input
               id="e2e-finetune"
               type="checkbox"
-            />全体をfine-tuning（DINOv3 backbone＋制御headを更新）</label
+            />encoder＋制御headを全体学習</label
           >
           <p id="e2e-training-scope" class="help">backboneを凍結してheadのみ学習。既定学習率 1e-4。</p>
           <p class="help">
@@ -658,6 +663,7 @@
           id="e2e-setting-weights"
           placeholder="/workspaces/weights/dinov3/dinov3_vits16_pretrain_lvd1689m-08c60483.pth"
       /></label>
+      <label>ViT-B公式事前学習重み<input id="e2e-setting-base_weights" placeholder="/workspaces/weights/dinov3/dinov3_vitb16.pth" /></label>
       <label>EVS 20ch encoder PT<input id="e2e-setting-evs_weights" placeholder="/workspaces/weights/evs/event_encoder.pt" /></label>
       <label>EVS encoder JSON<input id="e2e-setting-evs_json" placeholder="/workspaces/weights/evs/event_encoder.json" /></label>
       <div class="form-grid">

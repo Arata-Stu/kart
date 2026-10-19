@@ -31,7 +31,30 @@ def preprocess(image):
     return F.pad(value, (6, 6, 4, 4))  # 212x120 -> 224x128, zero after normalization
 
 
+class SimpleCNN(nn.Module):
+    """Four stride-2 blocks; 192 spatial features, global mean, shared control head."""
+    def __init__(self):
+        super().__init__()
+        blocks = []
+        channels = 3
+        for width in (24, 48, 96, 192):
+            blocks.extend([nn.Conv2d(channels, width, 3, stride=2, padding=1),
+                           nn.GroupNorm(8, width), nn.GELU()])
+            channels = width
+        self.blocks = nn.Sequential(*blocks)
+
+    def forward_features(self, value):
+        spatial = self.blocks(value)
+        return {"x_norm_patchtokens": spatial.flatten(2).transpose(1, 2)}
+
+    def forward(self, value):
+        return self.forward_features(value)["x_norm_patchtokens"].mean(1)
+
+
 def backbone(repo, architecture="dinov3_vits16"):
+    rgb_spec(architecture)
+    if architecture == "simple_cnn":
+        return SimpleCNN()
     repo = Path(repo).expanduser().resolve(strict=True)
     revision = subprocess.check_output(
         ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
@@ -49,8 +72,8 @@ def backbone(repo, architecture="dinov3_vits16"):
     if not Path(backbones.__file__).resolve().is_relative_to(repo):
         raise ValueError("A different dinov3 package was already imported")
     rgb_spec(architecture)
-    if architecture == "dinov3_vits16":
-        return backbones.dinov3_vits16(pretrained=False)
+    if architecture in ("dinov3_vits16", "dinov3_vitb16"):
+        return getattr(backbones, architecture)(pretrained=False)
     # Same pinned official implementation/config as ViT-S; change only width/heads.
     return backbones._make_dinov3_vit(
         img_size=224, patch_size=16, in_chans=3, embed_dim=192, depth=12, num_heads=3,
@@ -68,7 +91,7 @@ class Policy(nn.Module):
             raise ValueError("mode must be steer_throttle or steer_only")
         self.encoder, self.mode, self.frozen = encoder, mode, frozen
         self.spec = rgb_spec(architecture)
-        self.feature_dim = 192 if architecture == "dinov3_vitt16" else 384
+        self.feature_dim = {"dinov3_vitt16":192, "dinov3_vits16":384, "dinov3_vitb16":768, "simple_cnn":192}[architecture]
         self.runtime = {"fixed_throttle": 0.0, "max_throttle": 0.2}
         self.head = nn.Sequential(
             nn.Linear(self.feature_dim, 128),

@@ -30,6 +30,7 @@ const fields = [
   "evs_raw_python",
   "encoder_repo",
   "weights",
+  "base_weights",
   "evs_weights",
   "evs_json",
   "device",
@@ -43,10 +44,10 @@ function suggestNames() {
     input.value = suggestion;
     input.dataset.suggestion = suggestion;
   }
-  const base = ($("e2e-train-modality").value === "evs" ? "evs20" : $("e2e-architecture").value === "dinov3_vitt16" ? "dinov3-tiny" : "dinov3") + ($("e2e-mode").value === "steer_only" ? "-steer" : "-control");
+  const base = ($("e2e-train-modality").value === "evs" ? "evs20" : ({dinov3_vitt16:"dinov3-tiny",dinov3_vits16:"dinov3",dinov3_vitb16:"dinov3-base",simple_cnn:"cnn"}[$("e2e-architecture").value]) + ($("e2e-initialization").value === "scratch" ? "-scratch" : "")) + ($("e2e-mode").value === "steer_only" ? "-steer" : "-control");
   for (const [id, prefix, kind] of [
     ["e2e-distill-name", "dinov3-tiny-encoder", "encoders"],
-    ["e2e-run-name", base + ($("e2e-finetune").checked ? "-finetune" : ""), "runs"],
+    ["e2e-run-name", base + ($("e2e-finetune").checked && $("e2e-initialization").value !== "scratch" ? "-finetune" : ""), "runs"],
     ["e2e-features-name", ($("e2e-features-run").value || base) + "-features", "features"],
     ["e2e-model-name", $("e2e-export-run").value || base, "models"],
     [
@@ -119,7 +120,7 @@ function render() {
       kind === "datasets"
         ? `${row.id.includes("/") ? row.id.split("/").slice(0, -1).join(" ") + " · " : ""}${row.samples.toLocaleString()} samples · ${row.bag.split("/").pop()}`
         : kind === "runs"
-          ? `${row.finetune ? "全体fine-tuning" : "head学習"} · ${row.mode} · epoch ${row.metrics?.epoch ?? "—"} · val MSE ${row.metrics?.validation_mse?.toPrecision(4) ?? "—"}`
+          ? `${row.architecture || "dinov3_vits16"} · ${row.initialization === "scratch" ? "scratch" : row.finetune ? "全体fine-tuning" : "head学習"} · ${row.mode} · epoch ${row.metrics?.epoch ?? "—"} · val MSE ${row.metrics?.validation_mse?.toPrecision(4) ?? "—"}`
           : `${row.mode} · ORT最大誤差 ${Number(row.ort_max_abs_error).toExponential(2)}`;
     if (kind === "evaluations")
       detail = `${row.samples} frames · ${row.model} · steer MAE ${row.metrics.steering_command.mae.toFixed(4)}`;
@@ -231,6 +232,8 @@ action("e2e-start-train", () =>
     lr_patience: Number($("e2e-lr-patience").value), min_lr: Number($("e2e-min-lr").value),
     modality: $("e2e-train-modality").value,
     architecture: $("e2e-train-modality").value === "evs" ? "dinov3_vits16" : $("e2e-architecture").value,
+    initialization: $("e2e-train-modality").value === "evs" ? "pretrained" : $("e2e-initialization").value,
+    seed: Number($("e2e-seed").value),
     encoder: $("e2e-tiny-encoder").value,
     finetune: $("e2e-finetune").checked,
     feature_cache: $("e2e-feature-cache").checked,
@@ -337,7 +340,7 @@ $("e2e-finetune").addEventListener("change", () => {
 });
 
 $("e2e-architecture").addEventListener("change", () => {
-  $("e2e-tiny-options").hidden = $("e2e-architecture").value !== 'dinov3_vitt16';
+  updateInitialization();
   suggestNames();
 });
 action('e2e-start-distill', () => start('distill', {
@@ -360,7 +363,8 @@ $("e2e-modality").addEventListener("change", () => {
 $("e2e-train-modality").addEventListener("change", () => {
   const evs = $("e2e-train-modality").value === "evs";
   $("e2e-rgb-model").hidden = evs;
-  $("e2e-tiny-options").hidden = evs || $("e2e-architecture").value !== "dinov3_vitt16";
+  updateInitialization();
+  $("e2e-tiny-options").hidden = evs || $("e2e-initialization").value === "scratch" || $("e2e-architecture").value !== "dinov3_vitt16";
   for (const id of ["e2e-train-data", "e2e-validation-data"])
     options(id, catalog.datasets.filter(row => (row.modality || "rgb") === (evs ? "evs" : "rgb")).map(datasetOption), "");
   suggestNames();
@@ -372,3 +376,38 @@ $("e2e-lr-scheduler").addEventListener("change", () => {
 $("e2e-loss-kind").addEventListener("change", () => {
   $("e2e-loss-beta").disabled = $("e2e-loss-kind").value !== "smooth_l1";
 });
+
+function updateInitialization() {
+  const evs = $("e2e-train-modality").value === "evs";
+  const cnn = !evs && $("e2e-architecture").value === "simple_cnn";
+  const initialization = $("e2e-initialization");
+  $("e2e-init-options").hidden = evs;
+  if (evs) initialization.value = "pretrained";
+  if (cnn) initialization.value = "scratch";
+  initialization.disabled = cnn;
+  const scratch = initialization.value === "scratch";
+  const wasScratch = initialization.dataset.scratchActive === "true";
+  initialization.dataset.scratchActive = String(scratch);
+  const cache = $("e2e-feature-cache");
+  if (scratch && !wasScratch) {cache.dataset.previous = String(cache.checked); cache.checked = false;}
+  if (!scratch && wasScratch) cache.checked = cache.dataset.previous !== "false";
+  $("e2e-scratch-help").hidden = !scratch;
+  $("e2e-tiny-options").hidden = evs || scratch || $("e2e-architecture").value !== "dinov3_vitt16";
+  const finetune = $("e2e-finetune");
+  if (scratch) {
+    if (!finetune.disabled) finetune.dataset.previous = String(finetune.checked);
+    finetune.checked = true;
+    $("e2e-training-scope").textContent = "ランダム初期化したencoderと制御headを全体学習。既定学習率 1e-4。";
+    $("e2e-feature-cache").disabled = true;
+    $("e2e-cache-help").textContent = "scratchではencoderを更新するため、特徴量キャッシュを使用しません。";
+    if (Number($("e2e-lr").value) === 1e-5) $("e2e-lr").value = "0.0001";
+  } else if (finetune.disabled) {
+    finetune.checked = finetune.dataset.previous === "true";
+    finetune.dispatchEvent(new Event("change"));
+  }
+  finetune.disabled = scratch;
+  const epochs = $("e2e-epochs");
+  if ([10,50].includes(Number(epochs.value))) epochs.value = scratch ? "50" : "10";
+  suggestNames();
+}
+$("e2e-initialization").addEventListener("change",updateInitialization);

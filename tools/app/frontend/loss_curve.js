@@ -67,6 +67,7 @@ export async function showLoss(id, kind="runs") {
 action('e2e-loss-close',()=>{request++;$('e2e-loss-dialog').close();});
 action('e2e-loss-export',()=>{
   if (selectedKind === 'encoders') {
+    $('e2e-initialization').value='pretrained';
     $('e2e-architecture').value='dinov3_vitt16';
     $('e2e-architecture').dispatchEvent(new Event('change',{bubbles:true}));
     $('e2e-tiny-encoder').value=selected;

@@ -15,13 +15,13 @@ SPEC = {
 }
 
 
-RGB_ENCODERS = ("dinov3_vits16", "dinov3_vitt16")
+RGB_ENCODERS = ("dinov3_vits16", "dinov3_vitt16", "dinov3_vitb16", "simple_cnn")
 
 
 def rgb_spec(encoder="dinov3_vits16"):
     if encoder not in RGB_ENCODERS:
         raise ValueError("Unsupported RGB encoder")
-    return dict(SPEC, encoder=encoder)
+    return dict(SPEC, encoder=encoder, encoder_commit="kart.simple_cnn.v1" if encoder == "simple_cnn" else DINOV3_COMMIT)
 
 
 def validate_rgb_spec(spec):

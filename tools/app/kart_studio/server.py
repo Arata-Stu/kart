@@ -155,7 +155,7 @@ class Studio:
             titles = {
                 "features": "特徴量の可視化",
                 "dataset": "データセット作成",
-                "train": "DINOv3学習",
+                "train": "制御モデル学習",
                 "distill": "ViT-S → ViT-Tiny特徴蒸留",
                 "export": "ONNX export",
                 "evaluate": "rosbagオフライン評価",

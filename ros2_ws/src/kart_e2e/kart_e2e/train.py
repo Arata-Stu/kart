@@ -83,8 +83,8 @@ def main():
     p.add_argument(
         "--weights",
         type=Path,
-        required=True,
-        help="Local official ViT-S state dict, or distilled Tiny encoder.pt with --architecture dinov3_vitt16",
+        required=False,
+        help="Local pretrained encoder weights; not used with --initialization scratch",
     )
     p.add_argument("--output", type=Path, required=True)
     p.add_argument(
@@ -101,12 +101,13 @@ def main():
     )
     p.add_argument("--architecture", choices=RGB_ENCODERS, default="dinov3_vits16")
     p.add_argument("--modality", choices=["rgb", "evs"], default="rgb")
+    p.add_argument("--initialization", choices=["pretrained", "scratch"], default="pretrained")
     p.add_argument("--finetune", action="store_true", help="Update the full backbone and control head")
     p.add_argument("--device", default="cuda")
-    p.add_argument("--epochs", type=int, default=10)
+    p.add_argument("--epochs", type=int, default=None, help="Default 10 pretrained / 50 scratch")
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--learning-rate", type=float, default=None,
-                   help="AdamW learning rate for all trainable parameters (default: 1e-4 frozen, 1e-5 finetune)")
+                   help="AdamW learning rate for all trainable parameters (default: 1e-4 frozen/scratch, 1e-5 pretrained finetune)")
     p.add_argument("--loss", choices=["smooth_l1", "mse"], default="smooth_l1")
     p.add_argument("--smooth-l1-beta", type=float, default=0.1)
     p.add_argument("--lr-scheduler", choices=["none", "plateau"], default="none")
@@ -119,8 +120,21 @@ def main():
     p.add_argument("--cache-dir", type=Path, default=None)
     p.add_argument("--seed", type=int, default=42)
     a = p.parse_args()
+    scratch = a.initialization == "scratch"
+    if scratch and a.modality != "rgb":
+        p.error("Scratch baselines currently support RGB only")
+    if a.architecture == "simple_cnn" and not scratch:
+        p.error("simple_cnn requires --initialization scratch")
+    if scratch and a.weights is not None:
+        p.error("Scratch must not load --weights; omit it")
+    if not scratch and a.weights is None:
+        p.error("Pretrained training requires --weights")
+    if a.epochs is None:
+        a.epochs = 50 if scratch else 10
     if a.learning_rate is None:
-        a.learning_rate = 1e-5 if a.finetune else 1e-4
+        a.learning_rate = 1e-4 if scratch else (1e-5 if a.finetune else 1e-4)
+    if scratch:
+        a.finetune = True
     if (
         a.num_workers < 0
         or a.epochs <= 0
@@ -141,11 +155,13 @@ def main():
     runtime = validate_runtime(
         {"fixed_throttle": a.fixed_throttle, "max_throttle": a.max_throttle}
     )
+    if not 0 <= a.seed <= 2147483647:
+        p.error("seed must be 0..2147483647")
     random.seed(a.seed)
     np.random.seed(a.seed)
     torch.manual_seed(a.seed)
     from .feature_cache import cached_samples, digest
-    weights_sha = digest(a.weights)
+    weights_sha = None if scratch else digest(a.weights)
     if a.modality == 'evs':
         if a.architecture != 'dinov3_vits16':
             p.error('ViT-Tiny distillation currently supports RGB only')
@@ -154,7 +170,9 @@ def main():
         datasets = [Samples(r, a.mode, model.spec) for r in (a.train, a.validation)]
     else:
         datasets = [Samples(a.train, a.mode), Samples(a.validation, a.mode)]
-        if a.architecture == 'dinov3_vits16':
+        if scratch:
+            encoder = backbone(a.repo, a.architecture)
+        elif a.architecture == 'dinov3_vits16':
             encoder = backbone(a.repo)
             encoder.load_state_dict(torch.load(a.weights, map_location="cpu", weights_only=True), strict=True)
         else:
@@ -167,7 +185,7 @@ def main():
     )
     scheduler = (plateau_scheduler(optimizer, factor=a.lr_factor, patience=a.lr_patience, min_lr=a.min_lr)
                  if a.lr_scheduler == "plateau" else None)
-    if digest(a.weights) != weights_sha:
+    if not scratch and digest(a.weights) != weights_sha:
         raise ValueError("Weights changed while loading")
     effective_cache = a.feature_cache and not a.finetune
     print(f"Feature cache: requested={a.feature_cache}; effective={effective_cache}; workers={a.num_workers}", flush=True)

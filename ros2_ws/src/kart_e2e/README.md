@@ -838,3 +838,50 @@ run.json/checkpointに損失・β・scheduler設定・監視/選定指標を保�
 GUIは損失関数・βとschedulerを選択でき、Plateau選択時に詳細値を設定する。
 損失カーブはMSEと実学習lossを切替可能。数値表には使用LRと次epoch LRも表示する。
 過去のMSEのみの履歴は従来どおり表示する。Tinyの第1段階の特徴蒸留は独自目的関数のまま。
+
+### RGBのscratch / CNN比較
+
+RGBの`--architecture`は`dinov3_vits16`（384次元）、`dinov3_vitt16`（192）、
+`dinov3_vitb16`（768）、`simple_cnn`（192）を選択できる。
+ViT-Bは同じ固定公式DINOv3ソースの`dinov3_vitb16(pretrained=False)`で構築し、
+事前学習済みを選んだ場合だけローカル重みをstrict loadする。重みは自動取得しない。
+ViT-BにViT-S重みを暗黙流用しない。
+
+`--initialization pretrained`が既定。従来の重み付き学習は既定10 epoch。
+`--initialization scratch`では重みを読み込まず、encoderとheadを必ず全体学習し、
+既定50 epoch・学習率1e-4を使う（`--epochs`/`--learning-rate`で上書き可能）。
+`--weights`はpretrainedでは必須、scratchとの併用は誤設定として拒否する。
+scratch中は特徴量キャッシュを無効化する。凍結したランダム特徴をbaselineとしない。
+事前学習済み全体fine-tuningの既定学習率1e-5は維持する。
+`--seed`は既定42（0..2147483647）、GUIでも指定可能。
+
+CNNは3→24→48→96→192の4段Conv3x3/stride2/pad1＋GroupNorm8＋GELU、
+空間平均で192次元とする。scratch専用でDINOソースも重みも不要。
+RGB resize/正規化/padding、headの隠れ次元128・GELU・Dropout0.1と出力制約は全モデル共通。
+CNN仕様は`encoder=simple_cnn`、`encoder_commit=kart.simple_cnn.v1`で区別する。
+CNNの前処理は比較のためImageNet正規化を維持し、モデルに合わせて暗黙変更しない。
+
+```bash
+# 事前学習済みViT-B: 重みは利用者が配置
+python -m kart_e2e.train --architecture dinov3_vitb16 \
+  --train /workspaces/datasets/train --validation /workspaces/datasets/validation \
+  --repo /workspaces/python_ws/dinov3 --weights /workspaces/weights/dinov3/dinov3_vitb16.pth \
+  --output /workspaces/runs/base_pretrained --device cuda
+# 同じViT-Bのscratch、50 epoch（--weightsを指定しない）
+python -m kart_e2e.train --architecture dinov3_vitb16 --initialization scratch \
+  --train /workspaces/datasets/train --validation /workspaces/datasets/validation \
+  --repo /workspaces/python_ws/dinov3 --output /workspaces/runs/base_scratch --device cuda
+# 小規模CNNのscratch。共通CLIの--repoは渡すがCNNでは参照しない
+python -m kart_e2e.train --architecture simple_cnn --initialization scratch \
+  --train /workspaces/datasets/train --validation /workspaces/datasets/validation \
+  --repo /workspaces/python_ws/dinov3 --output /workspaces/runs/cnn_scratch --device cuda
+```
+
+GUIではRGBモデルと初期化方法を選択する。CNN選択時はscratch固定。
+ViT-B事前学習済み重みは「学習環境」の専用欄で設定する。
+学習runにarchitecture・初期化・seed・実trainable parameter数を保存する。
+同じbag分割・テストbag・損失・seed条件を使い、既存のONNX export→bag評価で比較する。
+同一epoch比較と収束後比較は別に扱い、50 epochでの収束を保証しない。
+RGB Small/Tiny/Base/CNNの復元・export・評価・オフライン特徴量可視化を共通経路で扱う。
+CNNのPCAは16画素strideの畳み込み空間特徴でありViTのpatch tokenとは構造が異なる。
+EVSのモデル/初期化契約は変更しない。ROSノード・topic・parameter追加なし。

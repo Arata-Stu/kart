@@ -45,6 +45,7 @@ class Learning:
                 self.repo
                 / "weights/dinov3/dinov3_vits16_pretrain_lvd1689m-08c60483.pth"
             ),
+            base_weights=str(self.repo / "weights/dinov3/dinov3_vitb16.pth"),
             evs_weights=str(self.repo / "weights/evs/event_encoder.pt"),
             evs_json=str(self.repo / "weights/evs/event_encoder.json"),
             device="cuda",
@@ -263,32 +264,40 @@ class Learning:
                 raise ValueError("予測モードが不正です")
             repo = Path(cfg["encoder_repo"]).expanduser()
             architecture = body.get("architecture", "dinov3_vits16")
-            if architecture not in ("dinov3_vits16", "dinov3_vitt16"):
+            if architecture not in ("dinov3_vits16", "dinov3_vitt16", "dinov3_vitb16", "simple_cnn"):
                 raise ValueError("不明なRGBモデルです")
+            initialization = body.get("initialization", "pretrained")
+            if initialization not in ("pretrained", "scratch"):
+                raise ValueError("初期化方法が不正です")
+            scratch = initialization == "scratch"
+            if scratch and (action != "train" or modality != "rgb"):
+                raise ValueError("scratch比較はRGBの制御学習のみ対応しています")
+            if architecture == "simple_cnn" and not scratch:
+                raise ValueError("CNNはscratchを選択してください")
             source_resources = []
-            weights = Path(cfg["evs_weights"] if modality == "evs" else cfg["weights"]).expanduser()
+            weights = Path(cfg["evs_weights"] if modality == "evs" else cfg["base_weights"] if architecture == "dinov3_vitb16" else cfg["weights"]).expanduser()
             if modality == "evs" and architecture != "dinov3_vits16":
                 raise ValueError("EVSは20ch ViT-S encoderを使用します")
             if action == "distill" and body.get("teacher_run"):
                 teacher = self.folder("runs", body["teacher_run"])
                 weights = within(teacher, "best.pt")
                 source_resources.append("e2e:runs:" + body["teacher_run"])
-            elif action == "train" and architecture == "dinov3_vitt16":
+            elif action == "train" and architecture == "dinov3_vitt16" and not scratch:
                 source = self.folder("encoders", body.get("encoder"))
                 weights = within(source, "encoder.pt")
                 source_resources.append("e2e:encoders:" + body["encoder"])
-            if not repo.is_dir():
+            if architecture != "simple_cnn" and not repo.is_dir():
                 raise ValueError(
                     f"DINOv3ソースが見つかりません: {repo}。"
                     "Notebookのコンテナ内で cd /workspaces && vcs import . < e2e.repos "
                     "を実行し、UI「学習環境」のDINOv3ソースを確認してください。重みとは別に必要です"
                 )
-            if not weights.is_file():
+            if not scratch and not weights.is_file():
                 raise ValueError(
                     f"{'EVS encoder重み' if modality == 'evs' else 'DINOv3公式重み'}が見つかりません: {weights}。"
                     "UI「学習環境」の重みパスをコンテナ内のパスで指定してください"
                 )
-            epochs = self.integer(body.get("epochs", 10), 1, 100000)
+            epochs = self.integer(body.get("epochs", 50 if scratch else 10), 1, 100000)
             batch = self.integer(body.get("batch_size", 32), 1, 4096)
             fixed = self.number(body.get("fixed_throttle", 0.0), 0, 1)
             maximum = self.number(body.get("max_throttle", 0.2), 0, 1)
@@ -297,11 +306,13 @@ class Learning:
             finetune = body.get("finetune", False)
             if not isinstance(finetune, bool):
                 raise ValueError("finetuneはboolです")
+            if scratch:
+                finetune = True
             feature_cache = body.get("feature_cache", True)
             if not isinstance(feature_cache, bool):
                 raise ValueError("feature_cacheはboolです")
             workers = self.integer(body.get("num_workers", 8), 0, 64)
-            lr = self.number(body.get("learning_rate", 1e-5 if finetune else 1e-4), 1e-9, 1)
+            lr = self.number(body.get("learning_rate", 1e-4 if scratch else (1e-5 if finetune else 1e-4)), 1e-9, 1)
             if action == "distill":
                 target = self.target("encoders", key)
                 args = ["--train", *map(str, groups[0]), "--validation", *map(str, groups[1]),
@@ -333,8 +344,6 @@ class Learning:
                 *map(str, groups[1]),
                 "--repo",
                 str(repo),
-                "--weights",
-                str(weights),
                 "--output",
                 "@OUTPUT@",
                 "--mode",
@@ -352,6 +361,10 @@ class Learning:
                 "--device",
                 cfg["device"],
             ]
+            seed = self.integer(body.get("seed", 42), 0, 2147483647)
+            args += ["--initialization", initialization, "--seed", str(seed)]
+            if not scratch:
+                args += ["--weights", str(weights)]
             args += ["--loss", loss, "--smooth-l1-beta", str(beta), "--lr-scheduler", scheduler,
                      "--lr-factor", str(factor), "--lr-patience", str(patience), "--min-lr", str(minimum_lr)]
             args += ["--modality", modality, "--architecture", architecture, "--num-workers", str(workers), "--cache-dir", str(self.root / '.feature_cache'),
@@ -368,7 +381,8 @@ class Learning:
                     "mode": mode,
                     "modality": modality,
                     "architecture": architecture,
-                    "encoder": body.get("encoder") if architecture=="dinov3_vitt16" else None,
+                    "initialization": initialization, "seed": seed,
+                    "encoder": body.get("encoder") if architecture=="dinov3_vitt16" and not scratch else None,
                     "train": body["train"],
                     "validation": body["validation"],
                     "epochs": epochs,
@@ -407,7 +421,7 @@ class Learning:
             target = self.target("features", key)
             maximum = self.integer(body.get("max_frames", 12), 1, 64)
             repo = Path(cfg["encoder_repo"]).expanduser()
-            if not repo.is_dir():
+            if read_json(within(run, "artifact.json")).get("architecture") != "simple_cnn" and not repo.is_dir():
                 raise ValueError("DINOv3ソースのパスを確認してください")
             return {**common, "kind": "features", "target": target,
                     "key": target.relative_to(self.root / "features").as_posix(),
@@ -465,7 +479,7 @@ class Learning:
             run = self.folder("runs", body.get("run"))
             checkpoint = within(run, "best.pt")
             target = self.target("models", key)
-            if not Path(cfg["encoder_repo"]).expanduser().is_dir():
+            if read_json(within(run, "artifact.json")).get("architecture") != "simple_cnn" and not Path(cfg["encoder_repo"]).expanduser().is_dir():
                 raise ValueError("DINOv3ソースのパスを確認してください")
             return {
                 **common,

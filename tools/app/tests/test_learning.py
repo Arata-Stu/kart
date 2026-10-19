@@ -192,6 +192,33 @@ class LearningTests(unittest.TestCase):
         legacy=self.service.prepare('train',{**body,'loss':'mse','lr_scheduler':'none'})
         self.assertEqual(legacy['provenance']['loss'],'mse')
 
+    def test_rgb_scratch_and_base_weights_routing(self):
+        data=self.dataset().relative_to(self.service.root/'datasets').as_posix()
+        body=dict(name='baseline',train=[data],validation=[data],initialization='scratch')
+        missing=str(self.base/'missing')
+        self.service.save_settings(dict(self.settings,weights=missing,base_weights=missing,encoder_repo=missing))
+        cnn=self.service.prepare('train',{**body,'architecture':'simple_cnn'})
+        self.assertNotIn('--weights',cnn['args'])
+        self.assertIn('--finetune',cnn['args'])
+        self.assertEqual(cnn['provenance']['epochs'],50)
+        self.assertEqual(cnn['provenance']['learning_rate'],1e-4)
+        self.assertFalse(cnn['provenance']['feature_cache_effective'])
+        self.service.save_settings(dict(self.settings,weights=missing,base_weights=missing))
+        base=self.service.prepare('train',{**body,'architecture':'dinov3_vitb16'})
+        self.assertNotIn('--weights',base['args'])
+        self.assertEqual(base['provenance']['initialization'],'scratch')
+        with self.assertRaisesRegex(ValueError,'重み'):
+            self.service.prepare('train',{**body,'initialization':'pretrained','architecture':'dinov3_vitb16'})
+        base_weights=self.base/'base.pt';base_weights.write_bytes(b'base')
+        self.service.save_settings(dict(self.settings,base_weights=str(base_weights)))
+        pretrained=self.service.prepare('train',{**body,'initialization':'pretrained','architecture':'dinov3_vitb16'})
+        self.assertEqual(pretrained['args'][pretrained['args'].index('--weights')+1],str(base_weights))
+        self.assertEqual(pretrained['provenance']['epochs'],10)
+        with self.assertRaisesRegex(ValueError,'CNN'):
+            self.service.prepare('train',{**body,'initialization':'pretrained','architecture':'simple_cnn'})
+        with self.assertRaisesRegex(ValueError,'RGB'):
+            self.service.prepare('distill',{**body,'architecture':'dinov3_vits16'})
+
     def test_loss_history_and_invalid_records(self):
         import json
         run = self.service.root / "runs/history"
