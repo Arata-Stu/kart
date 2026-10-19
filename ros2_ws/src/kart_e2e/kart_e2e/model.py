@@ -73,8 +73,14 @@ class Policy(nn.Module):
             self.encoder.eval()
         return self
 
+    def extract_features(self, value):
+        return self.encoder(value)
+
     def forward(self, value):
-        raw = self.head(self.encoder(value))
+        return self.predict_features(self.extract_features(value))
+
+    def predict_features(self, features):
+        raw = self.head(features)
         steering = raw[:, :1].tanh()
         return (
             steering

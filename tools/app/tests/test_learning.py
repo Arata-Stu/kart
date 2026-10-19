@@ -224,6 +224,16 @@ class LearningTests(unittest.TestCase):
         self.assertEqual(defaults["args"][defaults["args"].index("--epochs") + 1], "10")
         self.assertEqual(defaults["args"][defaults["args"].index("--learning-rate") + 1], "1e-05")
         self.assertTrue(defaults["provenance"]["finetune"])
+        self.assertEqual(defaults["provenance"]["num_workers"], 8)
+        self.assertIn("--feature-cache", defaults["args"])
+        self.assertFalse(defaults["provenance"]["feature_cache_effective"])
+        uncached = self.service.prepare("train", {**body, "feature_cache": False, "num_workers": 0})
+        self.assertIn("--no-feature-cache", uncached["args"])
+        self.assertEqual(uncached["provenance"]["num_workers"], 0)
+        for bad in ({"feature_cache": "false"}, {"num_workers": -1}):
+            with self.assertRaises(ValueError):
+                self.service.prepare("train", {**body, **bad})
+
         frozen = self.service.prepare("train", {**body, "finetune": False})
         self.assertNotIn("--finetune", frozen["args"])
         self.assertEqual(frozen["provenance"]["learning_rate"], 1e-4)

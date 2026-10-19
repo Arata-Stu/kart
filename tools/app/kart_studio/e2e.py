@@ -236,6 +236,10 @@ class Learning:
             finetune = body.get("finetune", False)
             if not isinstance(finetune, bool):
                 raise ValueError("finetuneはboolです")
+            feature_cache = body.get("feature_cache", True)
+            if not isinstance(feature_cache, bool):
+                raise ValueError("feature_cacheはboolです")
+            workers = self.integer(body.get("num_workers", 8), 0, 64)
             lr = self.number(body.get("learning_rate", 1e-5 if finetune else 1e-4), 1e-9, 1)
             args = [
                 "--train",
@@ -263,6 +267,8 @@ class Learning:
                 "--device",
                 cfg["device"],
             ]
+            args += ["--num-workers", str(workers), "--cache-dir", str(self.root / '.feature_cache'),
+                     "--feature-cache" if feature_cache else "--no-feature-cache"]
             if finetune:
                 args.append("--finetune")
             return {
@@ -278,6 +284,9 @@ class Learning:
                     "epochs": epochs,
                     "finetune": finetune,
                     "learning_rate": lr,
+                    "num_workers": workers,
+                    "feature_cache": feature_cache,
+                    "feature_cache_effective": feature_cache and not finetune,
                 },
                 "resources": ["e2e-compute", *["e2e:datasets:" + item for item in (*body["train"], *body["validation"])]],
             }

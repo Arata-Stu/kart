@@ -242,7 +242,7 @@ class RealPolicyTests(unittest.TestCase):
                 command = [sys.executable, '-m', 'kart_e2e.train', '--modality', 'evs',
                            '--train', str(dataset), '--validation', str(dataset),
                            '--repo', REPO, '--weights', str(weights), '--output', str(run),
-                           '--mode', mode, '--fixed-throttle', '0.1', '--epochs', '1',
+                           '--mode', mode, '--fixed-throttle', '0.1', '--epochs', '1', '--num-workers', '0',
                            '--batch-size', '1', '--device', 'cpu']
                 env = dict(os.environ, OMP_NUM_THREADS='2', MKL_NUM_THREADS='2')
                 subprocess.run(command, check=True, env=env, capture_output=True, text=True)

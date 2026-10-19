@@ -615,3 +615,26 @@ Notebook UIでは「全体をfine-tuning」を選択する。標準学習率は�
 RGB/EVSのCLIに共通し、best.pt→ONNX→TensorRTは同じ経路を使用する。
 `run.json`とcheckpointのprovenanceにfinetune・実効学習率・更新対象parameter数を記録する。
 起動ログにも実効設定を出力する。全体学習の品質・GPUメモリ使用量は実データ／対象GPUで別途確認する。
+
+
+### 凍結学習の特徴量キャッシュとDataLoader
+
+Notebook UIの「特徴量キャッシュを使用」は既定ON、DataLoader workersは既定8（0〜64）。
+CLIも`--feature-cache`が既定ON、`--num-workers 8`が既定。`--no-feature-cache`で無効化できる。
+`--finetune`時はチェック設定にかかわらずキャッシュを使わず、backboneまで更新する。
+UIはfine-tuning中のキャッシュ欄を無効表示し、通常学習に戻すと選択状態を復元する。
+
+凍結時のRGB CLS特徴／EVSの正規化・padding後のpatch平均特徴（384次元）をFP32で保存する。
+初回だけencoderを実行し、以降のepoch・同条件の別実験はheadのみ学習する。
+PNG/countsの内容と順序、encoder重みSHA256、モデル仕様、前処理実装、Torch版、deviceが一致した
+キャッシュのみ再利用する。ラベルは毎回現在のデータセットから取得する。学習率・epoch・head出力数の
+変更では特徴量を再利用できる。入力・重み等が変われば別キャッシュになり、元のキャッシュは保持する。
+一時領域からatomic公開し、同じキーはfile lockで排他。特徴量ファイルのSHA256とshapeを確認し、
+破損時はエラーで停止する（表示されたcacheディレクトリを削除して再作成できる）。
+
+UIの保存先は`e2e/.feature_cache/<sha256>/`。CLIの`--cache-dir`既定は出力先の親の
+`.feature_cache`。既存datasetや画像は変更しない。キャッシュ作成／再利用はログに表示し、
+`run.json`・checkpoint provenanceに要求値・実効値・cache key・num_workersを残す。
+各DataLoaderに8 workerを使用し、spawnで起動する。学習・検証loaderはそれぞれworkerを保持する。
+CUDA時はpin_memoryとnon_blocking転送を使う。小規模CPU検証には`--num-workers 0`も指定可能。
+保存するbest.ptには従来どおりencoderも含み、export／TensorRT推論時にキャッシュは不要。

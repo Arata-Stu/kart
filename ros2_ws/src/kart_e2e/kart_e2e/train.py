@@ -1,7 +1,6 @@
 """Small DINOv3 behavior-cloning trainer, with explicit session-level validation."""
 
 import argparse
-import hashlib
 import json
 import math
 import random
@@ -94,12 +93,17 @@ def main():
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--learning-rate", type=float, default=None,
                    help="AdamW learning rate for all trainable parameters (default: 1e-4 frozen, 1e-5 finetune)")
+    p.add_argument("--num-workers", type=int, default=8)
+    p.add_argument("--feature-cache", action=argparse.BooleanOptionalAction, default=True,
+                   help="Cache frozen encoder features; bypassed during finetune")
+    p.add_argument("--cache-dir", type=Path, default=None)
     p.add_argument("--seed", type=int, default=42)
     a = p.parse_args()
     if a.learning_rate is None:
         a.learning_rate = 1e-5 if a.finetune else 1e-4
     if (
-        a.epochs <= 0
+        a.num_workers < 0
+        or a.epochs <= 0
         or a.batch_size <= 0
         or not math.isfinite(a.learning_rate)
         or a.learning_rate <= 0
@@ -114,6 +118,8 @@ def main():
     random.seed(a.seed)
     np.random.seed(a.seed)
     torch.manual_seed(a.seed)
+    from .feature_cache import cached_samples, digest
+    weights_sha = digest(a.weights)
     if a.modality == 'evs':
         from .evs_policy import pretrained_policy
         model = pretrained_policy(a.weights, a.repo, a.mode, frozen=not a.finetune).to(a.device)
@@ -129,10 +135,30 @@ def main():
     optimizer = torch.optim.AdamW(
         (v for v in model.parameters() if v.requires_grad), lr=a.learning_rate
     )
-    loaders = [
-        DataLoader(d, batch_size=a.batch_size, shuffle=i == 0)
-        for i, d in enumerate(datasets)
-    ]
+    if digest(a.weights) != weights_sha:
+        raise ValueError("Weights changed while loading")
+    effective_cache = a.feature_cache and not a.finetune
+    print(f"Feature cache: requested={a.feature_cache}; effective={effective_cache}; workers={a.num_workers}", flush=True)
+    if a.output.exists():
+        raise FileExistsError(a.output)
+
+    def loader_factory(dataset, shuffle, persistent=True, seed=a.seed):
+        options = dict(batch_size=a.batch_size, shuffle=shuffle, num_workers=a.num_workers,
+                       pin_memory=str(a.device).startswith('cuda'),
+                       generator=torch.Generator().manual_seed(seed))
+        if a.num_workers:
+            options.update(multiprocessing_context='spawn', persistent_workers=persistent)
+        return DataLoader(dataset, **options)
+
+    cache_keys = []
+    if effective_cache:
+        cached = []
+        cache_dir = a.cache_dir or a.output.parent/'.feature_cache'
+        for dataset in datasets:
+            data, key = cached_samples(dataset, model, cache_dir, weights_sha, loader_factory, a.device)
+            cached.append(data); cache_keys.append(key)
+        datasets = cached
+    loaders = [loader_factory(d, i==0, seed=a.seed+i) for i,d in enumerate(datasets)]
     a.output.mkdir(parents=True, exist_ok=False)
     provenance = {
         key: str(value) if isinstance(value, Path) else value
@@ -144,7 +170,9 @@ def main():
     provenance["total_parameters"] = sum(v.numel() for v in model.parameters())
     print(f"Training: finetune={a.finetune}; lr={a.learning_rate:g}; "
           f"trainable={provenance['trainable_parameters']}/{provenance['total_parameters']}", flush=True)
-    provenance["weights_sha256"] = hashlib.sha256(a.weights.read_bytes()).hexdigest()
+    provenance["weights_sha256"] = weights_sha
+    provenance["feature_cache_effective"] = effective_cache
+    provenance["feature_cache_keys"] = cache_keys
     (a.output / "run.json").write_text(json.dumps(provenance, indent=2))
     best = float("inf")
     for epoch in range(a.epochs):
@@ -155,8 +183,9 @@ def main():
             mae = torch.zeros(1 if a.mode == "steer_only" else 2, device=a.device)
             with torch.set_grad_enabled(index == 0):
                 for images, target in loader:
-                    target = target.to(a.device)
-                    prediction = model(images.to(a.device))
+                    target = target.to(a.device, non_blocking=True)
+                    inputs = images.to(a.device, non_blocking=True)
+                    prediction = model.predict_features(inputs) if effective_cache else model(inputs)
                     loss = torch.nn.functional.mse_loss(prediction, target)
                     if not torch.isfinite(loss):
                         raise RuntimeError("Non-finite training/validation loss")

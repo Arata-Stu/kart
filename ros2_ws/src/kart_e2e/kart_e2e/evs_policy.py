@@ -17,7 +17,7 @@ class EVSPolicy(Policy):
         self.spec = evs_spec(self.evs_metadata)
         self.modality = 'evs'
 
-    def forward(self, counts):
+    def extract_features(self, counts):
         # Validation of finite/nonnegative counts belongs to the offline dataset
         # loader and live OpenEB producer. This branch-free graph is also ONNX.
         h, w = self.spec['height'], self.spec['width']
@@ -26,10 +26,7 @@ class EVSPolicy(Policy):
                                (ph-h)//2, ph-h-(ph-h)//2))
         normalized = (padded - self.encoder.mean) / self.encoder.std
         tokens = self.encoder(normalized)
-        raw = self.head(tokens.mean(dim=1))
-        steering = raw[:, :1].tanh()
-        return steering if self.mode == 'steer_only' else torch.cat(
-            (steering, raw[:, 1:2].sigmoid()), dim=1)
+        return tokens.mean(dim=1)
 
 
 def pretrained_policy(weights, repo, mode='steer_throttle', frozen=True):

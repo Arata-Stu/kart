@@ -209,6 +209,8 @@ action("e2e-start-train", () =>
     batch_size: Number($("e2e-batch").value),
     learning_rate: Number($("e2e-lr").value),
     finetune: $("e2e-finetune").checked,
+    feature_cache: $("e2e-feature-cache").checked,
+    num_workers: Number($("e2e-workers").value),
   }),
 );
 action("e2e-start-export", () =>
@@ -290,6 +292,10 @@ action("e2e-start-features", () => start("features", {
 
 $("e2e-finetune").addEventListener("change", () => {
   const finetune = $("e2e-finetune").checked;
+  $("e2e-feature-cache").disabled = finetune;
+  $("e2e-cache-help").textContent = finetune
+    ? '全体fine-tuningではbackboneが変わるため、特徴量キャッシュを使用しません。'
+    : '初回に特徴量を保存し、同じ入力・重み・前処理なら再利用します。';
   const lr = $("e2e-lr");
   if (Number(lr.value) === (finetune ? 1e-4 : 1e-5))
     lr.value = finetune ? '0.00001' : '0.0001';
