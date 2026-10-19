@@ -148,6 +148,14 @@ class RawTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'reset'):
             resetting.window(0, 60000)
 
+    def test_raw_regression_reports_magnitude_and_position(self):
+        from kart_e2e.preprocess_evs import RawWindows
+        chunk = self.events.copy()
+        chunk['t'] = [0, 100, 99, 200, 40000, 50000]
+        raw = RawWindows('diagnostic.raw', self.reader([chunk]))
+        with self.assertRaisesRegex(ValueError, r'event_index=2; location=within_chunk; previous_us=100; current_us=99; backward_us=1;'):
+            raw.window(0, 40000)
+
     def test_causal_labels_epoch_mapping_atomic_output_and_gaps(self):
         import numpy as np
         from kart_e2e.preprocess_evs import extract

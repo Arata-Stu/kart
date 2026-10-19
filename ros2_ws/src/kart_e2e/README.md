@@ -759,3 +759,29 @@ RAW manifest絶対パスを指定する。CLIも`--raw`/`--raw-manifest`省略�
 EVSモデルの評価ではbagの代わりに作成済みEVSデータセットを選択する。
 RGB/EVSデータの混在とEVSへのRGB Tiny蒸留を拒否する。
 特徴量可視化はRGB専用。新規ROSノード・topic・parameterはない。
+
+### RAW readerのNumPy / h5py ABIエラー
+
+`numpy.dtype size changed`が`/usr/lib/python3/dist-packages/h5py`で出る場合は、
+実行中のNumPyとapt版h5pyのバイナリが不整合。RAW自動検出・encoder重みとは別の問題。
+`_debian_h5py_mpi`の後続エラーより、先に出たdtypeエラーを確認する。
+EVSイメージでは最終Docker layerでNumPy 2対応h5py wheelを導入し、
+システムPythonから`numpy`・`h5py`・`RawReader`のimportを検査する。
+既存コンテナは次で修復できる（コンテナ内、UIで指定したPythonに合わせる）。
+
+```bash
+sudo /usr/bin/python3 -m pip install --break-system-packages --ignore-installed \
+  --no-deps --only-binary=:all: 'h5py>=3.11,<4'
+/usr/bin/python3 -c 'import numpy, h5py; from metavision_core.event_io import RawReader; print(numpy.__version__, numpy.__file__); print(h5py.__version__, h5py.__file__)'
+```
+
+`--ignore-installed`でapt管理ファイルは削除せず、`--no-deps`でNumPyを変更しない。
+検査成功後にGUIからデータセット作成を再実行する。
+恒久反映はLinux側で`./scripts/dev.sh --evs --build-local`によりイメージを再buildする。
+Docker build / RAW実行の成功は対象環境で確認すること。
+
+RAWの時刻逆行は`RAW timestamp regression`として、ファイル・0始まりevent index・
+chunk内/境界・前後時刻・逆行量（us）・要求窓をエラーへ出力する。
+この検査だけではセンサー時刻リセットと局所的なイベント順序乱れを区別できない。
+ログの逆行量とbagのstream/epoch、SDK直接読出しの結果を比較して原因を調べる。
+並べ替え・時刻補正・逆行区間の暗黙除外は行わない。

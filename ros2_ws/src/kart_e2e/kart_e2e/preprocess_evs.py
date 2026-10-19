@@ -143,6 +143,8 @@ class RawWindows:
             factory = RawReader
         self.reader = factory(str(path), do_time_shifting=False)
         self.shape = tuple(self.reader.get_size())
+        self.path = str(path)
+        self.events_read = 0
         self.buffer = None
         self.first = self.last = None
         self.requested = -1
@@ -159,9 +161,26 @@ class RawWindows:
                 if self.reader.is_done():
                     break
                 raise ValueError('RAW reader made no progress')
-            if (np.any(np.diff(chunk['t'].astype(np.int64)) < 0)
-                    or (self.last is not None and int(chunk['t'][0]) < self.last)):
-                raise ValueError('Timestamp reset inside RAW; separate epochs before extraction')
+            times = chunk['t'].astype(np.int64)
+            backwards = np.flatnonzero(np.diff(times) < 0)
+            boundary = self.last is not None and int(times[0]) < self.last
+            if boundary or len(backwards):
+                index = 0 if boundary else int(backwards[0]) + 1
+                previous = self.last if boundary else int(times[index - 1])
+                current = int(times[index])
+                raise ValueError(
+                    'RAW timestamp regression (possible reset or out-of-order events): '
+                    f'path={self.path}; event_index={self.events_read + index}; '
+                    f'location={"chunk_boundary" if boundary else "within_chunk"}; '
+                    f'previous_us={previous}; current_us={current}; '
+                    f'backward_us={previous - current}; '
+                    f'chunk_first_us={int(times[0])}; chunk_last_us={int(times[-1])}; '
+                    f'chunk_min_us={int(times.min())}; chunk_max_us={int(times.max())}; '
+                    f'within_chunk_regressions={len(backwards)}; '
+                    f'requested_window_us=[{start},{end}); '
+                    'do_time_shifting=False. No sorting or timestamp correction applied.'
+                )
+            self.events_read += len(chunk)
             if self.first is None:
                 self.first = int(chunk['t'][0])
             self.last = int(chunk['t'][-1])

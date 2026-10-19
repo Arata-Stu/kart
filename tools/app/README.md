@@ -731,3 +731,7 @@ EVSのオフライン評価はモデル選択後に作成済みEVSデータセ�
 RGBは従来どおりbagを直接評価する。特徴量可視化は現在RGBのみ。
 GUIの入力切替とジョブ生成・成果物公開をローカル検証済み。
 実RAW・学習済み20ch重み・GPU/TensorRT・実車での一連の実行は別途検証する。
+
+EVS抽出時にh5pyで`numpy.dtype size changed`が出る場合は、学習用Pythonの
+NumPyとapt版h5pyのABI不整合。kart_e2e READMEの「RAW readerのNumPy / h5py ABIエラー」
+を参照。RAWパスやmanifestの変更では解決しない。
