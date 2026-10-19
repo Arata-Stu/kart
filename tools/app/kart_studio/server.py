@@ -81,7 +81,7 @@ class Studio:
         if path == "/api/vgl":
             return vgl.catalog(self, key)
         if path == "/api/e2e/loss":
-            return self.learning.loss(key)
+            return self.learning.loss(key, q.get("kind", "runs"))
         if path == "/api/e2e/engine":
             folder = self.learning.folder("engines", key)
             return read_json(within(folder, "report.json"))
@@ -144,6 +144,7 @@ class Studio:
         if path in (
             "/api/e2e/dataset",
             "/api/e2e/train",
+            "/api/e2e/distill",
             "/api/e2e/export",
             "/api/e2e/evaluate",
             "/api/e2e/build-engine",
@@ -155,6 +156,7 @@ class Studio:
                 "features": "RGB特徴量の可視化",
                 "dataset": "データセット作成",
                 "train": "DINOv3学習",
+                "distill": "ViT-S → ViT-Tiny特徴蒸留",
                 "export": "ONNX export",
                 "evaluate": "rosbagオフライン評価",
                 "build-engine": "Notebook TensorRT build",

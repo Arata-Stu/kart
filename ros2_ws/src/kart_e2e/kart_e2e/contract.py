@@ -15,6 +15,21 @@ SPEC = {
 }
 
 
+RGB_ENCODERS = ("dinov3_vits16", "dinov3_vitt16")
+
+
+def rgb_spec(encoder="dinov3_vits16"):
+    if encoder not in RGB_ENCODERS:
+        raise ValueError("Unsupported RGB encoder")
+    return dict(SPEC, encoder=encoder)
+
+
+def validate_rgb_spec(spec):
+    if not isinstance(spec, dict) or spec != rgb_spec(spec.get("encoder")):
+        raise ValueError("Unsupported RGB model contract")
+    return spec
+
+
 def evs_spec(meta):
     """Canonical raw-count policy input; no Torch/ROS needed by launch."""
     import math
@@ -89,7 +104,7 @@ def model_contract(directory):
         spec = evs_spec(metadata.get('evs_metadata', {}))
         name, shape = 'input_tensor', [1, 20, spec['height'], spec['width']]
     elif modality == 'rgb':
-        spec, name, shape = SPEC, 'image', [1, 3, 120, 212]
+        spec, name, shape = validate_rgb_spec(metadata.get('model_spec')), 'image', [1, 3, 120, 212]
     else:
         raise ValueError('Unknown E2E modality')
     if (

@@ -39,7 +39,7 @@ def export(policy, output):
         input_name = 'input_tensor'
         model = policy.cpu().eval()
     else:
-        spec, shape, input_name = SPEC, (1, 3, 120, 212), 'image'
+        spec, shape, input_name = policy.spec, (1, 3, 120, 212), 'image'
         model = ExportPolicy(policy.cpu().eval()).eval()
     generator = torch.Generator().manual_seed(42)
     example = (torch.rand(shape, generator=generator) * 5 if is_evs

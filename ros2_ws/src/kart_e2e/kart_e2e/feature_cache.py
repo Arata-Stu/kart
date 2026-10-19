@@ -37,6 +37,7 @@ class CachedSamples(Dataset):
 
 
 def cached_samples(dataset, model, root, weights_sha, loader_factory, device):
+    dimension = getattr(model, "feature_dim", 384)
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
     sources = {str(path): digest(path) for path,_ in dataset.items}
@@ -58,21 +59,21 @@ def cached_samples(dataset, model, root, weights_sha, loader_factory, device):
             if features.is_symlink() or report.get('identity') != identity or report.get('sha256') != digest(features):
                 raise ValueError(f'Invalid feature cache; remove this cache and retry: {folder}')
             values = np.load(features,mmap_mode='r',allow_pickle=False)
-            if values.shape != (len(dataset),384) or values.dtype != np.float32:
+            if values.shape != (len(dataset),dimension) or values.dtype != np.float32:
                 raise ValueError('Invalid cached feature layout')
             print(f'Feature cache reused: {key[:12]} ({len(dataset)} samples)',flush=True)
         else:
             with tempfile.TemporaryDirectory(prefix='.building-',dir=root) as temporary:
                 stage = Path(temporary)/'data'; stage.mkdir()
                 path = stage/'features.npy'
-                values = np.lib.format.open_memmap(path,mode='w+',dtype=np.float32,shape=(len(dataset),384))
+                values = np.lib.format.open_memmap(path,mode='w+',dtype=np.float32,shape=(len(dataset),dimension))
                 offset = 0
                 model.eval()
                 loader = loader_factory(dataset,False,persistent=False)
                 with torch.inference_mode():
                     for batch,(images,_) in enumerate(loader):
                         features = model.extract_features(images.to(device,non_blocking=True)).float().cpu().numpy()
-                        if features.shape != (len(images),384) or not np.isfinite(features).all():
+                        if features.shape != (len(images),dimension) or not np.isfinite(features).all():
                             raise ValueError('Invalid encoder features')
                         values[offset:offset+len(images)] = features
                         offset += len(images)

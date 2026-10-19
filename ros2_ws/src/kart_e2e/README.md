@@ -624,7 +624,7 @@ CLIも`--feature-cache`が既定ON、`--num-workers 8`が既定。`--no-feature-
 `--finetune`時はチェック設定にかかわらずキャッシュを使わず、backboneまで更新する。
 UIはfine-tuning中のキャッシュ欄を無効表示し、通常学習に戻すと選択状態を復元する。
 
-凍結時のRGB CLS特徴／EVSの正規化・padding後のpatch平均特徴（384次元）をFP32で保存する。
+凍結時のRGB CLS特徴／EVSの正規化・padding後のpatch平均特徴（ViT-S/EVSは384次元、Tinyは192次元）をFP32で保存する。
 初回だけencoderを実行し、以降のepoch・同条件の別実験はheadのみ学習する。
 RGBファイル/countsの内容と順序、encoder重みSHA256、モデル仕様、前処理実装、Torch版、deviceが一致した
 キャッシュのみ再利用する。ラベルは毎回現在のデータセットから取得する。学習率・epoch・head出力数の
@@ -686,3 +686,61 @@ compareのprobe/outputは必須、model-dirは任意（省略時は前処理だ�
 記録TensorRT出力との差も数値化する（TensorRT差の合否を自動判定しない）。
 model-dirには実機で使ったmodel.onnx/metadata.jsonを指定し、別モデルとの比較を避ける。
 実ROS TensorListの記録・GPU readback・Jetson実機診断は未検証。capture/compareの単体テストは代替bag fixture。
+
+
+### DINOv3 ViT-Tinyと2段階蒸留（RGB）
+
+`--architecture`は既定`dinov3_vits16`、追加`dinov3_vitt16`で独自Tinyを選択する。
+固定commitの公式DINOv3実装を使い、ViT-Sと同じ12層・patch16・head次元64・RoPE・
+storage token 4・LayerScale・FFN比4を維持する。Tinyはembed_dim=192、heads=3、
+encoder 5,492,160 parameter。入力・正規化・paddingは既存RGBと同じ。
+公式配布のTiny事前学習重みではなく、ローカルViT-Sから蒸留して作る。
+
+**第1段階：特徴蒸留**
+
+同じRGBに対する教師のCLS特徴384次元へ、TinyのCLS特徴192次元を学習用Linearで射影し、
+`MSE + 0.5*(1-cosine)`を最小化する。教師はeval/frozen、Tiny本体と射影は全体更新する。
+異なる次元を直接同一視せず、教師空間に近づける。完全な特徴一致や制御精度を保証しない。
+参考は[GEPの特徴次元射影とMSE/cosine alignment](https://github.com/uzh-rpg/generative_event_pretraining/blob/master/src/gra.py)。
+GEPのevent/RGB間alignmentをそのまま導入するのではなく、同一RGBによる圧縮用に独立実装した。
+今回は下流control headが使うCLS特徴を対象とし、patch tokenや生成モデルの学習は行わない。
+
+```bash
+python -m kart_e2e.distill --train /path/to/train --validation /path/to/val   --repo /workspaces/python_ws/dinov3 --teacher-weights /path/to/vits16.pth   --output /path/to/tiny-encoder --device cuda
+# --teacher-weightsにはkart RGB ViT-Sのbest.ptも指定可能
+```
+
+CLI（ROS install後は`ros2 run kart_e2e e2e_distill`）であり、ROSノード・topic・parameterはない。
+train/validation/repo/teacher-weights/outputは必須。既定はepochs=10、batch-size=32、
+num-workers=8、learning-rate=1e-4、mse-weight=1、cosine-weight=0.5、seed=42、device=cuda。
+`--feature-cache`既定ON（`--no-feature-cache`でOFF）、教師特徴だけをキャッシュする。
+cache-dir既定はoutput親の`.feature_cache`。teacherはローカルファイルをstrict loadし、
+checkpoint/SPEC不一致を拒否する。重みをダウンロードしない。EVS/他encoderを教師にしない。
+蒸留中にTiny本体は変わるため、その特徴はキャッシュしない。
+
+最良validation_lossの`encoder.pt`（format=`kart.rgb_encoder.v1`）へTiny encoder、
+学習用射影、SPEC、損失、教師SHA256、provenanceを保存する。metrics.jsonlは各epochの
+train/validation_loss・mse・cosineを分けて記録する。run.jsonに設定とcache keyを保存する。
+
+**第2段階：制御head学習**
+
+```bash
+python -m kart_e2e.train --architecture dinov3_vitt16   --weights /path/to/tiny-encoder/encoder.pt --train /path/to/train --validation /path/to/val   --repo /workspaces/python_ws/dinov3 --output /path/to/tiny-control --device cuda   --mode steer_only --fixed-throttle 0.1
+```
+
+既定はTinyを凍結し192→128→control headのみ学習。必要なら`--finetune`で全体更新。
+蒸留用射影はencoder bundleに残すが、制御モデルにはロードせず、export/実行にも含めない。
+既存の画像/NPY、特徴量キャッシュ（Tinyは192次元）、損失表示、特徴量可視化に対応する。
+ViT-S重みをTinyに無理に部分ロードせず、Tiny学習には蒸留済みencoder bundleを必須とする。
+
+最終best.ptは従来の`e2e_export_onnx`に渡せる。metadataのmodel_spec.encoderでSmall/Tinyを
+識別し、Tinyも同じ`image=[1,3,120,212]`、`control=[1,1|2]`でTensorRT→既存decoderへ接続する。
+既存ViT-S checkpoint/SPECは保持。EVSのTiny化は未対応で、EVS経路を変更しない。
+合成画像・ランダム初期ViT-Sによる蒸留/両head学習/復元/ONNX・ORT/可視化の接続をテストする。
+実事前学習重みでの蒸留品質、TensorRT実build、Jetson速度、実車の走行精度は別途検証する。
+
+Notebook UIは「RGBモデル」でTinyを選び、データを選択して第1段階を実行する。
+教師は学習環境の公式ViT-S重み、または学習済みViT-S実験から選べる。
+完了後に蒸留済みTiny encoderを選び、下の通常学習ボタンで第2段階を実行する。
+蒸留損失カーブと制御MSEは別表示。encoderは
+`e2e/encoders/YYYY-MM-DD/HH-MM-SS/<name>`に保存し、ごみ箱/復元・使用中lockに対応する。

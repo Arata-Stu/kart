@@ -40,9 +40,9 @@ function suggestNames() {
     input.value = suggestion;
     input.dataset.suggestion = suggestion;
   }
-  const base =
-    $("e2e-mode").value === "steer_only" ? "dinov3-steer" : "dinov3-control";
+  const base = ($("e2e-architecture").value === "dinov3_vitt16" ? "dinov3-tiny" : "dinov3") + ($("e2e-mode").value === "steer_only" ? "-steer" : "-control");
   for (const [id, prefix, kind] of [
+    ["e2e-distill-name", "dinov3-tiny-encoder", "encoders"],
     ["e2e-run-name", base + ($("e2e-finetune").checked ? "-finetune" : ""), "runs"],
     ["e2e-features-name", ($("e2e-features-run").value || base) + "-features", "features"],
     ["e2e-model-name", $("e2e-export-run").value || base, "models"],
@@ -162,6 +162,8 @@ export async function refreshLearning() {
       "",
     );
   options("e2e-export-run", data.runs, "実験を選択");
+  options("e2e-tiny-encoder", data.encoders.map(artifactOption), "蒸留済みTiny encoderを選択");
+  options("e2e-distill-teacher", data.runs.filter(row => !row.architecture || row.architecture === 'dinov3_vits16'), "学習環境の公式ViT-S重み");
   options("e2e-features-run", data.runs, "学習済み実験を選択");
   options("e2e-features-data", data.datasets.map(datasetOption), "RGBデータセットを選択");
   options("e2e-push-model", data.models.map(artifactOption), "モデルを選択");
@@ -208,6 +210,8 @@ action("e2e-start-train", () =>
     epochs: Number($("e2e-epochs").value),
     batch_size: Number($("e2e-batch").value),
     learning_rate: Number($("e2e-lr").value),
+    architecture: $("e2e-architecture").value,
+    encoder: $("e2e-tiny-encoder").value,
     finetune: $("e2e-finetune").checked,
     feature_cache: $("e2e-feature-cache").checked,
     num_workers: Number($("e2e-workers").value),
@@ -261,9 +265,10 @@ action("e2e-settings-save", async () => {
 });
 on("job-finished", async ({detail:job}) => {
   if (catalog) await refreshLearning();
-  if (job.status === 'succeeded' && job.result?.kind === 'runs' &&
+  if (job.status === 'succeeded' && job.result?.kind === 'encoders') $("e2e-tiny-encoder").value = job.result.id;
+  if (job.status === 'succeeded' && ['runs','encoders'].includes(job.result?.kind) &&
       step === 'train' && !$("learning-page").hidden && !document.querySelector('dialog[open]'))
-    await showLoss(job.result.id);
+    await showLoss(job.result.id, job.result.kind);
 });
 on("connection", render);
 
@@ -303,4 +308,21 @@ $("e2e-finetune").addEventListener("change", () => {
     ? 'backboneを凍結せず、headと一緒に全体を更新。既定学習率 1e-5。学習率は手動変更できます。'
     : 'backboneを凍結してheadのみ学習。既定学習率 1e-4。';
   suggestNames();
+});
+
+$("e2e-architecture").addEventListener("change", () => {
+  $("e2e-tiny-options").hidden = $("e2e-architecture").value !== 'dinov3_vitt16';
+  suggestNames();
+});
+action('e2e-start-distill', () => start('distill', {
+  name: $('e2e-distill-name').value, architecture:'dinov3_vitt16',
+  train:selected('e2e-train-data'), validation:selected('e2e-validation-data'),
+  teacher_run:$('e2e-distill-teacher').value,
+  epochs:Number($('e2e-distill-epochs').value), learning_rate:Number($('e2e-distill-lr').value),
+  batch_size:Number($('e2e-batch').value), num_workers:Number($('e2e-workers').value),
+  feature_cache:$('e2e-feature-cache').checked,
+}));
+action('e2e-distill-curve', () => {
+  if (!$('e2e-tiny-encoder').value) throw new Error('Tiny encoderを選択してください');
+  return showLoss($('e2e-tiny-encoder').value,'encoders');
 });

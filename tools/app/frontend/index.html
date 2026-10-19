@@ -401,6 +401,10 @@
         </section>
         <section id="e2e-pane-train" class="learning-form" hidden>
           <h2>学習・検証データと条件を選択</h2>
+          <label>RGBモデル<select id="e2e-architecture">
+            <option value="dinov3_vits16">DINOv3 ViT-S/16 · 384次元</option>
+            <option value="dinov3_vitt16">DINOv3 ViT-Tiny/16 · 192次元（独自構成）</option>
+          </select></label>
           <div class="form-grid">
             <label
               >学習用<select
@@ -415,6 +419,20 @@
           <p class="help">
             複数選択はCtrl / ⌘＋クリック。同じbag・データセットも選択できます。
           </p>
+          <div id="e2e-tiny-options" hidden>
+            <h3>第1段階：ViT-SからTinyへ特徴蒸留</h3>
+            <p class="help">上で選択した学習・検証データの同じRGBを使用。教師は凍結し、Tiny本体と192→384の射影を学習します。制御headは次の段階で学習します。</p>
+            <label>教師<select id="e2e-distill-teacher"></select></label>
+            <label>蒸留名<input id="e2e-distill-name" maxlength="64" /></label>
+            <div class="form-grid">
+              <label>蒸留Epoch<input id="e2e-distill-epochs" type="number" min="1" value="10" /></label>
+              <label>蒸留学習率<input id="e2e-distill-lr" type="number" min="0.000000001" step="0.00001" value="0.0001" /></label>
+            </div>
+            <button id="e2e-start-distill" class="full">第1段階：特徴蒸留を開始</button>
+            <h3>第2段階：蒸留済みTinyで制御学習</h3>
+            <label>Tiny encoder<select id="e2e-tiny-encoder"></select></label>
+            <button id="e2e-distill-curve" class="quiet">選択encoderの蒸留損失カーブ</button>
+          </div>
           <div class="form-grid">
             <label
               >実験名<input
@@ -585,7 +603,7 @@
       <p>ごみ箱へ移動した成果物は、元の保存先へ復元できます。</p>
       <label>表示対象<select id="e2e-manage-kind">
         <option value="trash">ごみ箱</option><option value="datasets">データセット</option>
-        <option value="runs">学習実験</option><option value="models">ONNXモデル</option>
+        <option value="encoders">蒸留済みTiny encoder</option><option value="runs">学習実験</option><option value="models">ONNXモデル</option>
         <option value="features">特徴量の確認結果</option><option value="evaluations">評価結果</option><option value="engines">TensorRT計測</option>
       </select></label>
       <button id="e2e-manage-refresh">更新</button>
@@ -1113,10 +1131,10 @@
 <dialog id="e2e-loss-dialog" class="loss-dialog">
   <div class="actions"><h2 id="e2e-loss-title">損失カーブ</h2><button id="e2e-loss-close">閉じる</button></div>
   <p id="e2e-loss-summary"></p>
-  <p class="loss-legend"><span>● 学習MSE</span><span>● 検証MSE</span> · 破線＝最良epoch（best.pt）</p>
+  <p class="loss-legend"><span id="e2e-loss-train-label">● 学習MSE</span><span id="e2e-loss-val-label">● 検証MSE</span> · 破線＝最良epoch</p>
   <svg id="e2e-loss-chart" viewBox="0 0 880 300" role="img" aria-label="epochごとの学習損失と検証損失"></svg>
-  <p class="help">平均二乗誤差（MSE）、平滑化なし。学習損失だけが低下して検証損失が上がる場合は、過学習の可能性があります。学習時と検証時ではDropout等の動作が異なります。同じbagを両方に使った場合は未知データへの汎化を評価できません。</p>
-  <details><summary>epochごとの数値</summary><div class="loss-table"><table><thead><tr><th>Epoch</th><th>学習MSE</th><th>検証MSE</th></tr></thead><tbody id="e2e-loss-rows"></tbody></table></div></details>
+  <p id="e2e-loss-note" class="help">平均二乗誤差（MSE）、平滑化なし。学習損失だけが低下して検証損失が上がる場合は、過学習の可能性があります。学習時と検証時ではDropout等の動作が異なります。同じbagを両方に使った場合は未知データへの汎化を評価できません。</p>
+  <details><summary>epochごとの数値</summary><div class="loss-table"><table><thead><tr><th>Epoch</th><th id="e2e-loss-train-heading">学習MSE</th><th id="e2e-loss-val-heading">検証MSE</th></tr></thead><tbody id="e2e-loss-rows"></tbody></table></div></details>
   <button id="e2e-loss-export">この実験のONNX exportへ</button>
 </dialog>
 </body>

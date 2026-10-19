@@ -694,3 +694,18 @@ fine-tuning時はキャッシュ欄を無効化し、全体学習に切り替え
 新規RGBデータセットはPNG圧縮を省くため、圧縮なしuint8 RGBの`.npy`へ保存する。
 元解像度・画素値は保持する。既存PNGも学習・特徴量可視化・ONNX評価で引き続き使用できる。
 CLIの互換PNG出力は`--image-format png`。UIの新規抽出・評価時の一時抽出はNPYが既定。
+
+
+### ViT-Tinyの特徴蒸留と制御学習
+
+学習画面の「RGBモデル」でDINOv3 ViT-Tiny/16を選択する。
+上の学習/検証データで「第1段階：特徴蒸留」を実行し、教師ViT-SのCLS特徴へTinyを近づける。
+教師はローカル公式重み、またはViT-Sの学習済み実験を選択できる。
+教師は凍結、Tinyと学習用192→384射影を更新する。既定lossはMSE+0.5×cosine距離。
+
+完了後に「Tiny encoder」を選び、通常の学習条件で「学習を開始」すると第2段階の制御head学習になる。
+Tinyは192→128→controlのheadを持ち、蒸留用射影を実行モデルに含めない。
+通常はencoderを凍結し、必要なら全体fine-tuningも使用できる。
+蒸留lossと制御MSEのカーブは区別して表示する。Tiny encoderの保存先は
+`e2e/encoders/YYYY-MM-DD/HH-MM-SS/<name>`。整理・ごみ箱から復元できる。
+以降のONNX export、評価、転送、推論は同じ画面と入出力を使う。Tiny蒸留は現在RGB専用。

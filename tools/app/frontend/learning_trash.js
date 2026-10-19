@@ -1,5 +1,5 @@
 import { $, api, action, toast } from './api.js';
-const labels = {features:'特徴量の確認結果',datasets:'データセット',runs:'学習実験',models:'ONNXモデル',evaluations:'評価結果',engines:'TensorRT計測'};
+const labels = {encoders:"蒸留済みTiny encoder",features:'特徴量の確認結果',datasets:'データセット',runs:'学習実験',models:'ONNXモデル',evaluations:'評価結果',engines:'TensorRT計測'};
 
 export function trashButton(kind, row, refresh) {
   const button = document.createElement('button');

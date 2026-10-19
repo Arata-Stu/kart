@@ -11,6 +11,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 
 from .model import SPEC, Policy, backbone, preprocess
+from .contract import RGB_ENCODERS
 from .data import load_rgb
 
 
@@ -70,7 +71,7 @@ def main():
         "--weights",
         type=Path,
         required=True,
-        help="Official local DINOv3 ViT-S/16 state dict",
+        help="Local official ViT-S state dict, or distilled Tiny encoder.pt with --architecture dinov3_vitt16",
     )
     p.add_argument("--output", type=Path, required=True)
     p.add_argument(
@@ -85,6 +86,7 @@ def main():
     p.add_argument(
         "--max-throttle", type=float, default=0.2, help="Deployment output ceiling"
     )
+    p.add_argument("--architecture", choices=RGB_ENCODERS, default="dinov3_vits16")
     p.add_argument("--modality", choices=["rgb", "evs"], default="rgb")
     p.add_argument("--finetune", action="store_true", help="Update the full backbone and control head")
     p.add_argument("--device", default="cuda")
@@ -120,16 +122,20 @@ def main():
     from .feature_cache import cached_samples, digest
     weights_sha = digest(a.weights)
     if a.modality == 'evs':
+        if a.architecture != 'dinov3_vits16':
+            p.error('ViT-Tiny distillation currently supports RGB only')
         from .evs_policy import pretrained_policy
         model = pretrained_policy(a.weights, a.repo, a.mode, frozen=not a.finetune).to(a.device)
         datasets = [Samples(r, a.mode, model.spec) for r in (a.train, a.validation)]
     else:
         datasets = [Samples(a.train, a.mode), Samples(a.validation, a.mode)]
-        encoder = backbone(a.repo)
-        encoder.load_state_dict(
-            torch.load(a.weights, map_location="cpu", weights_only=True), strict=True
-        )
-        model = Policy(encoder, a.mode, frozen=not a.finetune).to(a.device)
+        if a.architecture == 'dinov3_vits16':
+            encoder = backbone(a.repo)
+            encoder.load_state_dict(torch.load(a.weights, map_location="cpu", weights_only=True), strict=True)
+        else:
+            from .model import load_rgb_encoder
+            encoder = load_rgb_encoder(a.weights, a.repo, a.architecture)
+        model = Policy(encoder, a.mode, frozen=not a.finetune, architecture=a.architecture).to(a.device)
     model.runtime = runtime
     optimizer = torch.optim.AdamW(
         (v for v in model.parameters() if v.requires_grad), lr=a.learning_rate

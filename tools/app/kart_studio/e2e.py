@@ -16,8 +16,8 @@ from . import transfers
 from .storage import atomic_json, name, read_json, within
 
 
-KINDS = ("datasets", "runs", "models", "evaluations", "engines", "features")
-DATED = ("datasets", "models", "evaluations", "features")
+KINDS = ("datasets", "runs", "models", "evaluations", "engines", "features", "encoders")
+DATED = ("datasets", "models", "evaluations", "features", "encoders")
 
 
 class Learning:
@@ -103,8 +103,10 @@ class Learning:
         within(path, "artifact.json")
         return path
 
-    def loss(self, key):
-        folder = self.folder("runs", key)
+    def loss(self, key, kind="runs"):
+        if kind not in ("runs", "encoders"):
+            raise ValueError("Invalid loss artifact kind")
+        folder = self.folder(kind, key)
         metrics = []
         import json
         for line in within(folder, "metrics.jsonl").read_text().splitlines():
@@ -114,14 +116,15 @@ class Learning:
             epoch = row.get("epoch")
             if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch <= (metrics[-1]["epoch"] if metrics else 0):
                 raise ValueError("Invalid loss epoch sequence")
-            for field in ("train_mse", "validation_mse"):
+            fields = ("train_loss", "validation_loss") if kind == "encoders" else ("train_mse", "validation_mse")
+            for field in fields:
                 value = row.get(field)
                 if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
                     raise ValueError("Invalid training loss")
-            metrics.append({field: row[field] for field in ("epoch", "train_mse", "validation_mse")})
+            metrics.append({field: row[field] for field in ("epoch", *fields)})
         if not metrics:
             raise ValueError("損失の記録がありません")
-        return dict(id=key, metrics=metrics)
+        return dict(id=key, kind=kind, metric="distillation_loss" if kind=="encoders" else "mse", metrics=metrics)
 
     def runtime(self, action=None):
         cfg = self.settings()
@@ -196,8 +199,8 @@ class Learning:
                 "provenance": {"bag": str(bag)},
                 "resources": ["record:" + str(bag.relative_to(self.records.resolve()))],
             }
-        if action == "train":
-            target = self.target("runs", key)
+        if action in ("train", "distill"):
+            target = self.target("runs", key) if action == "train" else None
             groups = []
             for field in ("train", "validation"):
                 ids = body.get(field, [])
@@ -215,7 +218,19 @@ class Learning:
             if mode not in ("steer_throttle", "steer_only"):
                 raise ValueError("予測モードが不正です")
             repo = Path(cfg["encoder_repo"]).expanduser()
+            architecture = body.get("architecture", "dinov3_vits16")
+            if architecture not in ("dinov3_vits16", "dinov3_vitt16"):
+                raise ValueError("不明なRGBモデルです")
+            source_resources = []
             weights = Path(cfg["weights"]).expanduser()
+            if action == "distill" and body.get("teacher_run"):
+                teacher = self.folder("runs", body["teacher_run"])
+                weights = within(teacher, "best.pt")
+                source_resources.append("e2e:runs:" + body["teacher_run"])
+            elif action == "train" and architecture == "dinov3_vitt16":
+                source = self.folder("encoders", body.get("encoder"))
+                weights = within(source, "encoder.pt")
+                source_resources.append("e2e:encoders:" + body["encoder"])
             if not repo.is_dir():
                 raise ValueError(
                     f"DINOv3ソースが見つかりません: {repo}。"
@@ -241,6 +256,20 @@ class Learning:
                 raise ValueError("feature_cacheはboolです")
             workers = self.integer(body.get("num_workers", 8), 0, 64)
             lr = self.number(body.get("learning_rate", 1e-5 if finetune else 1e-4), 1e-9, 1)
+            if action == "distill":
+                target = self.target("encoders", key)
+                args = ["--train", *map(str, groups[0]), "--validation", *map(str, groups[1]),
+                        "--repo", str(repo), "--teacher-weights", str(weights), "--output", "@OUTPUT@",
+                        "--epochs", str(epochs), "--batch-size", str(batch), "--learning-rate", str(lr),
+                        "--device", cfg["device"], "--num-workers", str(workers),
+                        "--cache-dir", str(self.root / '.feature_cache'),
+                        "--feature-cache" if feature_cache else "--no-feature-cache"]
+                return {**common, "kind":"encoders", "target":target,
+                        "key":target.relative_to(self.root/"encoders").as_posix(), "module":"distill", "args":args,
+                        "provenance":dict(architecture="dinov3_vitt16", teacher_run=body.get("teacher_run"),
+                                          train=body["train"], validation=body["validation"], epochs=epochs),
+                        "resources":["e2e-compute", *source_resources,
+                                     *["e2e:datasets:"+item for item in (*body["train"],*body["validation"])]]}
             args = [
                 "--train",
                 *map(str, groups[0]),
@@ -267,7 +296,7 @@ class Learning:
                 "--device",
                 cfg["device"],
             ]
-            args += ["--num-workers", str(workers), "--cache-dir", str(self.root / '.feature_cache'),
+            args += ["--architecture", architecture, "--num-workers", str(workers), "--cache-dir", str(self.root / '.feature_cache'),
                      "--feature-cache" if feature_cache else "--no-feature-cache"]
             if finetune:
                 args.append("--finetune")
@@ -279,6 +308,8 @@ class Learning:
                 "args": args,
                 "provenance": {
                     "mode": mode,
+                    "architecture": architecture,
+                    "encoder": body.get("encoder") if architecture=="dinov3_vitt16" else None,
                     "train": body["train"],
                     "validation": body["validation"],
                     "epochs": epochs,
@@ -288,7 +319,7 @@ class Learning:
                     "feature_cache": feature_cache,
                     "feature_cache_effective": feature_cache and not finetune,
                 },
-                "resources": ["e2e-compute", *["e2e:datasets:" + item for item in (*body["train"], *body["validation"])]],
+                "resources": ["e2e-compute", *source_resources, *["e2e:datasets:" + item for item in (*body["train"], *body["validation"])]],
             }
         if action == "build-engine":
             model = self.folder("models", body.get("model"))
@@ -455,8 +486,8 @@ class Learning:
                     for kind in ("rgb", "pca", "saliency"):
                         within(output, frame[kind])
                 metadata.update(frame_count=report["frame_count"], mode=report["mode"])
-            elif plan["kind"] == "runs":
-                within(output, "best.pt")
+            elif plan["kind"] in ("runs", "encoders"):
+                within(output, "encoder.pt" if plan["kind"] == "encoders" else "best.pt")
                 rows = within(output, "metrics.jsonl").read_text().splitlines()
                 import json
 

@@ -102,6 +102,33 @@ class LearningTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.service.loss("../history")
 
+    def test_tiny_distill_plan_publication_and_control_training(self):
+        import json
+        data = self.dataset().relative_to(self.service.root / "datasets").as_posix()
+        plan = self.service.prepare("distill", dict(name="tiny", train=[data], validation=[data]))
+        self.assertEqual(plan["kind"], "encoders")
+        self.assertEqual(len(plan["key"].split("/")), 3)
+        self.assertIn("--teacher-weights", plan["args"])
+        self.assertIn("--feature-cache", plan["args"])
+        class Worker(FakeJob):
+            def run(inner,args,env=None):
+                output=Path(args[args.index("--output")+1]);output.mkdir()
+                (output/'encoder.pt').write_bytes(b'fixture')
+                (output/'metrics.jsonl').write_text(json.dumps(dict(epoch=1,train_loss=.3,validation_loss=.2))+'\n')
+        result=self.service.execute(Worker(),plan)
+        self.assertEqual(self.service.loss(result['id'], 'encoders')['metric'], 'distillation_loss')
+        train=self.service.prepare("train", dict(name="tiny-control", architecture="dinov3_vitt16",
+                                                encoder=result['id'],train=[data],validation=[data]))
+        self.assertIn("e2e:encoders:"+result['id'],train['resources'])
+        self.assertIn(str(plan['target']/'encoder.pt'),train['args'])
+        self.assertEqual(train['provenance']['architecture'],'dinov3_vitt16')
+        from kart_studio import e2e_trash
+        moved=e2e_trash.move(self.service,'encoders',result['id'])
+        e2e_trash.restore(self.service,moved['token'])
+        self.assertTrue((plan['target']/'encoder.pt').exists())
+        with self.assertRaises(ValueError):
+            self.service.prepare('train',dict(name='bad',architecture='unknown',train=[data],validation=[data]))
+
     def test_missing_encoder_and_weights_identify_path(self):
         dataset = self.dataset().relative_to(self.service.root / "datasets").as_posix()
         body = dict(name="run", train=[dataset], validation=[dataset])

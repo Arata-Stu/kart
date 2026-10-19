@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kart_e2e.contract import DINOV3_COMMIT, SPEC, model_contract
+from kart_e2e.contract import DINOV3_COMMIT, SPEC, model_contract, rgb_spec
 
 
 class ContractTests(unittest.TestCase):
@@ -25,6 +25,9 @@ class ContractTests(unittest.TestCase):
                 ).hexdigest(),
             )
             path = root / "metadata.json"
+            path.write_text(json.dumps(metadata))
+            self.assertEqual(model_contract(root)[1], "steer_only")
+            metadata["model_spec"] = rgb_spec("dinov3_vitt16")
             path.write_text(json.dumps(metadata))
             self.assertEqual(model_contract(root)[1], "steer_only")
             metadata["model_spec"] = dict(SPEC, encoder_commit="6876159a11b4df116f30f667f8c9888617df0751")

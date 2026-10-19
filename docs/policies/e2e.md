@@ -151,3 +151,14 @@ E2E画像stampの未来ずれは、明示したimage_future_tolerance_s（既定
 CLIの明示指定でlossless PNGも提供し、既存PNGデータセットの読み込み互換を保持する。
 学習・特徴量キャッシュ・オフライン可視化・ONNX評価は同じRGB loaderを使用する。
 NPYのpickle読み込みは禁止し、dtype・shapeを検証する。可視化用PNGと学習入力の保存形式を区別する。
+
+
+## RGB Tinyと特徴蒸留
+
+ViT-Sと同じ固定DINOv3実装を用い、Tinyは12層・192次元・3 heads・patch16・storage token4とする。
+教師はViT-Sをeval/frozenで固定し、同じ画像からのCLS特徴へ192→384の学習用射影で近づける。
+第1段階は特徴蒸留、第2段階はTinyの192次元へ制御headを付け、人の操作で学習する。
+蒸留の射影は圧縮のための学習補助であり、制御モデル・ONNX・実行モデルには含めない。
+教師を動かすことで損失を下げない。教師と生徒の異なる次元の完全一致を前提にしない。
+蒸留済みencoderのSPEC・教師hash・設定を保存し、モデル契約でSmall/Tinyを区別する。
+既存Small checkpointの互換を保持し、EVS仕様へ暗黙にTinyを適用しない。
