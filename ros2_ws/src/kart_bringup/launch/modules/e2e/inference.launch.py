@@ -3,7 +3,7 @@
 import isaac_ros_launch_utils as lu
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.e2e import boolean, parameters
-from kart_e2e.contract import model_contract, runtime_settings, input_contract
+from kart_e2e.contract import model_contract, runtime_settings, input_contract, validate_runtime
 from kart_e2e.engine_cache import require_engine
 
 
@@ -28,6 +28,9 @@ def add_nodes(args):
         trt["use_sim_time"] = decoder["use_sim_time"] = boolean(args.use_sim_time)
     if args.fixed_throttle != "":
         decoder["fixed_throttle"] = float(args.fixed_throttle)
+    validate_runtime({key: decoder[key] for key in ("fixed_throttle", "max_throttle")})
+    if getattr(args, "use_fixed_throttle", "") != "":
+        decoder["use_fixed_throttle"] = boolean(args.use_fixed_throttle)
     if args.drive_enabled != "":
         decoder["drive_enabled"] = boolean(args.drive_enabled)
     if args.force_engine_update != "":
@@ -68,6 +71,7 @@ def generate_launch_description():
     for key in ("container_name", "model_dir"):
         args.add_arg(key, cli=True)
     for key in (
+        "use_fixed_throttle",
         "fixed_throttle",
         "drive_enabled",
         "force_engine_update",

@@ -90,7 +90,9 @@ def main():
         "--dry-run", action="store_true", help="選択・検証とコマンド表示のみ"
     )
     parser.add_argument("--auto-fixed-throttle", type=float, default=None,
-                        help="AUTO throttle command, manual steering: -1 normal, 0..speed_scale fixed (not vehicle speed)")
+                        help="Collection AUTO throttle, manual steering (collect/drive): -1 normal, 0..speed_scale fixed (not vehicle speed)")
+    parser.add_argument("--e2e-fixed-throttle", type=float, default=None,
+                        help="E2E model steering + fixed throttle; defaults to model runtime metadata")
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--e2e-model-dir", default="")
     parser.add_argument("--eval-localization", choices=("vslam", "vgl", "fresh"), default=None)
@@ -228,9 +230,11 @@ def main():
             )
         elif args.run_name is None:
             args.run_name = input("run_name [run] > ").strip() or "run"
-    if args.mode == 'eval' and args.auto_fixed_throttle is not None:
-        raise ValueError('--auto-fixed-throttleは実車のcollect/drive/e2eで指定してください')
-    if interactive and args.mode != 'eval' and args.auto_fixed_throttle is None:
+    if args.mode not in ('collect', 'drive') and args.auto_fixed_throttle is not None:
+        raise ValueError('--auto-fixed-throttleは収集用（ステア手動）です。collect/driveで指定してください。E2Eは--e2e-fixed-throttleを使用します')
+    if args.e2e_fixed_throttle is not None and args.mode != 'e2e':
+        raise ValueError('--e2e-fixed-throttleはe2e専用です')
+    if interactive and args.mode in ('collect', 'drive') and args.auto_fixed_throttle is None:
         from kart_bringup.configuration import load
         _, modules = load(config / 'bringup.yaml')
         fixed = modules['joy_manager']['effective']['auto_fixed_throttle']
@@ -293,12 +297,13 @@ def main():
 
         _, modules = load(config / "bringup.yaml", {
             "enable_bridge": str(not args.no_bridge).lower(), "device": args.device,
-            "auto_fixed_throttle": '' if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle),
+            "auto_fixed_throttle": '-1' if args.mode == 'e2e' else ('' if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle)),
         })
         if not args.no_bridge:
             print(f"車両基板: {modules['bridge']['effective']['device']}")
         fixed = modules['joy_manager']['effective']['auto_fixed_throttle']
-        print('AUTOスロットル: ' + ('通常AUTO（既存制御）、MANUALはR2/L2' if fixed < 0 else
+        if args.mode != 'e2e':
+            print('AUTOスロットル: ' + ('通常AUTO（既存制御）、MANUALはR2/L2' if fixed < 0 else
               f'固定 {fixed:.6f}（□でAUTO、△で通常MANUALへ直接切替、ステア手動、○/L2/×で解除・STOP）'))
     if args.mode == "e2e":
         from kart_e2e.contract import model_contract, runtime_settings, input_contract
@@ -313,7 +318,14 @@ def main():
             raise ValueError("RGB E2EにはRGBが必要です")
         _, mode = model_contract(args.e2e_model_dir)
         runtime = runtime_settings(args.e2e_model_dir)
-        print(f"E2E metadata: {mode}; {runtime}")
+        import math
+        if interactive and args.e2e_fixed_throttle is None:
+            raw = input(f'E2E固定スロットル 0..{runtime["max_throttle"]} [{runtime["fixed_throttle"]}] > ').strip()
+            args.e2e_fixed_throttle = float(raw) if raw else runtime['fixed_throttle']
+        fixed = runtime['fixed_throttle'] if args.e2e_fixed_throttle is None else args.e2e_fixed_throttle
+        if not math.isfinite(fixed) or not 0 <= fixed <= runtime['max_throttle']:
+            raise ValueError('E2E固定スロットルは有限値で0..モデルのmax_throttle以内にしてください')
+        print(f"E2E AUTO: モデルのステア + 固定スロットル {fixed}; max={runtime['max_throttle']}; model={mode}")
     if args.mode != "eval":
         from kart_bag_manager.recorder import Settings
 
@@ -325,6 +337,7 @@ def main():
     values = {
         "mode": args.mode,
         "auto_fixed_throttle": None if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle),
+        "e2e_fixed_throttle": None if args.e2e_fixed_throttle is None else str(args.e2e_fixed_throttle),
         "rgb_fps": args.rgb_fps,
         "infra_fps": args.infra_fps,
         "enable_bridge": str(not args.no_bridge).lower(),

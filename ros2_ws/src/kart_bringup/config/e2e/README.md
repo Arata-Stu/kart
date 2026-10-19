@@ -55,8 +55,8 @@ model_dirからONNX/hashを確認し、model/engine pathと出力modeを明示�
 - sensorの全OpenEB YAMLは`python -m kart_e2e.evs_contract`で明示生成し、
   `evs_tensor_config`で指定する。通常の既定212×120 tensor設定へEVS policyを接続しない。
 - `evs_e2e.launch.py`は既存OpenEB processへTensorRT/decoderだけをloadする。
-  全引数はmodel_dir、evs_tensor_config、container_name、input_topic、fixed_throttle、drive_enabled、use_sim_time。
+  全引数はmodel_dir、evs_tensor_config、container_name、input_topic、fixed_throttle、use_fixed_throttle、drive_enabled、use_sim_time。
   既定空＝JSON/YAML保持。model_dirとevs_tensor_configは必須。
 - 内部inference.launch.pyのinput_topicは未指定時RGBの/e2e/tensor_input、EVSでは/event_camera/tensor。
-  出力/e2e/tensor_outputとdecoderのtopic/QoSは共通。ROS parameter/serviceの追加なし。
+  出力/e2e/tensor_outputとdecoderのtopic/QoSは共通。decoderのuse_fixed_throttle（bool、既定false、起動時固定）はmission e2eでtrueにする。service追加なし。
 - 詳細手順・検証範囲は[kart_e2e README](../../../../kart_e2e/README.md)を参照。

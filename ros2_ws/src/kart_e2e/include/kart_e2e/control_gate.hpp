@@ -14,9 +14,9 @@ struct Decision {
 class ControlGate {
 public:
   ControlGate(bool steer_only, double fixed, double maximum, double timeout,
-              double mode_timeout)
+              double mode_timeout, bool use_fixed_throttle = false)
       : steer_only_(steer_only), fixed_(fixed), maximum_(maximum),
-        timeout_(timeout), mode_timeout_(mode_timeout) {
+        timeout_(timeout), mode_timeout_(mode_timeout), use_fixed_(use_fixed_throttle) {
     if (!std::isfinite(fixed) || !std::isfinite(maximum) ||
         !std::isfinite(timeout) || !std::isfinite(mode_timeout) || fixed < 0 ||
         fixed > maximum || maximum > 1 || timeout <= 0 || mode_timeout <= 0)
@@ -54,7 +54,7 @@ public:
         (!steer_only_ && (prediction[1] < 0 || prediction[1] > 1)))
       return fail("invalid_or_expired_prediction");
     return {prediction[0],
-            std::min(maximum_, steer_only_ ? fixed_ : double(prediction[1])),
+            std::min(maximum_, (steer_only_ || use_fixed_) ? fixed_ : double(prediction[1])),
             "active", false};
   }
 
@@ -65,5 +65,6 @@ private:
   }
   bool steer_only_, latched_{false};
   double fixed_, maximum_, timeout_, mode_timeout_, entered_{-1};
+  bool use_fixed_{false};
 };
 } // namespace kart_e2e

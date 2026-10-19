@@ -13,6 +13,12 @@ int main() {
   auto d = fixed.step(11.11, 1, 11.1, {.4f}, 11.1);
   assert(std::abs(d.steering - .4) < 1e-6 && d.throttle == .12);
   assert(fixed.step(11.12, 3, 11.12, {.4f}, 11.1).throttle == 0);
+  // The model's throttle output must not replace the fixed E2E demand.
+  ControlGate forced(false, .12, .2, .15, .3, true);
+  arm(forced);
+  auto fixed_joint = forced.step(11.11, 1, 11.1, {-.8f, .9f}, 11.1);
+  assert(std::abs(fixed_joint.steering + .8) < 1e-6 && fixed_joint.throttle == .12);
+  assert(forced.step(11.5, 1, 11.5, {0, .1f}, 11.1).stop);
   ControlGate joint(false, 0, .2, .15, .3);
   arm(joint);
   assert(joint.step(11.11, 1, 11.1, {-.8f, .9f}, 11.1).throttle == .2);

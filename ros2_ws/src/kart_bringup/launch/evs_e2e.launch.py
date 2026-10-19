@@ -22,14 +22,14 @@ def add_pipeline(args):
             lu.include('kart_bringup', 'launch/modules/e2e/inference.launch.py',
                        launch_arguments={
                            **{k: config[k] for k in ('container_name', 'input_topic', 'model_dir')},
-                           **{k: getattr(args, k) for k in ('fixed_throttle', 'drive_enabled', 'use_sim_time')},
+                           **{k: getattr(args, k) for k in ('use_fixed_throttle', 'fixed_throttle', 'drive_enabled', 'use_sim_time')},
                        }, scoped=True, forwarding=False)]
 
 
 def generate_launch_description():
     args = lu.ArgumentContainer()
     for key in ('container_name', 'input_topic', 'model_dir', 'evs_tensor_config',
-                'fixed_throttle', 'drive_enabled', 'use_sim_time'):
+                'use_fixed_throttle', 'fixed_throttle', 'drive_enabled', 'use_sim_time'):
         args.add_arg(key, '', cli=True)
     args.add_opaque_function(add_pipeline)
     return lut.LaunchDescription(args.get_launch_actions())

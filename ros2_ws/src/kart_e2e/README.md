@@ -118,7 +118,8 @@ pkg基準値は`config/control_decoder.yaml`、実運用はbringupの同名YAML�
 |use_sim_time|false|ROS共通、bag再生時の時計|
 |output_mode|steer_throttle|launchではmetadataから解決。直接起動時は要整合|
 |output_tensor_name|control|TensorListの名前|
-|fixed_throttle|0.0|steer-only値[0,max_throttle]|
+|fixed_throttle|0.0|固定駆動量[0,max_throttle]。モデルmetadataを初期値として使用|
+|use_fixed_throttle|false|起動時固定。trueならモデルの出力数に関係なくthrottleは固定値。missionのe2eはtrue|
 |max_throttle|0.2|スロットル上限[0,1]|
 |input_timeout_s|0.15|撮影から出力までの期限秒。decoder受信wall鮮度も確認|
 |mode_timeout_s|0.3|modeのstamp・受信wall鮮度上限秒|
@@ -217,12 +218,16 @@ ONNX exportはmetadata.jsonのruntimeへ引き継ぐ。
 bringupのe2eモードはmetadataからoutput_mode（steer_only/steer_throttle）、
 固定throttle・上限をdecoderへ設定し、model_specで学習時の入力サイズ・前処理との一致を検証する。
 RGB 424×240から212×120へresizeし、ImageNet正規化・224×128へのpaddingという既存契約は共通。
-steer_onlyでは予測steer＋固定throttle、steer_throttleでは予測steer/throttleを使う。
+missionのe2eモードはuse_fixed_throttle=trueを明示し、どちらのモデル形式でも予測steer＋固定throttleを使う。
+出力数やmetadataのoutput_modeは変更せず、steer_throttleの2成分も既存契約どおり検証する。
+単独decoder／下位e2e.launchでuse_fixed_throttle=falseの場合は、従来どおりsteer_throttleの予測throttleを使用する。
 起動はAUTOへの切替を行わず、decoderのmode gateが引き続き適用される。
 
 旧checkpointにruntimeがない場合、export CLIへ `--fixed-throttle 0.1 --max-throttle 0.2`
 等を明示して再exportする。推論起動時に不足値を推測しない。
-単独e2e.launchのfixed_throttle明示上書きは可能だが、TUIではmetadataをそのまま使用する。
+CLI --e2e-fixed-throttle／missionのe2e_fixed_throttle／単独e2e.launchのfixed_throttleで固定値を上書きできる。
+TUIはE2E専用の固定値入力を表示する。未指定はmetadataのruntime.fixed_throttle、上限はruntime.max_throttle。
+収集用--auto-fixed-throttleはE2E CLIでは拒否する。missionはYAMLに収集用設定があってもJoy固定を-1へ上書きする。
 ROS node/topicの変更はない。decoderの全parameterは既存config/control_decoder.yaml参照。
 
 ## rosbagのオフライン評価（Notebook専用）
@@ -453,7 +458,7 @@ decoderは既存pkg `config/control_decoder.yaml`とbringupの同名YAMLを使�
 全launch引数は空文字が既定（JSON/YAML保持）:
 `model_dir`（必須bundle）、`evs_tensor_config`（必須・driverへ適用した全YAML）、
 `container_name`（既定/event_camera/tensor_container、変更不可）、`input_topic`（既定/event_camera/tensor、変更不可）、
-`fixed_throttle`、`drive_enabled`、`use_sim_time`（既存decoderと同じ意味）。
+`fixed_throttle`、`use_fixed_throttle`、`drive_enabled`、`use_sim_time`（既存decoderと同じ意味）。
 module内部の`input_topic`追加は未指定時に既存RGB `/e2e/tensor_input`を使用する。
 外部driverが実際に指定YAMLで起動済みかは利用者が確認する。launch終了だけでは外部containerからunloadされない。
 
@@ -505,7 +510,7 @@ bash scripts/bringup.sh --mode collect --auto-fixed-throttle 0.10 --run-name aut
 
 CLI/launchの旧`manual_fixed_throttle`は`auto_fixed_throttle`へ変更した。
 実運用設定はkart_bringup/config/input/joy_manager.yaml、未指定ならYAMLを保持する。
-TUIの「AUTOスロットル」で通常／固定を選ぶ。collect/drive/e2eで利用可能、evalは不可。
+TUIの「AUTOスロットル」で通常／固定を選ぶ。collect/driveで利用可能。E2Eでは収集用の固定設定を無効化し、モデルのステア＋E2E専用固定スロットルを使用する。
 RGB/EVS教師抽出はbag内の固定AUTO有効設定を自動検出する。固定収集bagでは固定AUTOだけを採用し、MANUALの復帰・調整区間を全て除外する。通常bagは従来どおりMANUALだけを採用する。
 ROS結合・実車動作は未確認。portable testで固定出力、直接切替、異常ラッチ、HOST handshakeを検証する。
 

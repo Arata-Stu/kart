@@ -271,6 +271,10 @@ class MissionCompositionTests(unittest.TestCase):
             self.assertEqual(inference["container_name"], "/external/sensors")
             self.assertEqual(inference["create_container"], "false")
             self.assertEqual(inference["drive_enabled"], "true")
+            self.assertEqual(inference['use_fixed_throttle'], 'true')
+            vehicle_call = next(call for call in lu.include.call_args_list if call.args[1]=='launch/vehicle.launch.py')
+            self.assertEqual(vehicle_call.kwargs['launch_arguments']['auto_fixed_throttle'], '-1')
+
             lu.include.reset_mock()
             args.enable_evs = 'true'
             args.evs_tensor_config = '/model/openeb.yaml'

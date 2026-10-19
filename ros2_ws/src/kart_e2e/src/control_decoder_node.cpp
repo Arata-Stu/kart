@@ -41,13 +41,14 @@ public:
     timeout_ = setting<double>("input_timeout_s", .15);
     mode_timeout_ = setting<double>("mode_timeout_s", .3);
     const auto fixed = setting<double>("fixed_throttle", 0.0);
+    const auto use_fixed = setting<bool>("use_fixed_throttle", false);
     const auto maximum = setting<double>("max_throttle", .2);
     drive_ = setting<bool>("drive_enabled", false);
     const auto rate = setting<double>("control_rate_hz", 50.0);
     if (!std::isfinite(rate) || rate < 1 || rate > 100 || tensor_name_.empty())
       throw std::invalid_argument("Invalid control rate/tensor name");
     gate_ = std::make_unique<ControlGate>(count_ == 1, fixed, maximum, timeout_,
-                                          mode_timeout_);
+                                          mode_timeout_, use_fixed);
     stream_ = nvidia::isaac_ros::common::createCudaStream("E2EControlDecoder");
     output_ = create_publisher<kart_interfaces::msg::ControlCommand>(
         drive_ ? "auto/control_cmd" : "e2e/control_cmd", 1);

@@ -57,6 +57,7 @@ def add_pipeline(args):
                 **{
                     key: getattr(args, key)
                     for key in (
+                        "use_fixed_throttle",
                         "fixed_throttle",
                         "drive_enabled",
                         "force_engine_update",
@@ -79,6 +80,7 @@ def generate_launch_description():
         "model_dir",
         "image_topic",
         "camera_info_topic",
+        "use_fixed_throttle",
         "fixed_throttle",
         "drive_enabled",
         "force_engine_update",

@@ -3,6 +3,7 @@
     use_sim_time: false
     output_mode: steer_throttle # launch resolves from ONNX metadata
     output_tensor_name: control
+    use_fixed_throttle: false # mission e2e sets true; preserve model output shape
     fixed_throttle: 0.0
     max_throttle: 0.2
     input_timeout_s: 0.15

@@ -118,3 +118,24 @@ kart.auto_fixed_throttle.v1のenabled=trueが1件でもあれば固定収集と�
 固定AUTO候補は最新過去300ms以内のenabled/armed/AUTO設定と操作throttle一致を要求し、
 AUTO連続観測のentry_neutral_s以内を除外する。未知・不正設定は拒否し、意図を推測しない。
 判定policy、教師候補の採用・除外内訳、サンプルのteacher_sourceを出力に保存する。
+
+## 収集用固定スロットルとE2E走行の分離
+
+- collect/driveの`--auto-fixed-throttle`（Joy parameter `auto_fixed_throttle`）は手動ステア収集用。
+- `--mode e2e`はAUTOでモデルのステア＋固定スロットル。収集用Joy固定は必ず-1へ上書きし、
+  muxの`auto_use_teleop=false`で`/auto/control_cmd`を車両へ通す。MANUALは通常の手動操作。
+- E2E専用CLI `--e2e-fixed-throttle`／mission引数 `e2e_fixed_throttle` は未指定なら
+  metadataのruntime.fixed_throttleを使い、明示時は0..runtime.max_throttleの有限値に限る。
+  TUIもE2E専用の入力欄を使い、収集用の固定選択を表示しない。
+- missionはRGB/EVSの双方に`use_fixed_throttle=true`を渡す。モデルがsteer_throttleでも
+  ステアだけを操舵に用い、駆動量は固定値。モデルの出力数・形式は書き換えない。
+- decoderの新しい起動時parameter `use_fixed_throttle` はbool、ノード/YAML既定false。
+  単独launchにも同名の任意引数を提供する。既存topic・QoS・watchdog・STOP処理は同じ。
+
+```bash
+bash scripts/bringup.sh --mode e2e --e2e-model-dir /workspaces/models/policy \
+  --e2e-fixed-throttle 0.10
+```
+
+0.10は車速ではなく正規化した固定要求。起動だけでは走行せず、□でAUTO、△でMANUAL、×でSTOP。
+C++ gateとlaunch転送・CLIをportable testで確認する。ROS結合・GPU推論・実車操舵は未確認。
