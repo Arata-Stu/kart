@@ -7,6 +7,7 @@
     fixed_throttle: 0.0
     max_throttle: 0.2
     input_timeout_s: 0.15
+    image_future_tolerance_s: 0.005 # Allow up to 5ms of image timestamp lead; not extra stale time
     mode_timeout_s: 0.3
     control_rate_hz: 50.0
     drive_enabled: false

@@ -139,3 +139,7 @@ bash scripts/bringup.sh --mode e2e --e2e-model-dir /workspaces/models/policy \
 
 0.10は車速ではなく正規化した固定要求。起動だけでは走行せず、□でAUTO、△でMANUAL、×でSTOP。
 C++ gateとlaunch転送・CLIをportable testで確認する。ROS結合・GPU推論・実車操舵は未確認。
+
+E2E画像stampの未来ずれは、明示したimage_future_tolerance_s（既定5ms、許容範囲0..50ms）で
+小さな時刻差だけを許容する。画像stampの上書きや過去期限の延長は行わない。
+期限切れ・AUTO前の画像・非有限値・受信途絶・異常ラッチは従来どおり拒否する。

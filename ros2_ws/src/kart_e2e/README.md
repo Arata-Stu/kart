@@ -122,6 +122,7 @@ pkg基準値は`config/control_decoder.yaml`、実運用はbringupの同名YAML�
 |use_fixed_throttle|false|起動時固定。trueならモデルの出力数に関係なくthrottleは固定値。missionのe2eはtrue|
 |max_throttle|0.2|スロットル上限[0,1]|
 |input_timeout_s|0.15|撮影から出力までの期限秒。decoder受信wall鮮度も確認|
+|image_future_tolerance_s|0.005|画像stampがROS現在時刻より先になる許容秒。起動時固定、0..0.05、0で厳密判定|
 |mode_timeout_s|0.3|modeのstamp・受信wall鮮度上限秒|
 |control_rate_hz|50.0|watchdog/指令周期[1,100]Hz|
 |drive_enabled|false|AUTO muxへの接続|
@@ -567,3 +568,13 @@ tensor_receipt_age_ms、prediction_count、input_timeout_ms、予測steering/thr
 最初の理由が次tickのfault_latchedに置き換わる前に記録するための診断であり、停止判定や
 STOP要求周期は変えない。標準bagにもe2e/statusを保存する。未記録の過去bagへは遡及しない。
 実機ログで原因を特定する。固定スロットルの値やモデルの操舵精度だけから停止原因を推測しない。
+
+
+画像stampの小さな未来ずれは`image_future_tolerance_s=0.005`（5ms）まで許容する。
+実機ログのimage_age_ms=-2.1／tensor_receipt_age_ms=7.3／prediction_count=1／steering=0.337598は、
+従来のnow < image_stampという判定でSTOPしていた。5ms以内でも元の画像stampを保持し、
+過去150msの期限を延長したり時刻を書き換えたりしない。5msを超える未来ずれ、古い画像、
+AUTO進入前の画像、不正な値、受信途絶、mode失効は引き続きSTOPとなる。
+許容値の上限は50msで、有限値を要求する。ログにもimage_future_tolerance_msを出す。
+C++ gateで2.1ms、5ms境界、境界超過、150ms超過、非有限stamp、異常ラッチを検証する。
+ROS/GPUの実機再走行は未確認。センサstampが未来になった理由そのものは別途時刻同期を確認する。

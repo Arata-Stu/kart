@@ -14,11 +14,15 @@ struct Decision {
 class ControlGate {
 public:
   ControlGate(bool steer_only, double fixed, double maximum, double timeout,
-              double mode_timeout, bool use_fixed_throttle = false)
+              double mode_timeout, bool use_fixed_throttle = false,
+              double image_future_tolerance = .005)
       : steer_only_(steer_only), fixed_(fixed), maximum_(maximum),
-        timeout_(timeout), mode_timeout_(mode_timeout), use_fixed_(use_fixed_throttle) {
+        timeout_(timeout), mode_timeout_(mode_timeout),
+        future_tolerance_(image_future_tolerance), use_fixed_(use_fixed_throttle) {
     if (!std::isfinite(fixed) || !std::isfinite(maximum) ||
-        !std::isfinite(timeout) || !std::isfinite(mode_timeout) || fixed < 0 ||
+        !std::isfinite(timeout) || !std::isfinite(mode_timeout) ||
+        !std::isfinite(image_future_tolerance) || image_future_tolerance < 0 ||
+        image_future_tolerance > .05 || fixed < 0 ||
         fixed > maximum || maximum > 1 || timeout <= 0 || mode_timeout <= 0)
       throw std::invalid_argument("Invalid E2E throttle limits/timeouts");
   }
@@ -46,7 +50,8 @@ public:
       return {0, 0, "auto_entry_neutral", false};
     const auto expected = steer_only_ ? 1u : 2u;
     if (prediction.size() != expected || image_stamp < entered_ ||
-        now < image_stamp || now - image_stamp > timeout_ ||
+        !std::isfinite(image_stamp) || image_stamp > now + future_tolerance_ ||
+        now - image_stamp > timeout_ ||
         !std::all_of(
             prediction.begin(), prediction.end(),
             [](float v) { return std::isfinite(v); }) ||
@@ -64,7 +69,7 @@ private:
     return {0, 0, status, true};
   }
   bool steer_only_, latched_{false};
-  double fixed_, maximum_, timeout_, mode_timeout_, entered_{-1};
+  double fixed_, maximum_, timeout_, mode_timeout_, future_tolerance_, entered_{-1};
   bool use_fixed_{false};
 };
 } // namespace kart_e2e

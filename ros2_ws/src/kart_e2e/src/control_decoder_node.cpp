@@ -40,6 +40,7 @@ public:
     tensor_name_ = setting<std::string>("output_tensor_name", "control");
     timeout_ = setting<double>("input_timeout_s", .15);
     mode_timeout_ = setting<double>("mode_timeout_s", .3);
+    future_tolerance_ = setting<double>("image_future_tolerance_s", .005);
     const auto fixed = setting<double>("fixed_throttle", 0.0);
     const auto use_fixed = setting<bool>("use_fixed_throttle", false);
     const auto maximum = setting<double>("max_throttle", .2);
@@ -48,7 +49,7 @@ public:
     if (!std::isfinite(rate) || rate < 1 || rate > 100 || tensor_name_.empty())
       throw std::invalid_argument("Invalid control rate/tensor name");
     gate_ = std::make_unique<ControlGate>(count_ == 1, fixed, maximum, timeout_,
-                                          mode_timeout_, use_fixed);
+                                          mode_timeout_, use_fixed, future_tolerance_);
     stream_ = nvidia::isaac_ros::common::createCudaStream("E2EControlDecoder");
     output_ = create_publisher<kart_interfaces::msg::ControlCommand>(
         drive_ ? "auto/control_cmd" : "e2e/control_cmd", 1);
@@ -160,12 +161,12 @@ private:
       RCLCPP_WARN(get_logger(),
         "E2E STOP: %s; mode=%u; image_age_ms=%.1f; mode_age_ms=%.1f; "
         "tensor_receipt_age_ms=%.1f; prediction_count=%zu; input_timeout_ms=%.1f; "
-        "predicted_steering=%g; predicted_throttle=%g",
+        "predicted_steering=%g; predicted_throttle=%g; image_future_tolerance_ms=%.1f",
         result.status, static_cast<unsigned>(mode_.mode),
         image_stamp > 0 ? (sec-image_stamp)*1000 : -1.,
         state_stamp > 0 ? (sec-state_stamp)*1000 : -1.,
         received_ != Clock::time_point{} ? age(received_)*1000 : -1.,
-        prediction_count, timeout_*1000, predicted_steering, predicted_throttle);
+        prediction_count, timeout_*1000, predicted_steering, predicted_throttle, future_tolerance_*1000);
     }
     last_stop_result_ = result.stop;
     // Record the first fault immediately, before the next tick says fault_latched.
@@ -191,7 +192,7 @@ private:
   bool last_stop_result_{false};
   int count_;
   bool drive_;
-  double timeout_, mode_timeout_, last_time_{-1};
+  double timeout_, mode_timeout_, future_tolerance_, last_time_{-1};
   uint64_t generation_{0};
   std::mutex mutex_;
   Mode mode_;

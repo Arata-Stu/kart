@@ -904,3 +904,7 @@ launch配線はtest_e2e_composition.pyと既存EVS/mission testで検証する�
 標準録画へ`/e2e/status`（std_msgs/msg/String）を追加し、E2Eの停止時状態を保存する。
 停止の切り分けは`ros2 topic echo /operation_mode/request`と`ros2 topic echo /e2e/status`。
 □は押下イベントでAUTOを選ぶ操作で、保持はSTOP要求を解除しない。
+
+E2E decoderの画像時刻未来ずれは`config/e2e/control_decoder.yaml`の
+`image_future_tolerance_s: 0.005`（5ms、起動時固定）まで許容する。
+小さなセンサ時刻ずれで停止させないための許容で、150msの期限切れ監視は変更しない。

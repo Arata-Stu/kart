@@ -60,3 +60,6 @@ model_dirからONNX/hashを確認し、model/engine pathと出力modeを明示�
 - 内部inference.launch.pyのinput_topicは未指定時RGBの/e2e/tensor_input、EVSでは/event_camera/tensor。
   出力/e2e/tensor_outputとdecoderのtopic/QoSは共通。decoderのuse_fixed_throttle（bool、既定false、起動時固定）はmission e2eでtrueにする。service追加なし。
 - 詳細手順・検証範囲は[kart_e2e README](../../../../kart_e2e/README.md)を参照。
+
+decoderの`image_future_tolerance_s`は0.005秒（起動時固定、範囲0..0.05）。
+数msの画像stampの未来ずれを許容し、input_timeout_s=0.15の過去期限は維持する。

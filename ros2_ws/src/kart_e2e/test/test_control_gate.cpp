@@ -37,6 +37,34 @@ int main() {
     arm(g);
     assert(g.step(11.11, 1, 11.1, {0}, stamp).stop);
   }
+  // RealSense trace: a valid steer-only prediction stamped 2.1ms in the future.
+  for (double lead : {0., .0021, .005}) {
+    ControlGate g(true, .1, .2, .15, .3);
+    arm(g);
+    const auto result = g.step(11.11, 1, 11.1, {.337598f}, 11.11 + lead);
+    assert(!result.stop && result.throttle == .1);
+    assert(std::abs(result.steering - .337598) < 1e-6);
+  }
+  for (double stamp : {11.11 + .005001, 11.11 - .150001,
+                       std::numeric_limits<double>::quiet_NaN(),
+                       std::numeric_limits<double>::infinity()}) {
+    ControlGate g(true, .1, .2, .15, .3);
+    // Enter AUTO earlier so the stale case tests expiry, not pre-entry rejection.
+    arm(g);
+    assert(!g.step(11.2, 1, 11.2, {0}, 11.2).stop);
+    const auto image = std::isfinite(stamp) ? stamp + .2 : stamp;
+    assert(g.step(11.31, 1, 11.3, {0}, image).stop);
+    assert(g.step(11.32, 1, 11.32, {0}, 11.32).stop); // Still latched.
+  }
+  ControlGate strict(true, .1, .2, .15, .3, false, 0.);
+  arm(strict);
+  assert(strict.step(11.11, 1, 11.1, {0}, 11.1121).stop);
+  for (double tolerance : {-.001, .051, std::numeric_limits<double>::quiet_NaN()}) {
+    bool threw = false;
+    try {ControlGate g(true, .1, .2, .15, .3, false, tolerance);}
+    catch (const std::invalid_argument &) {threw = true;}
+    assert(threw);
+  }
   ControlGate competitor(true, 0, .2, .15, .3);
   arm(competitor);
   assert(competitor.step(11.11, 1, 11.1, {0}, 11.1, true).stop);
