@@ -13,6 +13,7 @@
     - teleop/fixed_config
     - propo/control_cmd
     - auto/control_cmd
+    - e2e/status
     - vehicle/control_cmd
     - /control/fixed_config
     - /control/fixed_status

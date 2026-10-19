@@ -900,3 +900,7 @@ RGBは1つのsensor containerの下にRealSense＋8個、EVSはtensor_container�
 TensorRT＋decoderが表示されることを照合する。container名を明示上書きした場合はその名前で確認する。
 launch配線はtest_e2e_composition.pyと既存EVS/mission testで検証する。
 これらの静的・stub検証は、実機プロセス・GPU転送・zero-copy性能の実測を代替しない。
+
+標準録画へ`/e2e/status`（std_msgs/msg/String）を追加し、E2Eの停止時状態を保存する。
+停止の切り分けは`ros2 topic echo /operation_mode/request`と`ros2 topic echo /e2e/status`。
+□は押下イベントでAUTOを選ぶ操作で、保持はSTOP要求を解除しない。

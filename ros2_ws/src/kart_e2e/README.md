@@ -99,7 +99,7 @@ root namespace時の既定。相対topicはnamespace/remapに従う。
 |入力|`/operation_mode/state`|kart_interfaces/msg/OperationModeState|reliable / depth 1|mode・元stamp・受信時刻|
 |出力|`/e2e/control_cmd`|kart_interfaces/msg/ControlCommand|reliable / depth 1|既定、50Hzの制御gate出力|
 |条件付き出力|`/auto/control_cmd`|kart_interfaces/msg/ControlCommand|reliable / depth 1|drive_enabled=true時に上記を置換|
-|出力|`/e2e/status`|std_msgs/msg/String|reliable / depth 1|状態、最大10Hz|
+|出力|`/e2e/status`|std_msgs/msg/String|reliable / depth 1|状態、10Hz＋状態変化時に即時|
 |条件付き出力|`/operation_mode/request`|kart_interfaces/msg/OperationModeRequest|reliable / depth 10|drive有効時の異常STOP要求、最大10Hz|
 
 50Hzはwatchdog/指令周期であり推論FPSではない。active指令には画像のstampをそのまま使用。
@@ -550,3 +550,20 @@ header選択時も同じROS時計であることが必要。受信遅延を逆�
 学習済みモデルには遡及反映されないため、抽出後のdatasetで再学習する。
 `test_teacher_selection.py`と`test_evs_pipeline.py`で混在モード、鮮度、設定変更、
 人間のステア保持、旧bag互換、RGB/EVSの抽出を合成入力で確認する。実bag／ROS SDKでの実行は未確認。
+
+
+### E2E AUTOが途中で停止する場合
+
+□は押下の立ち上がりでAUTO要求を送り、保持中の繰り返し要求や自動再armは行わない。
+入力期限は標準150msで、画像stampからの経過とtensor受信からの経過の両方を検査する。
+mux/bridgeも標準150msの指令期限を持ち、元画像stampを保持するため、decoderからの
+出版Hzが高くても古い画像の指令は有効にならない。AUTO進入の中立期間は100msで、
+進入後の新しい画像の推論が必要。mode失効・他AUTO publisher・推論不正・USB/基板異常でもSTOPとなる。
+
+`/operation_mode/request`のsourceで要求元を確認し、`/e2e/status`の最初の状態変化を照合する。
+状態topicは既存std_msgs/msg/String・reliable/depth1で、10Hzに加え状態変化時に即時出版する。
+decoderが最初にSTOP判定した時はWARNINGに理由、mode、image_age_ms、mode_age_ms、
+tensor_receipt_age_ms、prediction_count、input_timeout_ms、予測steering/throttleを残す。時刻がないageは-1。
+最初の理由が次tickのfault_latchedに置き換わる前に記録するための診断であり、停止判定や
+STOP要求周期は変えない。標準bagにもe2e/statusを保存する。未記録の過去bagへは遡及しない。
+実機ログで原因を特定する。固定スロットルの値やモデルの操舵精度だけから停止原因を推測しない。

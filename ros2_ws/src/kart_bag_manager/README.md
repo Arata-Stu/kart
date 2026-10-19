@@ -246,3 +246,6 @@ record子プロセスのQoSは既存の自動適応／overrideに従う。
 `/teleop/control_cmd`の教師は固定値適用後の要求。固定区間はAUTO modeとして記録する。RGB/EVS抽出はこの固定設定からbagを自動判定し、固定収集bagではAUTOだけを採用してMANUALの復帰・調整を除外する。
 manager自身の入出力・parameterは追加せず、topics既定値への追加だけを行う。
 録画と走行開始・停止は従来どおり独立。[操作手順](../kart_bringup/README.md#auto固定スロットル手動ステア)。
+
+標準の通常／OpenEBプロファイルは`e2e/status`（std_msgs/msg/String）も記録する。
+operation_mode/request・stateと組み合わせ、E2Eの最初の停止理由を診断する。

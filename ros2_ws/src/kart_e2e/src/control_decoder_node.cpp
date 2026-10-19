@@ -135,6 +135,9 @@ private:
       prediction_.clear();
     }
     last_time_ = sec;
+    const auto prediction_count = prediction_.size();
+    const double predicted_steering = prediction_count > 0 ? prediction_[0] : 0.;
+    const double predicted_throttle = prediction_count > 1 ? prediction_[1] : 0.;
     if (age(received_) > timeout_)
       prediction_.clear();
     const auto mode_stamp = age(mode_received_) <= mode_timeout_
@@ -150,10 +153,30 @@ private:
     command.steering = result.steering;
     command.throttle = result.throttle;
     output_->publish(command);
-    if (age(reported_) >= .1) {
+    const bool periodic = age(reported_) >= .1;
+    if (drive_ && result.stop && !last_stop_result_) {
+      const auto image_stamp = seconds(header_.stamp);
+      const auto state_stamp = seconds(mode_.header.stamp);
+      RCLCPP_WARN(get_logger(),
+        "E2E STOP: %s; mode=%u; image_age_ms=%.1f; mode_age_ms=%.1f; "
+        "tensor_receipt_age_ms=%.1f; prediction_count=%zu; input_timeout_ms=%.1f; "
+        "predicted_steering=%g; predicted_throttle=%g",
+        result.status, static_cast<unsigned>(mode_.mode),
+        image_stamp > 0 ? (sec-image_stamp)*1000 : -1.,
+        state_stamp > 0 ? (sec-state_stamp)*1000 : -1.,
+        received_ != Clock::time_point{} ? age(received_)*1000 : -1.,
+        prediction_count, timeout_*1000, predicted_steering, predicted_throttle);
+    }
+    last_stop_result_ = result.stop;
+    // Record the first fault immediately, before the next tick says fault_latched.
+    if (last_status_ != result.status || periodic) {
       std_msgs::msg::String status;
       status.data = result.status;
       status_->publish(status);
+      last_status_ = result.status;
+    }
+    // Preserve the existing STOP request cadence and all control decisions.
+    if (periodic) {
       if (drive_ && result.stop) {
         kart_interfaces::msg::OperationModeRequest request;
         request.header.stamp = time;
@@ -164,7 +187,8 @@ private:
       reported_ = Clock::now();
     }
   }
-  std::string tensor_name_;
+  std::string tensor_name_, last_status_;
+  bool last_stop_result_{false};
   int count_;
   bool drive_;
   double timeout_, mode_timeout_, last_time_{-1};
