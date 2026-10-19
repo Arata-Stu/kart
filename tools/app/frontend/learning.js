@@ -170,8 +170,8 @@ export async function refreshLearning() {
   options("e2e-export-run", data.runs, "実験を選択");
   options("e2e-tiny-encoder", data.encoders.map(artifactOption), "蒸留済みTiny encoderを選択");
   options("e2e-distill-teacher", data.runs.filter(row => row.modality !== "evs" && (!row.architecture || row.architecture === 'dinov3_vits16')), "学習環境の公式ViT-S重み");
-  options("e2e-features-run", data.runs.filter(row => row.modality !== "evs"), "学習済み実験を選択");
-  options("e2e-features-data", data.datasets.filter(row => row.modality !== "evs").map(datasetOption), "RGBデータセットを選択");
+  options("e2e-features-run", data.runs, "学習済み実験を選択");
+  updateFeatureDatasets();
   options("e2e-push-model", data.models.map(artifactOption), "モデルを選択");
   options("e2e-eval-model", data.models.map(artifactOption), "モデルを選択");
   options("e2e-engine-history", data.engines, "Notebook engineの結果を選択");
@@ -307,7 +307,12 @@ $("e2e-engine-history").addEventListener("change", () =>
 
 installTrash(refreshLearning);
 
-$("e2e-features-run").addEventListener("change", suggestNames);
+function updateFeatureDatasets() {
+  if (!catalog) return;
+  const modality = catalog.runs.find(row => row.id === $("e2e-features-run").value)?.modality || "rgb";
+  options("e2e-features-data", catalog.datasets.filter(row => (row.modality || "rgb") === modality).map(datasetOption), `${modality === "evs" ? "EVS 20ch" : "RGB"}データセットを選択`);
+}
+$("e2e-features-run").addEventListener("change", () => {updateFeatureDatasets(); suggestNames();});
 action("e2e-start-features", () => start("features", {
   name: $("e2e-features-name").value, run: $("e2e-features-run").value,
   dataset: $("e2e-features-data").value, max_frames: Number($("e2e-features-max").value),

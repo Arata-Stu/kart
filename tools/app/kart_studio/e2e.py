@@ -378,6 +378,11 @@ class Learning:
             dataset = self.folder("datasets", body.get("dataset"))
             checkpoint = within(run, "best.pt")
             within(dataset, "samples.jsonl")
+            run_modality = read_json(within(run, "artifact.json")).get("modality", "rgb")
+            dataset_meta = within(dataset, "metadata.json", exists=False)
+            dataset_modality = read_json(dataset_meta if dataset_meta.is_file() else within(dataset, "artifact.json")).get("modality", "rgb")
+            if run_modality != dataset_modality:
+                raise ValueError("学習済み実験とデータセットの入力種別が一致しません")
             target = self.target("features", key)
             maximum = self.integer(body.get("max_frames", 12), 1, 64)
             repo = Path(cfg["encoder_repo"]).expanduser()
@@ -529,12 +534,12 @@ class Learning:
                 )
             elif plan["kind"] == "features":
                 report = read_json(within(output, "report.json"))
-                if report.get("schema") != "kart.rgb_features.v1" or not 1 <= report.get("frame_count", 0) <= 64:
+                if report.get("schema") not in ("kart.rgb_features.v1", "kart.evs_features.v1") or not 1 <= report.get("frame_count", 0) <= 64:
                     raise ValueError("Invalid feature report")
                 for frame in report["frames"]:
-                    for kind in ("rgb", "pca", "saliency"):
+                    for kind in (("rgb", "pca", "saliency", "channels") if report["schema"] == "kart.evs_features.v1" else ("rgb", "pca", "saliency")):
                         within(output, frame[kind])
-                metadata.update(frame_count=report["frame_count"], mode=report["mode"])
+                metadata.update(frame_count=report["frame_count"], mode=report["mode"], modality=report.get("modality", "rgb"))
             elif plan["kind"] in ("runs", "encoders"):
                 within(output, "encoder.pt" if plan["kind"] == "encoders" else "best.pt")
                 rows = within(output, "metrics.jsonl").read_text().splitlines()

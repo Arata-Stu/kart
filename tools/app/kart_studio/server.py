@@ -153,7 +153,7 @@ class Studio:
             action = path.rsplit("/", 1)[1]
             plan = self.learning.prepare(action, b)
             titles = {
-                "features": "RGB特徴量の可視化",
+                "features": "特徴量の可視化",
                 "dataset": "データセット作成",
                 "train": "DINOv3学習",
                 "distill": "ViT-S → ViT-Tiny特徴蒸留",
@@ -356,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == "/e2e-feature-image":
                 query = {k: v[-1] for k, v in parse_qs(url.query).items()}
                 filename = query.get("file", "")
-                if not re.fullmatch(r"frames/[0-9]{4}/(?:rgb|pca|saliency)\.png", filename):
+                if not re.fullmatch(r"frames/[0-9]{4}/(?:rgb|pca|saliency|channels)\.png", filename):
                     raise ValueError("Invalid feature image")
                 folder = self.server.studio.learning.folder("features", query.get("id", ""))
                 return self.reply(200, within(folder, filename).read_bytes(), "image/png")

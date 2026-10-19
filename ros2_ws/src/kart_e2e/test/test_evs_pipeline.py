@@ -336,6 +336,10 @@ class RealPolicyTests(unittest.TestCase):
                 result = export(policy, bundle)
                 self.assertLess(result['ort_max_abs_error'], 1e-5)
                 self.assertEqual(model_contract(bundle)[1], mode)
+                from kart_e2e.features import visualize
+                features = visualize(run / 'best.pt', dataset, REPO, root / (mode+'-features'), max_frames=1)
+                self.assertEqual(features['modality'], 'evs')
+                self.assertEqual(features['frame_count'], 1)
                 report = evaluate(bundle, dataset, root / (mode+'-eval'))
                 self.assertEqual(report['samples'], 1)
             # Full finetune permits encoder gradients; 320x240 input has no padding.

@@ -1276,6 +1276,8 @@ summary {
 .feature-dialog input[type=range] { width: 100%; }
 .feature-images { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
 .feature-images figure { margin: 0; }
+.feature-images .feature-channels { grid-column: 1 / -1; }
+.feature-images .feature-channels img { aspect-ratio: auto; }
 .feature-images img { width: 100%; aspect-ratio: 212 / 120; object-fit: contain; background: #18212a; }
 .feature-images figcaption { font-size: 16px; padding: 8px 0; }
 @media(max-width:700px) { .feature-images { grid-template-columns: 1fr; } }

@@ -595,7 +595,7 @@ python -m kart_e2e.features --checkpoint /path/to/run/best.pt \
 
 ROSノードではなくオフラインCLIで、ROS topic・独自ROS parameterはない。
 checkpoint/dataset/repo/outputは必須。deviceはcpu、max-framesは12が既定。
-重みのダウンロードは行わず学習済みcheckpointを読み込む。現在はRGB専用。
+重みのダウンロードは行わず学習済みcheckpointを読み込む。RGBと20ch EVSに対応。
 `e2e/features/YYYY-MM-DD/HH-MM-SS/<name>`にreport.json、画像、PCA基底を保存し、
 checkpoint・manifest・入力画像のSHA256を記録する。UIのごみ箱・復元にも対応する。
 PCAの基底と色範囲、入力感度の強度基準は結果内で共通。別結果の色は直接比較できない。
@@ -758,7 +758,7 @@ RAW manifest絶対パスを指定する。CLIも`--raw`/`--raw-manifest`省略�
 全体fine-tuning、損失カーブ、ONNX exportは共通操作で使用できる。
 EVSモデルの評価ではbagの代わりに作成済みEVSデータセットを選択する。
 RGB/EVSデータの混在とEVSへのRGB Tiny蒸留を拒否する。
-特徴量可視化はRGB専用。新規ROSノード・topic・parameterはない。
+特徴量可視化も20ch EVSに対応。新規ROSノード・topic・parameterはない。
 
 ### RAW readerのNumPy / h5py ABIエラー
 
@@ -800,3 +800,20 @@ metadata.jsonに設定値とRAWごとの観測最大遅れを保存する。GUI�
 対応するRAWが存在する`*.raw.tmp_index`だけが対象で、RAW本体・metadata.yaml・
 rosbag storage等は監視を継続する。変更時はファイル名をエラーに表示する。
 SDKの索引作成を録画継続と誤認しないための処理であり、録画中の抽出を許可するものではない。
+
+### 20ch EVSのオフライン特徴量可視化
+
+`e2e_features` / `python -m kart_e2e.features`はdatasetのmodalityでRGB/EVSを判定する。
+引数・既定値は共通（max-frames=12、1..64、device=cpu）。EVSは学習済みEVS checkpointと
+完全一致するmodel_specのcountsデータセットを使用し、入力種別やSPECの不一致を拒否する。
+RAW SDKは不要で、学習用PythonのPyTorchで実行する。
+
+EVSでは未正規化20ch countsをモデルの固定padding/mean/stdで処理し、
+実際のpatch tokensを共有PCAで可視化する。ステア感度は実際の制御headの出力から、
+未正規化20ch countsへの絶対勾配をchannel平均したもの。画像上の赤は局所感度であってattentionではない。
+入力表示はpositive=赤・negative=青、各10binの合計。別に正10bin/負10binの一覧PNGも出力する。
+表示のみlog1p＋非ゼロ値の共有p99スケールを使用し、モデル入力は変更しない。
+160x120と320x240のcontent座標を保持し、PCAはpadding分を除いて表示する。
+`kart.evs_features.v1`のreportとinput/PCA/saliency/channels PNG、PCA基底、入力hashを保存する。
+RGB reportとの読み込み互換を維持。GUIで実験を選ぶと同じmodalityのdataset候補を表示する。
+合成counts・ランダム重みで実装検証し、学習済み実データでの定性評価は利用者環境で行う。

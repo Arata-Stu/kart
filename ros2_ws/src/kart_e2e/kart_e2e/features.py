@@ -19,7 +19,7 @@ def sha256(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def sample_rows(dataset, maximum):
+def sample_rows(dataset, maximum, modality="rgb"):
     manifest = Path(dataset) / 'samples.jsonl'
     with manifest.open() as stream:
         count = sum(bool(line.strip()) for line in stream)
@@ -33,8 +33,8 @@ def sample_rows(dataset, maximum):
                 continue
             if index in indexes:
                 row = json.loads(line)
-                if 'image' not in row:
-                    raise ValueError('Feature visualization currently requires an RGB dataset')
+                if ('counts' if modality == 'evs' else 'image') not in row:
+                    raise ValueError(f'Feature visualization requires a {modality} dataset')
                 if any(not np.isfinite(float(row[key])) for key in ('steering','throttle')):
                     raise ValueError('Non-finite teacher label')
                 selected.append((index, row))
@@ -79,8 +79,9 @@ def visualize(checkpoint, dataset, repo, output, *, device='cpu', max_frames=12)
     if output.exists():
         raise FileExistsError(output)
     metadata = dataset / 'metadata.json'
-    if metadata.exists() and json.loads(metadata.read_text()).get('modality','rgb') != 'rgb':
-        raise ValueError('Feature visualization currently requires RGB, not EVS counts')
+    if metadata.exists() and json.loads(metadata.read_text()).get('modality','rgb') == 'evs':
+        from .evs_features import visualize as visualize_evs
+        return visualize_evs(checkpoint, dataset, repo, output, device=device, max_frames=max_frames)
     checkpoint_sha, manifest_sha = sha256(checkpoint), sha256(dataset/'samples.jsonl')
     selected = sample_rows(dataset, max_frames)
     model = load_checkpoint(checkpoint, repo, device)

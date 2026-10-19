@@ -4,6 +4,8 @@ export async function showFeatures(id) {
   const token = ++generation;
   const report = await api('e2e/features?id=' + encodeURIComponent(id));
   if (token !== generation) return;
+  const evs = report.modality === "evs";
+  $("e2e-features-title").textContent = evs ? "20ch EVSと特徴量" : "RGBと特徴量";
   const slider = $('e2e-features-slider');
   slider.max = report.frames.length - 1;
   slider.value = 0;
@@ -13,8 +15,11 @@ export async function showFeatures(id) {
     $('e2e-features-info').textContent = `${i+1} / ${report.frames.length} · sample ${frame.sample_index} · 開始から ${((frame.stamp_ns-report.frames[0].stamp_ns)/1e9).toFixed(3)} s · ステア 教師 ${frame.steering_label.toFixed(3)} / 予測 ${frame.steering_prediction.toFixed(3)}`;
     const root = $('e2e-features-images');
     root.replaceChildren();
-    for (const [key,label] of [['rgb','RGB（モデル入力）'],['pca','パッチ特徴 PCA'],['saliency','ステア入力感度']]) {
+    const views = [['rgb', evs ? 'EVS入力 · 正極性=赤／負極性=青' : 'RGB（モデル入力）'],['pca','パッチ特徴 PCA'],['saliency','ステア入力感度']];
+    if (evs) views.push(['channels','20ch · 上段=正／下段=負 · 左から時間bin 0〜9']);
+    for (const [key,label] of views) {
       const figure = document.createElement('figure');
+      if (key === 'channels') figure.className = 'feature-channels';
       const image = document.createElement('img');
       image.alt = label;
       image.src = '/e2e-feature-image?id=' + encodeURIComponent(id) + '&file=' + encodeURIComponent(frame[key]);

@@ -54,13 +54,6 @@ def test_checkpoint_report_and_images(tmp_path,image_format):
         visualize(checkpoint,dataset,tmp_path,output)
 
 
-def test_evs_and_path_escape_rejected(tmp_path):
-    data=tmp_path/'data';data.mkdir()
-    (data/'metadata.json').write_text('{"modality":"evs"}')
-    with pytest.raises(ValueError,match='RGB'):
-        visualize(tmp_path/'best.pt',data,tmp_path,tmp_path/'out')
-
-
 def test_dataset_image_cannot_escape(tmp_path):
     data=tmp_path/'data'; data.mkdir()
     Image.new('RGB',(212,120)).save(tmp_path/'outside.png')
@@ -70,3 +63,36 @@ def test_dataset_image_cannot_escape(tmp_path):
         with pytest.raises(ValueError,match='outside dataset'):
             visualize(checkpoint,data,tmp_path,tmp_path/'output')
     assert not (tmp_path/'output').exists()
+
+@pytest.mark.parametrize('width', [160,320])
+def test_evs_features_input_pca_gradient_and_channels(tmp_path,width):
+    from evs_fixtures import metadata
+    from kart_e2e.contract import evs_spec
+    from kart_e2e.event_encoder_model import PortableEventEncoder
+    from kart_e2e.evs_policy import EVSPolicy
+    class Backbone(torch.nn.Module):
+        def forward_features(self,x):
+            patches=torch.nn.functional.avg_pool2d(x.mean(1,keepdim=True),16).flatten(2).transpose(1,2)
+            return {'x_norm_patchtokens':patches.expand(-1,-1,384)}
+    model=EVSPolicy(PortableEventEncoder(Backbone(),metadata(width)),mode='steer_only').eval()
+    data=tmp_path/'data'; data.mkdir()
+    (data/'metadata.json').write_text(json.dumps(dict(modality='evs',model_spec=model.spec)))
+    h,w=model.spec['height'],model.spec['width']
+    counts=np.zeros((20,h,w),dtype=np.float32); counts[0,10:20,10:20]=4; counts[19,30:40,30:40]=2
+    np.save(data/'counts.npy',counts)
+    rows=[dict(counts='counts.npy',stamp_ns=i*100000000,steering=.1,throttle=.2) for i in range(3)]
+    (data/'samples.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in rows))
+    checkpoint=tmp_path/'best.pt';checkpoint.write_bytes(b'fixture')
+    with patch('kart_e2e.evs_features.load_checkpoint',return_value=model):
+        report=visualize(checkpoint,data,tmp_path,tmp_path/'out',max_frames=2)
+    assert report['schema']=='kart.evs_features.v1' and report['frame_count']==2
+    assert report['sensitivity_scale_p99']>0
+    for row in report['frames']:
+        for key in ('rgb','pca','saliency'):
+            assert Image.open(tmp_path/'out'/row[key]).size==(w,h)
+        assert Image.open(tmp_path/'out'/row['channels']).size==(10*w,2*(h+max(20,w//5)))
+        assert np.asarray(Image.open(tmp_path/'out'/row['rgb'])).max()>0
+    bad=dict(model.spec,width=1)
+    (data/'metadata.json').write_text(json.dumps(dict(modality='evs',model_spec=bad)))
+    with patch('kart_e2e.evs_features.load_checkpoint',return_value=model),pytest.raises(ValueError,match='spec mismatch'):
+        visualize(checkpoint,data,tmp_path,tmp_path/'bad')

@@ -567,12 +567,12 @@
           </div>
         </section>
         <section id="e2e-pane-features" class="learning-form" hidden>
-          <h2>RGBと学習済み特徴量を比較</h2>
+          <h2>入力と学習済み特徴量を比較</h2>
           <label>学習済み実験<select id="e2e-features-run"></select></label>
-          <label>RGBデータセット<select id="e2e-features-data"></select></label>
+          <label>データセット<select id="e2e-features-data"></select></label>
           <label>保存名<input id="e2e-features-name" maxlength="64" /></label>
           <label>確認フレーム数<input id="e2e-features-max" type="number" min="1" max="64" value="12" /></label>
-          <p class="help">データ全体から均等に選択。学習済みbest.ptを使用し、RGB・パッチ特徴PCA・ステアの入力感度を並べます。完了後、右の結果を選択してください。現在はRGBに対応しています。</p>
+          <p class="help">データ全体から均等に選択。学習済みbest.ptを使用し、RGBまたはEVS入力・パッチ特徴PCA・ステアの入力感度を並べます。EVSでは20ch一覧も表示します。完了後、右の結果を選択してください。</p>
           <button id="e2e-start-features" class="primary full">特徴量を可視化</button>
         </section>
         <section id="e2e-pane-push" class="learning-form" hidden>
@@ -1130,7 +1130,7 @@
     </dialog>
     <script type="module" src="app.js"></script>
   <dialog id="e2e-features-dialog" class="feature-dialog">
-  <div class="actions"><h2>RGBと特徴量</h2><button id="e2e-features-close">閉じる</button></div>
+  <div class="actions"><h2 id="e2e-features-title">入力と特徴量</h2><button id="e2e-features-close">閉じる</button></div>
   <p id="e2e-features-source" class="help"></p>
   <p class="help">PCAの色は特徴の違いを表します。同じ結果内で基準を共有します。赤はステア出力の局所的な入力感度です。注意領域や走行の正しさを保証する表示ではありません。</p>
   <label>フレーム<input id="e2e-features-slider" type="range" min="0" value="0" /></label>

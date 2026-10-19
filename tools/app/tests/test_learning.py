@@ -154,6 +154,30 @@ class LearningTests(unittest.TestCase):
         (bag / "metadata.yaml").write_text("updated bag")
         self.assertNotEqual(before, signature(bag, ignore_raw_indexes=True))
 
+    def test_evs_feature_publication_and_modality_rejection(self):
+        run = self.service.root / "runs/event-run"; run.mkdir()
+        atomic_json(run / "artifact.json", dict(created=1,modality="evs"))
+        (run / "best.pt").write_bytes(b"checkpoint")
+        data = self.dataset("event-data")
+        atomic_json(data / "metadata.json", dict(modality="evs",samples=2))
+        key = data.relative_to(self.service.root / "datasets").as_posix()
+        plan = self.service.prepare("features",dict(name="evs-features",run="event-run",dataset=key))
+        class FeatureJob(FakeJob):
+            def run(self,args,env=None):
+                output = Path(args[args.index("--output")+1]); output.mkdir()
+                folder=output/'frames/0000'; folder.mkdir(parents=True)
+                frame={}
+                for kind in ('rgb','pca','saliency','channels'):
+                    (folder/(kind+'.png')).write_bytes(b'fixture')
+                    frame[kind]='frames/0000/'+kind+'.png'
+                atomic_json(output/'report.json',dict(schema='kart.evs_features.v1',modality='evs',
+                            frame_count=1,mode='steer_only',frames=[frame]))
+        self.service.execute(FeatureJob(),plan)
+        self.assertEqual(self.service.catalog()['features'][0]['modality'],'evs')
+        atomic_json(data / "metadata.json",dict(modality='rgb'))
+        with self.assertRaisesRegex(ValueError,'入力種別'):
+            self.service.prepare("features",dict(name="wrong",run="event-run",dataset=key))
+
     def test_loss_history_and_invalid_records(self):
         import json
         run = self.service.root / "runs/history"
