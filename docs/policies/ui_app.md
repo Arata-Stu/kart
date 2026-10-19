@@ -199,3 +199,11 @@ UIは着色率を表示する。RGB表示は座標整合性の保証ではない
 RGB着色の既定遮蔽判定はNotebook GPU/EGL深度描画とする。
 CPU ray版はCLIで明示指定した場合のみ使用し、EGL失敗・software renderer時の暗黙fallbackは禁止。
 GPU描画とCPUのbag読込・色割当・保存の実行境界、および実GPU検証の有無を明記する。
+
+## 学習データセットの保存階層
+
+UIで新規作成するdatasetは`e2e/datasets/YYYY-MM-DD/HH-MM-SS/<name>/`へ保存する。
+作成要求時のサーバーローカル日時を使い、同一日時・同名の上書きを拒否する。
+内部IDと学習時の参照はdatasetsからの相対パスとし、日付を跨ぐ同名datasetを区別する。
+既存の平置きdatasetは移動せず参照可能にする。一覧は日付でグループ化する。
+読み込みは既存のパス境界・symlink拒否を維持し、一時成果物を公開しない。

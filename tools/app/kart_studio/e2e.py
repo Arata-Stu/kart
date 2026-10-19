@@ -1,5 +1,6 @@
 """Offline learning jobs and model bundles. No vehicle startup or arbitrary shell commands."""
 
+from datetime import datetime
 import importlib.util
 import math
 import os
@@ -18,7 +19,7 @@ from .storage import atomic_json, name, read_json, within
 class Learning:
     def __init__(self, repo, base, records, state):
         self.repo, self.records = repo, records
-        self.root = base / "e2e"
+        self.root = (base / "e2e").resolve()
         self.settings_file = state / "e2e.json"
         for kind in ("datasets", "runs", "models", "evaluations", "engines"):
             (self.root / kind).mkdir(parents=True, exist_ok=True)
@@ -63,13 +64,18 @@ class Learning:
         result = dict(settings=self.settings(), root=str(self.root))
         for kind in ("datasets", "runs", "models", "evaluations", "engines"):
             entries = []
-            for path in (self.root / kind).iterdir():
-                if path.name.startswith(".") or path.is_symlink() or not path.is_dir():
+            root = self.root / kind
+            artifacts = list(root.glob('*/artifact.json'))
+            if kind == 'datasets':
+                artifacts += list(root.glob('*/*/*/artifact.json'))
+            for artifact in artifacts:
+                path = artifact.parent
+                relative = path.relative_to(root).as_posix()
+                if any(part.startswith('.') for part in path.relative_to(root).parts):
                     continue
                 try:
-                    entries.append(
-                        {**read_json(within(path, "artifact.json")), "id": path.name}
-                    )
+                    self.folder(kind, relative)
+                    entries.append({**read_json(artifact), "id": relative, "name": path.name})
                 except (ValueError, OSError):
                     continue
             result[kind] = sorted(
@@ -78,7 +84,13 @@ class Learning:
         return result
 
     def folder(self, kind, key):
-        path = within(self.root / kind, name(key))
+        if kind == 'datasets' and isinstance(key, str) and re.fullmatch(
+            r"[0-9]{4}-[0-9]{2}-[0-9]{2}/[0-9]{2}-[0-9]{2}-[0-9]{2}/[A-Za-z0-9][A-Za-z0-9_-]{0,63}", key
+        ):
+            relative = key
+        else:
+            relative = name(key)
+        path = within(self.root / kind, relative)
         within(path, "artifact.json")
         return path
 
@@ -109,7 +121,10 @@ class Learning:
         return str(python), cfg, env
 
     def target(self, kind, key):
-        target = within(self.root / kind, name(key), exists=False)
+        relative = name(key)
+        if kind == 'datasets':
+            relative = datetime.now().strftime('%Y-%m-%d/%H-%M-%S/') + relative
+        target = within(self.root / kind, relative, exists=False)
         if target.exists():
             raise ValueError("同じ名前の成果物が存在します。別名にしてください")
         return target
@@ -145,6 +160,7 @@ class Learning:
             return {
                 **common,
                 "kind": "datasets",
+                "key": target.relative_to(self.root / "datasets").as_posix(),
                 "target": target,
                 "module": "preprocess_bag",
                 "args": args,
@@ -315,6 +331,9 @@ class Learning:
         return int(parsed)
 
     def execute(self, job, plan):
+        # Recheck confinement before creating the timestamp parents/staging directory.
+        within(self.root / plan["kind"], plan["target"].relative_to(self.root / plan["kind"]), exists=False)
+        plan["target"].parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(
             prefix=".work-", dir=plan["target"].parent
         ) as directory:

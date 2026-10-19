@@ -80,11 +80,11 @@ class LearningTests(unittest.TestCase):
     def dataset(self, name="data"):
         plan = self.service.prepare("dataset", dict(name=name, bag="bag"))
         self.service.execute(FakeJob(), plan)
-        return self.service.folder("datasets", name)
+        return self.service.folder("datasets", plan["key"])
 
     def test_missing_encoder_and_weights_identify_path(self):
-        self.dataset()
-        body = dict(name="run", train=["data"], validation=["data"])
+        dataset = self.dataset().relative_to(self.service.root / "datasets").as_posix()
+        body = dict(name="run", train=[dataset], validation=[dataset])
         missing = str(self.base / "missing")
         for field, message in (
             ("encoder_repo", "DINOv3ソース"),
@@ -123,13 +123,43 @@ class LearningTests(unittest.TestCase):
         self.assertEqual(self.service.catalog()["datasets"], [])
 
     def test_dataset_publication_and_overwrite(self):
-        folder = self.dataset()
+        with patch("kart_studio.e2e.datetime") as clock:
+            clock.now.return_value.strftime.return_value = "2026-10-19/12-34-56/"
+            folder = self.dataset()
+            with self.assertRaises(ValueError):
+                self.dataset()
+        self.assertEqual(folder.relative_to(self.service.root / "datasets").as_posix(), "2026-10-19/12-34-56/data")
         self.assertTrue((folder / "artifact.json").is_file())
         self.assertEqual(self.service.catalog()["datasets"][0]["samples"], 2)
         with self.assertRaises(ValueError):
-            self.dataset()
-        with self.assertRaises(ValueError):
             self.service.prepare("dataset", dict(name="bad", bag="../escape"))
+
+    def test_dataset_legacy_and_new_catalog_training_and_confinement(self):
+        legacy = self.service.root / "datasets/legacy"
+        legacy.mkdir()
+        atomic_json(legacy / "artifact.json", dict(created=1, samples=2, bag="bag"))
+        with patch("kart_studio.e2e.datetime") as clock:
+            clock.now.return_value.strftime.return_value = "2026-10-19/12-34-56/"
+            first = self.dataset("same")
+            clock.now.return_value.strftime.return_value = "2026-10-20/01-02-03/"
+            second = self.dataset("same")
+        self.assertNotEqual(first, second)
+        rows = self.service.catalog()["datasets"]
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(sum(row["name"] == "same" for row in rows), 2)
+        self.assertEqual(self.service.folder("datasets", "legacy"), legacy)
+        key = second.relative_to(self.service.root / "datasets").as_posix()
+        plan = self.service.prepare("train", dict(name="mixed", train=[key], validation=["legacy"]))
+        self.assertIn(str(second), plan["args"])
+        self.assertIn(str(legacy), plan["args"])
+        for bad in ("../escape", "/tmp/escape", "2026-10-19/12-34-56/../legacy", "a/b/c"):
+            with self.assertRaises(ValueError):
+                self.service.folder("datasets", bad)
+        linked = self.service.root / "datasets/2026-10-21"
+        linked.symlink_to(first.parent.parent, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            self.service.folder("datasets", "2026-10-21/12-34-56/same")
+        self.assertEqual(len(self.service.catalog()["datasets"]), 3)
 
     def test_cancel_and_failure_do_not_publish(self):
         for job in (FakeJob(cancelled=True), FakeJob(fail=True)):
@@ -155,12 +185,12 @@ class LearningTests(unittest.TestCase):
         self.assertFalse(list(plan["target"].parent.glob(".work-*")))
 
     def test_split_and_training_arguments(self):
-        self.dataset("train")
-        self.dataset("val")
+        train = self.dataset("train").relative_to(self.service.root / "datasets").as_posix()
+        val = self.dataset("val").relative_to(self.service.root / "datasets").as_posix()
         body = dict(
             name="run",
-            train=["train"],
-            validation=["val"],
+            train=[train],
+            validation=[val],
             mode="steer_only",
             fixed_throttle=0.12,
             max_throttle=0.25,
@@ -168,7 +198,7 @@ class LearningTests(unittest.TestCase):
             finetune=True,
         )
         # Both datasets originate from the same bag; identical dataset selection is also allowed.
-        self.service.prepare("train", {**body, "validation": ["train"]})
+        self.service.prepare("train", {**body, "validation": [train]})
         plan = self.service.prepare("train", body)
         job = FakeJob()
         self.service.execute(job, plan)

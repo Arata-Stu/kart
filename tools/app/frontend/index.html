@@ -357,7 +357,7 @@
           <label
             >データセット名<input
               id="e2e-dataset-name"
-              placeholder="例: session01"
+              placeholder="例: session01（日付・時刻は自動付与）"
               maxlength="64"
           /></label>
           <div class="form-grid">
@@ -392,7 +392,7 @@
             /></label>
           </details>
           <p class="help">
-            MANUAL走行のみ採用。ブレーキ・後退は除外します。Jetson内のbagは「転送」で先に受信してください。
+            固定収集bagは固定AUTOのみ、通常bagはMANUALを採用。ブレーキ・後退は除外します。Jetson内のbagは「転送」で先に受信してください。
           </p>
           <button id="e2e-create-dataset" class="primary full">
             データセットを作成

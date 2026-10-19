@@ -1,7 +1,8 @@
 import { showEvaluation, showEngine } from "./evaluation.js";
 import { $, state, api, action, on, emit, item, toast } from "./api.js";
-import { nextVersion } from "./learning_names.js";
+import { nextVersion, datasetOption, datasetName } from "./learning_names.js";
 let catalog = null;
+let bags = [];
 let step = "dataset";
 const kinds = {
   dataset: "datasets",
@@ -26,6 +27,12 @@ const fields = [
 ];
 function suggestNames() {
   if (!catalog) return;
+  const input = $("e2e-dataset-name");
+  const suggestion = datasetName(bags.find(row => row.id === $("e2e-bag").value));
+  if (!input.value || input.value === input.dataset.suggestion) {
+    input.value = suggestion;
+    input.dataset.suggestion = suggestion;
+  }
   const base =
     $("e2e-mode").value === "steer_only" ? "dinov3-steer" : "dinov3-control";
   for (const [id, prefix, kind] of [
@@ -52,10 +59,22 @@ function options(id, rows, title) {
     previous = new Set([...select.selectedOptions].map((o) => o.value));
   select.replaceChildren();
   if (!select.multiple) select.add(new Option(title, ""));
+  const groups = new Map();
   for (const row of rows) {
+    let parent = select;
+    if (row.group) {
+      if (!groups.has(row.group)) {
+        const group = document.createElement("optgroup");
+        group.label = row.group;
+        select.append(group);
+        groups.set(row.group, group);
+      }
+      parent = groups.get(row.group);
+    }
     const option = new Option(row.label || row.id, row.id);
     option.selected = previous.has(row.id);
-    select.add(option);
+    option.title = row.id;
+    parent.append(option);
   }
 }
 function render() {
@@ -87,14 +106,14 @@ function render() {
   for (const row of catalog[kind]) {
     let detail =
       kind === "datasets"
-        ? `${row.samples.toLocaleString()} samples · ${row.bag.split("/").pop()}`
+        ? `${row.id.includes("/") ? row.id.split("/").slice(0, -1).join(" ") + " · " : ""}${row.samples.toLocaleString()} samples · ${row.bag.split("/").pop()}`
         : kind === "runs"
           ? `${row.mode} · epoch ${row.metrics?.epoch ?? "—"} · val MSE ${row.metrics?.validation_mse?.toPrecision(4) ?? "—"}`
           : `${row.mode} · ORT最大誤差 ${Number(row.ort_max_abs_error).toExponential(2)}`;
     if (kind === "evaluations")
       detail = `${row.samples} frames · ${row.model} · steer MAE ${row.metrics.steering_command.mae.toFixed(4)}`;
     list.append(
-      item(row.id, detail, () => {
+      item(kind === "datasets" ? row.name || row.id : row.id, detail, () => {
         if (kind === "evaluations") return showEvaluation(row.id);
         if (step === "dataset") {
           setStep("train");
@@ -119,6 +138,7 @@ function setStep(next) {
 export async function refreshLearning() {
   const [data, records] = await Promise.all([api("e2e"), api("records")]);
   catalog = data;
+  bags = records;
   options(
     "e2e-bag",
     records.map((r) => ({ id: r.id, label: r.name + " · " + r.id })),
@@ -127,7 +147,7 @@ export async function refreshLearning() {
   for (const id of ["e2e-train-data", "e2e-validation-data"])
     options(
       id,
-      data.datasets.map((d) => ({ ...d, label: `${d.id} (${d.samples})` })),
+      data.datasets.map(datasetOption),
       "",
     );
   options("e2e-export-run", data.runs, "実験を選択");
@@ -142,6 +162,7 @@ export async function refreshLearning() {
   suggestNames();
   render();
 }
+$("e2e-bag").addEventListener("change", suggestNames);
 $("e2e-eval-model").addEventListener("change", suggestNames);
 $("e2e-mode").addEventListener("change", suggestNames);
 $("e2e-export-run").addEventListener("change", suggestNames);

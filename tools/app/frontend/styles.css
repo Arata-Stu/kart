@@ -1008,6 +1008,7 @@ summary {
   margin: 6px 0 10px;
 }
 .learning-form label {
+  font-size: 14px;
   margin-bottom: 8px;
   line-height: 1.4;
 }
@@ -1024,12 +1025,17 @@ summary {
 .learning-form label.check input {
   width: auto;
 }
+.learning-form select {
+  font-size: 16px;
+  line-height: 1.5;
+  min-height: 44px;
+}
 .learning-form select[multiple] {
-  height: 74px;
+  height: 148px;
   padding: 4px;
 }
 .learning-form select[multiple] option {
-  padding: 3px;
+  padding: 8px;
 }
 .learning-form details {
   margin: 10px 0;
@@ -1237,3 +1243,16 @@ summary {
 .dense-stage[data-status="running"] { border-color: #71a6ce; background: #eef6fc; }
 .dense-stage[data-status="stale"] { border-color: #d7af68; background: #fff8eb; }
 @media (max-width: 650px) { .dense-stages { grid-template-columns: 1fr; } }
+
+/* Bag and dataset names must remain readable in selection lists. */
+.record-item strong {
+  font-size: 16px;
+  line-height: 1.5;
+}
+.record-item small {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.learning-library .record-item {
+  padding: 12px;
+}
