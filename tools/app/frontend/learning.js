@@ -207,6 +207,7 @@ action("e2e-create-dataset", () =>
     modality: $("e2e-modality").value,
     raw_manifest: $("e2e-raw-manifest").value,
     sample_stride: Number($("e2e-sample-stride").value),
+    max_reorder_us: Number($("e2e-max-reorder").value),
     clock: $("e2e-clock").value,
     max_skew_ms: Number($("e2e-skew").value),
     image_topic: $("e2e-image-topic").value,

@@ -736,3 +736,7 @@ GUIの入力切替とジョブ生成・成果物公開をローカル検証済�
 EVS抽出時にh5pyで`numpy.dtype size changed`が出る場合は、EVS RAW抽出用Pythonの
 NumPyとapt版h5pyのABI不整合。kart_e2e READMEの「RAW readerのNumPy / h5py ABIエラー」
 を参照。RAWパスやmanifestの変更では解決しない。
+
+EVSのRAW順序乱れ許容幅は既定5000µs（0..100000、0は厳格）。
+窓終端＋許容幅まで先読みし、元時刻のまま安定整列する。時間補間・イベント削除は行わない。
+上限を超える逆行や負時刻は停止する。学習済みencoderの20ch定義は変更しない。

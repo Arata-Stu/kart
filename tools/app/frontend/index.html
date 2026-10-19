@@ -358,6 +358,7 @@
           <div id="e2e-evs-options" hidden>
             <p class="help">選択したbagと同じディレクトリのRAWを自動検出します。</p>
             <details><summary>RAWの対応を手動指定（複数RAW・再接続時）</summary><label>RAW manifest（省略時は自動検出）<input id="e2e-raw-manifest" placeholder="空欄で自動検出" /></label></details>
+            <label>RAW順序乱れの許容幅 µs（時刻は変更しません）<input id="e2e-max-reorder" type="number" min="0" max="100000" value="5000" /></label>
             <label>サンプル間隔（timing件数）<input id="e2e-sample-stride" type="number" min="1" value="10" /></label>
             <p class="help">RAWが1件、bagのstream・epochが1組なら自動対応します。複数の場合はmanifestを指定してください。EVS SDKを利用できるPython環境が必要です。encoder PT・JSONは「学習環境」で指定してください。</p>
           </div>

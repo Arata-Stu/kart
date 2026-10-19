@@ -206,12 +206,13 @@ class Learning:
                     raise ValueError("RAW manifestの絶対パスを指定してください")
                 raw_args = ["--raw-manifest", str(manifest)] if manifest is not None else []
                 stride = self.integer(body.get("sample_stride", 10), 1, 100000)
+                reorder = self.integer(body.get("max_reorder_us", 5000), 0, 100000)
                 return {**common, "kind":"datasets", "target":target,
                         "key":target.relative_to(self.root/"datasets").as_posix(),
                         "module":"preprocess_evs",
                         "args":[str(bag), "@OUTPUT@", *raw_args,
                                 "--model-json", str(model_json), "--clock", clock,
-                                "--sample-stride", str(stride), "--max-skew-ms", str(skew),
+                                "--sample-stride", str(stride), "--max-reorder-us", str(reorder), "--max-skew-ms", str(skew),
                                 "--command-topic", topics["command_topic"], "--mode-topic", topics["mode_topic"]],
                         "provenance":{"bag":str(bag), "modality":"evs", "raw_manifest":str(manifest) if manifest is not None else None},
                         "resources":["e2e-compute", "record:"+str(bag.relative_to(self.records.resolve()))]}

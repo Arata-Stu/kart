@@ -137,7 +137,7 @@ def load_manifest(path):
 
 class RawWindows:
     """Sequential, bounded-window reader. Never seek backwards across resets."""
-    def __init__(self, path, factory=None):
+    def __init__(self, path, factory=None, max_reorder_us=5000):
         if factory is None:
             if int(np.__version__.split('.')[0]) >= 2:
                 raise ValueError('This OpenEB RAW reader requires the NumPy 1.26 environment. '
@@ -148,6 +148,10 @@ class RawWindows:
             factory = RawReader
         self.reader = factory(str(path), do_time_shifting=False)
         self.shape = tuple(self.reader.get_size())
+        if type(max_reorder_us) is not int or not 0 <= max_reorder_us <= 100000:
+            raise ValueError("max_reorder_us must be an integer in 0..100000")
+        self.max_reorder_us = max_reorder_us
+        self.max_observed_reorder_us = 0
         self.path = str(path)
         self.events_read = 0
         self.buffer = None
@@ -158,7 +162,7 @@ class RawWindows:
         if start < self.requested:
             raise ValueError('RAW windows moved backwards; split sensor epochs')
         self.requested = start
-        while self.last is None or self.last < end:
+        while self.last is None or self.last < end + self.max_reorder_us:
             if self.reader.is_done():
                 break
             chunk = self.reader.load_n_events(100000)
@@ -168,10 +172,21 @@ class RawWindows:
                 raise ValueError('RAW reader made no progress')
             times = chunk['t'].astype(np.int64)
             backwards = np.flatnonzero(np.diff(times) < 0)
-            boundary = self.last is not None and int(times[0]) < self.last
-            if boundary or len(backwards):
-                index = 0 if boundary else int(backwards[0]) + 1
-                previous = self.last if boundary else int(times[index - 1])
+            highwater = np.maximum.accumulate(times)
+            if self.last is not None:
+                highwater = np.maximum(highwater, self.last)
+            # Python integers also handle a corrupt int64 timestamp without overflow.
+            invalid_negative = np.flatnonzero(times < 0)
+            if len(invalid_negative):
+                raise ValueError(f'Invalid negative RAW timestamp: path={self.path}; '
+                                 f'event_index={self.events_read + int(invalid_negative[0])}')
+            lag = highwater - times
+            self.max_observed_reorder_us = max(self.max_observed_reorder_us, int(lag.max()))
+            excessive = np.flatnonzero(lag > self.max_reorder_us)
+            if len(excessive):
+                index = int(excessive[0])
+                boundary = index == 0 and self.last is not None
+                previous = int(highwater[index])
                 current = int(times[index])
                 raise ValueError(
                     'RAW timestamp regression (possible reset or out-of-order events): '
@@ -183,12 +198,15 @@ class RawWindows:
                     f'chunk_min_us={int(times.min())}; chunk_max_us={int(times.max())}; '
                     f'within_chunk_regressions={len(backwards)}; '
                     f'requested_window_us=[{start},{end}); '
-                    'do_time_shifting=False. No sorting or timestamp correction applied.'
+                    f'max_reorder_us={self.max_reorder_us}; do_time_shifting=False. '
+                    'Regression exceeds reorder allowance; no timestamp correction applied.'
                 )
             self.events_read += len(chunk)
             if self.first is None:
-                self.first = int(chunk['t'][0])
-            self.last = int(chunk['t'][-1])
+                self.first = int(times.min())
+            else:
+                self.first = min(self.first, int(times.min()))
+            self.last = int(highwater[-1])
             if self.buffer is not None:
                 self.buffer = self.buffer[self.buffer['t'] >= start]
                 self.buffer = np.concatenate((self.buffer, chunk))
@@ -198,12 +216,13 @@ class RawWindows:
         if self.first is None or self.first > start or self.last < end:
             return None
         self.buffer = self.buffer[self.buffer['t'] >= start]
-        return self.buffer[self.buffer['t'] < end]
+        events = self.buffer[self.buffer['t'] < end]
+        return events[np.argsort(events['t'], kind='stable')]
 
 
 def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
             max_skew_ms=100, reader_factory=None, provenance=None, source_guard=None,
-            fixed_configs=()):
+            fixed_configs=(), max_reorder_us=5000):
     selection = TeacherSelection(fixed_configs, modes)
     spec = evs_spec(meta)
     if sample_stride < 1 or not 0 < max_skew_ms <= 1000:
@@ -243,7 +262,7 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
         (stage / 'counts').mkdir(parents=True)
         with (stage / 'samples.jsonl').open('w') as stream:
             for file in files:
-                raw = RawWindows(file['path'], reader_factory)
+                raw = RawWindows(file['path'], reader_factory, max_reorder_us=max_reorder_us)
                 if list(raw.shape) != spec['sensor_shape']:
                     raise ValueError('RAW sensor size differs from encoder metadata')
                 rows = groups[(file['stream_id'], file['sensor_epoch'])][::sample_stride]
@@ -274,7 +293,7 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
                     stream.write(json.dumps(sample) + '\n')
                 with Path(file['path']).open('rb') as source:
                     sha = hashlib.file_digest(source, 'sha256').hexdigest()
-                raw_provenance.append(dict(file, sha256=sha))
+                raw_provenance.append(dict(file, sha256=sha, max_observed_reorder_us=raw.max_observed_reorder_us))
         if not used:
             raise ValueError('No usable human teacher EVS windows; check RAW coverage/timing/teachers')
         for path, signature in signatures.items():
@@ -284,7 +303,7 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
         result = dict(schema=1, modality='evs', model_spec=spec, evs_metadata=meta,
                       samples=len(used), skipped=dict(counters), teacher_selection=selection.metadata(), timing_sequence_gaps=missing,
                       sample_stride=sample_stride, max_skew_ms=max_skew_ms,
-                      raw_time_shifting=False, raw_files=raw_provenance,
+                      raw_time_shifting=False, max_reorder_us=max_reorder_us, raw_files=raw_provenance,
                       label_time='tensor_stamp_ros_ns', extraction=provenance or {},
                       limitation='RAW reconstruction cannot reproduce online dropped/late packets; offset is receipt-derived')
         if source_guard is not None:
@@ -309,8 +328,12 @@ def main():
     p.add_argument('--timing-topic', default='/event_camera/tensor_timing')
     p.add_argument('--clock', choices=['header', 'bag'], default='header')
     p.add_argument('--sample-stride', type=int, default=10)
+    p.add_argument('--max-reorder-us', type=int, default=5000,
+                   help='Bounded RAW event reordering allowance; timestamps unchanged (0=strict)')
     p.add_argument('--max-skew-ms', type=float, default=100)
     a = p.parse_args()
+    if not 0 <= a.max_reorder_us <= 100000:
+        p.error('max-reorder-us must be 0..100000')
     if a.sample_stride < 1 or not 0 < a.max_skew_ms <= 1000:
         p.error('sample-stride >= 1 and 0 < max-skew-ms <= 1000 required')
     meta = json.loads(a.model_json.read_text())
@@ -348,7 +371,8 @@ def main():
                       str(v) if isinstance(v, Path) else v) for k, v in vars(a).items()}
     result = extract(files, commands, modes, timings, meta, a.output,
                      sample_stride=a.sample_stride, max_skew_ms=a.max_skew_ms,
-                     provenance=provenance, source_guard=guard, fixed_configs=fixed_configs)
+                     provenance=provenance, source_guard=guard, fixed_configs=fixed_configs,
+                     max_reorder_us=a.max_reorder_us)
     print(f"Exported {result['samples']} EVS samples; skipped {result['skipped']}")
 
 

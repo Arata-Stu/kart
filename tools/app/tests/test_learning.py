@@ -101,6 +101,9 @@ class LearningTests(unittest.TestCase):
                 self.service.prepare("dataset", dict(name="bad-env",bag="bag",modality="evs"))
             self.assertEqual(self.service.prepare("dataset", dict(name="rgb-env",bag="bag"))["python"], sys.executable)
         self.assertNotIn("--raw-manifest", auto["args"])
+        self.assertEqual(auto["args"][auto["args"].index("--max-reorder-us")+1], "5000")
+        with self.assertRaises(ValueError):
+            self.service.prepare("dataset", dict(name="bad-reorder",bag="bag",modality="evs",max_reorder_us=-1))
         self.assertIsNone(auto["provenance"]["raw_manifest"])
         self.assertEqual(plan["module"], "preprocess_evs")
         self.assertIn(str(manifest), plan["args"])

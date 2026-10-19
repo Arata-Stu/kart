@@ -158,8 +158,28 @@ class RawTests(unittest.TestCase):
         from kart_e2e.preprocess_evs import RawWindows
         chunk = self.events.copy()
         chunk['t'] = [0, 100, 99, 200, 40000, 50000]
-        raw = RawWindows('diagnostic.raw', self.reader([chunk]))
+        raw = RawWindows('diagnostic.raw', self.reader([chunk]), max_reorder_us=0)
         with self.assertRaisesRegex(ValueError, r'event_index=2; location=within_chunk; previous_us=100; current_us=99; backward_us=1;'):
+            raw.window(0, 40000)
+
+    def test_bounded_reorder_reads_ahead_across_chunks(self):
+        import numpy as np
+        from kart_e2e.preprocess_evs import RawWindows
+        first = self.events[:3].copy(); first['t'] = [0, 39000, 41000]
+        second = self.events[:3].copy(); second['t'] = [38000, 42000, 46000]
+        raw = RawWindows('reorder.raw', self.reader([first, second]), max_reorder_us=5000)
+        events = raw.window(0, 40000)
+        self.assertEqual(events['t'].tolist(), [0, 38000, 39000])
+        self.assertEqual(raw.max_observed_reorder_us, 3000)
+        self.assertEqual(raw.window(35000, 45000)['t'].tolist(), [38000, 39000, 41000, 42000])
+        bad = second.copy(); bad['t'][0] = 35000
+        raw = RawWindows('reset.raw', self.reader([first, bad]), max_reorder_us=5000)
+        with self.assertRaisesRegex(ValueError, 'backward_us=6000'):
+            raw.window(0, 40000)
+        # Cumulative regressions are bounded against the highwater, not adjacent values.
+        descending = self.events.copy(); descending['t'] = [0, 10000, 8000, 6000, 4000, 20000]
+        raw = RawWindows('reset.raw', self.reader([descending]), max_reorder_us=5000)
+        with self.assertRaisesRegex(ValueError, 'backward_us=6000'):
             raw.window(0, 40000)
 
     def test_causal_labels_epoch_mapping_atomic_output_and_gaps(self):
