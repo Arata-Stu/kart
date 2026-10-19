@@ -239,6 +239,12 @@ READMEの自由文だけでは正確な自動生成は難しい。導入時に�
 - 実行できない確認は理由と未確認範囲を残したか。
 - 方針を変更した場合は本書とルート`AGENTS.md`を必要に応じて更新したか。
 
+`build.sh`はJetsonではsimを既定でdiscoveryから除外し、package間1並列・compiler2並列を
+基準にする。明示的なsim選択・colcon並列指定・既存build環境を尊重する。
+除外は呼出しごとの`--packages-ignore`とし、共有checkoutへ`COLCON_IGNORE`を作らない。
+一般ARMをJetsonと同一視せず、検出できないcontainerではprofileを明示する。
+
+
 この方針はrepo内で管理し、会話履歴やセッション固有の記憶だけに依存させない。
 
 ## 8. ホスト単位のハードウェア監視

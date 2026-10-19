@@ -554,7 +554,7 @@ collect/e2eは未設定mountをログ表示して省略する。設定済みmoun
 ROS結合と実機の取付座標・TF接続は別途確認が必要。
 
 ```bash
-bash scripts/build.sh --packages-up-to kart_bringup
+bash scripts/build.sh --with-sim --packages-up-to kart_sim kart_bringup
 source ros2_ws/install/setup.bash
 # bringup実行中、別ターミナルで確認
 ros2 run tf2_ros tf2_echo base_link camera_link
@@ -815,3 +815,6 @@ TensorRT入力/topic型は/event_camera/tensor / isaac_ros_tensor_msgs/msg/Tenso
 独自service/actionは追加なし。ROS標準自動topicは省略。
 既存e2e.launch.pyはRGB専用としてEVSモデルの誤接続を拒否する。
 構成とbinding照合を代替fixtureで検証。実SDK/ROS/Jetson/車両は未確認。
+
+Jetsonの通常buildは`kart_sim`を探索対象から除外する。simを使う場合は上記の
+`--with-sim`で明示的に含める。実機用bringupの起動ではsim packageは不要。

@@ -128,12 +128,33 @@ SSH/HTTPS認証は別途用意する必要がある。git worktreeで`.git`が�
 
 コンテナ内の対話BashはLyricalと、存在する場合はワークスペースのinstallをsourceする。
 ワークスペースのビルドはコンテナ内で次を実行する。スクリプトが`ros2_ws`へ移動し、
-`colcon build --symlink-install`を実行する。追加引数はそのままcolconへ渡す。
+`colcon build --symlink-install`を実行する。wrapper引数（colcon引数より前に指定）:
+
+| 引数 | 既定 | 内容 |
+|---|---|---|
+| `--profile auto\|jetson\|desktop` | auto | Jetsonはsim除外、packageを1つずつ、compilerは2並列。desktopは従来どおり |
+| `--with-sim` / `--without-sim` | profile依存 | kart_simの既定除外を解除／全hostで除外 |
+| `--jobs N` | Jetsonは2 | package内のコンパイル並列数。MAKEFLAGS/CMAKE_BUILD_PARALLEL_LEVELに適用 |
+
+Jetson自動判定はLinux/aarch64かつTegra kernel、nv_tegra_release、Jetson device-treeのいずれか。
+一般のARM機をJetson扱いしない。Docker内で検出できない場合は`--profile jetson`で明示する。
+`--executor` / `--parallel-workers`と既存のMAKEFLAGS/CMAKE_BUILD_PARALLEL_LEVELは優先する。
+`--jobs`だけは明示要求として両環境変数のジョブ設定を上書きする。
+その他の引数はcolconへ渡す。wrapper引数は最初のcolcon引数より前に置く。
+
+simは`--packages-ignore kart_sim`で探索・依存グラフから除外するため、sim未ビルドでも
+通常のbringupをビルドできる。sim起動時だけ`--with-sim`を付ける。
+`--packages-select kart_sim`や`--packages-up-to kart_sim kart_bringup`の明示選択も尊重する。
+regexなど間接的に選択する場合は`--with-sim`を明示する。
+既存のsim成果物は削除しない。`COLCON_IGNORE`ファイルも作成しない。
+実装は[build.sh](scripts/build.sh)、検証は`python3 -m unittest discover -s scripts/tests -p test_build.py`。
 
 ```bash
 /workspaces/scripts/build.sh
-# 車両関連だけビルドする場合
-/workspaces/scripts/build.sh --packages-up-to kart_bringup
+# Jetson用設定を明示して車両関連だけビルド
+/workspaces/scripts/build.sh --profile jetson --packages-up-to kart_bringup
+# simも含める場合
+/workspaces/scripts/build.sh --with-sim --packages-up-to kart_sim kart_bringup
 source /workspaces/ros2_ws/install/setup.bash
 ```
 

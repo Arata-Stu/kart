@@ -357,11 +357,19 @@ ros2 pkg prefix realsense2_camera
 /usr/bin/python3 -c 'import tensorrt; print(tensorrt.__version__)'
 nvidia-smi
 
-/workspaces/scripts/build.sh
+/workspaces/scripts/build.sh --profile jetson
 source install/setup.bash
 colcon test --packages-select kart_system kart_vehicle kart_joy
 colcon test-result --verbose
 ```
+
+Jetson profileは`kart_sim`を探索対象から外し、packageを1つずつ・package内compilerを2並列にする。
+同時に複数の重いC++ビルドを走らせることによるメモリ圧迫を抑える設定であり、
+実行時間の短縮を保証するものではない。自動判定できる環境ではprofile指定を省略できる。
+さらにメモリを抑える場合は`--profile jetson --jobs 1`、simが必要なら`--with-sim`を
+colcon引数より前へ追加する。明示的な`--executor`/`--parallel-workers`と既存の
+MAKEFLAGS/CMAKE_BUILD_PARALLEL_LEVELは保持する。未変更のpackageを除くときは
+`--packages-select kart_control kart_system`など対象を明示する（依存が導入済みの場合）。
 
 ワークスペースの外部依存はDockerイメージへ導入済みとする。通常は`rosdep install`不要。
 依存を追加した場合は`package.xml`と`docker/Dockerfile.kart`を更新してイメージを再ビルドする。

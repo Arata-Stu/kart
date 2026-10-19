@@ -152,7 +152,7 @@ Dockerfileに[MuJoCo 3.3.7](https://pypi.org/project/mujoco/3.3.7/)、GL/EGL/GLF
 
 ```bash
 cd /workspaces
-scripts/build.sh --packages-up-to kart_sim kart_bringup
+scripts/build.sh --with-sim --packages-up-to kart_sim kart_bringup
 source ros2_ws/install/setup.bash
 scripts/sim.sh --map minicar_2026
 # GUI/カメラが使えるLinux描画環境の場合
@@ -312,3 +312,6 @@ BEVは観察用でセンサtopic・bag・制御入力には含めない。追加
 最後に検出したsim時刻とgeom名をmonitorへ表示する。Resetで履歴を消す。
 接触は停止原因の証明ではなく、段差・床接触はこの履歴に含めない。
 制御のtracking状態と最後のtracking異常も表示して停止の切り分けに使う。
+
+Jetsonの通常buildは`kart_sim`を探索対象から除外する。simを使う場合は上記の
+`--with-sim`で明示的に含める。実機用bringupの起動ではsim packageは不要。
