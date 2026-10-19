@@ -150,7 +150,7 @@ steer-onlyは学習を`--mode steer_only`にする。encoder既定凍結、`--fi
 Torch CLIをROS外で実行する場合は`PYTHONPATH=ros2_ws/src/kart_e2e python -m kart_e2e.train ...`
 または`-m kart_e2e.export_onnx ...`。rosbag抽出のみROSメッセージ環境が必要。
 
-学習既定: epochs=10, batch-size=32, learning-rate=1e-4, seed=42, device=cuda。
+学習既定: epochs=10, batch-size=32, learning-rate=1e-4（凍結）／1e-5（`--finetune`）, seed=42, device=cuda。
 train/validation/repo/weights/outputは必須。MSEと出力別MAEを保存し最良validationのbest.ptを保存。
 公式重みはstrict load、取得失敗時にrandomへfallbackしない。train/validationは同一bag・同一データセットでも実行可能。
 exportは固定batch=1、opset17。checkerと3入力のONNX Runtime比較が通ってからmetadataを作る。
@@ -602,3 +602,16 @@ PCAの基底と色範囲、入力感度の強度基準は結果内で共通。�
 PCAは空間的な特徴の違いであり、制御headがその領域を使った証明ではない。
 赤い入力感度は実際のステア出力の局所勾配で、attentionや走行成功率とは異なる。
 PyTorch checkpointの確認であり、ONNX/TensorRTとの数値同等性はexport時の検証を用いる。
+
+
+### 全体fine-tuning
+
+`--finetune`はDINOv3 backboneを凍結せず、制御headと一緒に全体をAdamWで更新する。
+学習率未指定時は全trainable parameterに`1e-5`（通常のhead学習は`1e-4`）を使用する。
+`--learning-rate`を明示すると指定値を優先する。epoch既定は両方式とも10。
+Notebook UIでは「全体をfine-tuning」を選択する。標準学習率は切替に追従し、
+別の値を手入力している場合は保持する。学習名候補に`-finetune`を付け、既存実験と別に保存する。
+初期値は学習環境のローカル事前学習重み。既存best.ptからの再開ではない。
+RGB/EVSのCLIに共通し、best.pt→ONNX→TensorRTは同じ経路を使用する。
+`run.json`とcheckpointのprovenanceにfinetune・実効学習率・更新対象parameter数を記録する。
+起動ログにも実効設定を出力する。全体学習の品質・GPUメモリ使用量は実データ／対象GPUで別途確認する。

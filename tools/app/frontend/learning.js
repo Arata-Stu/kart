@@ -1,3 +1,4 @@
+import { showLoss } from "./loss_curve.js";
 import { installBagPicker } from "./bag_picker.js";
 import { showFeatures } from "./features.js";
 import { trashButton, installTrash } from "./learning_trash.js";
@@ -42,7 +43,7 @@ function suggestNames() {
   const base =
     $("e2e-mode").value === "steer_only" ? "dinov3-steer" : "dinov3-control";
   for (const [id, prefix, kind] of [
-    ["e2e-run-name", base, "runs"],
+    ["e2e-run-name", base + ($("e2e-finetune").checked ? "-finetune" : ""), "runs"],
     ["e2e-features-name", ($("e2e-features-run").value || base) + "-features", "features"],
     ["e2e-model-name", $("e2e-export-run").value || base, "models"],
     [
@@ -115,7 +116,7 @@ function render() {
       kind === "datasets"
         ? `${row.id.includes("/") ? row.id.split("/").slice(0, -1).join(" ") + " · " : ""}${row.samples.toLocaleString()} samples · ${row.bag.split("/").pop()}`
         : kind === "runs"
-          ? `${row.mode} · epoch ${row.metrics?.epoch ?? "—"} · val MSE ${row.metrics?.validation_mse?.toPrecision(4) ?? "—"}`
+          ? `${row.finetune ? "全体fine-tuning" : "head学習"} · ${row.mode} · epoch ${row.metrics?.epoch ?? "—"} · val MSE ${row.metrics?.validation_mse?.toPrecision(4) ?? "—"}`
           : `${row.mode} · ORT最大誤差 ${Number(row.ort_max_abs_error).toExponential(2)}`;
     if (kind === "evaluations")
       detail = `${row.samples} frames · ${row.model} · steer MAE ${row.metrics.steering_command.mae.toFixed(4)}`;
@@ -130,6 +131,7 @@ function render() {
           setStep("train");
           $("e2e-train-data").value = row.id;
         } else if (kind === "runs") {
+          if (step === "train") return showLoss(row.id);
           setStep("export");
           $("e2e-export-run").value = row.id;
           suggestNames();
@@ -255,8 +257,11 @@ action("e2e-settings-save", async () => {
   await refreshLearning();
   toast("学習環境を保存しました");
 });
-on("job-finished", () => {
-  if (catalog) return refreshLearning();
+on("job-finished", async ({detail:job}) => {
+  if (catalog) await refreshLearning();
+  if (job.status === 'succeeded' && job.result?.kind === 'runs' &&
+      step === 'train' && !$("learning-page").hidden && !document.querySelector('dialog[open]'))
+    await showLoss(job.result.id);
 });
 on("connection", render);
 
@@ -282,3 +287,14 @@ action("e2e-start-features", () => start("features", {
   name: $("e2e-features-name").value, run: $("e2e-features-run").value,
   dataset: $("e2e-features-data").value, max_frames: Number($("e2e-features-max").value),
 }));
+
+$("e2e-finetune").addEventListener("change", () => {
+  const finetune = $("e2e-finetune").checked;
+  const lr = $("e2e-lr");
+  if (Number(lr.value) === (finetune ? 1e-4 : 1e-5))
+    lr.value = finetune ? '0.00001' : '0.0001';
+  $("e2e-training-scope").textContent = finetune
+    ? 'backboneを凍結せず、headと一緒に全体を更新。既定学習率 1e-5。学習率は手動変更できます。'
+    : 'backboneを凍結してheadのみ学習。既定学習率 1e-4。';
+  suggestNames();
+});

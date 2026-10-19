@@ -103,6 +103,26 @@ class Learning:
         within(path, "artifact.json")
         return path
 
+    def loss(self, key):
+        folder = self.folder("runs", key)
+        metrics = []
+        import json
+        for line in within(folder, "metrics.jsonl").read_text().splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            epoch = row.get("epoch")
+            if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch <= (metrics[-1]["epoch"] if metrics else 0):
+                raise ValueError("Invalid loss epoch sequence")
+            for field in ("train_mse", "validation_mse"):
+                value = row.get(field)
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+                    raise ValueError("Invalid training loss")
+            metrics.append({field: row[field] for field in ("epoch", "train_mse", "validation_mse")})
+        if not metrics:
+            raise ValueError("損失の記録がありません")
+        return dict(id=key, metrics=metrics)
+
     def runtime(self, action=None):
         cfg = self.settings()
         field = (
@@ -209,7 +229,6 @@ class Learning:
                 )
             epochs = self.integer(body.get("epochs", 10), 1, 100000)
             batch = self.integer(body.get("batch_size", 32), 1, 4096)
-            lr = self.number(body.get("learning_rate", 0.0001), 1e-9, 1)
             fixed = self.number(body.get("fixed_throttle", 0.0), 0, 1)
             maximum = self.number(body.get("max_throttle", 0.2), 0, 1)
             if fixed > maximum:
@@ -217,6 +236,7 @@ class Learning:
             finetune = body.get("finetune", False)
             if not isinstance(finetune, bool):
                 raise ValueError("finetuneはboolです")
+            lr = self.number(body.get("learning_rate", 1e-5 if finetune else 1e-4), 1e-9, 1)
             args = [
                 "--train",
                 *map(str, groups[0]),
@@ -256,6 +276,8 @@ class Learning:
                     "train": body["train"],
                     "validation": body["validation"],
                     "epochs": epochs,
+                    "finetune": finetune,
+                    "learning_rate": lr,
                 },
                 "resources": ["e2e-compute", *["e2e:datasets:" + item for item in (*body["train"], *body["validation"])]],
             }

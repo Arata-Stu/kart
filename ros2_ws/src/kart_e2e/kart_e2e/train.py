@@ -88,13 +88,16 @@ def main():
         "--max-throttle", type=float, default=0.2, help="Deployment output ceiling"
     )
     p.add_argument("--modality", choices=["rgb", "evs"], default="rgb")
-    p.add_argument("--finetune", action="store_true")
+    p.add_argument("--finetune", action="store_true", help="Update the full backbone and control head")
     p.add_argument("--device", default="cuda")
     p.add_argument("--epochs", type=int, default=10)
     p.add_argument("--batch-size", type=int, default=32)
-    p.add_argument("--learning-rate", type=float, default=1e-4)
+    p.add_argument("--learning-rate", type=float, default=None,
+                   help="AdamW learning rate for all trainable parameters (default: 1e-4 frozen, 1e-5 finetune)")
     p.add_argument("--seed", type=int, default=42)
     a = p.parse_args()
+    if a.learning_rate is None:
+        a.learning_rate = 1e-5 if a.finetune else 1e-4
     if (
         a.epochs <= 0
         or a.batch_size <= 0
@@ -137,6 +140,10 @@ def main():
     }
     provenance["train"] = [str(r.resolve()) for r in a.train]
     provenance["validation"] = [str(r.resolve()) for r in a.validation]
+    provenance["trainable_parameters"] = sum(v.numel() for v in model.parameters() if v.requires_grad)
+    provenance["total_parameters"] = sum(v.numel() for v in model.parameters())
+    print(f"Training: finetune={a.finetune}; lr={a.learning_rate:g}; "
+          f"trainable={provenance['trainable_parameters']}/{provenance['total_parameters']}", flush=True)
     provenance["weights_sha256"] = hashlib.sha256(a.weights.read_bytes()).hexdigest()
     (a.output / "run.json").write_text(json.dumps(provenance, indent=2))
     best = float("inf")

@@ -1285,3 +1285,13 @@ summary {
 #e2e-bag-tree { max-height: 58vh; overflow: auto; }
 #e2e-bag-tree .remote-tree-row { font-size: 16px; padding: 10px 12px; }
 #e2e-bag-choose, #e2e-eval-bag-choose { display: block; width: 100%; text-align: left; font-size: 16px; overflow-wrap: anywhere; }
+
+.loss-dialog { width: min(1000px,94vw); max-height: 92vh; overflow: auto; }
+.loss-dialog h2 { margin-right: auto; overflow-wrap: anywhere; }
+#e2e-loss-chart { display: block; width: 100%; background: #f7f9fb; border-radius: 8px; }
+.loss-legend { font-size: 15px; }
+.loss-legend span:first-child { color: #177f86; margin-right: 16px; }
+.loss-legend span:nth-child(2) { color: #a04fa5; }
+.loss-table { max-height: 220px; overflow: auto; }
+.loss-table td, .loss-table th { padding: 8px 16px; text-align: right; }
+#e2e-loss-export { margin-top: 12px; }

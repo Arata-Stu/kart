@@ -82,6 +82,26 @@ class LearningTests(unittest.TestCase):
         self.service.execute(FakeJob(), plan)
         return self.service.folder("datasets", plan["key"])
 
+    def test_loss_history_and_invalid_records(self):
+        import json
+        run = self.service.root / "runs/history"
+        run.mkdir()
+        atomic_json(run / "artifact.json", dict(created=1, kind="runs"))
+        rows = [dict(epoch=1, train_mse=.4, validation_mse=.3),
+                dict(epoch=2, train_mse=.1, validation_mse=.2)]
+        metrics = run / "metrics.jsonl"
+        metrics.write_text("\n".join(map(json.dumps, rows)))
+        self.assertEqual(self.service.loss("history")["metrics"], rows)
+        for bad in ([], [dict(epoch=1, validation_mse=.1)],
+                    [dict(epoch=1, train_mse=float('nan'), validation_mse=.1)],
+                    [dict(epoch=1, train_mse=-.1, validation_mse=.1)],
+                    [rows[1], rows[0]], [rows[0], rows[0]]):
+            metrics.write_text("\n".join(map(json.dumps, bad)))
+            with self.assertRaises(ValueError):
+                self.service.loss("history")
+        with self.assertRaises(ValueError):
+            self.service.loss("../history")
+
     def test_missing_encoder_and_weights_identify_path(self):
         dataset = self.dataset().relative_to(self.service.root / "datasets").as_posix()
         body = dict(name="run", train=[dataset], validation=[dataset])
@@ -202,6 +222,14 @@ class LearningTests(unittest.TestCase):
         plan = self.service.prepare("train", body)
         defaults = self.service.prepare("train", {key: value for key, value in body.items() if key != "epochs"})
         self.assertEqual(defaults["args"][defaults["args"].index("--epochs") + 1], "10")
+        self.assertEqual(defaults["args"][defaults["args"].index("--learning-rate") + 1], "1e-05")
+        self.assertTrue(defaults["provenance"]["finetune"])
+        frozen = self.service.prepare("train", {**body, "finetune": False})
+        self.assertNotIn("--finetune", frozen["args"])
+        self.assertEqual(frozen["provenance"]["learning_rate"], 1e-4)
+        explicit = self.service.prepare("train", {**body, "learning_rate": 2e-6})
+        self.assertEqual(explicit["provenance"]["learning_rate"], 2e-6)
+
         job = FakeJob()
         self.service.execute(job, plan)
         self.assertEqual(job.args[job.args.index("--fixed-throttle") + 1], "0.12")

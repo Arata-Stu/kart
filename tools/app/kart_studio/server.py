@@ -80,6 +80,8 @@ class Studio:
             return dense.catalog(self.maps, key)
         if path == "/api/vgl":
             return vgl.catalog(self, key)
+        if path == "/api/e2e/loss":
+            return self.learning.loss(key)
         if path == "/api/e2e/engine":
             folder = self.learning.folder("engines", key)
             return read_json(within(folder, "report.json"))

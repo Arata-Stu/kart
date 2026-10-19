@@ -466,7 +466,7 @@
                 id="e2e-lr"
                 type="number"
                 value="0.0001"
-                step="0.00001"
+                step="0.000001"
                 min="0.000000001"
             /></label>
           </div>
@@ -474,12 +474,14 @@
             ><input
               id="e2e-finetune"
               type="checkbox"
-            />encoderも更新する（未選択は凍結）</label
+            />全体をfine-tuning（DINOv3 backbone＋制御headを更新）</label
           >
+          <p id="e2e-training-scope" class="help">backboneを凍結してheadのみ学習。既定学習率 1e-4。</p>
           <p class="help">
             steer-onlyの固定スロットルは走行時に設定します。学習はNotebookの設定済み環境で実行します。
           </p>
           <button id="e2e-start-train" class="primary full">学習を開始</button>
+          <p class="help">学習完了後に損失カーブを表示します。過去の結果も右の学習済み実験から確認できます。</p>
         </section>
         <section id="e2e-pane-export" class="learning-form" hidden>
           <h2>最良checkpointをONNXへ変換</h2>
@@ -1104,6 +1106,15 @@
   <div class="actions"><h2>Notebookのrosbagを選択</h2><button id="e2e-bag-close">閉じる</button></div>
   <p class="help">フォルダを展開してbagを選択してください。▣がbagです。</p>
   <ul id="e2e-bag-tree" class="remote-tree" aria-label="Notebookのrecordフォルダ"></ul>
+</dialog>
+<dialog id="e2e-loss-dialog" class="loss-dialog">
+  <div class="actions"><h2 id="e2e-loss-title">損失カーブ</h2><button id="e2e-loss-close">閉じる</button></div>
+  <p id="e2e-loss-summary"></p>
+  <p class="loss-legend"><span>● 学習MSE</span><span>● 検証MSE</span> · 破線＝最良epoch（best.pt）</p>
+  <svg id="e2e-loss-chart" viewBox="0 0 880 300" role="img" aria-label="epochごとの学習損失と検証損失"></svg>
+  <p class="help">平均二乗誤差（MSE）、平滑化なし。学習損失だけが低下して検証損失が上がる場合は、過学習の可能性があります。学習時と検証時ではDropout等の動作が異なります。同じbagを両方に使った場合は未知データへの汎化を評価できません。</p>
+  <details><summary>epochごとの数値</summary><div class="loss-table"><table><thead><tr><th>Epoch</th><th>学習MSE</th><th>検証MSE</th></tr></thead><tbody id="e2e-loss-rows"></tbody></table></div></details>
+  <button id="e2e-loss-export">この実験のONNX exportへ</button>
 </dialog>
 </body>
 </html>

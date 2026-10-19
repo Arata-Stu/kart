@@ -52,3 +52,28 @@ class ModelTests(unittest.TestCase):
         model = Policy(encoder, "steer_only", frozen=False)
         model(image).sum().backward()
         self.assertTrue(any(p.grad is not None for p in encoder.parameters()))
+
+    def test_full_finetune_updates_backbone_and_head(self):
+        import torch
+        from kart_e2e.model import Policy, backbone
+        torch.set_num_threads(2)
+        torch.manual_seed(42)
+        model = Policy(backbone(REPO), "steer_only", frozen=False)
+        model.train()
+        self.assertTrue(model.encoder.training)
+        self.assertTrue(all(p.requires_grad for p in model.encoder.parameters()))
+        encoder_weight = model.encoder.patch_embed.proj.weight
+        head_weight = model.head[0].weight
+        before_encoder = encoder_weight.detach().clone()
+        before_head = head_weight.detach().clone()
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
+        value = torch.randn(1,3,128,224)
+        loss = torch.nn.functional.mse_loss(model(value), torch.ones(1,1)*.5)
+        loss.backward()
+        self.assertIsNotNone(encoder_weight.grad)
+        self.assertGreater(encoder_weight.grad.abs().sum().item(), 0)
+        optimizer.step()
+        self.assertFalse(torch.equal(before_encoder, encoder_weight))
+        self.assertFalse(torch.equal(before_head, head_weight))
+        model.eval()
+        self.assertFalse(model.encoder.training)
