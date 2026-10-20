@@ -311,6 +311,9 @@ class Learning:
             feature_cache = body.get("feature_cache", True)
             if not isinstance(feature_cache, bool):
                 raise ValueError("feature_cacheはboolです")
+            ram_preload = body.get("ram_preload", True)
+            if not isinstance(ram_preload, bool):
+                raise ValueError("ram_preloadはboolです")
             workers = self.integer(body.get("num_workers", 8), 0, 64)
             lr = self.number(body.get("learning_rate", 1e-4 if scratch else (1e-5 if finetune else 1e-4)), 1e-9, 1)
             if action == "distill":
@@ -320,11 +323,12 @@ class Learning:
                         "--epochs", str(epochs), "--batch-size", str(batch), "--learning-rate", str(lr),
                         "--device", cfg["device"], "--num-workers", str(workers),
                         "--cache-dir", str(self.root / '.feature_cache'),
-                        "--feature-cache" if feature_cache else "--no-feature-cache"]
+                        "--feature-cache" if feature_cache else "--no-feature-cache",
+                        "--ram-preload" if ram_preload else "--no-ram-preload"]
                 return {**common, "kind":"encoders", "target":target,
                         "key":target.relative_to(self.root/"encoders").as_posix(), "module":"distill", "args":args,
                         "provenance":dict(architecture="dinov3_vitt16", teacher_run=body.get("teacher_run"),
-                                          train=body["train"], validation=body["validation"], epochs=epochs),
+                                          train=body["train"], validation=body["validation"], epochs=epochs, ram_preload=ram_preload),
                         "resources":["e2e-compute", *source_resources,
                                      *["e2e:datasets:"+item for item in (*body["train"],*body["validation"])]]}
             loss = body.get("loss", "smooth_l1")
@@ -366,7 +370,9 @@ class Learning:
                 raise ValueError("学習精度はauto / fp32 / bf16 / fp16です")
             if precision in ("bf16", "fp16") and not cfg["device"].startswith("cuda"):
                 raise ValueError("BF16/FP16の明示指定にはCUDAが必要です。CPUでは自動またはFP32を選択してください")
-            args += ["--precision", precision]
+            profile_batches = self.integer(body.get("profile_batches", 20), 0, 1000)
+            log_interval = self.integer(body.get("log_interval", 50), 1, 100000)
+            args += ["--precision", precision, "--profile-batches", str(profile_batches), "--log-interval", str(log_interval)]
             seed = self.integer(body.get("seed", 42), 0, 2147483647)
             args += ["--initialization", initialization, "--seed", str(seed)]
             if not scratch:
@@ -374,7 +380,8 @@ class Learning:
             args += ["--loss", loss, "--smooth-l1-beta", str(beta), "--lr-scheduler", scheduler,
                      "--lr-factor", str(factor), "--lr-patience", str(patience), "--min-lr", str(minimum_lr)]
             args += ["--modality", modality, "--architecture", architecture, "--num-workers", str(workers), "--cache-dir", str(self.root / '.feature_cache'),
-                     "--feature-cache" if feature_cache else "--no-feature-cache"]
+                     "--feature-cache" if feature_cache else "--no-feature-cache",
+                     "--ram-preload" if ram_preload else "--no-ram-preload"]
             if finetune:
                 args.append("--finetune")
             return {
@@ -388,6 +395,7 @@ class Learning:
                     "modality": modality,
                     "architecture": architecture,
                     "initialization": initialization, "seed": seed, "precision": precision,
+                    "profile_batches": profile_batches, "log_interval": log_interval,
                     "encoder": body.get("encoder") if architecture=="dinov3_vitt16" and not scratch else None,
                     "train": body["train"],
                     "validation": body["validation"],
@@ -396,7 +404,7 @@ class Learning:
                     "learning_rate": lr,
                     "loss": loss, "smooth_l1_beta": beta, "lr_scheduler": scheduler,
                     "lr_factor": factor, "lr_patience": patience, "min_lr": minimum_lr,
-                    "num_workers": workers,
+                    "num_workers": workers, "ram_preload": ram_preload,
                     "feature_cache": feature_cache,
                     "feature_cache_effective": feature_cache and not finetune,
                 },

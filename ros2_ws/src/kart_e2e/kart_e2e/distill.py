@@ -51,6 +51,7 @@ def main():
     p.add_argument('--mse-weight',type=float,default=1.)
     p.add_argument('--cosine-weight',type=float,default=.5)
     p.add_argument('--feature-cache',action=argparse.BooleanOptionalAction,default=True)
+    p.add_argument('--ram-preload',action=argparse.BooleanOptionalAction,default=True)
     p.add_argument('--cache-dir',type=Path)
     p.add_argument('--seed',type=int,default=42)
     a=p.parse_args()
@@ -77,10 +78,13 @@ def main():
     optimizer=torch.optim.AdamW([*student.parameters(),*projector.parameters()],lr=a.learning_rate)
     datasets=[Samples(roots,'steer_only') for roots in (a.train,a.validation)]
 
+    from .ram_dataset import preload_datasets, loader_workers
+
     def loader_factory(data,shuffle,persistent=True,seed=a.seed):
-        settings=dict(batch_size=a.batch_size,shuffle=shuffle,num_workers=a.num_workers,
+        workers=loader_workers(data,a.num_workers)
+        settings=dict(batch_size=a.batch_size,shuffle=shuffle,num_workers=workers,
                       pin_memory=str(a.device).startswith('cuda'),generator=torch.Generator().manual_seed(seed))
-        if a.num_workers: settings.update(multiprocessing_context='spawn',persistent_workers=persistent)
+        if workers: settings.update(multiprocessing_context='spawn',persistent_workers=persistent)
         return DataLoader(data,**settings)
 
     keys=[]
@@ -89,11 +93,14 @@ def main():
             features,key=cached_samples(data,teacher,a.cache_dir or a.output.parent/'.feature_cache',
                                         teacher_sha,loader_factory,a.device)
             datasets[i]=AlignedSamples(data,features);keys.append(key)
+    if a.ram_preload: datasets=preload_datasets(datasets)
     loaders=[loader_factory(data,i==0,seed=a.seed+i) for i,data in enumerate(datasets)]
     a.output.mkdir(parents=True)
     provenance={k:([str(p.resolve()) for p in v] if isinstance(v,list) else str(v) if isinstance(v,Path) else v)
                 for k,v in vars(a).items()}
-    provenance.update(teacher_sha256=teacher_sha,feature_cache_keys=keys,feature_target='x_norm_clstoken',
+    provenance.update(effective_num_workers=loader_workers(datasets[0],a.num_workers),
+                      ram_preload_bytes=sum(d.bytes for d in {id(value):value for value in datasets}.values()) if a.ram_preload else 0,
+                      teacher_sha256=teacher_sha,feature_cache_keys=keys,feature_target='x_norm_clstoken',
                       selection_metric='validation_loss',student_parameters=sum(v.numel() for v in student.parameters()),
                       architecture='dinov3_vitt16',projection='train_only_linear_192_to_384')
     (a.output/'run.json').write_text(json.dumps(provenance,indent=2))

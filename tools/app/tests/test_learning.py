@@ -225,6 +225,17 @@ class LearningTests(unittest.TestCase):
         auto=self.service.prepare('train',body)
         self.assertEqual(auto['args'][auto['args'].index('--precision')+1],'auto')
         self.assertEqual(auto['provenance']['precision'],'auto')
+        self.assertTrue(auto['provenance']['ram_preload'])
+        self.assertIn('--ram-preload',auto['args'])
+        streamed=self.service.prepare('train',{**body,'ram_preload':False})
+        self.assertIn('--no-ram-preload',streamed['args'])
+        with self.assertRaises(ValueError):self.service.prepare('train',{**body,'ram_preload':'true'})
+        self.assertEqual(auto['provenance']['profile_batches'],20)
+        self.assertEqual(auto['args'][auto['args'].index('--log-interval')+1],'50')
+        for field,bad in [('profile_batches',-1),('profile_batches',1001),('log_interval',0)]:
+            with self.assertRaises(ValueError):self.service.prepare('train',{**body,field:bad})
+        disabled=self.service.prepare('train',{**body,'profile_batches':0,'log_interval':10})
+        self.assertEqual(disabled['args'][disabled['args'].index('--profile-batches')+1],'0')
         for precision in ('bf16','fp16','invalid'):
             with self.assertRaises(ValueError):
                 self.service.prepare('train',{**body,'precision':precision})

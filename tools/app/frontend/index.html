@@ -521,8 +521,16 @@
             <option value="fp16">AMP FP16 · GradScaler併用</option>
           </select></label>
           <p class="help">loss・MSE・MAEはFP32で計算。重みはFP32で保存します。特徴量キャッシュの初回作成はFP32を維持します。Tiny第1段階の特徴蒸留には適用しません。</p>
+          <details>
+            <summary>学習速度の診断ログ</summary>
+            <label>各phaseのCUDA計測batch数<input id="e2e-profile-batches" type="number" min="0" max="1000" value="20" /></label>
+            <label>進捗ログの間隔（batch）<input id="e2e-log-interval" type="number" min="1" max="100000" value="50" /></label>
+            <p class="help">制御学習のDataLoader待ち・転送・encoder・head・逆伝播・optimizerを記録。CUDAは各phase先頭20batchをEventで計測（0でOFF）。CPU側の時間・処理速度は全batchで集計します。初回batchと50batchごとにログ表示し、詳細は実験内のtiming.jsonlへ保存。Tiny第1段階の蒸留は対象外です。</p>
+          </details>
           <label>乱数seed<input id="e2e-seed" type="number" min="0" max="2147483647" value="42" /></label>
-          <label>DataLoader workers<input id="e2e-workers" type="number" min="0" max="64" value="8" /></label>
+          <label class="check"><input id="e2e-ram-preload" type="checkbox" checked />学習データを最初にすべてRAMへ読み込む</label>
+          <p id="e2e-ram-help" class="help">前処理済み画像・EVS、またはキャッシュ済み特徴量をRAMに保持します。学習中のworkerは0で、RAMの重複を防ぎます。大きいデータセットではOFFにして逐次読み込みを選択してください。</p>
+          <label>DataLoader workers（逐次読込・特徴量抽出）<input id="e2e-workers" type="number" min="0" max="64" value="8" /></label>
           <label class="check"><input id="e2e-feature-cache" type="checkbox" checked />特徴量キャッシュを使用（backbone凍結時）</label>
           <p id="e2e-cache-help" class="help">初回に特徴量を保存し、同じ入力・重み・前処理なら再利用します。</p>
           <label class="check"

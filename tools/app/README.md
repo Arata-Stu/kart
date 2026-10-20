@@ -790,3 +790,24 @@ GPUのあるkart Dockerが必要。校正済みモデルと比較結果は日付
 比較成功時に結果を自動表示する。元モデルを残し、ライブラリから整理・削除可能。
 JetsonへはQ/DQ ONNXとmetadataを転送し、`e2e_trt.sh`でINT8として再buildする。
 詳細・CLIは[kart_e2e README](../../ros2_ws/src/kart_e2e/README.md)を参照。
+
+### 制御学習の速度診断
+
+通常のRGB/20ch EVS学習から`TIMING`ログを出し、実験内の`timing.jsonl`へ保存する。
+「学習速度の診断ログ」でCUDA計測batch数（既定20、0でEventのみOFF）と
+進捗表示の間隔（既定50batch）を変更可能。初回batchとphase終了時にも表示する。
+DataLoader待ち、転送、encoder/head、loss、逆伝播、optimizer、指標集計を分離する。
+CUDA Eventの時間とhostのdispatch/同期待ちは別に記録し、VRAM peakとsamples/sも保存する。
+cache作成/再利用と入力ハッシュ、best.pt保存時間も記録する。
+学習中は下部「ログ・履歴」で参照・コピーできる。次回開始の学習から適用され、Tiny特徴蒸留は対象外。
+詳細と数値の読み方は[kart_e2e README](../../ros2_ws/src/kart_e2e/README.md)を参照。
+
+### RAM全量読込を既定にする
+
+学習画面の「学習データを最初にすべてRAMへ読み込む」は既定ON。
+RGB/EVSの前処理済み入力、または凍結encoderの特徴量を最初にRAMへ読み込み、epochごとのI/Oを省く。
+Tiny第1段階の蒸留も対応。RAM学習のworkerは実効0にし、全量データのworkerごとの複製を防ぐ。
+worker設定（既定8）は初回特徴量抽出と、RAM OFFの逐次読み込みで使用する。
+容量が大きければRAMチェックを外して開始する。必要量が利用可能RAM/container残量の80%を超える場合は
+切替方法を表示して停止し、暗黙fallbackしない。読込準備時間とbyte数もログへ記録する。
+CLIは`--ram-preload` / `--no-ram-preload`。詳細はkart_e2e READMEを参照。

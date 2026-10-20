@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import random
+import time
 from pathlib import Path
 
 import numpy as np
@@ -76,6 +77,7 @@ class Samples(Dataset):
 
 
 def main():
+    setup_started = time.perf_counter()
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--train", type=Path, nargs="+", required=True)
     p.add_argument("--validation", type=Path, nargs="+", required=True)
@@ -119,7 +121,11 @@ def main():
     p.add_argument("--num-workers", type=int, default=8)
     p.add_argument("--feature-cache", action=argparse.BooleanOptionalAction, default=True,
                    help="Cache frozen encoder features; bypassed during finetune")
+    p.add_argument("--ram-preload", action=argparse.BooleanOptionalAction, default=True,
+                   help="Preload training tensors in RAM; --no-ram-preload streams from disk")
     p.add_argument("--cache-dir", type=Path, default=None)
+    p.add_argument("--profile-batches", type=int, default=20, help="CUDA event samples per phase; 0 disables GPU event sampling")
+    p.add_argument("--log-interval", type=int, default=50, help="Live timing progress every N batches")
     p.add_argument("--seed", type=int, default=42)
     a = p.parse_args()
     scratch = a.initialization == "scratch"
@@ -138,13 +144,15 @@ def main():
     if scratch:
         a.finetune = True
     if (
-        a.num_workers < 0
+        not 0 <= a.profile_batches <= 1000
+        or not 1 <= a.log_interval <= 100000
+        or a.num_workers < 0
         or a.epochs <= 0
         or a.batch_size <= 0
         or not math.isfinite(a.learning_rate)
         or a.learning_rate <= 0
     ):
-        p.error("epochs, batch-size and learning-rate must be positive")
+        p.error("epochs/batch-size/lr positive; profile-batches 0..1000; log-interval 1..100000 required")
 
     if (not math.isfinite(a.smooth_l1_beta) or a.smooth_l1_beta <= 0
             or not math.isfinite(a.lr_factor) or not 0 < a.lr_factor < 1
@@ -199,24 +207,34 @@ def main():
     if a.output.exists():
         raise FileExistsError(a.output)
 
+    from .ram_dataset import preload_datasets, loader_workers
+
     def loader_factory(dataset, shuffle, persistent=True, seed=a.seed):
-        options = dict(batch_size=a.batch_size, shuffle=shuffle, num_workers=a.num_workers,
+        workers = loader_workers(dataset, a.num_workers)
+        options = dict(batch_size=a.batch_size, shuffle=shuffle, num_workers=workers,
                        pin_memory=str(a.device).startswith('cuda'),
                        generator=torch.Generator().manual_seed(seed))
-        if a.num_workers:
+        if workers:
             options.update(multiprocessing_context='spawn', persistent_workers=persistent)
         return DataLoader(dataset, **options)
 
+    a.output.mkdir(parents=True, exist_ok=False)
+    from .training_timing import TrainingTiming
+    timing = TrainingTiming(a.output, a.device, profile_batches=a.profile_batches, log_interval=a.log_interval)
+    timing.record("setup", time.perf_counter()-setup_started, feature_cache=effective_cache, num_workers=a.num_workers)
     cache_keys = []
     if effective_cache:
         cached = []
         cache_dir = a.cache_dir or a.output.parent/'.feature_cache'
-        for dataset in datasets:
-            data, key = cached_samples(dataset, model, cache_dir, weights_sha, loader_factory, a.device)
+        for index, dataset in enumerate(datasets):
+            data, key = cached_samples(dataset, model, cache_dir, weights_sha, loader_factory, a.device, timing=timing, timing_phase="cache_"+("train" if index==0 else "validation"))
             cached.append(data); cache_keys.append(key)
         datasets = cached
+    if a.ram_preload:
+        datasets = preload_datasets(datasets, timing=timing)
+    effective_workers = loader_workers(datasets[0], a.num_workers)
+    print(f"Data loading: ram_preload={a.ram_preload}; requested_workers={a.num_workers}; effective_workers={effective_workers}", flush=True)
     loaders = [loader_factory(d, i==0, seed=a.seed+i) for i,d in enumerate(datasets)]
-    a.output.mkdir(parents=True, exist_ok=False)
     provenance = {
         key: str(value) if isinstance(value, Path) else value
         for key, value in vars(a).items()
@@ -236,6 +254,8 @@ def main():
     provenance["weights_sha256"] = weights_sha
     provenance["feature_cache_effective"] = effective_cache
     provenance["feature_cache_keys"] = cache_keys
+    provenance["effective_num_workers"] = effective_workers
+    provenance["ram_preload_bytes"] = sum(d.bytes for d in {id(value):value for value in datasets}.values()) if a.ram_preload else 0
     (a.output / "run.json").write_text(json.dumps(provenance, indent=2))
     best = float("inf")
     for epoch in range(a.epochs):
@@ -245,25 +265,41 @@ def main():
             total = 0.0
             total_mse = 0.0
             mae = torch.zeros(1 if a.mode == "steer_only" else 2, device=a.device)
+            phase = timing.phase("train" if index==0 else "validation", epoch+1)
             with torch.set_grad_enabled(index == 0):
-                for images, target in loader:
-                    target = target.to(a.device, non_blocking=True)
-                    inputs = images.to(a.device, non_blocking=True)
+                for images, target in phase.batches(loader):
+                    with phase.measure("transfer"):
+                        target = target.to(a.device, non_blocking=True)
+                        inputs = images.to(a.device, non_blocking=True)
                     with autocast_context(effective_precision):
-                        prediction = model.predict_features(inputs) if effective_cache else model(inputs)
-                    # Loss and comparison metrics stay FP32; casts preserve gradients.
-                    prediction = prediction.float()
-                    loss = regression_loss(prediction, target.float(), a.loss, a.smooth_l1_beta)
-                    if not torch.isfinite(loss):
-                        raise RuntimeError("Non-finite training/validation loss")
+                        if effective_cache:
+                            features = inputs
+                        else:
+                            with phase.measure("encoder"):
+                                features = model.extract_features(inputs)
+                        with phase.measure("head"):
+                            prediction = model.predict_features(features)
+                    with phase.measure("loss"):
+                        # Includes the pre-existing finite-check synchronization.
+                        prediction = prediction.float()
+                        loss = regression_loss(prediction, target.float(), a.loss, a.smooth_l1_beta)
+                        if not torch.isfinite(loss):
+                            raise RuntimeError("Non-finite training/validation loss")
                     if index == 0:
-                        optimizer.zero_grad(set_to_none=True)
-                        scaler.scale(loss).backward()
-                        scaler.step(optimizer)
-                        scaler.update()
-                    total += loss.item() * len(images)
-                    total_mse += torch.nn.functional.mse_loss(prediction.detach(), target).item() * len(images)
-                    mae += (prediction.detach() - target).abs().sum(0)
+                        with phase.measure("zero_grad", gpu=False):
+                            optimizer.zero_grad(set_to_none=True)
+                        with phase.measure("backward"):
+                            scaler.scale(loss).backward()
+                        with phase.measure("optimizer"):
+                            scaler.step(optimizer)
+                            scaler.update()
+                    with phase.measure("metrics"):
+                        total += loss.item() * len(images)
+                        total_mse += torch.nn.functional.mse_loss(prediction.detach(), target).item() * len(images)
+                        mae += (prediction.detach() - target).abs().sum(0)
+            phase_report = phase.report()
+            metrics[("train" if index==0 else "validation")+"_seconds"] = phase_report["wall_seconds"]
+            metrics[("train" if index==0 else "validation")+"_samples_per_second"] = phase_report["samples_per_second"]
             key = "train" if index == 0 else "validation"
             metrics[key + "_loss"] = total / len(loader.dataset)
             metrics[key + "_mse"] = total_mse / len(loader.dataset)
@@ -288,9 +324,11 @@ def main():
             }
             if a.modality == 'evs':
                 state.update(modality='evs', evs_metadata=model.evs_metadata)
+            save_started = time.perf_counter()
             temporary = a.output / "best.tmp"
             torch.save(state, temporary)
             temporary.replace(a.output / "best.pt")
+            timing.record("checkpoint_save", time.perf_counter()-save_started, epoch=epoch+1, bytes=(a.output/"best.pt").stat().st_size)
 
 
 if __name__ == "__main__":

@@ -997,3 +997,84 @@ Jetson転送にはrootのONNXとmetadataだけを使い、Notebookのengineは�
 
 検証範囲：CPUで実Q/DQ生成・ORT推論、契約、比較集計とCUDA呼出しのmockテスト。
 実NVIDIA GPUでのTensorRT build・校正済み学習モデルの精度/速度・実車走行は別途確認する。
+
+### 学習ボトルネックの診断ログ
+
+RGB/20ch EVSの制御学習は、通常のGUI実行でも`TIMING ...`を標準出力へ表示し、
+実験ディレクトリに`timing.jsonl`（schema=`kart.training_timing.v1`）を保存する。
+学習中はUI下部の「ログ・履歴」から確認・コピー可能。既存実行への後付けや過去runへの遡及記録は行わない。
+新規ROS node/topicはなく、オフライン学習CLIのみの変更。
+
+| 引数 / GUI設定 | 既定値 | 意味 |
+|---|---|---|
+| `--profile-batches` / 各phaseのCUDA計測batch数 | 20 | 各epochのtrain/validation・cache抽出で先頭N batchをCUDA Event計測。0〜1000、0でEventのみ無効 |
+| `--log-interval` / 進捗ログの間隔 | 50 | 初回batchとN batchごと、およびphase終了時に経過・速度・stage平均を表示。1〜100000 |
+
+学習画面の「学習速度の診断ログ」で変更する。CPU側時間は全batchを計測し、CUDAがなければ
+GPU時間・VRAMを捏造せず空欄にする。Tiny第1段階の特徴蒸留は対象外。
+通常の学習CLIにも上記引数を追加可能（`python -m kart_e2e.train ... --profile-batches 20 --log-interval 50`）。
+
+JSONLには`configuration`（device/torch/CUDA runtime/GPU/CPU thread数）、`operation`、
+`phase_start`、`progress`、`phase_end`を逐次追記する。
+phaseごとのbatch数、実sample数、wall秒、samples/s、host各stageのms統計、
+先頭N batchの`sampled_cuda_ms`、CUDA allocated/reserved/peak allocated bytesを含む。
+統計はcount/total/mean/median/P95/maximumに加えfirst/mean_after_firstを保持し、初回と以後を区別する。
+GPUが未完了のsampleはprogress集計に含めず、phase終了時に一度同期して確定する。
+CUDAの計測device/streamは学習と同じ。stageごと・batchごとの同期は追加しない。
+計測自体のEvent・ログ・phase終端同期の負荷はあり、計測なしの速度と厳密に同一とは限らない。
+
+| ログのstage/項目 | 読み方 |
+|---|---|
+| `iterator_start` / `iterator_end` | DataLoader iterator作成・終端、worker起動/終了待ちの一部。epoch 1と以後を比較 |
+| `data_wait` | consumerが次batchを受け取るまでの待ち。I/O・decode・resize・worker queue/pin処理を含み、workerのCPU時間やディスク速度そのものではない |
+| `transfer` | CPU→device。host値はenqueue/待ちを含む。CUDA Eventのstream時間と別に見る |
+| `encoder` / `head` | backbone特徴抽出 / 制御head。特徴量キャッシュ使用時は学習中のencoderを実行しない |
+| `loss` | loss計算と既存のfiniteチェック。host時間には先行GPU処理の完了待ちも含む |
+| `backward` / `optimizer` | 逆伝播 / AdamW・GradScaler。validationでは実行しない |
+| `metrics` | loss.item/MSE.item/MAE集計。host時間には既存のGPU同期・転送待ちを含む |
+| `cache_*_hash_inputs` / `cache_*_lock_wait` / `cache_*_total` | 入力ハッシュ、lock待ち、キャッシュ全体。totalのcache_hitで再利用を識別 |
+| `cache_*_extract` の `download` / `write_features` | 特徴量をCPUへ戻す時間 / NPY mmap書込。flush・整合確認はcache totalにも含む |
+| `checkpoint_save` | best.pt更新の保存時間とbyte数。best更新epochのみ |
+
+host時間とCUDA時間は重複するため足し合わせない。CUDA Eventはstream上の経過時間で、
+kernel単位のprofilerやGPU稼働率ではない。先頭N batchにはwarmupが含まれるため、firstと
+mean_after_firstや次epochを比較して定常時を判断する。
+例えばdata_waitが継続して大きければ入力供給側が候補、encoderのCUDA時間が大きければ特徴抽出側が候補。
+loss/metricsのhostだけが大きい場合はGPU待ちの可能性があり、そのCPU処理が原因だとは断定しない。
+実際のPNG/NPY読み込みとresizeの内訳や個別CUDA kernelの調査には追加のworker計測・profilerが必要。
+
+`metrics.jsonl`には`train_seconds` / `validation_seconds` と各`*_samples_per_second`も保存する。
+これらはphase時間で、モデル初期化・cache準備・checkpoint保存を含まない。
+CPU学習・CUDA Event mockで検証し、実CUDAテストは対応GPUがある場合のみ実行する。
+
+### RAM全量読み込み（学習の既定）
+
+制御学習・Tiny第1段階の蒸留ともに`--ram-preload`が既定ON。
+GUIの「学習データを最初にすべてRAMへ読み込む」で切り替える。
+大きいデータセットではチェックを外すか、CLIに`--no-ram-preload`を指定し、従来の逐次読み込みを使う。
+この切替は実行開始前の設定であり、実行中にモードは変えない。
+
+- 全体fine-tuning／scratch／特徴量キャッシュOFF：前処理済みRGB FP32 tensor（3×128×224）または
+  EVS FP32 counts（20×H×W）と教師をRAMに保持し、各epochの画像decode・resize・正規化・ディスク読込を省く。
+  EVSのpolicy内固定正規化/paddingは従来どおりGPUで行う。
+- 凍結encoder＋特徴量キャッシュON：必要なら最初に従来の逐次読込で特徴量を作り、
+  学習に使う特徴量と教師をRAMへ全量コピーする。学習で使わない画像は重複保持しない。
+- Tiny蒸留：学生入力と教師特徴量（教師cache ON時）をRAMへ保持する。
+- 完全に同じtrain/validation入力・教師・前処理契約は同じRAM tensorを共有する。
+  別datasetの部分重複画像までは統合しない。
+
+RAMモードのDataLoaderは実効`num_workers=0`。前処理済みtensorをbatch化するだけのため、
+複数spawn workerへ全量データを複製せず、全量分の`/dev/shm`拡張も要求しない。
+GUI/CLIの`num_workers`要求値（既定8）は逐次モードと初回特徴量cache抽出に使う。
+`run.json`へ`ram_preload`、`effective_num_workers`、`ram_preload_bytes`（共有分は一度だけ）を保存する。
+進捗ログに全量読込のsample数・推定MiB・利用可能MiB・実効worker数を表示する。
+制御学習では`timing.jsonl`にも`ram_preload` / `ram_preload_reuse`の準備時間を残し、
+学習phaseのsamples/sとは分ける。
+
+RGBは前処理後の1画像あたり約0.328 MiB（教師を除く）。ディスク上のPNG圧縮サイズからRAM量を見積もらない。
+利用可能RAMとLinux cgroupの残容量の小さい方を確認し、割当予定がその80%を超える場合は停止して
+RAM OFFを案内する。20%はモデル・batch・OS等の余地。確認できないOSでは容量チェックはbest effortで、
+他processとの競合やOOMを完全には防げない。自動で逐次モードへは切り替えない。
+
+CPUでPNG/NPY/EVS・特徴量の逐次/RAM入力一致、後続I/O不要、同一dataset共有、容量チェックと
+設定ルーティングをテストする。64GB実環境での最大容量・GPU速度向上は別途実測する。

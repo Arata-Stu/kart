@@ -238,10 +238,13 @@ action("e2e-start-train", () =>
     initialization: $("e2e-train-modality").value === "evs" ? "pretrained" : $("e2e-initialization").value,
     seed: Number($("e2e-seed").value),
     precision: $("e2e-precision").value,
+    profile_batches: Number($("e2e-profile-batches").value),
+    log_interval: Number($("e2e-log-interval").value),
     encoder: $("e2e-tiny-encoder").value,
     finetune: $("e2e-finetune").checked,
     feature_cache: $("e2e-feature-cache").checked,
     num_workers: Number($("e2e-workers").value),
+    ram_preload: $("e2e-ram-preload").checked,
   }),
 );
 action("e2e-start-export", () =>
@@ -375,7 +378,7 @@ action('e2e-start-distill', () => start('distill', {
   teacher_run:$('e2e-distill-teacher').value,
   epochs:Number($('e2e-distill-epochs').value), learning_rate:Number($('e2e-distill-lr').value),
   batch_size:Number($('e2e-batch').value), num_workers:Number($('e2e-workers').value),
-  feature_cache:$('e2e-feature-cache').checked,
+  feature_cache:$('e2e-feature-cache').checked, ram_preload:$('e2e-ram-preload').checked,
 }));
 action('e2e-distill-curve', () => {
   if (!$('e2e-tiny-encoder').value) throw new Error('Tiny encoderを選択してください');
@@ -437,3 +440,12 @@ function updateInitialization() {
   suggestNames();
 }
 $("e2e-initialization").addEventListener("change",updateInitialization);
+
+function updateRamPreload() {
+  const ram = $("e2e-ram-preload").checked;
+  $("e2e-ram-help").textContent = ram
+    ? "前処理済み画像・EVS、またはキャッシュ済み特徴量をRAMに保持。学習中のworkerは0でRAMの重複を防ぎます。特徴量キャッシュ初回作成には下のworker設定を使用します。大きいデータセットではOFFにしてください。"
+    : "画像・EVSまたは特徴量を必要に応じてディスクから逐次読み込み。下のworker数を使用します。";
+}
+$("e2e-ram-preload").addEventListener("change", updateRamPreload);
+updateRamPreload();

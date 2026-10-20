@@ -14,9 +14,10 @@ class TinyEncoder(torch.nn.Module):
     def forward(self,value):
         return self.proj(value.mean((2,3)))
 
+@pytest.mark.parametrize('ram', [True,False])
 @pytest.mark.parametrize('image_format', ['png','npy'])
 @pytest.mark.parametrize('finetune,explicit,expected,cache', [(False,None,1e-4,True),(False,None,1e-4,False),(True,None,1e-5,True),(True,2e-6,2e-6,True)])
-def test_cli_update_scope_and_provenance(tmp_path,finetune,explicit,expected,cache,image_format):
+def test_cli_update_scope_and_provenance(tmp_path,finetune,explicit,expected,cache,image_format,ram):
     torch.set_num_threads(2)
     torch.manual_seed(42)
     encoder=TinyEncoder()
@@ -31,6 +32,7 @@ def test_cli_update_scope_and_provenance(tmp_path,finetune,explicit,expected,cac
     args=['train','--train',str(data),'--validation',str(data),'--repo',str(tmp_path),
           '--weights',str(weights),'--output',str(output),'--device','cpu','--epochs','1','--num-workers','0','--mode','steer_only']
     if image_format == 'npy': args+=['--loss','mse','--lr-scheduler','plateau','--lr-patience','0']
+    if not ram: args+=["--no-ram-preload"]
     if not cache: args+=['--no-feature-cache']
     if finetune: args+=['--finetune']
     if explicit is not None: args+=['--learning-rate',str(explicit)]
@@ -40,6 +42,9 @@ def test_cli_update_scope_and_provenance(tmp_path,finetune,explicit,expected,cac
     assert report['effective_precision']=='fp32' and not report['amp_enabled']
     assert not report['grad_scaler_enabled']
     assert report['precision']=='auto'
+    assert report['ram_preload']==ram
+    assert (report['ram_preload_bytes']>0)==ram
+    assert report['effective_num_workers']==0
     assert report['learning_rate']==expected and report['finetune']==finetune
     assert report['loss']==('mse' if image_format=='npy' else 'smooth_l1')
     assert report['selection_metric']=='validation_mse'
@@ -50,6 +55,19 @@ def test_cli_update_scope_and_provenance(tmp_path,finetune,explicit,expected,cac
     if image_format=='npy': assert metrics['validation_loss']==metrics['validation_mse']
     assert report['feature_cache_effective']==(cache and not finetune)
     assert bool(report['feature_cache_keys'])==(cache and not finetune)
+    rows=[json.loads(row) for row in (output/'timing.jsonl').read_text().splitlines()]
+    phases={row['phase']:row for row in rows if row['event']=='phase_end'}
+    for phase in ('train','validation'):
+        value=phases[phase]
+        assert value['samples']==1 and value['batches']==1
+        assert value['host_ms']['data_wait']['count']==1
+        assert value['host_ms']['head']['mean']>=0 and not value['sampled_cuda_ms']
+        assert ('encoder' in value['host_ms'])==(not report['feature_cache_effective'])
+    assert 'backward' in phases['train']['host_ms'] and 'backward' not in phases['validation']['host_ms']
+    assert any(row.get('phase')=='checkpoint_save' for row in rows)
+    if report['feature_cache_effective']:
+        assert 'cache_train_extract' in phases
+        assert any(row.get('cache_hit') is False for row in rows)
     saved=torch.load(output/'best.pt',weights_only=True)
     changed=not torch.equal(initial['proj.weight'],saved['state_dict']['encoder.proj.weight'])
     assert changed==finetune

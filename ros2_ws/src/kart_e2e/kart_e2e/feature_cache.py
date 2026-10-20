@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import time
 
 import numpy as np
 import torch
@@ -36,7 +37,11 @@ class CachedSamples(Dataset):
         return torch.from_numpy(self.features[index].copy()), torch.from_numpy(self.labels[index].copy())
 
 
-def cached_samples(dataset, model, root, weights_sha, loader_factory, device):
+def cached_samples(dataset, model, root, weights_sha, loader_factory, device, *, timing=None, timing_phase="cache"):
+    started = time.perf_counter()
+    if timing:
+        timing.write(dict(event="operation_start", phase=timing_phase, samples=len(dataset)))
+        print(f"TIMING {timing_phase}: hashing/validating {len(dataset)} inputs", flush=True)
     dimension = getattr(model, "feature_dim", 384)
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
@@ -47,10 +52,14 @@ def cached_samples(dataset, model, root, weights_sha, loader_factory, device):
                     device=str(device), inputs=[sources[str(path)] for path,_ in dataset.items],
                     implementation={name:digest(code/name) for name in
                                     ('feature_cache.py','train.py','model.py','evs_policy.py','event_encoder_model.py','contract.py','data.py')})
+    if timing: timing.record(timing_phase+"_hash_inputs", time.perf_counter()-started, samples=len(dataset))
     key = hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest()
     folder = root/key
     with (root/(key+'.lock')).open('a') as lock:
+        lock_started = time.perf_counter()
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        if timing: timing.record(timing_phase+"_lock_wait", time.perf_counter()-lock_started)
+        reused = folder.exists()
         if folder.is_symlink():
             raise ValueError('Feature cache must not be a symlink')
         if folder.exists():
@@ -70,15 +79,25 @@ def cached_samples(dataset, model, root, weights_sha, loader_factory, device):
                 offset = 0
                 model.eval()
                 loader = loader_factory(dataset,False,persistent=False)
+                phase = timing.phase(timing_phase+"_extract") if timing else None
+                from contextlib import nullcontext
+                measure = phase.measure if phase else lambda *args,**kwargs: nullcontext()
                 with torch.inference_mode():
-                    for batch,(images,_) in enumerate(loader):
-                        features = model.extract_features(images.to(device,non_blocking=True)).float().cpu().numpy()
+                    for batch,(images,_) in enumerate(phase.batches(loader) if phase else loader):
+                        with measure("transfer"):
+                            inputs = images.to(device,non_blocking=True)
+                        with measure("encoder"):
+                            encoded = model.extract_features(inputs)
+                        with measure("download"):
+                            features = encoded.float().cpu().numpy()
                         if features.shape != (len(images),dimension) or not np.isfinite(features).all():
                             raise ValueError('Invalid encoder features')
-                        values[offset:offset+len(images)] = features
+                        with measure("write_features", gpu=False):
+                            values[offset:offset+len(images)] = features
                         offset += len(images)
                         if batch%100==0 or offset==len(dataset):
                             print(f'Feature cache extraction: {offset}/{len(dataset)}',flush=True)
+                if phase: phase.report()
                 if offset != len(dataset) or any(digest(path)!=sha for path,sha in sources.items()):
                     raise ValueError('Dataset changed during feature extraction')
                 values.flush(); del values
@@ -86,4 +105,5 @@ def cached_samples(dataset, model, root, weights_sha, loader_factory, device):
                 (stage/'cache.json').write_text(json.dumps(report,indent=2))
                 os.rename(stage,folder)
             print(f'Feature cache created: {key[:12]} ({len(dataset)} samples)',flush=True)
+    if timing: timing.record(timing_phase+"_total", time.perf_counter()-started, cache_hit=reused, key=key, samples=len(dataset))
     return CachedSamples(folder/'features.npy',dataset.items,dataset.mode), key

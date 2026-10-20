@@ -212,3 +212,17 @@ UIのINT8操作は校正と同一GPU・同一評価入力のFP32/INT8 native Ten
 同期した転送込み時間を記録する。FP32はTF32無効、INT8の浮動小数点fallbackはFP16許可と明示する。
 CPU ORTの数値preflightをGPU速度比較の代用にしない。対象GPUでのbuild/benchmark成功と
 閉ループ実走行の成否を区別し、自動走行開始や量子化モデルへの自動切替は行わない。
+
+制御学習の速度診断は通常実行から逐次ログを保存する。
+DataLoader consumer待ちとCPU dispatch/同期待ち、CUDA stream Event時間を区別する。
+CUDA sample数は各phase先頭20batchを既定とし、stageごとの同期は挿入せずphase終端で確定する。
+初回worker/warmup、cacheのハッシュ・hit/miss・抽出、検証、checkpoint保存を学習本体と分ける。
+host/CUDA時間を合算せず、consumer待ちからI/Oやresizeの原因を断定しない。
+CPU/mockテストから実GPUのボトルネックや速度向上を推定しない。
+
+学習用tensorは既定でRAMへ全量preloadし、GUI/CLIで明示的に逐次読み込みへ切替可能にする。
+RGB/EVSの前処理済み入力、凍結時は特徴量キャッシュを読み込み、学習中のディスク読込を省く。
+全RAMモードはDataLoader worker=0としてspawnごとの複製や巨大な/dev/shm領域を要求しない。
+逐次モードと初回特徴量抽出は従来のworker設定を使い、要求値と実効値をprovenanceへ残す。
+同一train/validation datasetはRAMを共有する。必要byte数と利用可能RAM/container headroomを事前確認し、
+不足の予測時は逐次モードへの切替方法を表示して停止する。暗黙のモード切替は行わない。
