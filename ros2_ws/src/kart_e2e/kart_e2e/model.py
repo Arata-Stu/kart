@@ -102,6 +102,16 @@ class Policy(nn.Module):
         self.encoder.requires_grad_(not frozen)
         self.train()
 
+    def configure_heads(self, routing):
+        from .sections import Router
+        route = Router(routing)
+        import copy
+        template = self.head
+        self.heads = nn.ModuleList([copy.deepcopy(template) for _ in route.heads])
+        del self.head
+        self.routing = routing
+        return self
+
     def train(self, mode=True):
         super().train(mode)
         if self.frozen:
@@ -115,6 +125,11 @@ class Policy(nn.Module):
         return self.predict_features(self.extract_features(value))
 
     def predict_features(self, features):
+        if hasattr(self, "heads"):
+            raw = torch.stack([head(features) for head in self.heads], dim=1)
+            steering = raw[:, :, :1].tanh()
+            return (steering if self.mode == "steer_only" else
+                    torch.cat((steering, raw[:, :, 1:2].sigmoid()), 2)).flatten(1)
         raw = self.head(features)
         steering = raw[:, :1].tanh()
         return (
@@ -130,6 +145,8 @@ def load_checkpoint(path, repo, device="cpu"):
     architecture = spec["encoder"]
     model = Policy(backbone(repo, architecture), state["mode"], architecture=architecture)
     model.runtime = state.get("runtime")
+    if state.get("routing") is not None:
+        model.configure_heads(state["routing"])
     model.load_state_dict(state["state_dict"], strict=True)
     return model.to(device).eval()
 

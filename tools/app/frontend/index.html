@@ -67,10 +67,19 @@
             <button id="tuning-connect" disabled>自己位置を接続</button>
             <select id="tuning-line" aria-label="適用するライン"><option value="centerline">Center</option><option value="raceline">Race</option><option value="customline">Custom</option></select>
             <label>Center速度 <input id="tuning-speed" type="number" min="0" step="0.05" value="0" aria-label="Center速度 m/s" /> m/s</label>
+            <button id="tuning-line-switch" disabled>実車ラインを切替</button>
+            <button id="tuning-offset-open" disabled>ステア補正</button>
+            <button id="tuning-parameters-open" disabled>パラメータ調整</button>
             <button id="tuning-preview" disabled>保存済み編集をプレビュー</button>
             <button id="tuning-apply" disabled>停止中に適用</button>
             <button id="tuning-rollback" disabled>直前の版へ</button>
           </div>
+          <section class="vehicle-state" aria-label="車両状態" aria-live="polite">
+            <strong id="vehicle-mode">モード不明</strong><span id="vehicle-host">HOST: 未受信</span>
+            <span id="vehicle-recovery">復帰: 未受信</span>
+            <div id="vehicle-health" class="small"></div>
+            <div id="vehicle-calibration" class="small"></div>
+          </section>
           <div class="small" id="tuning-status" role="status">未接続</div>
           <div class="small" id="tuning-revision"></div>
           <div class="small" id="tuning-lookahead" role="status">Pure Pursuit参照点: 未受信</div>
@@ -1219,6 +1228,20 @@
   <p id="e2e-loss-note" class="help">平均二乗誤差（MSE）、平滑化なし。学習損失だけが低下して検証損失が上がる場合は、過学習の可能性があります。学習時と検証時ではDropout等の動作が異なります。同じbagを両方に使った場合は未知データへの汎化を評価できません。</p>
   <details><summary>epochごとの数値</summary><div class="loss-table"><table><thead><tr><th>Epoch</th><th id="e2e-loss-train-heading">学習MSE</th><th id="e2e-loss-val-heading">検証MSE</th><th>学習率</th><th>次epoch学習率</th></tr></thead><tbody id="e2e-loss-rows"></tbody></table></div></details>
   <button id="e2e-loss-export">この実験のONNX exportへ</button>
+</dialog>
+<dialog id="tuning-parameters-dialog" class="tuning-parameters-dialog">
+  <div class="actions"><h2>Jetsonのパラメータ調整</h2><button id="tuning-parameters-close" type="button">閉じる</button></div>
+  <p class="help">Jetsonの現在値を取得します。変更はSTOP・停車中、ノード単位で一括適用。起動時固定の項目は表示のみです。</p>
+  <div class="actions"><label>対象<select id="tuning-parameters-target" aria-label="パラメータの対象ノード"><option value="vehicle">車両・ステア補正</option>
+    <option value="tracking">Pure Pursuit</option><option value="map">参照ライン・Center速度</option>
+    <option value="speed">速度PID</option><option value="recovery">復帰モジュール</option>
+  </select></label><button id="tuning-parameters-refresh" type="button">現在値を再取得</button></div>
+  <p id="tuning-parameters-status" role="status"></p>
+  <form id="tuning-parameters-form">
+    <div class="tuning-parameter-scroll"><table><thead><tr><th>項目</th><th>現在値</th><th>変更値</th></tr></thead><tbody id="tuning-parameter-rows"></tbody></table></div>
+    <div class="actions"><button id="tuning-parameters-apply" class="primary" type="submit" disabled>停止中に一括適用</button></div>
+  </form>
+  <p class="help">変更は実行中のノードに保持され、再起動すると起動時設定に戻ります。復帰モジュールの未起動時は、bringupで復帰を有効にして起動してください。</p>
 </dialog>
 </body>
 </html>

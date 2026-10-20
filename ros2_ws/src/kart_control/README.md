@@ -93,6 +93,7 @@ AUTO/MANUALの指令選択は既存muxが担当し、このpackageからAUTOへ�
 
 | 方向 | 既定topic | 型 | QoS・意味 |
 |---|---|---|---|
+| 入力 | /operation_mode/state | kart_interfaces/msg/OperationModeState | reliable/volatile/depth1、追従設定の動的変更用STOP確認。stamp/受信0.3秒以内 |
 | 入力 | /planning/reference_line | kart_interfaces/msg/ReferenceLine | reliable/transient_local/depth1、選択ラインと各点速度 |
 | 入力 | /visual_slam/tracking/odometry | nav_msgs/msg/Odometry | best effort/volatile/depth5、観測時刻と入力継続の監視 |
 | 入力 | /localization/vslam/diagnostics | diagnostic_msgs/msg/DiagnosticArray | reliable/volatile/depth10、VSLAM再局在状態 |
@@ -127,7 +128,9 @@ ROS時刻の経過とsteady受信時間の両方でfreshnessを判定し、bag�
 
 ## 全parameter
 
-起動時read_only。実運用はkart_bringup/config/control/pure_pursuit.yaml。
+lookahead_m・max_speed_mps・max_cross_track_m・goal_tolerance_m・deceleration_mps2は
+新鮮なSTOP中に動的変更可能。それ以外の独自parameterは起動時read_only。
+実運用はkart_bringup/config/control/pure_pursuit.yaml。
 package configは単独起動用。use_sim_timeのみROS共通。
 
 | 名前 | 既定値 | 意味 |
@@ -319,3 +322,17 @@ Map Studioの実車調整でも同じTrackingReferenceを読み、黄色い参�
 UIの切断・通信停止時も参照点表示を消す。
 portable C++計算テストでは横ずれ時の経路長／直線距離の違い・開路終端の参照点を検証。
 ROSメッセージ生成・marker表示・実車での確認は別途必要。
+
+
+### Map Studioのパラメータ調整
+
+地図画面の実車調整 → パラメータ調整 → Pure Pursuitで、実ノードの現在値と
+read_only属性を取得し、上記5項目をノード単位のset_parameters_atomicallyで変更できる。
+ネイティブROS parameter serviceからの変更も最新STOP（mode stamp 0.3秒以内、受信は
+既存wall_timeout_sの規則）を要求し、非有限値・0以下は拒否する。
+validatorは検証だけを行い、全callbackが承認した後の次制御周期に採用する。
+UIは追加で1秒以上の停車を要求する。速度PIDも同じ画面からkp/ki/kd/kff・積分上限・
+微分filter時定数・出力上限を変更可能。PIDの既存動的更新と積分reset規則は維持する。
+独立した速度controllerのmax_target_speed_mps等は起動時上限として保持される。
+変更はメモリ上のみで、再起動後はYAMLに戻る。追加parameterはなく、全既定値は既存configと同じ。
+C++計算のportable検証とUI/通信state machineの単体検証は実施し、ROS結合・実車は未確認。

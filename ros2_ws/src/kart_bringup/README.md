@@ -1032,3 +1032,17 @@ Foxgloveの3Dパネルでframeを`map`、topicを`/control/tracking_markers`に�
 実際の参照点・車両からの矢印・lookaheadの経路長と直線距離を表示できる。
 ノードとQoSの詳細は[kart_control README](../kart_control/README.md#pure-pursuit参照点の表示)を参照。
 allowlistはportable testで検証。ROS配信・実際のFoxglove描画・実車は未確認。
+
+
+### Map Studioでのパラメータ調整
+
+bringupのdriveで「Map Studio 動的調整」を有効にして起動すると、同じUI内の
+「パラメータ調整」からPure Pursuit、参照ライン／Center速度、速度PID、復帰を調整できる。
+現在値と変更可否はJetsonの実ノードから取得する。追従のlookahead等5項目と復帰core Settingsは
+新鮮なSTOP中の動的変更に対応し、UIはさらに1秒以上の停車を要求する。
+全既定値・config項目は従来どおり。適用はノード単位で、メモリ上のみ。
+復帰はbringupの「壁接触・スタック自動復帰」で事前に有効にする。未起動ならUIに未起動と出る。
+画像センサ設定・topic・処理幅など起動時固定項目の動的変更や、UIからの復帰ノード起動は行わない。
+実車ラインの切替ボタンはJetsonに適用済みの選択laneの生成ラインを再転送せず切り替える。
+設定の意味・値域・topic/serviceは各package READMEと[調整窓口](../kart_hdmap/README.md#jetsonパラメータ調整窓口)を参照。
+portable testは通信state machine・read_only・STOP・一括検証・復帰resetを確認し、ROS結合／実車は未確認。

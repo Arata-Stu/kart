@@ -7,6 +7,7 @@ import "./dialogs.js";
 import "./line_tools.js";
 import "./simulation.js";
 import "./tuning.js";
+import "./tuning_parameters.js";
 import "./lanes.js";
 import "./obstacles.js";
 import "./copies.js";

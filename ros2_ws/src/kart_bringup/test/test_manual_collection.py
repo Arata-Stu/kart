@@ -43,7 +43,7 @@ class ManualCollectionTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('manual_collection_cli', ROOT / 'scripts/lib/bringup.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        answers = iter(('collect', '30', '60', False, False, 'fixed'))
+        answers = iter(('collect', '424x240x30', '424x240x60', False, False, 'fixed'))
         output = io.StringIO()
         with (patch.object(sys, 'argv', ['bringup.py', '--no-bridge', '--dry-run', '--run-name', 'manual_fixed']),
               patch.object(sys.stdin, 'isatty', return_value=True),

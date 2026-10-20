@@ -250,7 +250,7 @@ def main():
         settings = yaml.safe_load((config / 'hdmap/hdmap.yaml').read_text())["/**/hdmap_server"]["ros__parameters"]
         tuning_enabled = settings['tuning_enabled'] if args.tuning is None else args.tuning
         if tuning_enabled:
-            from kart_bringup.tuning import map_root
+            from kart_bringup.studio_tuning import map_root
             tuning_map_dir = map_root(args.map_file, args.map_dir)
         print('Map Studio 動的調整: ' + ('有効 / 地図: ' + tuning_map_dir if tuning_enabled else '無効'))
     if args.mode not in ('collect', 'environment', 'drive') and args.auto_fixed_throttle is not None:

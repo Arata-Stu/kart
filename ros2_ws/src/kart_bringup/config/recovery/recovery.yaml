@@ -1,4 +1,5 @@
-# Initial tuning candidates, not calibrated values. All parameters are startup-only.
+# Core recovery thresholds/history/brake/reverse Settings are dynamic in fresh STOP; applying resets recovery history.
+# Initial tuning candidates, not calibrated values. Core Settings parameters are dynamic in fresh STOP; sensor/timing adapter settings are startup-only.
 /**/recovery:
   ros__parameters:
     sensor_profile: 'infra_imu'

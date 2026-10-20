@@ -70,7 +70,8 @@ EVS選択時の途絶はSTOPとし、黙って軽量構成へfallbackしない�
 
 ## 全parameter
 
-全独自parameterは起動時固定(read_only)。変更はSTOPしてYAMLを編集し再起動する。
+`history_span_s`から`max_tick_gap_s`までのcore Settings項目は最新STOP中に動的変更可能。
+上表以前のsensor/topic・処理幅・画像処理設定・受信timeout等のadapter項目は起動時固定(read_only)。
 use_sim_timeはROS標準parameterだが起動後に変更しない。
 pkgのconfig/recovery.yamlは単体起動基準、実運用正本はkart_bringup/config/recovery/recovery.yaml。
 simはkart_bringup/config/sim/drive_recovery.yamlを使用し、ROS stamp/動作時間とsteady受信時間を分離する。
@@ -166,3 +167,23 @@ colcon test-result --verbose
 portableで状態遷移、履歴の参照/符号/上限、固定後退時間、異常中断、試行上限、合成画像の
 フロー/特徴不足、イベント画像の孤立画素除去、ROS transportをstubにした鮮度/中断を確認する。
 ROSビルド・launch/ESC結合・実センサbag・sim接触・実車走行は未確認。
+
+
+## 実行中のパラメータ調整
+
+Map Studioの実車調整 → パラメータ調整 → 復帰モジュールから、履歴区間・スタック閾値・
+停車判定・ブレーキ／後退出力と時間・操舵倍率と上限・試行回数等のcore Settingsを変更できる。
+センサprofile・topic・処理幅・timer／受信期限はread_onlyのまま表示する。
+ノードは最新のSTOP（既存mode_timeout_sとstamp/steady受信期限内）かつ復帰動作非active時だけ
+変更を受け付ける。UIはさらに1秒以上の停車を要求する。
+全変更をSettingsとして一括検証し、停止判定timeoutと確認時間の整合、動／静閾値の順序、
+非有限値・型・値域などを拒否する。検証callbackは状態を変更しない。
+commit後に履歴・検出／後退phase・試行回数をresetし、STOP状態から次のAUTOを待つ。
+画像処理用のFrameMotionは作り直さず、画像処理負荷は変更しない。
+
+追加ROS topic/service/actionとparameterはなし。既存ROS parameterサービスを使う。
+現在値は従来どおり`/recovery/status`のsettingsにも出力され、初期値はconfig/recovery.yamlと同じ。
+変更はメモリ上のみ。再起動後に使う値はbringupのrecovery.yamlへ反映する。
+復帰が未起動の場合、UIは未起動と表示し、勝手に起動／enableしない。
+portable adapter testでSTOP／鮮度拒否、一括整合検証、commit後のresetを確認。
+実ROS parameter service・センサ・ESC・実車での結合は未確認。

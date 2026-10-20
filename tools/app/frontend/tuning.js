@@ -1,3 +1,4 @@
+import { renderVehicle } from './vehicle_status.js';
 import { $, state, api, action, on, emit, toast } from './api.js';
 
 export const tuning = {connected:false, busy:false, epoch:0, received:0, status:null,
@@ -11,6 +12,8 @@ function stop() {
   clearTimeout(tuning.timer); tuning.timer=null;
   render(); emit('tuning');
 }
+export function parameterConnectionReady() { return fresh() && tuning.id===state.id; }
+export function parameterRequest(action, extra={}) { return request(action,extra); }
 function request(action, extra={}) {
   return api('tuning/'+action, {id:tuning.id, connection:state.config.connection,
     known_revision:tuning.status?.revision, ...extra});
@@ -53,6 +56,10 @@ function render() {
   $('tuning-target').textContent=target ? `${target.user}@${target.host}:${target.port} · 接続設定は「転送」と共通` : '';
   $('tuning-connect').textContent=tuning.connected?'切断':'自己位置を接続';
   $('tuning-connect').disabled=tuning.busy || !state.doc;
+  renderVehicle(fresh() ? s : null);
+  $('tuning-offset-open').disabled=tuning.busy || !parameterConnectionReady();
+  $('tuning-parameters-open').disabled=tuning.busy || !parameterConnectionReady();
+  $('tuning-line-switch').disabled=tuning.busy || !!applyIssue();
   $('tuning-preview').disabled=tuning.busy || !state.lane || state.dirty;
   $('tuning-apply').disabled=tuning.busy || !!applyIssue() || !previewValid();
   $('tuning-rollback').disabled=tuning.busy || !!applyIssue() || !s?.can_rollback;

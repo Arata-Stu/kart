@@ -133,7 +133,7 @@ class Studio:
     def post(self, path, b):
         if path == "/api/tuning/prepare":
             return self.tuning.prepare(b)
-        if path in ("/api/tuning/status", "/api/tuning/apply", "/api/tuning/rollback"):
+        if path in ("/api/tuning/status", "/api/tuning/apply", "/api/tuning/rollback", "/api/tuning/parameters_get", "/api/tuning/parameters_set"):
             return self.tuning.request(b, path.rsplit("/", 1)[1])
         key = b.get("id", "")
         if path in ("/api/e2e/trash", "/api/e2e/restore"):

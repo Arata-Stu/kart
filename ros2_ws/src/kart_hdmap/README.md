@@ -71,7 +71,7 @@ ros2 service call /hdmap/reload std_srvs/srv/Trigger '{}'
 
 ## パラメータとlaunch
 
-line_typeのみ動的変更可能。他の独自parameterは起動時固定（read_only）。全値をpackage configとbringup configに記載。
+line_type・centerline_speed_mps・speed_override_mpsは動的変更可能。他の独自parameterは起動時固定（read_only）。全値をpackage configとbringup configに記載。
 
 | 名前 | 既定値 | 意味 |
 |---|---|---|
@@ -120,7 +120,7 @@ QoSはreliable/transient_local/depth1、既存のpublish_rate_hzと同周期。
 遅いsimでも地図heartbeatの実時間間隔が伸びず、制御側の受信watchdogと整合する。
 再配信は静的参照の状態通知であり、推定姿勢や制御指令のstampは更新しない。
 閉路でも先頭を末尾に重複追加しない。XY/速度の要素数は同じ。
-追加parameterは`line_type=centerline`（動的）と`centerline_speed_mps=0.0`（起動時固定）（有限・非負）。
+追加parameterは`line_type=centerline`（動的）と`centerline_speed_mps=0.0`（動的）（有限・非負）。
 Race/Customはprofileのvx_mpsを使用し、Centerlineは明示した一定速度を使う。
 
 | 速度試験parameter | 既定値 | 動的 | 意味 |
@@ -194,7 +194,7 @@ HTTP `POST /status`・`/apply`・`/rollback`は127.0.0.1:8782固定、Originな�
 速度推定はVSLAM由来であり、物理的な停車の保証ではない。
 有効なStudio v2 geometryを最大20,000生成点で受け、選択lane・lineと速度を一括交換する。
 Center速度はsnapshotの値、Race/Customは生成済みprofileを使う。uniform speed overrideは適用時に-1へ戻す。
-Center速度の起動parameterは保持し、適用値はHTTP active.centerline_speed_mpsで確認する。
+Center速度はROS parameterとHTTP active.centerline_speed_mpsの両方へ反映する。
 旧版へ戻す際はgeometry・lane・line・Center速度・uniform overrideをまとめて戻す。
 元ファイルは上書きせずメモリ上に適用するため、再起動時は起動地図へ戻る。
 画面切断によるSTOP要求は出さず、既存Joy/モード管理・watchdogに従う。
@@ -209,3 +209,45 @@ Center速度の起動parameterは保持し、適用値はHTTP active.centerline_
 HTTP statusの`tracking_reference`として返す。origin/targetは制御計測時の座標、
 lookahead_mは経路長、target_distance_mは直線距離。無効通知・timeout・地図適用時には消去する。
 この観測追加による新しいparameter、publisher、serviceはない。
+
+
+## Jetsonパラメータ調整窓口
+
+`tuning_enabled=true`時の同じloopback HTTP窓口へ`POST /parameters_get`・`/parameters_set`を追加。
+map_id、target（tracking / speed / map / recovery / vehicle）、変更時はexpected_revisionとchangesを受ける。
+許可した5ノードと項目だけに限定し、クライアントから任意ノード名・service名は受け付けない。
+対象はHDMapノードと同じnamespace内のpure_pursuit、speed_controller、hdmap_server、recovery、kart_bridge。
+現在値とdescriptorのread_only・型・説明を取得して返す。取得は閲覧用でSTOP不要、変更は
+既存の最新STOP・1秒停車・地図一致・参照ライン非競合条件を要求する。
+
+既存ROS標準serviceのクライアント:
+
+| 方向 | 既定service名（nodeを上記5ノードで展開） | 型 | 用途 |
+| --- | --- | --- | --- |
+| 要求 | /node/get_parameters | rcl_interfaces/srv/GetParameters | 許可項目の現在値取得 |
+| 要求 | /node/describe_parameters | rcl_interfaces/srv/DescribeParameters | 実ノードの型・read_only属性取得 |
+| 要求 | /node/set_parameters_atomically | rcl_interfaces/srv/SetParametersAtomically | 1ノード内の変更を一括適用 |
+
+ROS executorで同期待機／spinを行わず、futureを次timer周期で回収する。
+get/describe→変更前revision確認→STOP再確認→atomic set→get/describeで適用後の実値を確認する。
+同時に1トランザクションのみ。複数ノードを跨ぐ一括commitはしない。外部ROSクライアントとの
+compare-and-setを保証するAPIではなく、事前読取時の競合と適用後の値を確認する方式。
+通信timeout後に変更を再送しない。適用済みか不明な場合は現在値を再取得する。
+メモリ上だけの変更で、YAMLを更新しない。新規ROS parameterなし。
+
+実車ライン切替は生成済みの選択laneにあるline_typeに限定する。地図snapshot全体の再転送は不要。
+Center速度は有限・非負のdouble。tuning有効時のline_type／速度変更はネイティブparameter serviceでも
+既存STOP・停車条件を要求する。snapshotの一括適用は検証済みの新地図を同一transactionで選択する。
+
+
+### 車両状態とステア補正の連携
+
+`tuning_enabled=true`時、追加で`/recovery/status` (`std_msgs/msg/String`, JSON schema `kart.recovery.v1`)
+と`/diagnostics` (`diagnostic_msgs/msg/DiagnosticArray`, name=`kart_bridge`, hardware_id=`JPBB-01`)
+を購読する。追加パラメータ・出力topicはない。HTTP statusの`vehicle`に限定した状態だけを返す。
+復帰状態はstamp/受信時刻とも0.8秒以内、bridge診断は2.5秒以内だけ有効。
+未起動・受信待ち/無効・受信停止・復帰topicの配信元競合を区別する。
+共有diagnostics topicの他ノードは無視する。復帰のsuspectは衝突の確定判定ではない。
+車両パラメータ対象`vehicle`は`kart_bridge`の`steering_offset`を変更可能、
+`steering_scale`・`initial_steering_trim`・`steering_trim_limit`は参照専用。
+通常の新しいSTOP・1秒以上の低速確認を適用し、bridge自身のSTOPチェックも必要。

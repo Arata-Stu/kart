@@ -1,3 +1,4 @@
+# lookahead_m / max_speed_mps / max_cross_track_m / goal_tolerance_m / deceleration_mps2: dynamic in fresh STOP.
 # Full parameter set from control/pure_pursuit.yaml; sim-only settings.
 # Nominal simulator tuning; do not use these gains as physical vehicle calibration.
 /**/pure_pursuit:

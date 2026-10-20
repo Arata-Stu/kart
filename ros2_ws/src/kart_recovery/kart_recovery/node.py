@@ -8,7 +8,7 @@ import cv2
 import rclpy
 from rclpy.clock import Clock, ClockType
 from rclpy.node import Node
-from rcl_interfaces.msg import ParameterDescriptor
+from rcl_interfaces.msg import ParameterDescriptor, SetParametersResult
 from rclpy.qos import qos_profile_sensor_data
 from kart_interfaces.msg import ControlCommand, OperationModeRequest, OperationModeState
 from sensor_msgs.msg import Image, Imu
@@ -51,7 +51,7 @@ class RecoveryNode(Node):
         descriptor = ParameterDescriptor(read_only=True)
         self.cfg = {key: self.declare_parameter(key, value, descriptor).value
                     for key, value in NODE_DEFAULTS.items()}
-        settings = Settings(**{f.name: self.declare_parameter(f.name, getattr(Settings(), f.name), descriptor).value
+        settings = Settings(**{f.name: self.declare_parameter(f.name, getattr(Settings(), f.name), ParameterDescriptor(read_only=False)).value
                                for f in fields(Settings)})
         self.machine = Recovery(settings)
         c = self.cfg
@@ -100,8 +100,45 @@ class RecoveryNode(Node):
             self.create_subscription(Image, c['evs_image_topic'], self.on_events, qos_profile_sensor_data)
         self.timer = self.create_timer(1 / c['control_rate_hz'], self.tick,
                                       clock=Clock(clock_type=ClockType.STEADY_TIME))
+        self.add_on_set_parameters_callback(self.validate_settings)
+        self.add_post_set_parameters_callback(self.apply_settings)
         self.get_logger().info('Recovery settings (unvalidated on vehicle): ' +
                                json.dumps({**c, **asdict(settings)}))
+
+    def settings_candidate(self, parameters):
+        values = {f.name: self.get_parameter(f.name).value for f in fields(Settings)}
+        for parameter in parameters:
+            if parameter.name in values:
+                expected = type(getattr(Settings(), parameter.name))
+                if type(parameter.value) is not expected:
+                    raise ValueError(parameter.name + ': parameter type mismatch')
+                values[parameter.name] = parameter.value
+        return Settings(**values)
+
+    def validate_settings(self, parameters):
+        keys = {f.name for f in fields(Settings)}
+        if not any(p.name in keys for p in parameters):
+            return SetParametersResult(successful=True)
+        try:
+            if self.mode != 3 or not self.fresh('mode', self.cfg['mode_timeout_s']) or self.machine.active:
+                raise ValueError('Fresh STOP and inactive recovery are required')
+            self.settings_candidate(parameters)
+            return SetParametersResult(successful=True)
+        except (ValueError, TypeError) as error:
+            return SetParametersResult(successful=False, reason=str(error))
+
+    def apply_settings(self, parameters):
+        keys = {f.name for f in fields(Settings)}
+        if not any(p.name in keys for p in parameters):
+            return
+        # Apply only after every validator accepts. Reset steering history and
+        # recovery phases; the next AUTO starts with the new settings.
+        self.machine = Recovery(self.settings_candidate([]))
+        now = self.get_clock().now().nanoseconds * 1e-9
+        self.machine.step(now, 3, Command(), Observation())
+        self.command_msg = None
+        self.release_wait_until = -math.inf
+        self.last_reported = None
 
     def remember(self, key, stamp):
         self.samples[key] = (stamp_seconds(stamp), time.monotonic())

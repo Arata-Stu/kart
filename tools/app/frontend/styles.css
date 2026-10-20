@@ -1315,3 +1315,30 @@ summary {
 .tuning-controls select { width: auto; min-width: 100px; flex: 0 0 auto; }
 .tuning-controls label { display: inline-flex; align-items: center; gap: 4px; margin: 0; }
 .tuning-panel .small { line-height: 1.5; }
+
+.tuning-parameters-dialog { width: min(850px, 95vw); max-height: 90dvh; }
+.tuning-parameter-scroll { max-height: 48dvh; overflow: auto; }
+.tuning-parameter-scroll table { border-collapse: collapse; width: 100%; }
+.tuning-parameter-scroll th, .tuning-parameter-scroll td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); }
+.tuning-parameter-scroll code { display: block; color: var(--muted); font-size: 11px; }
+.tuning-parameter-scroll input { width: 120px; }
+.tuning-parameter-scroll select { width: 150px; }
+.tuning-parameter-scroll small { display: block; color: var(--muted); }
+.tuning-parameters-dialog[open] { display: flex; flex-direction: column; gap: 10px; height: min(760px, 92dvh); overflow: hidden; }
+.tuning-parameters-dialog h2 { margin: 0; font-size: 18px; }
+.tuning-parameters-dialog > .actions { align-items: center; flex: none; }
+#tuning-parameters-close { margin-left: auto; }
+.tuning-parameters-dialog label { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+#tuning-parameters-target { width: 220px; }
+.tuning-parameters-dialog p { margin: 0; flex: none; }
+#tuning-parameters-form { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
+#tuning-parameters-form > .actions { flex: none; }
+.tuning-parameter-scroll { flex: 1; min-height: 0; max-height: none; }
+.tuning-parameter-scroll thead { position: sticky; top: 0; background: white; }
+
+.vehicle-state{display:flex;flex-wrap:wrap;gap:6px 16px;margin:8px 0;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:white;font-size:13px}
+.vehicle-state>div{flex-basis:100%}
+.vehicle-state [data-tone=error]{color:#b42318;font-weight:600}
+.vehicle-state [data-tone=warn]{color:#925600;font-weight:600}
+.vehicle-state [data-tone=unknown]{color:var(--muted)}
+.vehicle-state [data-tone=ok]{color:var(--accent)}

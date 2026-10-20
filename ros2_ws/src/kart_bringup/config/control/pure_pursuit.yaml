@@ -1,3 +1,4 @@
+# lookahead_m / max_speed_mps / max_cross_track_m / goal_tolerance_m / deceleration_mps2: dynamic in fresh STOP.
 /**/pure_pursuit:
   ros__parameters:
     use_sim_time: false

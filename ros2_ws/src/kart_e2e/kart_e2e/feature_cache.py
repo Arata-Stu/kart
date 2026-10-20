@@ -21,7 +21,7 @@ def digest(path):
 class CachedSamples(Dataset):
     def __init__(self, path, items, mode):
         self.path = str(path)
-        self.labels = np.asarray([label[:1] if mode == 'steer_only' else label for _,label in items], dtype=np.float32)
+        self.labels = np.asarray([(label[:1] + label[2:] if mode == 'steer_only' else label) for _,label in items], dtype=np.float32)
         self.features = None
 
     def __len__(self):

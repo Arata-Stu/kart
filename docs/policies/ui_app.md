@@ -245,3 +245,22 @@ DataLoader worker数は既定8を表示し、要求値と実効cache設定を実
 - Pure Pursuitの参照点は`/control/tracking_reference`から受け、同じ計算に使った車両位置と
   結んで表示する。設定lookahead（最近傍経路投影点からの経路長）と直線距離を区別し、
   ブラウザ側で参照点を再計算しない。無効・古い情報は表示対象から除外する。
+
+
+## 実行中の制御パラメータ調整
+
+- 地図画面の実車調整へ統合し、接続先は既存SSH設定を共用する。
+- パラメータの現在値・型・read_only属性はJetsonの実ノードから取得する。
+  対象はPure Pursuit・HDMap・速度PID・復帰の明示allowlist。任意service／ノード操作UIを作らない。
+- UIはSTOPと停車を確認し、ノードごとにset_parameters_atomicallyで変更して現在値を読み返す。
+  ROS executorをHTTP待機やspinで塞がない。通信失敗時に変更を自動再送しない。
+- lookahead等の追従項目と復帰core Settingsはノード側でも最新STOPを要求する。
+  センサtopic・画像処理構成等の起動時固定項目は編集不可とし、未起動ノードを勝手に起動しない。
+- パラメータ変更はメモリ上に保持する。地図snapshotの「直前の版へ」とパラメータ変更は別操作。
+  起動YAMLへの自動保存や、複数ノードを跨ぐatomic commitは提供しない。
+
+
+車両状態の表示はモード・HOST authority・通信状態・復帰状態を区別する。
+復帰のsuspectを衝突確定と表示しない。topicのstampと受信時刻の両方で鮮度を確認し、
+切断・古い状態・未起動を正常状態に見せない。ステア補正は既存の加算方式を維持し、
+`steering_offset`とD-pad trimを区別する。動的offsetはSTOP時に適用し、YAMLへ自動保存しない。

@@ -12,6 +12,8 @@ rclcpp_components_register_node(kart_control_components PLUGIN "kart_control::Sp
 rclcpp_components_register_node(kart_control_components PLUGIN "kart_control::FixedCommandNode" EXECUTABLE fixed_command)
 include(CTest)
 if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(tracking_parameters test/test_tracking_parameters.py)
   add_executable(test_fixed_command test/test_fixed_command.cpp)
   target_compile_features(test_fixed_command PRIVATE cxx_std_17)
   target_include_directories(test_fixed_command PRIVATE include)

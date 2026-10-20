@@ -33,3 +33,9 @@ CLIは`--recovery off|infra_imu|rgb_imu|evs_assisted`。未指定はYAML保持�
 launch引数名は`recovery`（既定空文字）。明示profile選択ではsensor_profileとimage_topicだけを変更し、
 image_topicはlaunch.yamlのprofilesを使う。後退時間・出力・操舵履歴等の調整値は保持する。
 EVS補助では`--evs`も指定し、使用する画像のFPSを0にしない。
+
+
+動的調整を有効にしたdriveでは、Map Studioの「パラメータ調整」→「復帰モジュール」で
+core Settings（履歴・閾値・停止確認・ブレーキ／後退・操舵・回数等）をSTOP中に変更できる。
+適用時に復帰履歴／phaseをresetする。sensor/topic・画像処理・timeoutは起動時固定。
+静的YAMLの全項目・既定値は維持し、UI変更はメモリ上だけで次回起動には保存しない。

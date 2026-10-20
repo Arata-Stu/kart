@@ -26,7 +26,7 @@ ROS標準の`/rosout`、`/parameter_events`等は省略。QoSはすべてreliabl
 | 既定topic名 | 型 | Depth | 内容・配信タイミング |
 | --- | --- | --- | --- |
 | `/operation_mode/request` | `kart_interfaces/msg/OperationModeRequest` | 10 | 異常時STOP、実RC経路選択時PROPOの要求 |
-| `/vehicle/trim/state` | `kart_interfaces/msg/ControlTrim` | 1 | 10 Hz。累積トリム、固定`steering_offset`は含まない |
+| `/vehicle/trim/state` | `kart_interfaces/msg/ControlTrim` | 1 | 10 Hz。累積トリム、`steering_offset`は含まない |
 | `/vehicle/rc_channels` | `std_msgs/msg/Int32MultiArray` | 1 | 新しい有効statusごと。`[RX1,RX2,RX3]`、µs |
 | `/vehicle/output_channels` | `std_msgs/msg/Int32MultiArray` | 1 | statusごと。`[servo,ESC]`、µs。基板生成PWMであり実測舵角／車速ではない |
 | `/vehicle/vbec` | `std_msgs/msg/Float32` | 1 | statusごと。BEC電圧、V |
@@ -39,7 +39,7 @@ ROS標準の`/rosout`、`/parameter_events`等は省略。QoSはすべてreliabl
 
 ## パラメータ
 
-独自パラメータはすべて起動時固定。単体起動用の全parameterは[config/bridge.yaml](config/bridge.yaml)。
+`steering_offset`だけ動的変更可能。他の独自パラメータは起動時固定。単体起動用の全parameterは[config/bridge.yaml](config/bridge.yaml)。
 実運用は[kart_bringup/config/vehicle/bridge.yaml](../kart_bringup/config/vehicle/bridge.yaml)を使用する。
 個別pkgのconfigはbringupへ自動で重ねない。
 
@@ -47,7 +47,7 @@ ROS標準の`/rosout`、`/parameter_events`等は省略。QoSはすべてreliabl
 | --- | --- | --- |
 | `device` | `""` | 必須。空では起動を拒否。実際の`/dev/serial/by-id/...`または選定したttyACMパス |
 | `steering_scale` | `-1.0` | ROS左正→基板PWM方向への倍率。−1..1、絶対値0.01以上 |
-| `steering_offset` | `0.0` | 倍率適用後の固定ステア補正。−0.5..0.5。D-padトリムとは別 |
+| `steering_offset` | `0.0` | 倍率適用後のステア補正。fresh STOP中のみ動的変更可能。−0.5..0.5。D-padトリムとは別 |
 | `command_timeout` | `0.15` s | 指令の受信時刻・元stampの有効期間。0.02..0.2 s |
 | `status_timeout` | `0.2` s | 基板statusの有効期間。0.05..0.5 s |
 | `steering_trim_limit` | `0.25` | 累積ステアトリムの絶対値上限。0..0.5 |
@@ -141,3 +141,17 @@ bridge実装・parameter・topicは変更しない。このテストはROS/基�
 正常なHOST稼働中のAUTO↔MANUALはAuthorityを保持して直接切替する。
 この切替ではHostSession/ESC履歴を再初期化せず、操舵と通常手動操作への引継ぎを許可する。
 異常・通信途絶・再接続後のSTOP再arm要件は維持する。
+
+
+## UIでのステア補正
+
+Map Studioの実車調整 →「ステア補正」で`kart_bridge.steering_offset`を取得・変更する。
+UIは新しいSTOPとVSLAMによる1秒以上の停車確認を要求する。
+bridge自身も元stampと受信時刻が300 ms以内のSTOPを要求し、有限値−0.5..0.5だけを受理する。
+ROSパラメータのatomic commit後、次の10 ms周期で反映する。STOPの中立出力は変わらない。
+再起動でYAML値に戻り、自動保存しない。調整後は既存操作系で走行を再開する。
+
+加算・±1制限の方式は維持する。D-padの`steering_trim`は倍率適用前のROS左正、
+`steering_offset`は倍率適用後であり、`steering_scale=-1`では符号の意味が異なる。
+`/diagnostics`は両方の現在値と`steering_scale`を1 Hzで公開する。
+UIのHOST有効表示はbridgeのauthority状態であり、物理的な動作・停止確認ではない。

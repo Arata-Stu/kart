@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 from .model import SPEC, Policy, backbone, preprocess
 from .contract import RGB_ENCODERS
@@ -30,11 +30,17 @@ def plateau_scheduler(optimizer, *, factor=0.5, patience=2, min_lr=1e-7):
 
 
 class Samples(Dataset):
-    def __init__(self, roots, mode, evs_spec=None):
+    def __init__(self, roots, mode, evs_spec=None, routing=None):
         self.items = []
         self.mode = mode
         self.evs_spec = evs_spec
+        self.routing = routing
         for root in roots:
+            if routing:
+                from .sections import digest
+                meta = json.loads((root / 'metadata.json').read_text())
+                if meta.get('routing_sha256') != digest(routing):
+                    raise ValueError('Section dataset routing differs from training routing')
             if evs_spec is None and (root / 'metadata.json').exists():
                 if json.loads((root / 'metadata.json').read_text()).get('modality', 'rgb') != 'rgb':
                     raise ValueError('RGB training cannot consume an EVS dataset; use --modality evs')
@@ -54,6 +60,11 @@ class Samples(Dataset):
                     or not 0 <= values[1] <= 1
                 ):
                     raise ValueError("Invalid control label")
+                if routing:
+                    head = row.get('head_id')
+                    if head not in routing['heads']:
+                        raise ValueError('Sample lacks a valid head_id')
+                    values.append(routing['heads'].index(head))
                 self.items.append((image, values))
         if not self.items:
             raise ValueError("Empty dataset")
@@ -73,7 +84,9 @@ class Samples(Dataset):
             value = torch.from_numpy(counts)
         else:
             value = preprocess(load_rgb(path))
-        return value, torch.tensor(label[:1] if self.mode == "steer_only" else label)
+        target = label[:1] if self.mode == "steer_only" else label[:2]
+        if self.routing: target = target + [label[-1]]
+        return value, torch.tensor(target)
 
 
 def main():
@@ -104,6 +117,7 @@ def main():
     p.add_argument("--architecture", choices=RGB_ENCODERS, default="dinov3_vits16")
     p.add_argument("--modality", choices=["rgb", "evs"], default="rgb")
     p.add_argument("--initialization", choices=["pretrained", "scratch"], default="pretrained")
+    p.add_argument("--section-routing", type=Path, help="Jointly train shared encoder and section-assigned heads")
     p.add_argument("--finetune", action="store_true", help="Update the full backbone and control head")
     p.add_argument("--device", default="cuda")
     p.add_argument("--precision", choices=["auto", "fp32", "bf16", "fp16"], default="auto",
@@ -128,6 +142,10 @@ def main():
     p.add_argument("--log-interval", type=int, default=50, help="Detailed timing.jsonl snapshot every N batches; console progress refreshes at most every 0.5s")
     p.add_argument("--seed", type=int, default=42)
     a = p.parse_args()
+    routing = None
+    if a.section_routing:
+        from .sections import load as load_routing
+        routing = load_routing(a.section_routing)
     scratch = a.initialization == "scratch"
     if scratch and a.modality != "rgb":
         p.error("Scratch baselines currently support RGB only")
@@ -182,9 +200,9 @@ def main():
             p.error('ViT-Tiny distillation currently supports RGB only')
         from .evs_policy import pretrained_policy
         model = pretrained_policy(a.weights, a.repo, a.mode, frozen=not a.finetune).to(a.device)
-        datasets = [Samples(r, a.mode, model.spec) for r in (a.train, a.validation)]
+        datasets = [Samples(r, a.mode, model.spec, routing) for r in (a.train, a.validation)]
     else:
-        datasets = [Samples(a.train, a.mode), Samples(a.validation, a.mode)]
+        datasets = [Samples(a.train, a.mode, routing=routing), Samples(a.validation, a.mode, routing=routing)]
         if scratch:
             encoder = backbone(a.repo, a.architecture)
         elif a.architecture == 'dinov3_vits16':
@@ -194,6 +212,12 @@ def main():
             from .model import load_rgb_encoder
             encoder = load_rgb_encoder(a.weights, a.repo, a.architecture)
         model = Policy(encoder, a.mode, frozen=not a.finetune, architecture=a.architecture).to(a.device)
+    head_ids = None
+    if routing:
+        model.configure_heads(routing).to(a.device)
+        head_ids = [[int(label[-1]) for _, label in d.items] for d in datasets]
+        if any(set(ids) != set(range(len(routing['heads']))) for ids in head_ids):
+            raise ValueError('Every head requires both training and validation samples')
     model.runtime = runtime
     optimizer = torch.optim.AdamW(
         (v for v in model.parameters() if v.requires_grad), lr=a.learning_rate
@@ -211,7 +235,13 @@ def main():
 
     def loader_factory(dataset, shuffle, persistent=True, seed=a.seed):
         workers = loader_workers(dataset, a.num_workers)
-        options = dict(batch_size=a.batch_size, shuffle=shuffle, num_workers=workers,
+        sampler = None
+        if shuffle and head_ids is not None:
+            ids = head_ids[0]
+            counts = np.bincount(ids, minlength=len(routing['heads']))
+            sampler = WeightedRandomSampler([1./counts[i] for i in ids], len(ids), replacement=True,
+                                             generator=torch.Generator().manual_seed(seed))
+        options = dict(batch_size=a.batch_size, shuffle=shuffle and sampler is None, sampler=sampler, num_workers=workers,
                        pin_memory=str(a.device).startswith('cuda'),
                        generator=torch.Generator().manual_seed(seed))
         if workers:
@@ -250,6 +280,8 @@ def main():
     provenance["grad_scaler_enabled"] = scaler.is_enabled()
     provenance["feature_cache_precision"] = "fp32" if effective_cache else None
     provenance["selection_metric"] = "validation_mse"
+    provenance["head_sampling"] = "equal_head_replacement" if routing else None
+    provenance["routing"] = routing
     provenance["scheduler_metric"] = "validation_loss" if scheduler else None
     provenance["weights_sha256"] = weights_sha
     provenance["feature_cache_effective"] = effective_cache
@@ -266,11 +298,16 @@ def main():
             total = 0.0
             total_mse = 0.0
             mae = torch.zeros(1 if a.mode == "steer_only" else 2, device=a.device)
+            head_error = torch.zeros(len(routing["heads"]), device=a.device) if routing else None
+            head_mae = torch.zeros_like(head_error) if routing else None
+            head_count = torch.zeros_like(head_error) if routing else None
             phase = timing.phase("train" if index==0 else "validation", epoch+1)
             with torch.set_grad_enabled(index == 0):
                 for images, target in phase.batches(loader):
                     with phase.measure("transfer"):
                         target = target.to(a.device, non_blocking=True)
+                        selected_heads = target[:, -1].long() if routing else None
+                        if routing: target = target[:, :-1]
                         inputs = images.to(a.device, non_blocking=True)
                     with autocast_context(effective_precision):
                         if effective_cache:
@@ -280,6 +317,9 @@ def main():
                                 features = model.extract_features(inputs)
                         with phase.measure("head"):
                             prediction = model.predict_features(features)
+                            if routing:
+                                prediction = prediction.reshape(len(inputs), len(routing['heads']), -1)[
+                                    torch.arange(len(inputs), device=a.device), selected_heads]
                     with phase.measure("loss"):
                         # Includes the pre-existing finite-check synchronization.
                         prediction = prediction.float()
@@ -298,6 +338,11 @@ def main():
                         total += loss.item() * len(images)
                         total_mse += torch.nn.functional.mse_loss(prediction.detach(), target).item() * len(images)
                         mae += (prediction.detach() - target).abs().sum(0)
+                        if routing:
+                            errors = prediction.detach() - target
+                            head_error.scatter_add_(0, selected_heads, errors.square().mean(1))
+                            head_mae.scatter_add_(0, selected_heads, errors[:, 0].abs())
+                            head_count.scatter_add_(0, selected_heads, torch.ones_like(selected_heads, dtype=torch.float32))
                     phase.loss = total / (phase.samples + len(images))
                     phase.mse = total_mse / (phase.samples + len(images))
             phase_report = phase.report()
@@ -307,6 +352,16 @@ def main():
             metrics[key + "_loss"] = total / len(loader.dataset)
             metrics[key + "_mse"] = total_mse / len(loader.dataset)
             metrics[key + "_mae"] = (mae / len(loader.dataset)).tolist()
+            if routing:
+                count = head_count.cpu().tolist()
+                mse = (head_error / head_count.clamp_min(1)).cpu().tolist()
+                steer = (head_mae / head_count.clamp_min(1)).cpu().tolist()
+                metrics[key + '_heads'] = {head: dict(samples=int(count[i]), mse=mse[i] if count[i] else None,
+                                                     steering_mae=steer[i] if count[i] else None)
+                                           for i,head in enumerate(routing['heads'])}
+                metrics[key + '_micro_mse'] = metrics[key + '_mse']
+                metrics[key + '_mse'] = sum(mse[i] for i in range(len(mse)) if count[i])/sum(c>0 for c in count)
+
         if scheduler:
             scheduler.step(metrics["validation_loss"])
         metrics["next_learning_rate"] = optimizer.param_groups[0]["lr"]
@@ -327,6 +382,8 @@ def main():
                 "metrics": metrics,
                 "provenance": provenance,
             }
+            if routing:
+                state["routing"] = routing
             if a.modality == 'evs':
                 state.update(modality='evs', evs_metadata=model.evs_metadata)
             save_started = time.perf_counter()

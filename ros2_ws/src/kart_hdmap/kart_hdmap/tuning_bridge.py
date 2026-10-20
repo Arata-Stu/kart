@@ -14,6 +14,8 @@ class TuningBridge:
     def __init__(self, node):
         from kart_interfaces.msg import OperationModeState, TrackingReference
         from nav_msgs.msg import Odometry
+        from std_msgs.msg import String
+        from .vehicle_status import VehicleStatus
         from diagnostic_msgs.msg import DiagnosticArray
         from rclpy.clock import Clock, ClockType
         from rclpy.qos import qos_profile_sensor_data
@@ -32,6 +34,7 @@ class TuningBridge:
         self.node = node
         self.identity = map_identity(node.settings['tuning_map_dir'])
         self.gate = StopGate()
+        self.vehicle = VehicleStatus()
         self.previous = None
         self.pose = None
         self.tracking = None
@@ -41,11 +44,15 @@ class TuningBridge:
         self.buffer = Buffer()
         self.listener = TransformListener(self.buffer, node)
         self.subscriptions = [
+            node.create_subscription(String, 'recovery/status', lambda m: self.vehicle.recovery(m.data), 1),
+            node.create_subscription(DiagnosticArray, 'diagnostics', self.vehicle_diagnostics, 10),
             node.create_subscription(TrackingReference, 'control/tracking_reference', self.reference, 1),
             node.create_subscription(OperationModeState, 'operation_mode/state', self.mode, 1),
             node.create_subscription(Odometry, 'visual_slam/tracking/odometry', self.speed, qos_profile_sensor_data),
             node.create_subscription(DiagnosticArray, 'localization/vslam/diagnostics', self.localization, 10),
         ]
+        from .parameter_bridge import ParameterBridge
+        self.parameters = ParameterBridge(self)
         bridge = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -118,6 +125,10 @@ class TuningBridge:
                     target=[msg.target.x, msg.target.y], lookahead_m=msg.lookahead_m,
                     target_distance_m=msg.target_distance_m)
 
+    def vehicle_diagnostics(self, msg):
+        stamp = msg.header.stamp.sec + msg.header.stamp.nanosec / 1e9
+        self.vehicle.bridge(stamp, msg.status)
+
     def localization(self, msg):
         for status in msg.status:
             if status.hardware_id == 'visual_slam':
@@ -148,6 +159,10 @@ class TuningBridge:
                       speed_mps=self.gate.speed if now - self.gate.speed_at <= .5 else None,
                       pose=self.pose, tracking_reference=self.tracking_status(), localized=self.localized and now - self.localized_at <= 1.5,
                       apply_issue=self.issue(), can_rollback=self.previous is not None)
+        if hasattr(self, 'vehicle'):
+            result['vehicle'] = self.vehicle.view(self.node.get_clock().now().nanoseconds / 1e9,
+                dict(bridge=int(self.node.count_publishers('diagnostics') > 0),
+                     recovery=self.node.count_publishers('recovery/status')))
         if revision != known:
             result['active'] = self.active()
         return result
@@ -161,6 +176,7 @@ class TuningBridge:
             result = n.set_parameters_atomically([
                 Parameter('line_type', value=candidate['line_type']),
                 Parameter('speed_override_mps', value=float(candidate['speed_override_mps'])),
+                Parameter('centerline_speed_mps', value=float(candidate['centerline_speed_mps'])),
             ])
             if not result.successful:
                 raise ValueError(result.reason)
@@ -174,6 +190,7 @@ class TuningBridge:
 
     def tick(self):
         from rclpy.time import Time
+        self.parameters.tick()
         n = self.node
         self.pose = None
         try:
@@ -188,7 +205,10 @@ class TuningBridge:
             action, body, reply, deadline = self.requests.get_nowait()
         except queue.Empty:
             return
-        reply.put(self.handle(action, body, deadline))
+        if action in ('/parameters_get', '/parameters_set'):
+            self.parameters.begin(action, body, reply, deadline)
+        else:
+            reply.put(self.handle(action, body, deadline))
 
     def handle(self, action, body, deadline):
         """Validate and commit one request; called only by the ROS executor."""
@@ -200,6 +220,9 @@ class TuningBridge:
             if action not in ('/status', '/apply', '/rollback'):
                 raise ValueError('Unknown tuning action')
             if action != '/status':
+                parameters = getattr(self, 'parameters', None)
+                if parameters is not None and parameters.pending is not None:
+                    raise ValueError('パラメータ処理中です。結果確認後に地図を適用してください')
                 issue = self.issue()
                 if issue:
                     raise ValueError(issue)

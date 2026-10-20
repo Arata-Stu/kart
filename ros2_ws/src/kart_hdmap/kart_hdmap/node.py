@@ -41,7 +41,7 @@ class HDMapNode(Node):
         }
         for key, value in defaults.items():
             self.declare_parameter(
-                key, value, ParameterDescriptor(read_only=key not in ("line_type", "speed_override_mps"))
+                key, value, ParameterDescriptor(read_only=key not in ("line_type", "speed_override_mps", "centerline_speed_mps"))
             )
         self.settings = {k: self.get_parameter(k).value for k in defaults}
         for key in ("publish_rate_hz", "line_width_m", "label_height_m"):
@@ -100,6 +100,21 @@ class HDMapNode(Node):
         return super().destroy_node()
 
     def validate_parameters(self, parameters):
+        tuning = getattr(self, "tuning", None)
+        changed = any(p.name in ("line_type", "speed_override_mps", "centerline_speed_mps") for p in parameters)
+        if tuning is not None and changed:
+            issue = tuning.issue()
+            if issue:
+                return SetParametersResult(successful=False, reason=issue)
+        for parameter in parameters:
+            if parameter.name == "centerline_speed_mps" and (
+                    parameter.type_ != Parameter.Type.DOUBLE or
+                    not math.isfinite(parameter.value) or parameter.value < 0):
+                return SetParametersResult(successful=False, reason="Centerline speed must be finite and nonnegative")
+            if tuning is not None and not getattr(self, "tuning_transaction", False) and parameter.name == "line_type":
+                lane = select(self.document, self.selected)
+                if lane is None or parameter.value not in lane['lines']:
+                    return SetParametersResult(successful=False, reason="Selected lane has no generated line of that type")
         for parameter in parameters:
             if parameter.name == "speed_override_mps":
                 try:
@@ -119,11 +134,12 @@ class HDMapNode(Node):
         # Apply only after the entire parameter transaction has committed.
         changed = False
         for parameter in parameters:
-            if parameter.name in ("line_type", "speed_override_mps"):
+            if parameter.name in ("line_type", "speed_override_mps", "centerline_speed_mps"):
                 self.settings[parameter.name] = parameter.value
                 changed = True
         if changed:
             self.line_type = self.settings["line_type"]
+            self.runtime_centerline_speed = self.settings["centerline_speed_mps"]
             if not getattr(self, "tuning_transaction", False):
                 self.publish()
 

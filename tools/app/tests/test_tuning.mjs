@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 const elements = new Map();
 function element(id) {
-  if (!elements.has(id)) elements.set(id, {value:'', hidden:false, disabled:false, textContent:'',
+  if (!elements.has(id)) elements.set(id, {value:'', hidden:false, disabled:false, textContent:'',dataset:{},
     addEventListener(name, fn){this[name]=fn;}});
   return elements.get(id);
 }

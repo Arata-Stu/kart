@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from kart_bringup.tuning import map_root
+from kart_bringup.studio_tuning import map_root
 
 ROOT = Path(__file__).resolve().parents[4]
 

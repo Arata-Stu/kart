@@ -3,6 +3,7 @@
 #include "geometry_msgs/msg/point_stamped.hpp"
 #include "kart_control/pure_pursuit.hpp"
 #include "kart_interfaces/msg/reference_line.hpp"
+#include "kart_interfaces/msg/operation_mode_state.hpp"
 #include "kart_interfaces/msg/tracking_reference.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 #include <cstdio>
@@ -61,6 +62,31 @@ public:
         "control/tracking_reference", 1);
     markers_ = create_publisher<visualization_msgs::msg::MarkerArray>(
         "control/tracking_markers", 1);
+    mode_sub_ = create_subscription<kart_interfaces::msg::OperationModeState>(
+        "operation_mode/state", 1,
+        [this](kart_interfaces::msg::OperationModeState::ConstSharedPtr m) {
+          mode_ = m->mode;
+          mode_stamp_ = rclcpp::Time(m->header.stamp);
+          mode_received_ = steady();
+        });
+    parameter_callback_ = add_on_set_parameters_callback(
+        [this](const std::vector<rclcpp::Parameter> &values) {
+          rcl_interfaces::msg::SetParametersResult result;
+          result.successful = true;
+          try {
+            for (const auto &p : values) if (tunable(p.get_name())) {
+              if (mode_ != kart_interfaces::msg::OperationModeState::STOP ||
+                  !fresh(mode_stamp_, mode_received_, 0.3))
+                throw std::invalid_argument("Fresh STOP is required for tracking tuning");
+              if (!std::isfinite(p.as_double()) || p.as_double() <= 0)
+                throw std::invalid_argument("Tracking parameters must be finite and positive");
+            }
+          } catch (const std::exception &error) {
+            result.successful = false;
+            result.reason = error.what();
+          }
+          return result;
+        });
     line_sub_ = create_subscription<kart_interfaces::msg::ReferenceLine>(
         "planning/reference_line", rclcpp::QoS(1).transient_local(),
         [this](kart_interfaces::msg::ReferenceLine::ConstSharedPtr m) {
@@ -123,8 +149,13 @@ public:
 private:
   template <class T> T param(const std::string &name, T value) {
     rcl_interfaces::msg::ParameterDescriptor d;
-    d.read_only = true;
+    d.read_only = !tunable(name);
     return declare_parameter<T>(name, value, d);
+  }
+  static bool tunable(const std::string &name) {
+    return name == "lookahead_m" || name == "max_speed_mps" ||
+           name == "max_cross_track_m" || name == "goal_tolerance_m" ||
+           name == "deceleration_mps2";
   }
   static double steady() {
     return std::chrono::duration<double>(
@@ -208,6 +239,13 @@ private:
     }
   }
   void tick() {
+    // Read after the parameter transaction commits; never mutate control state
+    // from a validation callback that a later validator could still reject.
+    c_.lookahead = get_parameter("lookahead_m").as_double();
+    c_.max_speed = get_parameter("max_speed_mps").as_double();
+    c_.max_error = get_parameter("max_cross_track_m").as_double();
+    c_.goal_tolerance = get_parameter("goal_tolerance_m").as_double();
+    c_.deceleration = get_parameter("deceleration_mps2").as_double();
     if (c_.wheelbase <= 0 || c_.steering_limit <= 0) {
       publish({}, "vehicle_geometry_unconfigured");
       return;
@@ -248,6 +286,11 @@ private:
       publish({}, "tf_unavailable");
     }
   }
+  uint8_t mode_{0};
+  double mode_received_{0};
+  rclcpp::Time mode_stamp_{0, 0, RCL_ROS_TIME};
+  rclcpp::Subscription<kart_interfaces::msg::OperationModeState>::SharedPtr mode_sub_;
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_callback_;
   Settings c_;
   std::string frame_, map_;
   bool closed_{false}, localized_{false};

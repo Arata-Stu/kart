@@ -47,6 +47,8 @@ def load_checkpoint(path, repo, device='cpu'):
     if hasattr(encoder.patch_embed, 'in_chans'):
         encoder.patch_embed.in_chans = 20
     policy = EVSPolicy(PortableEventEncoder(encoder, meta), ck['mode'])
+    if ck.get('routing') is not None:
+        policy.configure_heads(ck['routing'])
     policy.load_state_dict(ck['state_dict'], strict=True)
     policy.runtime = validate_runtime(ck['runtime'])
     return policy.to(device).eval()

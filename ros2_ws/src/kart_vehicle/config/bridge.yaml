@@ -3,6 +3,7 @@
     use_sim_time: false
     device: ''
     steering_scale: -1.0
+    # fresh STOP中のみ動的変更可能。倍率適用後。再起動でこの値に戻る。
     steering_offset: 0.0
     initial_steering_trim: 0.0
     initial_throttle_trim: 0.0

@@ -21,7 +21,10 @@ public:
     if(device_.empty()) {throw std::invalid_argument("device is required: use /dev/serial/by-id/... or an explicitly selected ttyACM path");}
     scale_=number(*this,"steering_scale",-1,-1,1);
     if(std::abs(scale_)<0.01) {throw std::invalid_argument("steering_scale must be nonzero");}
-    offset_=number(*this,"steering_offset",0,-0.5,0.5);
+    rcl_interfaces::msg::ParameterDescriptor offset_description;
+    offset_description.description="Post-scale steering offset [-0.5,0.5]; fresh STOP required; runtime only";
+    offset_=declare_parameter<double>("steering_offset",0.0,offset_description);
+    if(!std::isfinite(offset_) || std::abs(offset_)>0.5) {throw std::invalid_argument("Invalid steering_offset");}
     command_timeout_=number(*this,"command_timeout",0.15,0.02,0.2);
     status_timeout_=number(*this,"status_timeout",0.2,0.05,0.5);
     steering_trim_limit_=number(*this,"steering_trim_limit",0.25,0,0.5);
@@ -53,6 +56,7 @@ public:
     propo_pub_=create_publisher<Control>("propo/control_cmd",1);
     command_sub_=create_subscription<Control>("vehicle/control_cmd",1,[this](Control::ConstSharedPtr msg) {command_={*msg,steady_now()};});
     mode_sub_=create_subscription<Mode>("operation_mode/state",1,[this](Mode::ConstSharedPtr msg) {
+      mode_stamp_=seconds(msg->header.stamp); mode_received_=steady_now(); observed_mode_=msg->mode;
       if (!valid_mode(msg->mode) || !fresh_stamp(now().seconds(),seconds(msg->header.stamp),0.3)) {trip("invalid_mode"); return;}
       const bool before=gate_.active();
       const bool permit=healthy() && (gate_.active() || status_->active_path==ActivePath::disabled);
@@ -64,6 +68,21 @@ public:
         // Mux publishes only after mode entry. Do not accept buffered pre-entry data.
         command_.received=NEVER; session_.start(steady_now());
       }
+    });
+    parameter_callback_=add_on_set_parameters_callback([this](const std::vector<rclcpp::Parameter> & params) {
+      rcl_interfaces::msg::SetParametersResult result; result.successful=true;
+      try {
+        for(const auto & p : params) if(p.get_name()=="steering_offset") {
+          if(observed_mode_!=STOP || !fresh(steady_now(),mode_received_,0.3) ||
+              !fresh_stamp(now().seconds(),mode_stamp_,0.3)) {
+            throw std::invalid_argument("Fresh STOP is required for steering offset tuning");
+          }
+          if(!std::isfinite(p.as_double()) || std::abs(p.as_double())>0.5) {
+            throw std::invalid_argument("steering_offset must be finite and within [-0.5,0.5]");
+          }
+        }
+      } catch(const std::exception & e) {result.successful=false;result.reason=e.what();}
+      return result;
     });
     timer_=create_wall_timer(std::chrono::milliseconds(10),[this] {tick();});
   }
@@ -82,6 +101,7 @@ private:
   }
   void tick() {
     const auto t=steady_now();
+    offset_=get_parameter("steering_offset").as_double();
     try {
       if(get_parameter("use_sim_time").as_bool()) {throw std::runtime_error("use_sim_time_not_allowed");}
       if(!serial_ && t>=retry_at_) {
@@ -150,6 +170,7 @@ private:
     auto add=[&](const std::string & key,const std::string & value) {
       diagnostic_msgs::msg::KeyValue kv; kv.key=key; kv.value=value; s.values.push_back(kv);
     };
+    add("steering_offset",std::to_string(offset_)); add("steering_scale",std::to_string(scale_));
     add("steering_trim",std::to_string(trim_.steering)); add("throttle_trim",std::to_string(trim_.throttle));
     add("device",device_); add("host_active",gate_.active()?"true":"false");
     add("host_phase",std::to_string(static_cast<int>(session_.phase())));
@@ -162,6 +183,8 @@ private:
   }
   std::string device_,error_{"waiting_for_usb"}; double scale_,offset_,command_timeout_,status_timeout_;
   double retry_at_{0},opened_at_{0},status_at_{NEVER},last_request_{NEVER},last_propo_{NEVER},last_diag_{NEVER};
+  double mode_stamp_{0},mode_received_{NEVER}; uint8_t observed_mode_{255};
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_callback_;
   ControlTrim trim_; double steering_trim_limit_,throttle_trim_limit_;
   double last_trim_stamp_{NEVER},last_trim_publish_{NEVER};
   uint32_t sequence_{0}; uint64_t protocol_errors_{0};
