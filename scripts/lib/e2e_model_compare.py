@@ -60,7 +60,7 @@ def signatures(plan):
 def create_plan(a):
     for value in (a.hours,a.safety_factor,a.head_lr,a.finetune_lr,a.scratch_lr):
         if not math.isfinite(value) or value<=0:raise ValueError('hours/safety-factor/LR must be positive and finite')
-    if a.safety_factor<1 or min(a.epochs,a.pilot_epochs,a.batch_size,a.size_distill_epochs,*a.distill_epochs)<1 or a.num_workers<0:
+    if a.safety_factor<1 or min(a.epochs,a.batch_size,a.size_distill_epochs,*a.distill_epochs)<1 or a.pilot_epochs<0 or a.num_workers<0:
         raise ValueError('Invalid epochs/batch/workers/safety-factor')
     if not 0<=a.seed<=2147483647 or not 0<=a.fixed_throttle<=a.max_throttle<=1:
         raise ValueError('Invalid seed or throttle range')
@@ -226,7 +226,7 @@ def summarize(root,plan):
     save(root/'summary.json',dict(same_train_validation=plan['same_train_validation'],results=results))
     lines=['# RGB model comparison','',f'Train = validation: {plan["same_train_validation"]}',
            'Same-data MSE measures fit, not unseen driving accuracy. Budget estimates are not hardware guarantees.',
-           'Preparation time excludes timing pilots. Pilot logs and duration are under pilots/.',
+           f'Timing pilots: {plan["pilot_epochs"]} epochs (0 = disabled). Preparation excludes optional pilots.',
            '', '| case | status | MSE | best epoch | encoder epoch | prep seconds |',
            '|---|---|---:|---:|---:|---:|']
     for row in results:
@@ -286,9 +286,10 @@ def execute(root,plan,*,hours=None,dry_run=False):
                 encoder=root/'runs'/steps[0]['name']/'output/encoder.pt' if case.get('distill_epochs') and stage['kind']=='train' else None
                 print(shlex.join(command(plan,stage,root/'runs'/stage['name'],encoder=encoder)))
             continue
-        predicted=0.;ready=True
+        predicted=0. if plan['pilot_epochs'] else None
+        ready=True
         # Reuse timing profiles by architecture/scope, and one Tiny distillation timing profile.
-        for stage in steps:
+        for stage in (steps if plan['pilot_epochs'] else []):
             target=root/'runs'/stage['name']
             if status(target)['status']=='succeeded':continue
             profile='distill' if stage['kind']=='distill' else (
@@ -308,12 +309,14 @@ def execute(root,plan,*,hours=None,dry_run=False):
                 save(case_dir/'status.json',dict(status='budget_skipped',reason='No time for pilot'))
             summarize(root,plan);continue
         remaining=deadline-time.monotonic()
-        if predicted>remaining:
-            print(f'Skip {case["name"]}: estimate {predicted/60:.1f} min > remaining {remaining/60:.1f} min',flush=True)
+        if remaining<=1 or (predicted is not None and predicted>remaining):
+            detail='budget exhausted' if remaining<=1 else f'estimate {predicted/60:.1f} min > remaining {remaining/60:.1f} min'
+            print(f'Skip {case["name"]}: {detail}',flush=True)
             save(case_dir/'status.json',dict(status='budget_skipped',estimate_seconds=predicted,remaining_seconds=max(0,remaining)))
             summarize(root,plan);continue
         save(case_dir/'status.json',dict(status='running',estimate_seconds=predicted))
-        print(f'Run: {case["name"]}, estimate {predicted/60:.1f} min; remaining {remaining/60:.1f} min',flush=True)
+        detail=f'estimate {predicted/60:.1f} min' if predicted is not None else f'{plan["epochs"]} control epochs, no pilot'
+        print(f'Run: {case["name"]}, {detail}; remaining {remaining/60:.1f} min',flush=True)
         for stage in steps:
             folder=root/'runs'/stage['name']
             if status(folder)['status']=='succeeded':continue
@@ -337,7 +340,8 @@ def main():
     p.add_argument('--preset',choices=['sizes','full'],default='sizes',help='sizes: 6 size-focused cases (default); full: previous 11 cases')
     p.add_argument('--size-distill-epochs',type=int,default=50,help='Shared Tiny encoder budget for sizes preset')
     p.add_argument('--epochs',type=int,default=100);p.add_argument('--distill-epochs',type=int,nargs='+',default=None,help='full preset distillation budgets; default 10 50 100')
-    p.add_argument('--pilot-epochs',type=int,default=2);p.add_argument('--safety-factor',type=float,default=1.3)
+    p.add_argument('--pilot-epochs',type=int,default=0,help='Optional timing pilot; 0 (default) runs full training directly')
+    p.add_argument('--safety-factor',type=float,default=1.3)
     p.add_argument('--cases',nargs='+',help='Subset of named comparisons; see --dry-run')
     p.add_argument('--batch-size',type=int,default=32);p.add_argument('--num-workers',type=int,default=8)
     p.add_argument('--head-lr',type=float,default=1e-4);p.add_argument('--finetune-lr',type=float,default=1e-5)

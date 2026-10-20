@@ -1120,8 +1120,9 @@ Tiny特徴蒸留は独立した工程で既定10 epochのまま。比較手順�
 Tinyは50 epoch蒸留した共通encoderを一度だけ作り、それぞれ新しい制御headから学習する。
 従来のscratch・蒸留予算比較を含む11条件は`--preset full`。
 `size_comparison.md/csv`にはサイズとMSE、同じ更新範囲のViT-Bに対する比率を記録する。
-既存train/distill CLIを共用し、2 epoch試走から時間を推定して予算内の条件を実行する。
-時間不足条件は明示的にskipし、全条件の6時間内完了は保証しない。
+既存train/distill CLIを共用し、試走なしで各制御条件を直接100 epoch実行する。
+時間試走が必要な場合だけ`--pilot-epochs 2`で有効化できる。
+時間切れの途中結果と未実行条件を区別し、全条件の6時間内完了は保証しない。
 実行・resume・出力仕様は[scripts README](../../../scripts/README.md#モデルサイズ事前学習蒸留の時間予算付き比較)を参照。
 実行例・resume・全設定は[scripts README](../../../scripts/README.md#学習条件の一括比較)を参照。
 

@@ -279,12 +279,19 @@ Tinyには独自構成の蒸留重み、S/Bには公式重みを使用するの�
    Tinyを独立に10/50/100 epoch特徴蒸留し、それぞれ新しい制御headを100 epoch学習。
 5. `b_finetune`、`b_scratch`: 高コストなViT-B全体更新の比較。
 
-各方式を本番と同じ全datasetで2 epoch試走し、初期化・キャッシュ作成等の時間＋
+既定では時間試走を行わず、各制御条件を直接100 epoch学習する（`--pilot-epochs 0`）。
+試走のepochと本番のepochを重ねて実行しない。
+未計測の時間見積もりは表示せず、残り予算だけを表示する。
+予算が残っている間は次の条件を開始し、期限に達したprocessを停止する。
+
+時間を見積もってから実行条件を選ぶ場合だけ、`--pilot-epochs 2`を指定する。
+本番と同じ全datasetで2 epoch試走し、初期化・キャッシュ作成等の時間＋
 試走で遅い方のepoch時間×本番epoch数を1.3倍して見積もる。
 Tiny蒸留の時間profileは共有し、Tiny headはfreezeとfinetuneの別profileで測定する。
 fullの異なる蒸留予算は同じseedから独立学習し、試走encoderを本番重みには使用しない。
 蒸留＋headは未完了stageの合計時間で開始可否を判定する。共有encoderの完成後はその時間を追加見積もりしない。
-試走も6時間の予算に含む。100 epochを黙って減らさず、収まらない条件は`budget_skipped`にする。
+任意の試走も6時間の予算に含む。100 epochを黙って減らさず、試走による見積もりで収まらない条件、
+または時間を使い切った後の未実行条件は`budget_skipped`にする。
 6時間で全条件を完了できる保証はない。見積もりを超えて期限に達したprocessは停止し、
 `budget_timeout`として途中checkpoint・ログを保持する。停止待ちは最大10秒、その後に集計する。
 RAM preload ON、凍結時だけ特徴量キャッシュON。制御学習はAMP auto、特徴蒸留は現実装どおりFP32。
@@ -307,12 +314,12 @@ scratchには重みを渡さない。B scratchにも固定公式DINOv3ソース�
   基準が未完了、またはMSEが0で除算できない場合は該当比率を空欄とする。
   checkpointの大きさからTensorRTの実行速度を推定しない。
 - `runs/<条件>/output/`: 既存CLIのcheckpoint・run.json・metrics・timing。
-- `runs/<条件>/{command.json,status.json,train.log}`、`pilots/`: 実行履歴と時間試走。
+- `runs/<条件>/{command.json,status.json,train.log}`、任意の`pilots/`: 実行履歴と時間試走。
 - `invocations.jsonl`: 試走・集計を含む各起動の実時間と時間予算。
 
 summaryの準備時間は本番の蒸留・制御学習processの合計で、試走時間を除く。
 共有encoderの蒸留時間は各Tiny条件の独立した準備費用として両方に載せるので、表を足して全実時間としない。
-試走時に構築したキャッシュは本番でも再利用されるため、完全なcold-cache時間ではない。
+任意の試走で構築したキャッシュは本番でも再利用されるため、試走ありの時間は完全なcold-cache時間ではない。
 全体所要時間は`invocations.jsonl`で確認する。
 蒸留は予算内のalignment loss最良encoder、制御はMSE最良checkpointを採用する。
 未完了・失敗条件の途中MSEは成功条件と同じ扱いで順位づけしない。

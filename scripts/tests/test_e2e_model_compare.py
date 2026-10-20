@@ -13,7 +13,7 @@ spec=importlib.util.spec_from_file_location('model_compare',LIB/'e2e_model_compa
 compare=importlib.util.module_from_spec(spec);spec.loader.exec_module(compare)
 
 
-def fixture(tmp_path,extra=(),*,preset='full'):
+def fixture(tmp_path,extra=(),*,preset='full',pilot=2):
     data=tmp_path/'data';data.mkdir();(data/'image.npy').write_bytes(b'image')
     (data/'samples.jsonl').write_text('{"image":"image.npy","steering":0.1,"throttle":0.1}\n')
     (data/'metadata.json').write_text('{"modality":"rgb"}')
@@ -24,6 +24,7 @@ def fixture(tmp_path,extra=(),*,preset='full'):
     argv=['compare','--train',str(data),'--repo',str(repo),'--weights',str(small),
           '--base-weights',str(base),'--output',str(root),'--dry-run']
     if preset is not None:argv+=['--preset',preset]
+    if pilot is not None:argv+=['--pilot-epochs',str(pilot)]
     argv+=extra
     # Fixture need not be an actual DINOv3 Git checkout.
     with patch.object(sys,'argv',argv),patch.object(compare.subprocess,'check_output',return_value=b'fixture-git'):
@@ -126,6 +127,30 @@ def test_size_preset_shares_encoder_and_compares_matching_scopes(tmp_path):
     assert all(not row['reference'] for row in rows if row['scope']=='finetune')
 
 
+def test_default_runs_100_epochs_directly_without_pilots(tmp_path):
+    root,plan=fixture(tmp_path,preset=None,pilot=None)
+    assert plan['pilot_epochs']==0 and plan['epochs']==100
+    calls=[]
+    def run(folder,args,deadline):
+        calls.append((folder,args));return fake_run(folder,args,deadline)
+    with patch.object(compare.subprocess,'check_output',return_value=b'fixture-git'),patch.object(compare,'run',run):
+        compare.execute(root,plan)
+    assert not (root/'pilots').exists()
+    assert len(calls)==7  # Six control runs and one shared encoder distillation.
+    for folder,args in calls:
+        assert folder.parent.name=='runs'
+        assert args[args.index('--epochs')+1]==('50' if 'kart_e2e.distill' in args else '100')
+    assert all(r['status']=='succeeded' and r['estimate_seconds'] is None for r in compare.summarize(root,plan))
+
+
+def test_direct_training_does_not_start_after_budget_expires(tmp_path):
+    root,plan=fixture(tmp_path,('--cases','s_freeze'),pilot=None)
+    with patch.object(compare.subprocess,'check_output',return_value=b'fixture-git'),patch.object(compare,'run') as run:
+        compare.execute(root,plan,hours=.00001)
+    run.assert_not_called()
+    assert compare.status(root/'cases/s_freeze')['status']=='budget_skipped'
+
+
 def test_failed_pilot_continues_other_cases_and_missing_base_is_explicit(tmp_path):
     root,plan=fixture(tmp_path,('--cases','s_finetune','cnn_scratch','b_freeze'))
     Path(plan['base_weights']).unlink()
@@ -151,6 +176,6 @@ def test_deadline_stops_process_and_preserves_outputs(tmp_path):
     assert list(folder.glob('interrupted-*/partial'))
 
 
-@pytest.mark.parametrize('extra',[('--hours','nan'),('--hours','-1'),('--pilot-epochs','0'),('--distill-epochs','0'),('--cases','unknown')])
+@pytest.mark.parametrize('extra',[('--hours','nan'),('--hours','-1'),('--pilot-epochs','-1'),('--distill-epochs','0'),('--cases','unknown')])
 def test_invalid_configuration(tmp_path,extra):
     with pytest.raises((SystemExit,ValueError)):fixture(tmp_path,extra)

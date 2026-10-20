@@ -11,8 +11,9 @@ Tinyは50 epoch蒸留した同じencoderから両条件を開始する（`--size
 scratchや蒸留epochの差まで含める従来の11条件は`--preset full`で実行する。
 sizesは実用的なモデル候補の比較であり、Tinyの蒸留と公式S/Bの初期重みの違いも含む。
 `size_comparison.md/csv`にparameter数、checkpointサイズ、MSE、同じ更新範囲のBに対する比率を保存する。
-各方式の2 epoch試走から時間を見積もり、収まる条件を100 epochのまま実行する。
-時間不足の条件を自動で短縮せず、未実行として記録する。
+既定では2 epoch試走を行わず、各制御条件を直接100 epoch学習する。
+6時間に達した場合は途中結果を保持して停止し、残りの未実行条件を記録する。
+時間見積もりによる開始判定が必要な場合だけ`--pilot-epochs 2`を指定する。
 全条件の6時間内完了を保証するものではない。
 詳細は[scripts README](../scripts/README.md#モデルサイズ事前学習蒸留の時間予算付き比較)を参照。
 
