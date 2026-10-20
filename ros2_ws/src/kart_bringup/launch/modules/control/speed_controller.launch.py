@@ -11,16 +11,21 @@ def add_node(args):
             raise ValueError("use_sim_time must be true or false")
         overrides["use_sim_time"] = str(args.use_sim_time).lower() == "true"
     config = lu.get_path("kart_bringup", "config/control/speed_controller.yaml")
+    from kart_bringup.recovery import route
+    remappings, recovery_actions = route(lu.get_path("kart_bringup", "config/recovery"), args.use_sim_time,
+                                         selection=getattr(args, "recovery", ""))
     node = lut.ComposableNode(
         name="speed_controller",
         package="kart_control",
         plugin="kart_control::SpeedControllerNode",
         parameters=[str(config), overrides],
+        remappings=remappings,
         extra_arguments=[{"use_intra_process_comms": True}],
     )
     return [
         lu.log_info(f"Speed PID config: {config}; overrides: {overrides}"),
         lu.load_composable_nodes(args.container_name, [node]),
+        *recovery_actions,
     ]
 
 
@@ -28,5 +33,6 @@ def generate_launch_description():
     args = lu.ArgumentContainer()
     args.add_arg("container_name", description="Existing component container", cli=True)
     args.add_arg("use_sim_time", "", cli=True)
+    args.add_arg("recovery", "", cli=True)
     args.add_opaque_function(add_node)
     return lut.LaunchDescription(args.get_launch_actions())

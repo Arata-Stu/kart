@@ -59,6 +59,7 @@ Dockerからは共有D-Bus経由でホストのBlueZを操作する。
 - [kart_vehicle](ros2_ws/src/kart_vehicle/README.md): USB bridge・トリム・基板状態
 - [kart_bag_manager](ros2_ws/src/kart_bag_manager/README.md): L1/R1録画操作・rosbagプロセス管理
 - [kart_interfaces](ros2_ws/src/kart_interfaces/README.md): msg定義
+- [kart_recovery](ros2_ws/src/kart_recovery/README.md): 操舵履歴を使う共通スタック復帰（明示opt-in）
 - [kart_bringup](ros2_ws/src/kart_bringup/README.md): 全体起動・launch引数
 
 ## 外部リポジトリ

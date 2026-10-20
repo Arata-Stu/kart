@@ -908,3 +908,36 @@ launch配線はtest_e2e_composition.pyと既存EVS/mission testで検証する�
 E2E decoderの画像時刻未来ずれは`config/e2e/control_decoder.yaml`の
 `image_future_tolerance_s: 0.005`（5ms、起動時固定）まで許容する。
 小さなセンサ時刻ずれで停止させないための許容で、150msの期限切れ監視は変更しない。
+
+
+## 共通の壁接触・スタック復帰
+
+`config/recovery/launch.yaml`の`enabled: true`でrule／RGB E2E／EVS E2Eの
+後段に`kart_recovery`を挿入する。既定false。`config/recovery/recovery.yaml`が実機parameter正本。
+通常指令は/recovery/input_cmdへ移し、復帰nodeのみが/auto/control_cmdを出版する。
+観測専用E2E、collect、固定指令試験には挿入しない。sim_driveでは専用の
+`config/sim/drive_recovery.yaml`（use_sim_time=true、wall_timeout_s=5.0）を使用する。
+標準bagへ復帰status・active・元指令を追加。AUTO・録画は従来通り独立した操作。
+[運用設定](config/recovery/README.md)／[全node仕様・調整parameter](../kart_recovery/README.md)。
+ROS結合・シミュレータ接触シナリオ・実車挙動は未確認。
+
+
+### bringup.shでの復帰選択
+
+`bash scripts/bringup.sh`のdrive/e2eで「壁接触・スタック自動復帰」を選択する。
+候補は「無効」「IR＋IMU」「RGB＋IMU」「IR＋IMU＋EVS補助」。
+選択は今回の起動だけに適用し、YAMLを書き換えない。未指定の非対話CLIはYAMLを保持する。
+
+```bash
+# 他の地図/モデル指定は従来通り。復帰選択部分の例
+bash scripts/bringup.sh --mode e2e --e2e-model-dir /workspaces/e2e/models/MODEL --recovery infra_imu
+# RGBのみを復帰画像に使用: --recovery rgb_imu
+# EVS補助: --evs --recovery evs_assisted
+# YAMLの有効設定を今回だけ解除: --recovery off
+```
+
+ROS launchへは`recovery:=off/infra_imu/rgb_imu/evs_assisted`を明示転送する（既定空文字=YAML保持）。
+mission→tracking→speed_controller、mission→RGB/EVS E2E→inferenceの両方へ伝播する。
+画像topicは`config/recovery/launch.yaml profiles`で切替え、細かなnode parameterはrecovery.yamlを保持する。
+必要な画像/IMU/EVSが無効、または固定AUTOスロットルで手動ステアの場合は起動前エラー。
+collect/evalでは復帰選択を受け付けない。起動による録画/AUTO要求は追加しない。

@@ -11,6 +11,7 @@
 #include "kart_control/timing.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
 #include "std_msgs/msg/string.hpp"
+#include "std_msgs/msg/bool.hpp"
 #include "tf2/LinearMath/Quaternion.hpp"
 #include "tf2/LinearMath/Vector3.hpp"
 #include "tf2/exceptions.hpp"
@@ -116,6 +117,12 @@ public:
     odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
         "visual_slam/tracking/odometry", rclcpp::SensorDataQoS(),
         [this](nav_msgs::msg::Odometry::ConstSharedPtr m) { measure(*m); });
+    recovery_sub_ = create_subscription<std_msgs::msg::Bool>(
+        "recovery/active", 1, [this](std_msgs::msg::Bool::ConstSharedPtr m) {
+          recovery_active_ = m->data;
+          recovery_received_ = steady();
+          if (recovery_active_) pid_.reset();
+        });
     sim_time_ = get_parameter("use_sim_time").as_bool();
     control_time_.advance(sim_time_ ? now().seconds() : steady());
     if (sim_time_)
@@ -319,6 +326,17 @@ private:
       fault("speed_unavailable");
       return;
     }
+    // Recovery owns AUTO output downstream. Keep upstream health checks above,
+    // but never integrate the forward speed error while backing out.
+    if (recovery_active_) {
+      pid_.reset();
+      if (steady() - recovery_received_ > receive_limit(mode_timeout_, wall_timeout_)) {
+        fault("recovery_status_stale");
+        return;
+      }
+      output("recovery");
+      return;
+    }
     double desired = target_.drive.speed, angle = target_.drive.steering_angle;
     if (!std::isfinite(desired) || !std::isfinite(angle) || desired < 0 ||
         desired > max_speed_) {
@@ -346,6 +364,9 @@ private:
       fault("pid_invalid");
     }
   }
+  bool recovery_active_{false};
+  double recovery_received_{0};
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr recovery_sub_;
   std::string frame_;
   double steering_limit_, timeout_, mode_timeout_, max_speed_, rate_, wall_timeout_;
   bool sim_time_{false};

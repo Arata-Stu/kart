@@ -285,3 +285,15 @@ ROS parameter serviceによる実変更、Component build/load、モード遷移
 TT-02標準ホイールベース257mmをpackage/bringup YAMLへ設定した。
 出典と暫定外形は[車体寸法方針](../../../docs/policies/vehicle_geometry.md)。
 最大舵角は引き続き未校正0であり、この寸法更新だけでは追従出力は有効にならない。
+
+
+## 共通復帰モジュールとの接続
+
+bringupの`config/recovery/launch.yaml`で明示有効化すると、speed_controllerの
+`/auto/control_cmd`は`/recovery/input_cmd`へremapされ、kart_recoveryがmux前段を所有する。
+speed_controllerは入力`/recovery/active`（std_msgs/msg/Bool、reliable/volatile/depth1、50Hz）
+がtrueの間、I/Dをresetして中立を出版する。tracking/odom/mode監視は継続する。
+active=trueのまま受信がmode_timeout_s（既定0.3秒、wall_timeout_s指定時はそのsteady期限）を
+超えると中立＋STOP要求をラッチする。新規parameter/service/actionなし。
+復帰観測はVSLAM非依存だが、ruleの既存localization健全性要件は緩和しない。
+[復帰仕様・全設定](../kart_recovery/README.md)を参照。

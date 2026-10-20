@@ -54,6 +54,7 @@ def add_pipeline(args):
             launch_arguments={
                 "container_name": config["container_name"],
                 "model_dir": config["model_dir"],
+                "recovery": getattr(args, "recovery", ""),
                 **{
                     key: getattr(args, key)
                     for key in (
@@ -84,6 +85,7 @@ def generate_launch_description():
         "fixed_throttle",
         "drive_enabled",
         "force_engine_update",
+        "recovery",
         "use_sim_time",
     ):
         args.add_arg(key, "", cli=True)

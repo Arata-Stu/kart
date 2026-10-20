@@ -22,6 +22,9 @@ def build(context):
     resolve(root/'config/localization',values['map_dir'],values['model_dir'],
             {'use_sim_time':True,'base_frame':'base_link'},inspect_engines,
             enable_vgl=values['enable_vgl']=='true')
+    from kart_bringup.recovery import route
+    recovery_remaps, recovery_actions = route(root/'config/recovery', 'true',
+                                               root/'config/sim/drive_recovery.yaml')
     components=[]
     for name,pkg,plugin in (
         ('operation_mode_manager','kart_system','kart_system::ModeManagerNode'),
@@ -30,6 +33,7 @@ def build(context):
         ('speed_controller','kart_control','kart_control::SpeedControllerNode')):
         components.append(ComposableNode(package=pkg,plugin=plugin,name=name,
             parameters=[str(root/'config/sim'/f'drive_{name}.yaml')],
+            remappings=recovery_remaps if name=='speed_controller' else [],
             extra_arguments=[{'use_intra_process_comms':True}]))
     return [IncludeLaunchDescription(PythonLaunchDescriptionSource(str(root/'launch/localization.launch.py')),
                 launch_arguments={**{k:values[k] for k in ('map_dir','model_dir','enable_vgl')},
@@ -39,7 +43,7 @@ def build(context):
                     {k:values[k] for k in ('map_file','lane_id','line_type')}]),
             ComposableNodeContainer(name='kart_sim_control_container',namespace='',package='rclcpp_components',
                 executable='component_container_mt',output='screen',on_exit=Shutdown(),
-                composable_node_descriptions=components)]
+                composable_node_descriptions=components), *recovery_actions]
 
 
 def generate_launch_description():

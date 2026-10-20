@@ -1,0 +1,46 @@
+# Initial tuning candidates, not calibrated values. All parameters are startup-only.
+/**/recovery:
+  ros__parameters:
+    sensor_profile: 'infra_imu'
+    image_topic: '/realsense/infra1/image_rect_raw'
+    imu_topic: '/realsense/imu'
+    evs_image_topic: '/event_camera/event_image'
+    control_rate_hz: 50.0
+    image_rate_hz: 15.0
+    input_timeout_s: 0.25
+    sensor_timeout_s: 0.3
+    mode_timeout_s: 0.3
+    future_tolerance_s: 0.05
+    wall_timeout_s: 0.0
+    processing_width: 212
+    min_features: 20
+    max_features: 120
+    min_feature_cells: 4
+    flow_fb_error_px: 1.0
+    evs_min_neighbors: 2
+    evs_activity_threshold: 0.02
+    history_span_s: 0.5
+    history_offset_s: 0.15
+    history_min_samples: 5
+    history_max_gap_s: 0.12
+    min_forward_throttle: 0.03
+    startup_grace_s: 1.0
+    stuck_duration_s: 0.8
+    stationary_flow_px_s: 2.0
+    moving_flow_px_s: 6.0
+    stationary_gyro_rad_s: 0.12
+    brake_command: 0.1
+    brake_min_s: 0.2
+    stop_confirm_s: 0.25
+    stop_timeout_s: 2.0
+    reverse_neutral_s: 0.2
+    reverse_throttle: 0.08
+    reverse_duration_s: 0.5
+    recovery_steering_scale: 1.0
+    recovery_steering_limit: 0.5
+    resume_neutral_s: 0.3
+    max_recovery_attempts: 2
+    progress_reset_s: 3.0
+    max_recovery_rotation_rad: 0.35
+    max_tick_gap_s: 0.25
+    use_sim_time: false

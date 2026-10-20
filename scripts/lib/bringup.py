@@ -93,6 +93,9 @@ def main():
                         help="Collection AUTO throttle, manual steering (collect/drive): -1 normal, 0..speed_scale fixed (not vehicle speed)")
     parser.add_argument("--e2e-fixed-throttle", type=float, default=None,
                         help="E2E model steering + fixed throttle; defaults to model runtime metadata")
+    from kart_bringup.recovery import CHOICES, LABELS, configuration as recovery_configuration, validate_inputs
+    parser.add_argument("--recovery", choices=CHOICES, default="",
+                        help="自動復帰: off / infra_imu / rgb_imu / evs_assisted（未指定はYAML）")
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--e2e-model-dir", default="")
     parser.add_argument("--eval-localization", choices=("vslam", "vgl", "fresh"), default=None)
@@ -250,6 +253,13 @@ def main():
             if not raw and default == '':
                 raise ValueError('固定スロットルの値を入力してください')
             args.auto_fixed_throttle = float(raw or default)
+    if args.recovery and args.mode not in ('drive', 'e2e'):
+        raise ValueError('--recoveryはdrive/e2e専用です')
+    if interactive and args.mode in ('drive', 'e2e') and not args.recovery:
+        enabled, recovery_params = recovery_configuration(config / 'recovery')
+        default = recovery_params['sensor_profile'] if enabled else 'off'
+        args.recovery = choose('壁接触・スタック自動復帰', list(CHOICES),
+                               lambda v: LABELS[v], default=CHOICES.index(default))
     if args.multicam_mode and args.mode not in ('drive','eval'):
         raise ValueError('--multicam-modeはVSLAMを使用するdrive/evalで指定してください')
     fresh = args.mode == "eval" and args.eval_localization == "fresh"
@@ -305,6 +315,11 @@ def main():
         if args.mode != 'e2e':
             print('AUTOスロットル: ' + ('通常AUTO（既存制御）、MANUALはR2/L2' if fixed < 0 else
               f'固定 {fixed:.6f}（□でAUTO、△で通常MANUALへ直接切替、ステア手動、○/L2/×で解除・STOP）'))
+    if args.mode in ('drive', 'e2e'):
+        recovery_enabled, recovery_params = recovery_configuration(config / 'recovery', args.recovery)
+        if recovery_enabled:
+            validate_inputs(recovery_params, sensors, args.evs, fixed)
+        print('自動復帰: ' + (f"{recovery_params['sensor_profile']} ({recovery_params['image_topic']})" if recovery_enabled else '無効'))
     if args.mode == "e2e":
         from kart_e2e.contract import model_contract, runtime_settings, input_contract
 
@@ -336,6 +351,7 @@ def main():
         playback(config,args.bag,args.rate,extra_topics=imu_topics(config,args.tracking_mode or "0"))
     values = {
         "mode": args.mode,
+        "recovery": args.recovery,
         "auto_fixed_throttle": None if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle),
         "e2e_fixed_throttle": None if args.e2e_fixed_throttle is None else str(args.e2e_fixed_throttle),
         "rgb_fps": args.rgb_fps,

@@ -1113,3 +1113,16 @@ validation省略時はtrainと同じ。ONNX以降は実行しない。
 `metrics.jsonl`の`epoch_seconds`・`elapsed_seconds`は当該epochのcheckpoint保存前までの時間。
 checkpointとschedulerの選択基準は従来どおり。通常学習の既定10epochは変更しない。
 実行例・resume・全設定は[scripts README](../../../scripts/README.md#学習条件の一括比較)を参照。
+
+
+## 共通復帰の任意接続
+
+bringupの`config/recovery/launch.yaml enabled: true`かつdrive_enabled=trueの場合のみ、
+RGB/EVS共通のinference launchがdecoderの/auto/control_cmdを/recovery/input_cmdへremapする。
+/recovery経由で既存muxへ接続し、decoderの入力鮮度・STOP要求は維持する。
+観測専用drive_enabled=falseでは復帰nodeを起動しない。
+復帰はVSLAM不要。使用画像とIMUはE2E入力とは別に有効化しておく。
+[復帰設定と検証範囲](../kart_recovery/README.md)を参照。
+
+bringup.shでは`--recovery off|infra_imu|rgb_imu|evs_assisted`または対話メニューで今回の復帰構成を選択する。
+RGB/EVS E2E launchの`recovery`引数（既定空文字）はinferenceへ渡り、未指定時はYAMLを保持する。

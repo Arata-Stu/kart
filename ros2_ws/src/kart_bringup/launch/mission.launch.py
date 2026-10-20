@@ -44,9 +44,18 @@ def add_mission(args):
         get_package_share_directory("openeb_ros2")
         vehicle["bag_config"] = str(root / "recording/bag_manager_openeb.yaml")
         vehicle["bag_shutdown_timeout"] = "26"
-    load(
+    _, vehicle_modules = load(
         root / "bringup.yaml", vehicle
     )  # Validate device/config before any node starts.
+    from kart_bringup.recovery import configuration, validate_inputs
+    recovery = getattr(args, 'recovery', '')
+    if recovery and args.mode not in ('drive', 'e2e'):
+        raise ValueError('recovery is only supported for drive/e2e')
+    if cfg['tracking'] or (cfg['e2e'] and cfg['e2e_drive_enabled']):
+        recovery_enabled, recovery_params = configuration(root / 'recovery', recovery)
+        if recovery_enabled:
+            validate_inputs(recovery_params, params, cfg['enable_evs'],
+                            vehicle_modules['joy_manager']['effective']['auto_fixed_throttle'])
     if cfg["localization"]:
         load_transforms(root / "vehicle/transforms.yaml", require_camera=True)
         if not params["enable_infra1"] or not params["enable_infra2"]:
@@ -144,6 +153,7 @@ def add_mission(args):
                     "map_file": args.map_file,
                     "lane_id": args.lane_id,
                     "line_type": args.line_type,
+                    "recovery": recovery,
                 },
             )
         )
@@ -157,6 +167,7 @@ def add_mission(args):
                         'create_container': 'false',
                     }),
                     'model_dir': args.e2e_model_dir,
+                    'recovery': recovery,
                     'drive_enabled': str(cfg['e2e_drive_enabled']).lower(),
                     'use_fixed_throttle': 'true',
                     'fixed_throttle': getattr(args, 'e2e_fixed_throttle', ''),
@@ -177,6 +188,7 @@ def generate_launch_description():
         "record_dir",
         "run_name",
         "auto_fixed_throttle",
+        "recovery",
         "e2e_model_dir",
         "e2e_fixed_throttle",
         "evs_backend",

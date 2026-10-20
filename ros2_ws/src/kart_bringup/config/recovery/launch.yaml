@@ -1,0 +1,7 @@
+# Explicit opt-in until sensor/ESC thresholds are tuned on the vehicle.
+enabled: false
+# Explicit profile selection changes only these image topics and sensor_profile.
+profiles:
+  infra_imu: /realsense/infra1/image_rect_raw
+  rgb_imu: /realsense/color/image_raw
+  evs_assisted: /realsense/infra1/image_rect_raw

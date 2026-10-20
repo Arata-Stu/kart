@@ -40,6 +40,11 @@ def add_nodes(args):
             "bringupではTensorRT buildを行いません。scripts/e2e_trt.sh --forceを実行してください"
         )
     require_engine(args.model_dir)
+    from kart_bringup.recovery import route
+    # Observation-only E2E must never create a vehicle command producer.
+    remappings, recovery_actions = (route(lu.get_path("kart_bringup", "config/recovery"), args.use_sim_time,
+                                         selection=getattr(args, "recovery", ""))
+                                     if decoder["drive_enabled"] else ([], []))
     nodes = [
         lut.ComposableNode(
             name="e2e_tensor_rt",
@@ -57,12 +62,14 @@ def add_nodes(args):
             package="kart_e2e",
             plugin="kart_e2e::ControlDecoderNode",
             parameters=[decoder],
+            remappings=remappings,
             extra_arguments=[{"use_intra_process_comms": True}],
         ),
     ]
     return [
         lu.log_info(f"E2E config: {root}; TensorRT: {trt}; decoder: {decoder}"),
         lu.load_composable_nodes(args.container_name, nodes),
+        *recovery_actions,
     ]
 
 
@@ -77,6 +84,7 @@ def generate_launch_description():
         "force_engine_update",
         "use_sim_time",
         "input_topic",
+        "recovery",
     ):
         args.add_arg(key, "", cli=True)
     args.add_opaque_function(add_nodes)

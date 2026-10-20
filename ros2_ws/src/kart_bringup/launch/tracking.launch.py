@@ -61,6 +61,7 @@ def add_tracking(args):
             "kart_bringup",
             "launch/modules/control/speed_controller.launch.py",
             launch_arguments={
+                "recovery": getattr(args, "recovery", ""),
                 "container_name": "/" + name,
                 "use_sim_time": args.use_sim_time,
             },
@@ -91,5 +92,6 @@ def generate_launch_description():
     args.add_arg(
         "use_sim_time", "", choices=["", "true", "false", "True", "False"], cli=True
     )
+    args.add_arg("recovery", "", cli=True)
     args.add_opaque_function(add_tracking)
     return lut.LaunchDescription(args.get_launch_actions())
