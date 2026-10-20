@@ -226,3 +226,8 @@ RGB/EVSの前処理済み入力、凍結時は特徴量キャッシュを読み�
 逐次モードと初回特徴量抽出は従来のworker設定を使い、要求値と実効値をprovenanceへ残す。
 同一train/validation datasetはRAMを共有する。必要byte数と利用可能RAM/container headroomを事前確認し、
 不足の予測時は逐次モードへの切替方法を表示して停止する。暗黙のモード切替は行わない。
+
+学習画面の進捗と詳細診断を分離する。terminalは1行上書き、GUIは最新phase進捗を固定欄で更新し、
+履歴へはepoch要約を残す。phase/epoch/batch/loss/速度/ETAを同じ行に明示する。
+詳細stage統計はtiming.jsonl、全学習指標はmetrics.jsonlに保存する。
+進捗表示のための追加GPU同期を行わず、警告・例外は隠さない。

@@ -1,5 +1,6 @@
 import { $, state, api, action, item, toast, on, emit } from "./api.js";
 import { duration } from "./job_time.js";
+import { compactLog } from "./job_log.js";
 let selected = null,
   busy = false;
 const known = new Map();
@@ -49,15 +50,22 @@ const labels = {
   interrupted: "中断・結果未確認",
 };
 async function showLog(id) {
+  const switching = selected !== id;
   selected = id;
   stopButtons();
   const result = await api("log?id=" + id);
   if (selected !== id) return;
-  $("job-log").textContent = result.text;
-  $("job-log-copy").disabled = !result.text;
+  const view = compactLog(result.text);
+  const history = $("job-log");
+  const follow = switching || history.scrollHeight-history.scrollTop-history.clientHeight<32;
+  history.textContent = view.text;
+  $("job-progress").textContent = view.progress;
+  $("job-progress").hidden = !view.progress;
+  if (follow) history.scrollTop = history.scrollHeight;
+  $("job-log-copy").disabled = !view.text && !view.progress;
 }
 action("job-log-copy", async () => {
-  const text = $("job-log").textContent;
+  const text = [$("job-log").textContent, $("job-progress").textContent].filter(Boolean).join("\n");
   if (!selected || !text) throw new Error("コピーするログがありません");
   try {
     await navigator.clipboard.writeText(text);
@@ -111,7 +119,7 @@ export async function poll() {
         row.className = "job-row";
         const button = item(
           job.title,
-          `${statusLabel(job)} · ${timeLabel(job)}${job.status === "running" && !isStopping(job) ? " · " + job.message : ""}`,
+          `${statusLabel(job)} · ${timeLabel(job)}${job.status === "running" && !isStopping(job) && !job.message?.startsWith("実行: ") ? " · " + job.message : ""}`,
           () => showLog(job.id),
         );
         button.className = "job-select";

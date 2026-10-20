@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {compactLog} from '../frontend/job_log.js';
+assert.deepEqual(compactLog('ordinary\n'), {text:'ordinary\n', progress:''});
+const first='Epoch 1/10 | train [##--------------] 2/10';
+const second='Epoch 1/10 | train [########--------] 5/10';
+assert.deepEqual(compactLog(`setup\n[progress] ${first}\n[progress] ${second}\n`), {text:'setup\n', progress:second});
+assert.deepEqual(compactLog(`[progress] ${second}\nEpoch 1/10 | train loss=0.1 | val loss=0.2\n`), {text:'Epoch 1/10 | train loss=0.1 | val loss=0.2\n', progress:''});
+assert.equal(compactLog(`[progress] ${first}\nTraceback\nRuntimeError: failed`).text,'Traceback\nRuntimeError: failed');
+assert.equal(compactLog(`warnings mention [progress] text\n`).text, 'warnings mention [progress] text\n');
+console.log('compact training log: passed');

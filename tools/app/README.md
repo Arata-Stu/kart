@@ -793,9 +793,9 @@ JetsonへはQ/DQ ONNXとmetadataを転送し、`e2e_trt.sh`でINT8として再bu
 
 ### 制御学習の速度診断
 
-通常のRGB/20ch EVS学習から`TIMING`ログを出し、実験内の`timing.jsonl`へ保存する。
+通常のRGB/20ch EVS学習で診断値を計測し、実験内の`timing.jsonl`へ保存する。
 「学習速度の診断ログ」でCUDA計測batch数（既定20、0でEventのみOFF）と
-進捗表示の間隔（既定50batch）を変更可能。初回batchとphase終了時にも表示する。
+詳細JSONLの記録間隔（既定50batch）を変更可能。初回batchとphase終了時にも記録する。
 DataLoader待ち、転送、encoder/head、loss、逆伝播、optimizer、指標集計を分離する。
 CUDA Eventの時間とhostのdispatch/同期待ちは別に記録し、VRAM peakとsamples/sも保存する。
 cache作成/再利用と入力ハッシュ、best.pt保存時間も記録する。
@@ -811,3 +811,11 @@ worker設定（既定8）は初回特徴量抽出と、RAM OFFの逐次読み込
 容量が大きければRAMチェックを外して開始する。必要量が利用可能RAM/container残量の80%を超える場合は
 切替方法を表示して停止し、暗黙fallbackしない。読込準備時間とbyte数もログへ記録する。
 CLIは`--ram-preload` / `--no-ram-preload`。詳細はkart_e2e READMEを参照。
+
+### 学習ログの進捗表示
+
+「ログ・履歴」の上段に最新の学習進捗（epoch、train/validation、bar、loss/MSE、samples/s、ETA）を
+固定表示し、更新ごとに履歴へ積み上げない。epoch完了時は固定欄を消し、結果要約を1行残す。
+詳細CUDA/stage計測は実験内のtiming.jsonlへ保持する。
+「詳細計測ログの間隔」はJSONLの記録頻度で、画面更新は最大0.5秒ごと。
+警告・例外は通常ログに残し、コピーは画面の履歴＋最新進捗。元のjob logも保持する。

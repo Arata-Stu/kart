@@ -8,6 +8,7 @@ import json
 import math
 from pathlib import Path
 import random
+import time
 
 import numpy as np
 import torch
@@ -105,14 +106,20 @@ def main():
                       architecture='dinov3_vitt16',projection='train_only_linear_192_to_384')
     (a.output/'run.json').write_text(json.dumps(provenance,indent=2))
     print(f'Distillation: teacher frozen; student={provenance["student_parameters"]} params; target=CLS; cache={a.feature_cache}',flush=True)
+    from .training_progress import TrainingProgress
+    progress=TrainingProgress(a.epochs)
     best=float('inf')
     for epoch in range(a.epochs):
+        epoch_started=time.perf_counter()
         metrics=dict(epoch=epoch+1)
         for i,loader in enumerate(loaders):
             student.train(i==0);projector.train(i==0)
             total=np.zeros(3,dtype=np.float64)
+            phase_started=time.perf_counter();seen=0
+            phase='train' if i==0 else 'validation'
+            progress.update(phase,epoch+1,0,len(loader),0,0,force=True)
             with torch.set_grad_enabled(i==0):
-                for images,target in loader:
+                for batch,(images,target) in enumerate(loader,1):
                     images=images.to(a.device,non_blocking=True)
                     if a.feature_cache:
                         target=target.to(a.device,non_blocking=True)
@@ -124,16 +131,22 @@ def main():
                     if i==0:
                         optimizer.zero_grad();loss.backward();optimizer.step()
                     total+=np.array([loss.item(),mse.item(),cosine.item()])*len(images)
+                    seen+=len(images)
+                    progress.update(phase,epoch+1,batch,len(loader),time.perf_counter()-phase_started,seen,loss=total[0]/seen,mse=total[1]/seen,force=batch==len(loader))
             prefix='train' if i==0 else 'validation'
+            seconds=time.perf_counter()-phase_started
+            metrics[prefix+'_seconds']=seconds
+            metrics[prefix+'_samples_per_second']=seen/seconds
             metrics.update({prefix+'_'+key:float(value/len(loader.dataset)) for key,value in zip(('loss','mse','cosine'),total)})
         with (a.output/'metrics.jsonl').open('a') as stream:stream.write(json.dumps(metrics)+'\n')
-        print(metrics,flush=True)
-        if metrics['validation_loss']<best:
+        improved=metrics['validation_loss']<best
+        if improved:
             best=metrics['validation_loss']
             checkpoint=dict(format='kart.rgb_encoder.v1',spec=rgb_spec('dinov3_vitt16'),
                             encoder_state_dict=student.state_dict(),projection_state_dict=projector.state_dict(),
                             metrics=metrics,provenance=provenance)
             temporary=a.output/'encoder.tmp';torch.save(checkpoint,temporary);temporary.replace(a.output/'encoder.pt')
+        progress.summary(epoch+1,metrics,elapsed=time.perf_counter()-epoch_started,best=improved)
 
 
 if __name__=='__main__':main()

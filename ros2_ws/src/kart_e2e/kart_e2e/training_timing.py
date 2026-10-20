@@ -18,7 +18,9 @@ def stats(values):
 
 
 class TrainingTiming:
-    def __init__(self, output, device, *, profile_batches=20, log_interval=50):
+    def __init__(self, output, device, *, profile_batches=20, log_interval=50, epochs=None):
+        from .training_progress import TrainingProgress
+        self.progress = TrainingProgress(epochs)
         self.path = Path(output) / 'timing.jsonl'
         self.device = torch.device(device)
         self.profile_batches, self.log_interval = profile_batches, log_interval
@@ -43,7 +45,6 @@ class TrainingTiming:
 
     def record(self, phase, seconds, **details):
         self.write(dict(event='operation', phase=phase, seconds=seconds, **details))
-        print(f'TIMING {phase}: {seconds:.3f}s ' + json.dumps(details), flush=True)
 
     def phase(self, name, epoch=None):
         return Phase(self, name, epoch)
@@ -58,7 +59,8 @@ class Phase:
         if owner.cuda:
             torch.cuda.reset_peak_memory_stats(owner.device)
         owner.write(dict(event='phase_start', phase=name, epoch=epoch))
-        print(f'TIMING {name} epoch={epoch}: started', flush=True)
+        self.loss = self.mse = None
+        self.total_batches = 0
 
     def add(self, name, milliseconds):
         self.host.setdefault(name, []).append(milliseconds)
@@ -79,7 +81,15 @@ class Phase:
                 with torch.cuda.device(self.owner.device): events[1].record()
                 self.events.setdefault(name, []).append(events)
 
+    def show_progress(self, force=False, elapsed=None):
+        waits = self.host.get("data_wait", [])
+        self.owner.progress.update(self.name, self.epoch, self.batches_seen, self.total_batches,
+                                   time.perf_counter()-self.started if elapsed is None else elapsed, self.samples,
+                                   loss=self.loss, mse=self.mse, wait_ms=waits[-1] if waits else None, force=force)
+
     def batches(self, loader):
+        self.total_batches = len(loader)
+        self.show_progress(force=True)
         with self.measure('iterator_start', gpu=False): iterator = iter(loader)
         while True:
             started = time.perf_counter()
@@ -88,9 +98,14 @@ class Phase:
                 self.add("iterator_end", (time.perf_counter()-started)*1000)
                 break
             self.add('data_wait', (time.perf_counter()-started)*1000)
-            yield batch
+            try:
+                yield batch
+            except BaseException:
+                self.owner.progress.clear()
+                raise
             self.batches_seen += 1
             self.samples += len(batch[0])
+            self.show_progress()
             if self.batches_seen == 1 or self.batches_seen % self.owner.log_interval == 0:
                 self.report('progress')
 
@@ -111,12 +126,5 @@ class Phase:
                       sampled_cuda_ms=gpu, cuda_sample_limit=self.owner.profile_batches,
                       cuda_memory=memory)
         self.owner.write(report)
-        host = report['host_ms']
-        wait = host.get('data_wait', {}).get('mean', 0)
-        gpu_text = ', '.join(f'{name}={value["mean"]:.2f}' for name,value in gpu.items() if value)
-        print(f'TIMING {self.name} epoch={self.epoch} batch={self.batches_seen}: '
-              f'{wall:.2f}s, {report["samples_per_second"]:.1f} samples/s; '
-              f'data_wait={wait:.2f}ms; host stage mean ms=' +
-              ', '.join(f'{name}={value["mean"]:.2f}' for name,value in host.items() if name!='data_wait') +
-              (f'; sampled CUDA mean ms: {gpu_text}' if gpu_text else ''), flush=True)
+        if event == 'phase_end': self.show_progress(force=True, elapsed=wall)
         return report

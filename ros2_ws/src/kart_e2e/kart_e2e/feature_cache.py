@@ -41,7 +41,7 @@ def cached_samples(dataset, model, root, weights_sha, loader_factory, device, *,
     started = time.perf_counter()
     if timing:
         timing.write(dict(event="operation_start", phase=timing_phase, samples=len(dataset)))
-        print(f"TIMING {timing_phase}: hashing/validating {len(dataset)} inputs", flush=True)
+        print(f"Preparing features: {timing_phase}, {len(dataset)} samples", flush=True)
     dimension = getattr(model, "feature_dim", 384)
     root = Path(root)
     root.mkdir(parents=True, exist_ok=True)
@@ -95,9 +95,11 @@ def cached_samples(dataset, model, root, weights_sha, loader_factory, device, *,
                         with measure("write_features", gpu=False):
                             values[offset:offset+len(images)] = features
                         offset += len(images)
-                        if batch%100==0 or offset==len(dataset):
+                        if phase is None and (batch%100==0 or offset==len(dataset)):
                             print(f'Feature cache extraction: {offset}/{len(dataset)}',flush=True)
-                if phase: phase.report()
+                if phase:
+                    phase.report()
+                    timing.progress.clear()
                 if offset != len(dataset) or any(digest(path)!=sha for path,sha in sources.items()):
                     raise ValueError('Dataset changed during feature extraction')
                 values.flush(); del values

@@ -11,6 +11,7 @@ from kart_e2e.training_timing import TrainingTiming
 def test_data_wait_and_compute_are_separate_and_final_batch_count_exact(tmp_path):
     clock=SimpleNamespace(value=0.)
     class Loader:
+        def __len__(self): return 3
         def __iter__(self):
             clock.value+=.03
             return self

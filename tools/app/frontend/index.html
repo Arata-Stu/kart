@@ -524,8 +524,8 @@
           <details>
             <summary>学習速度の診断ログ</summary>
             <label>各phaseのCUDA計測batch数<input id="e2e-profile-batches" type="number" min="0" max="1000" value="20" /></label>
-            <label>進捗ログの間隔（batch）<input id="e2e-log-interval" type="number" min="1" max="100000" value="50" /></label>
-            <p class="help">制御学習のDataLoader待ち・転送・encoder・head・逆伝播・optimizerを記録。CUDAは各phase先頭20batchをEventで計測（0でOFF）。CPU側の時間・処理速度は全batchで集計します。初回batchと50batchごとにログ表示し、詳細は実験内のtiming.jsonlへ保存。Tiny第1段階の蒸留は対象外です。</p>
+            <label>詳細計測ログの間隔（batch）<input id="e2e-log-interval" type="number" min="1" max="100000" value="50" /></label>
+            <p class="help">制御学習のDataLoader待ち・転送・encoder・head・逆伝播・optimizerを記録。CUDAは各phase先頭20batchをEventで計測（0でOFF）。CPU側の時間・処理速度は全batchで集計します。進捗はepoch・loss・速度を1行で更新。詳細統計は初回batchと設定間隔で実験内のtiming.jsonlへ保存。Tiny第1段階の蒸留は対象外です。</p>
           </details>
           <label>乱数seed<input id="e2e-seed" type="number" min="0" max="2147483647" value="42" /></label>
           <label class="check"><input id="e2e-ram-preload" type="checkbox" checked />学習データを最初にすべてRAMへ読み込む</label>
@@ -735,7 +735,8 @@
       </div>
       <div class="job-columns">
         <div id="job-list" class="scroll"></div>
-        <pre id="job-log">処理を選ぶとログを表示します。</pre>
+        <div class="job-log-panel"><div id="job-progress" class="job-progress" role="status" aria-live="polite" hidden></div>
+        <pre id="job-log">処理を選ぶとログを表示します。</pre></div>
       </div>
     </section>
     <div id="toast" role="status" hidden></div>

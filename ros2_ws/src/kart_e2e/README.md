@@ -1000,7 +1000,7 @@ Jetson転送にはrootのONNXとmetadataだけを使い、Notebookのengineは�
 
 ### 学習ボトルネックの診断ログ
 
-RGB/20ch EVSの制御学習は、通常のGUI実行でも`TIMING ...`を標準出力へ表示し、
+RGB/20ch EVSの制御学習は、通常のGUI実行でもepoch・loss・速度を1行の進捗表示にまとめ、
 実験ディレクトリに`timing.jsonl`（schema=`kart.training_timing.v1`）を保存する。
 学習中はUI下部の「ログ・履歴」から確認・コピー可能。既存実行への後付けや過去runへの遡及記録は行わない。
 新規ROS node/topicはなく、オフライン学習CLIのみの変更。
@@ -1008,7 +1008,7 @@ RGB/20ch EVSの制御学習は、通常のGUI実行でも`TIMING ...`を標準�
 | 引数 / GUI設定 | 既定値 | 意味 |
 |---|---|---|
 | `--profile-batches` / 各phaseのCUDA計測batch数 | 20 | 各epochのtrain/validation・cache抽出で先頭N batchをCUDA Event計測。0〜1000、0でEventのみ無効 |
-| `--log-interval` / 進捗ログの間隔 | 50 | 初回batchとN batchごと、およびphase終了時に経過・速度・stage平均を表示。1〜100000 |
+| `--log-interval` / 詳細計測ログの間隔 | 50 | 初回batch・N batchごと・phase終了時に詳細JSONLを保存。1〜100000。画面の進捗更新は最大0.5秒ごとで独立 |
 
 学習画面の「学習速度の診断ログ」で変更する。CPU側時間は全batchを計測し、CUDAがなければ
 GPU時間・VRAMを捏造せず空欄にする。Tiny第1段階の特徴蒸留は対象外。
@@ -1078,3 +1078,17 @@ RAM OFFを案内する。20%はモデル・batch・OS等の余地。確認でき
 
 CPUでPNG/NPY/EVS・特徴量の逐次/RAM入力一致、後続I/O不要、同一dataset共有、容量チェックと
 設定ルーティングをテストする。64GB実環境での最大容量・GPU速度向上は別途実測する。
+
+### 学習進捗を1行にまとめる
+
+制御学習・Tiny蒸留の画面進捗はepoch/総epoch、train/validation、batch進捗bar、
+累積平均loss、samples/s、経過・ETAを1行で更新する。GUIではMSEと最新data waitも表示する。
+TTYでは改行せず上書きし、狭いterminalでは幅内に省略する。追加のGPU同期やloss.itemは行わない。
+epoch完了後にtrain/validationのloss・MSE・速度、epoch時間、LR（制御学習）、best保存の
+要約を1行残す。従来の大きいmetrics辞書や`TIMING ...`の詳細stage列は画面に繰り返さない。
+
+非TTYの標準出力は`[progress] `で始まる読みやすい進捗snapshotを出力する。
+GUIはこの行を履歴から分離し、現在の進捗だけを固定欄で更新する。epoch要約後は固定欄を消す。
+警告・例外・通常ログは省略せず、raw job logも保持する。コピーは表示中の要約＋最新進捗を対象とする。
+診断用`timing.jsonl`、学習指標`metrics.jsonl`は従来どおり保持し、詳細はそちらで確認する。
+画面更新は最大0.5秒ごと。`--log-interval`は詳細JSONLの記録間隔で、画面更新間隔とは分離する。

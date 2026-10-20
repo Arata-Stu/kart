@@ -125,7 +125,7 @@ def main():
                    help="Preload training tensors in RAM; --no-ram-preload streams from disk")
     p.add_argument("--cache-dir", type=Path, default=None)
     p.add_argument("--profile-batches", type=int, default=20, help="CUDA event samples per phase; 0 disables GPU event sampling")
-    p.add_argument("--log-interval", type=int, default=50, help="Live timing progress every N batches")
+    p.add_argument("--log-interval", type=int, default=50, help="Detailed timing.jsonl snapshot every N batches; console progress refreshes at most every 0.5s")
     p.add_argument("--seed", type=int, default=42)
     a = p.parse_args()
     scratch = a.initialization == "scratch"
@@ -220,7 +220,7 @@ def main():
 
     a.output.mkdir(parents=True, exist_ok=False)
     from .training_timing import TrainingTiming
-    timing = TrainingTiming(a.output, a.device, profile_batches=a.profile_batches, log_interval=a.log_interval)
+    timing = TrainingTiming(a.output, a.device, profile_batches=a.profile_batches, log_interval=a.log_interval, epochs=a.epochs)
     timing.record("setup", time.perf_counter()-setup_started, feature_cache=effective_cache, num_workers=a.num_workers)
     cache_keys = []
     if effective_cache:
@@ -259,6 +259,7 @@ def main():
     (a.output / "run.json").write_text(json.dumps(provenance, indent=2))
     best = float("inf")
     for epoch in range(a.epochs):
+        epoch_started = time.perf_counter()
         metrics = {"epoch": epoch + 1, "learning_rate": optimizer.param_groups[0]["lr"]}
         for index, loader in enumerate(loaders):
             model.train(index == 0)
@@ -297,6 +298,8 @@ def main():
                         total += loss.item() * len(images)
                         total_mse += torch.nn.functional.mse_loss(prediction.detach(), target).item() * len(images)
                         mae += (prediction.detach() - target).abs().sum(0)
+                    phase.loss = total / (phase.samples + len(images))
+                    phase.mse = total_mse / (phase.samples + len(images))
             phase_report = phase.report()
             metrics[("train" if index==0 else "validation")+"_seconds"] = phase_report["wall_seconds"]
             metrics[("train" if index==0 else "validation")+"_samples_per_second"] = phase_report["samples_per_second"]
@@ -311,8 +314,8 @@ def main():
             metrics["grad_scale"] = scaler.get_scale()
         with (a.output / "metrics.jsonl").open("a") as stream:
             stream.write(json.dumps(metrics) + "\n")
-        print(metrics, flush=True)
-        if metrics["validation_mse"] < best:
+        improved = metrics["validation_mse"] < best
+        if improved:
             best = metrics["validation_mse"]
             state = {
                 "spec": getattr(model, "spec", SPEC),
@@ -329,6 +332,7 @@ def main():
             torch.save(state, temporary)
             temporary.replace(a.output / "best.pt")
             timing.record("checkpoint_save", time.perf_counter()-save_started, epoch=epoch+1, bytes=(a.output/"best.pt").stat().st_size)
+        timing.progress.summary(epoch+1, metrics, elapsed=time.perf_counter()-epoch_started, best=improved)
 
 
 if __name__ == "__main__":
