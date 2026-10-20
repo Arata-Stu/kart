@@ -5,6 +5,12 @@
 通常の単一headで比較し、Multi-head・gateの影響は別実験にする。
 ONNX export・TensorRT buildはこの比較に含めない。
 
+一括実行は`bash scripts/e2e_model_compare.sh --train <dataset> --hours 6`を使用する。
+各方式の2 epoch試走から時間を見積もり、収まる条件を100 epochのまま実行する。
+時間不足の条件を自動で短縮せず、未実行として記録する。
+全条件の6時間内完了を保証するものではない。
+詳細は[scripts README](../scripts/README.md#モデルサイズ事前学習蒸留の時間予算付き比較)を参照。
+
 ## 共通条件
 
 - 同じRGB dataset、入力サイズ・前処理、操作ラベル、予測対象を使用する。

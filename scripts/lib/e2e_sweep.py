@@ -24,8 +24,8 @@ def sha(path):
     with path.open('rb') as stream:return hashlib.file_digest(stream,'sha256').hexdigest()
 
 
-def signatures(plan):
-    files=[Path(plan['weights'])]
+def signatures(plan, *, weights=None):
+    files=[Path(plan['weights'])] if weights is None else [Path(path) for path in weights]
     for root in sorted(set(plan['train']+plan['validation'])):
         root=Path(root);files.append(root/'samples.jsonl')
         if (root/'metadata.json').is_file():files.append(root/'metadata.json')

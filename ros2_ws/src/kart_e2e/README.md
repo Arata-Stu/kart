@@ -1114,6 +1114,11 @@ validation省略時はtrainと同じ。ONNX以降は実行しない。
 `metrics.jsonl`の`epoch_seconds`・`elapsed_seconds`は当該epochのcheckpoint保存前までの時間。
 通常の制御学習もSmooth L1・100 epoch・Plateau ONを既定とする。
 Tiny特徴蒸留は独立した工程で既定10 epochのまま。比較手順は[モデル比較計画](../../../docs/e2e_model_comparison.md)を参照。
+サイズ・pretrained/scratch・freeze/fine-tuning・Tiny蒸留予算の一括比較には
+`bash scripts/e2e_model_compare.sh --train <dataset> --hours 6`を使用する。
+既存train/distill CLIを共用し、2 epoch試走から時間を推定して予算内の条件を実行する。
+時間不足条件は明示的にskipし、全条件の6時間内完了は保証しない。
+実行・resume・出力仕様は[scripts README](../../../scripts/README.md#モデルサイズ事前学習蒸留の時間予算付き比較)を参照。
 実行例・resume・全設定は[scripts README](../../../scripts/README.md#学習条件の一括比較)を参照。
 
 

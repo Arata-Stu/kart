@@ -280,3 +280,8 @@ wildcard割当は実走行時の位置不明を許容する機能ではなく、
 制御学習の共通既定はSmooth L1（β=0.1）・100 epoch・Plateau ONとし、
 CLI・HTTP省略値・UIを揃える。epochは学習予算であり、収束の保証やearly stoppingではない。
 Tiny特徴蒸留は別工程のepoch・目的関数を保持する。
+
+モデル比較の時間予算は全datasetでの短い試走を含むwall timeとして扱う。
+不足時に制御学習のepochを暗黙に減らさず、未実行・時間切れ・失敗を成功と区別して記録する。
+蒸留と後段head学習は合計時間で開始可否を判断し、試走encoderを本番の初期重みへ流用しない。
+比較は既存のtrain/distillを共用し、全条件の予算内完了や同一train/valの走行精度を保証しない。

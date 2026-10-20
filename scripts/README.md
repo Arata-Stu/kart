@@ -243,6 +243,84 @@ bash scripts/e2e_sweep.sh --summarize /path/to/sweep
 重み・manifest/metadataのhash、入力ファイルのsize/mtime、実装のhashが変わった場合は同じ比較への追記を拒否する。
 既定12条件×100epochは、25秒/epochなら学習・検証だけで概算約8時間。実際はbatchで異なる。
 
+## モデルサイズ・事前学習・蒸留の時間予算付き比較
+
+```bash
+# Notebook Docker内、/workspacesで実行。validation省略時はtrainと同じ。
+bash scripts/e2e_model_compare.sh \
+  --train /workspaces/e2e/datasets/日付/時刻/dataset名 \
+  --hours 6
+```
+
+`e2e_model_compare.sh`は既存の`kart_e2e.train`／`kart_e2e.distill`を逐次実行する。
+新しいtrainerは作らず、通常のRGB単一headの比較に限定する。ONNX以降と車両操作は実行しない。
+全11条件、制御学習はSmooth L1（β=0.1）・100 epoch・Plateau ON・batch32・seed42。
+
+既定の優先順（時間不足時は後続でも収まる条件を試す）:
+
+1. `s_freeze`、`b_freeze`: 公式ViT-S/B pretrained＋headのみ。
+2. `s_finetune`、`s_scratch`: 同じViT-Sでpretrained全体更新とscratch。
+3. `tiny_scratch`、`cnn_scratch`: 蒸留なしの軽量baseline。
+4. `tiny_distill_10`、`tiny_distill_50`、`tiny_distill_100`: 同じ公式ViT-S教師から
+   Tinyを独立に10/50/100 epoch特徴蒸留し、それぞれ新しい制御headを100 epoch学習。
+5. `b_finetune`、`b_scratch`: 高コストなViT-B全体更新の比較。
+
+各方式を本番と同じ全datasetで2 epoch試走し、初期化・キャッシュ作成等の時間＋
+試走で遅い方のepoch時間×本番epoch数を1.3倍して見積もる。
+Tiny蒸留とTiny凍結headの時間profileは各予算で共有するが、
+本番encoderは毎回同じseedから独立学習し、試走のencoderを本番重みには使用しない。
+蒸留＋headは両段階の合計時間で開始可否を判定する。
+試走も6時間の予算に含む。100 epochを黙って減らさず、収まらない条件は`budget_skipped`にする。
+6時間で全11条件を完了できる保証はない。見積もりを超えて期限に達したprocessは停止し、
+`budget_timeout`として途中checkpoint・ログを保持する。停止待ちは最大10秒、その後に集計する。
+RAM preload ON、凍結時だけ特徴量キャッシュON。制御学習はAMP auto、特徴蒸留は現実装どおりFP32。
+head LR=1e-4、pretrained全体更新LR=1e-5、scratch LR=1e-4。
+LRも異なる実用条件の比較なので、初期重みだけの厳密な因果比較とは区別する。
+
+Pythonは`KART_E2E_PYTHON`（既定`/usr/bin/python3`）。重みは既存sweepと同じViT-Sパス、
+ViT-Bは`weights/dinov3/dinov3_vitb16.pth`。`--repo`／`--small-weights`（別名`--weights`）／
+`--base-weights`で変更できる。S重みが必要な比較では欠落を開始前に拒否する。
+B重みがない場合はBのpretrained条件を`unavailable`と記録し、他の条件を続ける。
+scratchには重みを渡さない。B scratchにも固定公式DINOv3ソースは必要。
+
+出力は`e2e/comparisons/YYYY-MM-DD/HH-MM-SS/`、または`--output /path/new-directory`。
+
+- `summary.md/csv/json`: 条件別status、最良制御MSE・steering MAE・採用epoch、
+  encoder採用epoch、初期LR、parameter数、蒸留＋制御学習の時間。
+- `epoch_budgets.csv`: 10/25/50/75/100 epochまでの最良制御MSE。
+- `runs/<条件>/output/`: 既存CLIのcheckpoint・run.json・metrics・timing。
+- `runs/<条件>/{command.json,status.json,train.log}`、`pilots/`: 実行履歴と時間試走。
+- `invocations.jsonl`: 試走・集計を含む各起動の実時間と時間予算。
+
+summaryの準備時間は本番の蒸留・制御学習processの合計で、試走時間を除く。
+試走時に構築したキャッシュは本番でも再利用されるため、完全なcold-cache時間ではない。
+全体所要時間は`invocations.jsonl`で確認する。
+蒸留は予算内のalignment loss最良encoder、制御はMSE最良checkpointを採用する。
+未完了・失敗条件の途中MSEは成功条件と同じ扱いで順位づけしない。
+train=valのMSEは適合度であり、別走行での性能確認は別途必要。
+
+```bash
+# 学習しない計画確認（dataset・重み・ソースの存在検査は行う）
+bash scripts/e2e_model_compare.sh --train /path/dataset --dry-run
+# 比較を絞る。指定順に実行する。
+bash scripts/e2e_model_compare.sh --train /path/dataset --hours 6 \
+  --cases s_freeze s_finetune tiny_scratch tiny_distill_10 tiny_distill_50
+# 別のvalidation、batch、蒸留予算を選ぶ
+bash scripts/e2e_model_compare.sh --train /path/train --validation /path/val \
+  --batch-size 64 --distill-epochs 5 20 50 --hours 6
+# 時間不足・中断した条件を、追加6時間の予算で実行
+bash scripts/e2e_model_compare.sh --resume /path/comparison --hours 6
+bash scripts/e2e_model_compare.sh --summarize /path/comparison
+```
+
+resumeは新しい時間予算。成功済みの本番・試走を再利用し、budget_skipped/budget_timeout/中断条件を再試行する。
+失敗・OOM・unavailable確定条件は再実行しない。再試行する場合は新しい比較を作る。
+中断stageは途中出力を退避し、同じseedから再実行する（optimizerの途中再開ではない）。
+データ・重み・実装・encoderソースの変更と同時実行を拒否する。
+resume時は`--hours`以外の比較設定を変更しない。`--stream`でRAM一括読込を無効化できる。
+CPUで時間予算・依存関係・集計・既存sweep互換をテストし、CNNの試走→本番→集計を確認。
+GPU上の全比較と6時間内の完了数は未検証。
+
 ### 高解像度で環境を記録する
 
 `bash scripts/bringup.sh`のRGB / Infra選択は「解像度 × FPS」のプロファイル一覧。
