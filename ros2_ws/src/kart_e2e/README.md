@@ -1103,3 +1103,13 @@ ORT既定のINT32 bias＋DequantizeLinearはORTで実行できてもTensorRT 10.
 旧形式のINT8 ONNXは元のFP32モデルから再校正する。再学習・元ONNXの再exportは不要。
 CPUで旧INT32 bias DQの生成・早期拒否と修正後のConv/ViT-S/Tiny＋ORT推論をテストする。
 TensorRTのparse/build成功は対象NVIDIA GPU上で別途確認する。
+
+### 学習パラメータの一括比較
+
+project rootの`bash scripts/e2e_sweep.sh --train <dataset>`でbatch/loss/schedulerの組合せを逐次学習する。
+既定12条件・各100epoch、RGB ViT-S全体fine-tuning、同じ初期重み/seed/LR1e-5。
+validation省略時はtrainと同じ。ONNX以降は実行しない。
+条件ごとのbest.pt・metrics・timingと、最良epoch/MSE/時間のsummary、epoch予算別CSVを保存する。
+`metrics.jsonl`の`epoch_seconds`・`elapsed_seconds`は当該epochのcheckpoint保存前までの時間。
+checkpointとschedulerの選択基準は従来どおり。通常学習の既定10epochは変更しない。
+実行例・resume・全設定は[scripts README](../../../scripts/README.md#学習条件の一括比較)を参照。

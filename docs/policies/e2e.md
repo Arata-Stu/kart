@@ -235,3 +235,8 @@ RGB/EVSの前処理済み入力、凍結時は特徴量キャッシュを読み�
 TensorRT向けINT8校正ではbiasのINT32 DequantizeLinearを生成しない。
 ORTのQuantizeBias=Falseで元のFP32 biasを保持し、Q/DQ dtype/scale/zero-pointとbias保持を生成直後に検査する。
 ORTでの推論成功だけをTensorRT対応の根拠にせず、parser非対応形式をbuild前に拒否する。
+
+学習条件の一括比較は同じ初期重み/seedと固定データを条件ごとに新しいprocessで学習する。
+batch/loss/schedulerを独立した軸とし、異なるloss同士の比較は共通MSEを使用する。
+同じtrain/validationも許可し、その事実を結果に明示する。最良epochとepoch予算別の到達精度・時間を残し、
+上限近傍の最良値から収束を断定しない。学習のみでONNX以降へ自動進行しない。

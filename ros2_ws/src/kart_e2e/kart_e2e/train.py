@@ -312,6 +312,8 @@ def main():
         metrics["next_learning_rate"] = optimizer.param_groups[0]["lr"]
         if scaler.is_enabled():
             metrics["grad_scale"] = scaler.get_scale()
+        metrics["epoch_seconds"] = time.perf_counter()-epoch_started
+        metrics["elapsed_seconds"] = time.perf_counter()-setup_started
         with (a.output / "metrics.jsonl").open("a") as stream:
             stream.write(json.dumps(metrics) + "\n")
         improved = metrics["validation_mse"] < best

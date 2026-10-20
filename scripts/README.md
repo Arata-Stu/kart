@@ -193,3 +193,52 @@ bash scripts/setup/foundationstereo.sh --model-res high_res
 地図生成はdense有効時だけengineを事前確認し、不足時はVSLAM開始前にsetupコマンドを表示する。
 
 公式手順: https://nvidia-isaac-ros.github.io/v/release-5.0/repositories_and_packages/isaac_ros_dnn_stereo_depth/isaac_ros_foundationstereo/index.html
+
+## 学習条件の一括比較
+
+```bash
+# Notebook Docker。validation省略時はtrainと同じdatasetを使う。
+bash scripts/e2e_sweep.sh \
+  --train /workspaces/e2e/datasets/2026-10-19/18-24-00/e522-rgb90-fixed0_1
+```
+
+既定はRGB ViT-S・全体fine-tuning、batch=32/64/128 × Smooth L1(β=0.1)/MSE × schedulerなし/Plateauの
+12条件、各100 epoch。LR=1e-5、seed42、RAM ON、AMP auto、mode=steer_only。
+Plateauはfactor0.5/patience2/min_lr1e-7（LRが小さい場合はそのLR以下）で検証lossを監視する。
+比較指標とbest.pt選択は共通の検証MSE。特徴量キャッシュは全体学習なので使わない。
+固定/max throttleのcheckpoint metadataは既定0.15/0.2。ONNX export・TensorRT build・走行は実行しない。
+
+Pythonは`KART_E2E_PYTHON`（既定`/usr/bin/python3`）。既定repoはprojectの`python_ws/dinov3`、
+重みは`weights/dinov3/dinov3_vits16_pretrain_lvd1689m-08c60483.pth`。別の場所は`--repo`/`--weights`で指定する。
+結果は`e2e/sweeps/YYYY-MM-DD/HH-MM-SS/`、`--output /path/new-directory`でも指定可能。
+
+- `summary.md` / `summary.csv` / `summary.json`：条件別status、最良MSE・epoch、実所要時間。
+- `epoch_budgets.csv`：5/10/20/30/50/75/100 epoch（実行上限以下）の各時点までの最良MSE・epoch・時間。
+- `<条件名>/training/{best.pt,metrics.jsonl,timing.jsonl,run.json}`：checkpointと詳細。
+- `<条件名>/train.log` / `command.json` / `status.json`：コマンド・ログ・状態。
+
+最終epochで最良になる場合は、収束・最適epochが確定したとはみなさない。
+最良epochが上限の最後10%にある条件をsummaryの`best_in_last_10_percent`で示す。
+`elapsed_seconds`はtrainer開始から当該epochの検証完了まで（初期化/RAM読込/過去checkpoint保存を含むが、
+Python importと当該epochのcheckpoint保存は含まない）。`wall_seconds`はprocess全体の実測。
+同じtrain/valも許可する。その場合のMSEは同じデータに対する当てはまりの比較であることをsummaryに表示する。
+
+```bash
+# 条件を小さくする、または200epochまで調べる
+bash scripts/e2e_sweep.sh --train /path/dataset --epochs 200 \
+  --batches 32 64 --losses smooth_l1 mse --schedulers none plateau
+# コマンド一覧とplanだけ作成する
+bash scripts/e2e_sweep.sh --train /path/dataset --dry-run
+# 表示された結果ディレクトリを指定して中断後に再開
+bash scripts/e2e_sweep.sh --resume /path/to/sweep
+# 学習せず再集計
+bash scripts/e2e_sweep.sh --summarize /path/to/sweep
+```
+
+`--learning-rates 3e-6 1e-5 3e-5`でLR軸も追加可能。`--stream`で逐次読み込み。
+`--validation`で別dataset群も指定可能。`--help`に全設定を表示する。
+各条件は別processで逐次実行し、GPUメモリを解放してから次へ進む。OOM/失敗も記録して続行する。
+再開時は成功/失敗/OOM確定済み条件を飛ばし、実行中だった条件は先頭から再実行する（optimizer状態の途中再開ではない）。
+途中成果物はinterrupted日時ディレクトリへ退避する。同じ出力への上書き・同時実行は拒否する。
+重み・manifest/metadataのhash、入力ファイルのsize/mtime、実装のhashが変わった場合は同じ比較への追記を拒否する。
+既定12条件×100epochは、25秒/epochなら学習・検証だけで概算約8時間。実際はbatchで異なる。
