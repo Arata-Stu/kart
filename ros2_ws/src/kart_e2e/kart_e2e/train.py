@@ -36,6 +36,9 @@ class Samples(Dataset):
         self.evs_spec = evs_spec
         self.routing = routing
         for root in roots:
+            if not routing and (root/'metadata.json').exists():
+                if json.loads((root/'metadata.json').read_text()).get('routing_sha256'):
+                    raise ValueError('Section-labeled datasets require --section-routing')
             if routing:
                 from .sections import digest
                 meta = json.loads((root / 'metadata.json').read_text())
@@ -122,13 +125,13 @@ def main():
     p.add_argument("--device", default="cuda")
     p.add_argument("--precision", choices=["auto", "fp32", "bf16", "fp16"], default="auto",
                    help="CUDA AMP: auto prefers native BF16, otherwise FP16; CPU auto uses FP32")
-    p.add_argument("--epochs", type=int, default=None, help="Default 10 pretrained / 50 scratch")
+    p.add_argument("--epochs", type=int, default=100, help="Control training budget (default: 100 for pretrained and scratch)")
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--learning-rate", type=float, default=None,
                    help="AdamW learning rate for all trainable parameters (default: 1e-4 frozen/scratch, 1e-5 pretrained finetune)")
     p.add_argument("--loss", choices=["smooth_l1", "mse"], default="smooth_l1")
     p.add_argument("--smooth-l1-beta", type=float, default=0.1)
-    p.add_argument("--lr-scheduler", choices=["none", "plateau"], default="none")
+    p.add_argument("--lr-scheduler", choices=["none", "plateau"], default="plateau")
     p.add_argument("--lr-factor", type=float, default=0.5)
     p.add_argument("--lr-patience", type=int, default=2)
     p.add_argument("--min-lr", type=float, default=1e-7)
@@ -155,8 +158,6 @@ def main():
         p.error("Scratch must not load --weights; omit it")
     if not scratch and a.weights is None:
         p.error("Pretrained training requires --weights")
-    if a.epochs is None:
-        a.epochs = 50 if scratch else 10
     if a.learning_rate is None:
         a.learning_rate = 1e-4 if scratch else (1e-5 if a.finetune else 1e-4)
     if scratch:
@@ -282,7 +283,7 @@ def main():
     provenance["selection_metric"] = "validation_mse"
     provenance["head_sampling"] = "equal_head_replacement" if routing else None
     provenance["routing"] = routing
-    provenance["scheduler_metric"] = "validation_loss" if scheduler else None
+    provenance["scheduler_metric"] = ("validation_mse" if routing else "validation_loss") if scheduler else None
     provenance["weights_sha256"] = weights_sha
     provenance["feature_cache_effective"] = effective_cache
     provenance["feature_cache_keys"] = cache_keys
@@ -363,7 +364,7 @@ def main():
                 metrics[key + '_mse'] = sum(mse[i] for i in range(len(mse)) if count[i])/sum(c>0 for c in count)
 
         if scheduler:
-            scheduler.step(metrics["validation_loss"])
+            scheduler.step(metrics["validation_mse" if routing else "validation_loss"])
         metrics["next_learning_rate"] = optimizer.param_groups[0]["lr"]
         if scaler.is_enabled():
             metrics["grad_scale"] = scaler.get_scale()

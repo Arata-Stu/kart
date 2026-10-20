@@ -56,6 +56,9 @@ def validate_trt_qdq(graph, reference=None):
 def quantize(model, calibration, output, *, samples=256, seed=42, evaluation=None):
     model,output=Path(model),Path(output)
     contract,mode=model_contract(model)
+    from .contract import routing_settings
+    if routing_settings(model):
+        raise ValueError("Section multi-head INT8 comparison is not yet supported; use FP32/FP16")
     source=Path(contract['model_file_path']);source_hash=digest(source)
     metadata_hash=digest(model/'metadata.json')
     meta=json.loads((model/'metadata.json').read_text())

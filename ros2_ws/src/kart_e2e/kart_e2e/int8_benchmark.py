@@ -75,6 +75,9 @@ def run(model,calibration,evaluation,output,*,calibration_samples=256,evaluation
     except (ImportError, OSError) as error:
         raise RuntimeError("INT8比較にはTensorRT/CUDAとNVIDIA GPUのあるkart Dockerが必要です（CPU速度への代用なし）") from error
     _,mode=model_contract(model);source_hash=digest(model/'model.onnx');metadata_hash=digest(model/'metadata.json')
+    from .contract import routing_settings
+    if routing_settings(model):
+        raise ValueError('Section multi-head INT8 comparison is not yet supported; use FP32/FP16')
     data=DatasetInputs(model,evaluation,evaluation_samples,seed)
     output.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.int8-benchmark-',dir=output.parent) as temporary:

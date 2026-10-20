@@ -241,6 +241,16 @@ def main():
             )
         elif args.run_name is None:
             args.run_name = input("run_name [run] > ").strip() or "run"
+    section_routing = None
+    if args.mode == 'e2e':
+        from kart_e2e.contract import routing_settings
+        section_routing = routing_settings(args.e2e_model_dir)
+        if section_routing and interactive:
+            args.map_file = args.map_file or str(choose('sectionと同じHDMap', discover(args.map_root, 'hdmap')))
+            args.map_dir = args.map_dir or str(choose('sectionと同じVSLAM地図', discover(args.map_root, 'vslam')))
+        if section_routing:
+            from kart_e2e.sections import validate_maps
+            validate_maps(section_routing, args.map_file, args.map_dir)
     if args.tuning is not None and args.mode != 'drive':
         raise ValueError('--tuning / --no-tuningはdrive専用です')
     tuning_enabled = False
@@ -298,6 +308,13 @@ def main():
         camera_config(config, args.mode), args.rgb_fps or "", args.infra_fps or "",
         args.rgb_profile, args.infra_profile
     )
+    if section_routing:
+        from kart_bringup.localization import resolve
+        from kart_bringup.vehicle_tf import load_transforms
+        load_transforms(config / 'vehicle/transforms.yaml', require_camera=True)
+        if not sensors['enable_infra1'] or not sensors['enable_infra2']:
+            raise ValueError('Section E2E needs stereo Infra for localization')
+        resolve(config / 'localization', args.map_dir, '', enable_vgl=False)
     if args.mode in ("drive", "eval") and not fresh:
         if not sensors["enable_infra1"]:
             raise ValueError("VSLAM/VGLにはInfraが必要です（なしは選択できません）")
@@ -402,6 +419,8 @@ def main():
         values.update(tuning_enabled=str(tuning_enabled).lower(), tuning_map_dir=tuning_map_dir)
     if args.mode == "e2e":
         values["e2e_model_dir"] = args.e2e_model_dir
+        if section_routing:
+            values.update(map_file=args.map_file, map_dir=args.map_dir)
     launch = "mission.launch.py"
     if args.mode == "eval":
         launch = "evaluation.launch.py"

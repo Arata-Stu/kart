@@ -32,11 +32,21 @@ class Router:
             self.edges.append((a,dx,dy,length,station))
             station += length
         self.length = station
-        self.sections = config['sections']
+        self.sections = []
+        self.wildcard = None
         ids = set()
         intervals = []
         used = set()
-        for row in self.sections:
+        for row in config['sections']:
+            if row.get('id') == '*':
+                if self.wildcard is not None or row.get('head') not in self.heads:
+                    raise ValueError('Exactly one wildcard assignment with a known head is allowed')
+                if set(row) != {'id', 'head'}:
+                    raise ValueError('Wildcard assignment has no distances/map_section')
+                self.wildcard = row
+                used.add(row['head'])
+                continue
+            self.sections.append(row)
             key,a,b,head = row['id'],row['start_m'],row['end_m'],row['head']
             if not isinstance(key,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',key) or key in ids or head not in self.heads:
                 raise ValueError('Invalid section ID/head')
@@ -47,7 +57,7 @@ class Router:
         intervals.sort()
         if any(b>c+1e-8 for (a,b),(c,d) in zip(intervals,intervals[1:])):
             raise ValueError('Overlapping sections')
-        if used != set(self.heads): raise ValueError('Every head needs a section')
+        if used != set(self.heads): raise ValueError('Every head needs a section or wildcard assignment')
         for key in ('max_distance_m','max_heading_rad','ambiguity_distance_m','max_pose_age_s','max_pose_skew_s','max_jump_m'):
             if not math.isfinite(config[key]) or config[key]<=0: raise ValueError('Invalid '+key)
         if config['max_heading_rad']>math.pi: raise ValueError('Invalid heading tolerance')
@@ -91,3 +101,23 @@ def load(path):
     config=json.loads(Path(path).read_text())
     Router(config)
     return config
+
+
+def file_digest(path):
+    with Path(path).open('rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def map_fingerprint(directory):
+    root=Path(directory).expanduser().resolve(strict=True)
+    if (root/'cuvslam_map').is_dir(): root=root/'cuvslam_map'
+    files=sorted(root.glob('*.mdb'))
+    if not files: raise ValueError('Saved VSLAM map (*.mdb) required')
+    return digest({p.name:file_digest(p) for p in files})
+
+
+def validate_maps(config, map_file, map_dir):
+    if hashlib.sha256(Path(map_file).expanduser().read_bytes()).hexdigest()!=config.get('map_sha256'):
+        raise ValueError('HDMap changed or differs from section routing; regenerate routing and labels')
+    if map_fingerprint(map_dir)!=config.get('localization_map_sha256'):
+        raise ValueError('VSLAM map differs from section routing')

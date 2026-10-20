@@ -4,6 +4,7 @@ find_package(ament_cmake_auto REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 ament_auto_find_build_dependencies()
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/E2EHeadSelection.msg"
   "msg/ReferenceLine.msg" "msg/TrackingReference.msg"
   "msg/BagRequest.msg" "msg/BagStatus.msg"
   "msg/ControlTrim.msg" "msg/ControlCommand.msg" "msg/OperationModeRequest.msg" "msg/OperationModeState.msg"

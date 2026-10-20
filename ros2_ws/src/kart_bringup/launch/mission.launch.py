@@ -26,6 +26,16 @@ def add_mission(args):
         camera_config(root, args.mode), args.rgb_fps, args.infra_fps,
         getattr(args, "rgb_profile", ""), getattr(args, "infra_profile", "")
     )
+    section_routing = None
+    if cfg['e2e']:
+        from kart_e2e.contract import routing_settings, input_contract
+        section_routing = routing_settings(args.e2e_model_dir)
+        if section_routing:
+            from kart_e2e.sections import validate_maps
+            if input_contract(args.e2e_model_dir)[0] != 'rgb':
+                raise ValueError('Image-stamped section routing currently requires RGB E2E')
+            validate_maps(section_routing, args.map_file, args.map_dir)
+            cfg['localization'] = True
     vehicle = {
         "enable_bridge": str(cfg["enable_bridge"]).lower(),
         "device": args.device,
@@ -63,9 +73,10 @@ def add_mission(args):
         if not params["enable_infra1"] or not params["enable_infra2"]:
             raise ValueError("Drive localization requires stereo infra (infra_fps > 0)")
         overrides={'multicam_mode':args.multicam_mode} if args.multicam_mode!="" else {}
-        _, _, _, profile = resolve(root / "localization", args.map_dir, args.model_dir,overrides)
+        if section_routing: overrides['base_frame'] = section_routing['base_frame']
+        _, _, _, profile = resolve(root / "localization", args.map_dir, args.model_dir,overrides, enable_vgl=not bool(section_routing))
         width, height, _ = params["depth_module.infra_profile"].split("x")
-        if profile["input_shape"][2:] != [int(height), int(width)]:
+        if not section_routing and profile["input_shape"][2:] != [int(height), int(width)]:
             raise ValueError("RealSense resolution differs from VGL map/model shape")
     if cfg["tracking"] and (args.lane_id, args.line_type) not in hdmap_choices(
         args.map_file
@@ -142,6 +153,8 @@ def add_mission(args):
             include(
                 "localization.launch.py",
                 {
+                    "enable_vgl": "false" if section_routing else "true",
+                    "base_frame": section_routing["base_frame"] if section_routing else "",
                     "map_dir": args.map_dir,
                     "model_dir": args.model_dir,
                     "multicam_mode": args.multicam_mode,

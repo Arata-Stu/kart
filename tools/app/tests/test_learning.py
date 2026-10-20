@@ -180,10 +180,11 @@ class LearningTests(unittest.TestCase):
 
     def test_training_loss_and_scheduler_options(self):
         data = self.dataset().relative_to(self.service.root/'datasets').as_posix()
-        body = dict(name='smooth',train=[data],validation=[data],lr_scheduler='plateau',lr_patience=0)
+        body = dict(name='smooth',train=[data],validation=[data],lr_patience=0)
         plan=self.service.prepare('train',body)
         self.assertEqual(plan['provenance']['loss'],'smooth_l1')
         self.assertEqual(plan['provenance']['lr_scheduler'],'plateau')
+        self.assertEqual(plan['provenance']['epochs'],100)
         self.assertEqual(plan['args'][plan['args'].index('--smooth-l1-beta')+1],'0.1')
         for values in (dict(loss='other'),dict(smooth_l1_beta=0),dict(lr_factor=1),
                        dict(lr_patience=-1),dict(min_lr=.1),dict(lr_scheduler='unknown')):
@@ -200,7 +201,7 @@ class LearningTests(unittest.TestCase):
         cnn=self.service.prepare('train',{**body,'architecture':'simple_cnn'})
         self.assertNotIn('--weights',cnn['args'])
         self.assertIn('--finetune',cnn['args'])
-        self.assertEqual(cnn['provenance']['epochs'],50)
+        self.assertEqual(cnn['provenance']['epochs'],100)
         self.assertEqual(cnn['provenance']['learning_rate'],1e-4)
         self.assertFalse(cnn['provenance']['feature_cache_effective'])
         self.service.save_settings(dict(self.settings,weights=missing,base_weights=missing))
@@ -213,7 +214,7 @@ class LearningTests(unittest.TestCase):
         self.service.save_settings(dict(self.settings,base_weights=str(base_weights)))
         pretrained=self.service.prepare('train',{**body,'initialization':'pretrained','architecture':'dinov3_vitb16'})
         self.assertEqual(pretrained['args'][pretrained['args'].index('--weights')+1],str(base_weights))
-        self.assertEqual(pretrained['provenance']['epochs'],10)
+        self.assertEqual(pretrained['provenance']['epochs'],100)
         with self.assertRaisesRegex(ValueError,'CNN'):
             self.service.prepare('train',{**body,'initialization':'pretrained','architecture':'simple_cnn'})
         with self.assertRaisesRegex(ValueError,'RGB'):
@@ -446,7 +447,7 @@ class LearningTests(unittest.TestCase):
         self.service.prepare("train", {**body, "validation": [train]})
         plan = self.service.prepare("train", body)
         defaults = self.service.prepare("train", {key: value for key, value in body.items() if key != "epochs"})
-        self.assertEqual(defaults["args"][defaults["args"].index("--epochs") + 1], "10")
+        self.assertEqual(defaults["args"][defaults["args"].index("--epochs") + 1], "100")
         self.assertEqual(defaults["args"][defaults["args"].index("--learning-rate") + 1], "1e-05")
         self.assertTrue(defaults["provenance"]["finetune"])
         self.assertEqual(defaults["provenance"]["num_workers"], 8)

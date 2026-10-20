@@ -150,7 +150,8 @@ steer-onlyは学習を`--mode steer_only`にする。encoder既定凍結、`--fi
 Torch CLIをROS外で実行する場合は`PYTHONPATH=ros2_ws/src/kart_e2e python -m kart_e2e.train ...`
 または`-m kart_e2e.export_onnx ...`。rosbag抽出のみROSメッセージ環境が必要。
 
-学習既定: epochs=10, batch-size=32, learning-rate=1e-4（凍結）／1e-5（`--finetune`）, seed=42, device=cuda。
+学習既定: epochs=100, batch-size=32, learning-rate=1e-4（凍結）／1e-5（`--finetune`）, seed=42, device=cuda。
+制御学習はSmooth L1（β=0.1）・Plateau scheduler ONが既定。
 train/validation/repo/weights/outputは必須。MSEと出力別MAEを保存し最良validationのbest.ptを保存。
 公式重みはstrict load、取得失敗時にrandomへfallbackしない。train/validationは同一bag・同一データセットでも実行可能。
 exportは固定batch=1、opset17。checkerと3入力のONNX Runtime比較が通ってからmetadataを作る。
@@ -608,7 +609,7 @@ PyTorch checkpointの確認であり、ONNX/TensorRTとの数値同等性はexpo
 
 `--finetune`はDINOv3 backboneを凍結せず、制御headと一緒に全体をAdamWで更新する。
 学習率未指定時は全trainable parameterに`1e-5`（通常のhead学習は`1e-4`）を使用する。
-`--learning-rate`を明示すると指定値を優先する。epoch既定は両方式とも10。
+`--learning-rate`を明示すると指定値を優先する。epoch既定は両方式とも100。
 Notebook UIでは「全体をfine-tuning」を選択する。標準学習率は切替に追従し、
 別の値を手入力している場合は保持する。学習名候補に`-finetune`を付け、既存実験と別に保存する。
 初期値は学習環境のローカル事前学習重み。既存best.ptからの再開ではない。
@@ -754,7 +755,7 @@ Notebook UIは「RGBモデル」でTinyを選び、データを選択して第1�
 RAW manifest絶対パスを指定する。CLIも`--raw`/`--raw-manifest`省略時は同じ自動検出を使う。
 `preprocess_evs`を実行するため、学習用PythonにはRAW reader SDKが必要。
 次に「学習」でEVSへ切り替え、学習・検証データを選択する。
-既定encoder凍結、epoch 10、workers 8、特徴量キャッシュON。
+既定encoder凍結、epoch 100、Smooth L1（β=0.1）、Plateau scheduler ON、workers 8、特徴量キャッシュON。
 全体fine-tuning、損失カーブ、ONNX exportは共通操作で使用できる。
 EVSモデルの評価ではbagの代わりに作成済みEVSデータセットを選択する。
 RGB/EVSデータの混在とEVSへのRGB Tiny蒸留を拒否する。
@@ -826,7 +827,7 @@ RGB Small/Tiny・EVSの制御学習で共通。`--loss smooth_l1`が既定、
 学習・検証の実際の目的関数を`train_loss`/`validation_loss`、比較用MSE・MAEを別途保存する。
 `best.pt`は従来どおり`validation_mse`最小で選び、推論・exportの契約は変更しない。
 
-`--lr-scheduler none`が既定。`plateau`を指定するとReduceLROnPlateauで
+`--lr-scheduler plateau`が既定。`none`で無効化できる。ReduceLROnPlateauで
 検証の実目的関数`validation_loss`を監視する。`--lr-factor 0.5`、
 `--lr-patience 2`、`--min-lr 1e-7`が既定。
 factorは0より大きく1未満、patienceは0以上、min-lrは0以上かつ有効時に初期LR以下。
@@ -847,9 +848,9 @@ ViT-Bは同じ固定公式DINOv3ソースの`dinov3_vitb16(pretrained=False)`で
 事前学習済みを選んだ場合だけローカル重みをstrict loadする。重みは自動取得しない。
 ViT-BにViT-S重みを暗黙流用しない。
 
-`--initialization pretrained`が既定。従来の重み付き学習は既定10 epoch。
+`--initialization pretrained`が既定。重み付き学習は既定100 epoch。
 `--initialization scratch`では重みを読み込まず、encoderとheadを必ず全体学習し、
-既定50 epoch・学習率1e-4を使う（`--epochs`/`--learning-rate`で上書き可能）。
+既定100 epoch・学習率1e-4を使う（`--epochs`/`--learning-rate`で上書き可能）。
 `--weights`はpretrainedでは必須、scratchとの併用は誤設定として拒否する。
 scratch中は特徴量キャッシュを無効化する。凍結したランダム特徴をbaselineとしない。
 事前学習済み全体fine-tuningの既定学習率1e-5は維持する。
@@ -1111,7 +1112,8 @@ project rootの`bash scripts/e2e_sweep.sh --train <dataset>`でbatch/loss/schedu
 validation省略時はtrainと同じ。ONNX以降は実行しない。
 条件ごとのbest.pt・metrics・timingと、最良epoch/MSE/時間のsummary、epoch予算別CSVを保存する。
 `metrics.jsonl`の`epoch_seconds`・`elapsed_seconds`は当該epochのcheckpoint保存前までの時間。
-checkpointとschedulerの選択基準は従来どおり。通常学習の既定10epochは変更しない。
+通常の制御学習もSmooth L1・100 epoch・Plateau ONを既定とする。
+Tiny特徴蒸留は独立した工程で既定10 epochのまま。比較手順は[モデル比較計画](../../../docs/e2e_model_comparison.md)を参照。
 実行例・resume・全設定は[scripts README](../../../scripts/README.md#学習条件の一括比較)を参照。
 
 
@@ -1126,3 +1128,177 @@ RGB/EVS共通のinference launchがdecoderの/auto/control_cmdを/recovery/input
 
 bringup.shでは`--recovery off|infra_imu|rgb_imu|evs_assisted`または対話メニューで今回の復帰構成を選択する。
 RGB/EVS E2E launchの`recovery`引数（既定空文字）はinferenceへ渡り、未指定時はYAMLを保持する。
+
+## Section別head（共有backbone・同時学習）
+
+section→head対応は多対一。既存HDMapの基準ラインの距離[m]で区間を明示指定する。
+`config/examples/section_assignments.json`をコピーし、heads、sections、距離を実コースに合わせる。
+サンプル例の15mは仮の値であり、そのまま実コースには使わない。
+`[start_m,end_m)`、閉路のみstart>endで始点を跨げる。重複sectionは拒否し、未定義区間は不採用。
+`base_frame`はoffline・実走行で一致させる。HDMapとVSLAM地図は事前に同じ座標へ登録しておく。
+
+ROS/Docker環境で、既存の教師データセットを`--clock header`で作成した後:
+
+```bash
+python3 -m kart_e2e.section_dataset routing \
+  --map /workspaces/map/course/map.json --localization-map /workspaces/map/course/bundle \
+  --lane lane_001 --line customline --assignments /workspaces/e2e/assignments.json \
+  --output /workspaces/e2e/routing.json
+
+ros2 launch kart_bringup e2e_sections_offline.launch.py \
+  bag:=/workspaces/record/対象bag map_file:=/workspaces/map/course/map.json \
+  map_dir:=/workspaces/map/course/bundle routing_file:=/workspaces/e2e/routing.json \
+  trajectory_output:=/workspaces/e2e/poses.jsonl
+# bag再生終了後Ctrl-C。保存先は新規ファイルを指定する。
+
+python3 -m kart_e2e.section_dataset split \
+  --dataset /workspaces/e2e/datasets/元データセット --trajectory /workspaces/e2e/poses.jsonl \
+  --routing /workspaces/e2e/routing.json --output /workspaces/e2e/datasets/section付きデータセット
+
+python3 -m kart_e2e.train \
+  --train /workspaces/e2e/datasets/section付きデータセット \
+  --validation /workspaces/e2e/datasets/section付き検証データセット \
+  --section-routing /workspaces/e2e/routing.json \
+  --repo /workspaces/python_ws/dinov3 --weights /workspaces/weights/dinov3/使用する重み.pth \
+  --mode steer_only --finetune --learning-rate 1e-5 --epochs 50 \
+  --output /workspaces/e2e/training/section_trial
+```
+
+学習は通常と同じAMP・RAM・凍結時の特徴キャッシュに対応。
+headごとの逆頻度で復元抽出し、各epochの総サンプル数は元データ数を保つ。
+全headのtrain/validationサンプルが必要。`sections/<section_id>/`にも個別manifestを生成する。
+画像／countsは可能ならhard link、別filesystemならcopyして独立したデータセットを作る。
+固定AUTO／通常MANUAL等の教師採用条件は元データセットを継承し、区間分けで復活させない。
+`metadata.json`に元manifest、trajectory、routingのハッシュ・採用／除外数を記録する。
+`metrics.jsonl`の`train_heads` / `validation_heads`にhead別サンプル数・MSE・ステアMAEを保存する。
+通常の`validation_mse`は複数head時のみhead別MSEの平均、`validation_micro_mse`は画像数加重。
+
+通常の`kart_e2e.export_onnx`で、共有encoderと全headを一つのONNXに出力する。
+FP32入出力は`[1, head数 × (steer_onlyなら1、steer_throttleなら2)]`、head順はrouting.heads。
+推論時もbackboneを一回だけ実行し、decoderが対応するheadの出力を採用する。
+通常のTensorRT FP32/FP16 build経路を使う。INT8の複数head比較・GUIでのsection編集は未対応。
+RGBは実走行launchまで接続。EVSは同時学習／exportまで対応するが、実走行の時刻対応は未対応で
+launchが拒否する。RGBモデルもROS/GPU/実bag/実車での動作確認は未実施。
+
+### `e2e_section_selector`ノード
+
+Python独立プロセス。重い画像tensorは購読せず、CameraInfoのheader時刻でTFを照会する。
+
+| 方向 | topic既定値 | 型 | QoS / 内容 |
+| --- | --- | --- | --- |
+| 入力 | `/realsense/color/camera_info` | `sensor_msgs/msg/CameraInfo` | SENSOR_DATA、画像時刻 |
+| 入力 | `/localization/vslam/diagnostics` | `diagnostic_msgs/msg/DiagnosticArray` | reliable/volatile/10、局在確認 |
+| 入力 | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | tf2標準、画像時刻のmap→base |
+| 出力 | `/e2e/head_selection` | `kart_interfaces/msg/E2EHeadSelection` | reliable/volatile/10、画像毎の選択または無効理由 |
+
+ROS標準のparameter_events/rosout以外の独自service/actionなし。
+全parameterは`config/section_selector.yaml`、実運用はbringupの同名YAML。
+`model_dir=''`（export内routing）、`routing_file=''`（明示時はoffline用routingを優先）、
+`trajectory_output=''`（空は記録なし、指定は新規JSONL）、
+`camera_info_topic='/realsense/color/camera_info'`、
+`diagnostics_topic='/localization/vslam/diagnostics'`、`output_topic='/e2e/head_selection'`、
+`diagnostics_timeout_s=1.5`（steady time秒）、`use_sim_time=false`。全て起動時設定。
+
+routing JSONの閾値は`max_distance_m`（ラインからの最大距離）、`max_heading_rad`（方向差）、
+`ambiguity_distance_m`（別区間が同程度に近いと不採用）、`max_jump_m`（距離上の飛びと曖昧区間の分離）、
+`max_pose_age_s`（TF待ち上限・decoder受信watchdog）、`max_pose_skew_s`（offline画像との最大過去pose差）。
+例の値は1m、1.2rad、0.15m、3m、0.3s、0.05s。実コースに合わせて固定して学習から使用する。
+TFは最新値で代用せず画像時刻で問い合わせ、診断が未局在／異常／古い場合はvalid=false。
+
+decoderの追加parameterは`head_count=1`、`routing_sha256=''`、`head_timeout_s=0.3`。
+export metadataからlaunchが指定する。空ハッシュなら従来の単一head動作。
+選択の到着前は直前の一致済み推論を既存の150ms watchdog範囲内で保持する。
+無効選択・鮮度切れ・未一致のままwatchdog超過は停止し、正常モードへの切替で既存ラッチを解除する。
+CameraInfoと画像のstampが一致すること、TF遅延がwatchdogを超えないことは実機で確認が必要。
+
+portable検証: section境界・方向・地図不一致、dataset分割、混合head勾配、CPUのCNN 1epoch、
+ONNX Runtime比較、画像stamp一致／境界を跨ぐ遅延推論／期限切れのC++テスト。
+
+既存mapのcustomline速度区間をそのまま境界に使う場合、assignmentsのsectionを
+`{"id":"s01","map_section":0,"head":"curve"}`のように指定できる。
+`map_section`はmapの`custom_speeds`（または生成customlineの`speed_sections`）の0始まりindex。
+距離の再入力は不要。headの意味は速度値から自動推定せず明示割当とする。
+customline以外ではこの参照を拒否する。既存区間の重複や未定義の隙間は、routing作成時に確認する。
+
+### 別走行から必要なsectionだけを採用する
+
+固定スロットル＋人間のステアで収集した別bagから、カーブ区間と直線区間を選択できる。
+通常の教師抽出を先に行い、固定収集のMANUAL復帰区間を除外する方針は維持する。
+
+```bash
+# 低スロットル走行から、必要なsectionだけを区間分け時に採用
+python3 -m kart_e2e.section_dataset split \
+  --dataset /workspaces/e2e/datasets/slow --trajectory /workspaces/e2e/slow_poses.jsonl \
+  --routing /workspaces/e2e/routing.json --sections s02 s04 \
+  --output /workspaces/e2e/datasets/slow_curves
+
+# 区間分け済みの高速走行から、再度VSLAMを実行せず直線sectionだけを抽出
+python3 -m kart_e2e.section_dataset extract \
+  --dataset /workspaces/e2e/datasets/fast_labeled --sections s01 s03 \
+  --output /workspaces/e2e/datasets/fast_straights
+```
+
+`split --sections`を省略すれば従来どおり全section。指定はsection IDでありhead名ではない。
+未知のsectionは処理開始前にエラー。抽出件数0もエラー。
+指定区間にデータがなかった場合は`metadata.json.missing_selected_sections`に記録する。
+`selected_sections`、採用／除外件数、元manifestのハッシュを記録し、画像・countsと教師の
+steering/throttle・head対応はそのまま保持する。元データは編集しない。
+`extract`の出力は選択区間をまとめた一つのmanifestで、さらに`sections/`を再生成しない。
+
+学習の`--train`は複数datasetを指定できるため、例えば
+`--train .../slow_curves .../fast_straights`として混ぜる。
+全データセットで同じroutingを使い、trainとvalidationのそれぞれで全headのデータを揃える。
+`--mode steer_throttle`は実際に記録された固定スロットル値も教師にする。
+現行missionの実走行は固定スロットルを維持する。
+この抽出機能によって走行時のスロットル設定を自動変更しない。
+
+### ワイルドカード割当 `*`：全周用head
+
+専門headに加え、全周用headを`sections`へ距離指定なしで追加できる。
+
+```json
+{
+  "heads": ["straight", "curve", "stable"],
+  "sections": [
+    {"id": "s01", "start_m": 0, "end_m": 5, "head": "straight"},
+    {"id": "s02", "start_m": 5, "end_m": 10, "head": "curve"},
+    {"id": "*", "head": "stable"}
+  ]
+}
+```
+
+上は割当部分の抜粋。完全な例は`config/examples/section_assignments_wildcard.json`。
+`*`は一つだけ指定でき、距離／map_sectionは指定しない。
+専門sectionの境界とは重複しない特別な割当として扱う。
+
+全周用は通常の教師抽出済みdatasetを入力し、offline VSLAM／trajectoryなしで作成する。
+
+```bash
+python3 -m kart_e2e.section_dataset assign \
+  --dataset /workspaces/e2e/datasets/全周の人間操舵データ \
+  --routing /workspaces/e2e/routing.json --sections '*' \
+  --output /workspaces/e2e/datasets/stable_full_lap
+```
+
+`assign`は各サンプルを`section_id='*'`とwildcardのheadへ割り当てる。
+元dataset内の教師サンプルを全て採用し、ステア・スロットル・教師採用情報は保持する。
+停止・復帰・調整の除外は前段の通常抽出で行う。raw bag全メッセージを教師にする意味ではない。
+画像／countsを可能ならhard linkし、元datasetは編集しない。
+header時刻／poseは不要で、metadataに`section_assignment=wildcard_no_localization`を記録する。
+既存poseに基づく割当情報は採用せず、出力にtrajectoryの出典を付けない。
+
+専門head分は従来どおり`split`と指定sectionの抽出で作成する。
+同じroutingを使い、学習に`--train .../専門dataset .../stable_full_lap`を指定する。
+validationにも全headのデータを用意する。head名とindexは全datasetで共通。
+
+`split --sections '*'`と`extract --sections '*'`は「全ての既存区間を選択」であり、
+既存headの割当を保持する。全サンプルをstableへ割り当て直す操作は`assign`を使う。
+シェル展開を防ぐため`'*'`は引用符で囲む。個別sectionとの混在指定は拒否する。
+位置判定の曖昧・局在失敗をwildcardへ自動fallbackする動作は追加していない。
+
+### 学習UIからのsection工程
+
+Map Studioの「学習 → Section head」で割当、offline pose、専門／全周dataset作成を行える。
+既存の学習画面で複数datasetを選ぶとroutingを自動で渡し、全headのtrain/validationの存在を検証する。
+`section_workflow`はUI内部workerであり、固定のrouting保存／offline起動のみを処理する。
+独自ROSノードやtopicは追加しない。詳細なUI操作は[Map Studio README](../../../tools/app/README.md#section-headの学習ui)を参照。

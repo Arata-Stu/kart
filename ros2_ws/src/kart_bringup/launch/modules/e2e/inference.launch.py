@@ -3,7 +3,7 @@
 import isaac_ros_launch_utils as lu
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.e2e import boolean, parameters
-from kart_e2e.contract import model_contract, runtime_settings, input_contract, validate_runtime
+from kart_e2e.contract import model_contract, runtime_settings, input_contract, validate_runtime, routing_settings
 from kart_e2e.engine_cache import require_engine
 
 
@@ -24,6 +24,18 @@ def add_nodes(args):
     trt.update(paths)
     decoder.update(runtime_settings(args.model_dir))
     decoder["output_mode"] = mode
+    routing = routing_settings(args.model_dir)
+    selector_actions = []
+    if routing:
+        if modality != 'rgb':
+            raise ValueError('Section runtime routing requires RGB image timestamps')
+        from kart_e2e.sections import Router
+        from launch_ros.actions import Node
+        decoder.update(head_count=len(routing['heads']), routing_sha256=Router(routing).sha,
+                       head_timeout_s=routing['max_pose_age_s'])
+        selector_actions.append(Node(package='kart_e2e', executable='e2e_section_selector',
+            name='e2e_section_selector', output='screen', parameters=[str(root/'section_selector.yaml'),
+            dict(model_dir=str(args.model_dir),use_sim_time=boolean(args.use_sim_time) if args.use_sim_time!='' else False)]))
     if args.use_sim_time != "":
         trt["use_sim_time"] = decoder["use_sim_time"] = boolean(args.use_sim_time)
     if args.fixed_throttle != "":
@@ -69,6 +81,7 @@ def add_nodes(args):
     return [
         lu.log_info(f"E2E config: {root}; TensorRT: {trt}; decoder: {decoder}"),
         lu.load_composable_nodes(args.container_name, nodes),
+        *selector_actions,
         *recovery_actions,
     ]
 

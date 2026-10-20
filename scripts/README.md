@@ -287,3 +287,11 @@ HDMapの転送フォルダーと選択したVSLAM/VGL地図の内容を照合し
 CLIでは通常のdrive引数へ`--tuning`を追加（`--no-tuning`で無効化、未指定はhdmap.yamlの既定値）。
 `--dry-run`は接続せず、地図の一致・採用値と生成された起動コマンドを確認する。
 操作手順は[Map Studio](../tools/app/README.md#hdmap自己位置を見ながら現場調整)を参照。
+
+### Section別headのE2E
+
+`metadata.json`にroutingを持つRGBモデルを選ぶと、`bringup.sh`はHDMapと保存VSLAM地図の
+選択を追加する。非対話では`--map-file` / `--map-dir`を指定する。
+モデルごとにheadを別々に読み込まず、共有encoder＋全headの一つのTensorRT engineを使用する。
+詳しいoffline pose生成→section dataset→混合バッチ学習の手順は
+[kart_e2e README](../ros2_ws/src/kart_e2e/README.md#section別head共有backbone同時学習)を参照。

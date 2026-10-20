@@ -673,7 +673,7 @@ PCAは特徴の違い、赤い入力感度は局所勾配であり、走行性�
 同名bagも親フォルダで区別する。データセット名候補は選択bag名から引き続き自動入力する。
 
 学習の「全体をfine-tuning」はDINOv3 backboneと制御headを同時に更新する。
-標準学習率はhead学習`1e-4`、全体fine-tuning`1e-5`（手動変更可）、epochは両方10。
+標準学習率はhead学習`1e-4`、全体fine-tuning`1e-5`（手動変更可）、epochは両方100。
 学習名候補に`-finetune`が付き、履歴にも全体学習を表示する。
 
 ### 学習後の損失カーブ
@@ -724,7 +724,7 @@ NumPy 1.26.4 / h5py 3.11.0の専用venvを指定し、学習用Pythonとは分�
 `weights/evs/event_encoder.pt`と`weights/evs/event_encoder.json`。
 利用者がEventStateで生成した対応するファイルを配置する。自動ダウンロードはしない。
 「学習」の入力種別もEVSへ切り替えるとEVSデータセットだけが選択でき、
-`train --modality evs`で制御head学習を実行する。epoch=10、workers=8、特徴量キャッシュONが既定。
+`train --modality evs`で制御head学習を実行する。epoch=100、workers=8、特徴量キャッシュONが既定。
 全体fine-tuningにも対応し、この場合は特徴量キャッシュを使用しない。RGB Tiny蒸留はEVSに適用しない。
 
 学習後の損失カーブ、ONNX export、転送、整理・ごみ箱は共通。
@@ -749,7 +749,7 @@ EVS特徴量可視化は「特徴量を確認」でEVS実験を選び、同じ�
 入力表示のlog1pは可視化専用で学習・推論入力には使わない。RAW SDK不要、学習用Pythonで実行する。
 
 制御学習の損失は既定Smooth L1（β=0.1）、MSEも選択可能。
-スケジューラは既定OFF。Plateau選択時は検証lossの停滞でLRを下げる
+スケジューラは既定Plateau。通常モデルは検証loss、Multi-headはhead平均の検証MSEの停滞でLRを下げる
 （factor=0.5、patience=2、min LR=1e-7）。patience=2は3回の非改善で次epochのLRを低下する。
 学習lossと比較用MSEは両方保存し、best.ptの選定は検証MSEを維持する。
 損失表示はMSE/学習lossを切り替え、epoch表で使用LR/次epoch LRを確認できる。
@@ -758,8 +758,8 @@ EVS特徴量可視化は「特徴量を確認」でEVS実験を選び、同じ�
 ### RGB baseline比較
 
 RGBモデルにViT-B（768次元）と小規模CNN（192次元）を追加。
-「初期化」でscratchを選ぶと既定50 epoch、全体学習、特徴量キャッシュ無効。
-CNNはscratch固定。事前学習済みは既定10 epochを維持する。
+「初期化」でscratchを選ぶと既定100 epoch、全体学習、特徴量キャッシュ無効。
+CNNはscratch固定。制御学習は初期化方式にかかわらず既定100 epoch。
 ViT-B重みは「学習環境」の専用欄（既定repo内`weights/dinov3/dinov3_vitb16.pth`）へ設定する。
 scratchは重み不要。CNNはDINOソースも不要。同じデータ分割・損失・seedを選んで比較する。
 seedの既定42、scratch学習率の既定1e-4。epochとLRは上書き可能。
@@ -907,3 +907,47 @@ D-pad trimとは補正位置・符号が異なるので、パネルには別々�
 疑いは画像/IMUによる推定であり衝突の確定ではない。ESC表示も指令履歴のモデルである。
 接続やtopicが途絶した場合は状態を不明/受信停止に変え、古い正常表示を維持しない。
 表示は既存の約1 Hzの状態取得に相乗りし、Jetson側に新しい画像処理を追加しない。
+
+### Section headの学習UI
+
+「学習 → Multi-head → 割当・区間抽出」で、次の工程を操作できる。
+
+1. VSLAM地図を持つ既存mapと生成済みlane/ラインを選び、section→head割当を保存する。
+   既存customline速度区間、距離指定、全周用`*`を選べる。同じhead名は共有する。
+2. 専門head分は元datasetと同じbagを選び、offline VSLAM（VO/VIO）でmap座標poseを取得する。
+   bagは既存の階層pickerを共用。ROS/CUDAコンテナで実行し、再生正常終了後に保存する。
+3. 元の教師dataset・割当・採用sectionを選んでdatasetを作る。
+   「全周head *」ではpose入力とoffline工程を隠し、VSLAMなしで全教師サンプルを割り当てる。
+   区間分け済みデータから指定sectionを再抽出することもできる。
+4. 「Multi-head学習」で専門datasetと全周datasetを複数選ぶ。
+   routingは自動判定し、学習用・検証用それぞれに全headがあるか表示・検証する。
+   未割当datasetとの混在、別routing、別bagのposeは処理前に拒否する。
+
+元の専門datasetは「元の教師datasetを作成」で時刻基準headerを選ぶ。全周用はpose時刻対応不要。
+教師の採用条件は従来の固定AUTO／通常MANUALの自動判定を維持する。
+割当とposeは`e2e/routings/日付/時刻/名前`、`e2e/trajectories/日付/時刻/名前`へ保存し、
+「整理・ごみ箱」で削除・復元できる。中止・失敗の一時出力はcatalogへ公開しない。
+共有backbone・各headの学習設定はMulti-head側で指定し、ONNX exportへ進める。
+sectionモデルの評価は作成済みsection datasetを選択する。
+画像gate・曖昧時のstable切替は未実装。複数headの実走行はRGBのみ。
+CPUテスト・ブラウザでの割当保存／全周dataset作成を確認済み。offline VSLAMのROS/GPU実行は未確認。
+
+### 通常モデルとMulti-headのpipeline分離
+
+学習画面上部で「通常モデル · 1 head」と「Multi-head · section別」を選択する。
+通常側は通常dataset・実験・ONNX・評価だけを表示し、section操作やhead不足表示を隠す。
+Multi-head側は割当・区間抽出から開始し、専門／全周datasetだけを学習候補に出す。
+元の教師datasetが必要な場合だけ「元の教師datasetを作成」から共通の抽出画面へ進む。
+学習、export、評価、転送の選択肢と履歴もpipelineごとに分離する。
+Tiny特徴蒸留は通常側、蒸留済みencoderの再利用は双方で可能。
+Multi-head未対応の特徴量可視化・INT8操作はMulti-head側に表示しない。
+切替時は学習設定・選択値・表示工程をそれぞれメモリ上で保持する（ページ再読込時は初期状態）。
+モデルやdatasetのファイルを移動・複製せず、既存metadataからpipelineを判定する。
+HTTPのpipeline指定と実データが食い違う学習・export等はサーバーで拒否する。
+内部のtrainer・ジョブ実行・前処理は共通で、学習実装を二重に持たない。
+
+制御学習の既定は通常／Multi-head／RGB／EVSともSmooth L1（β=0.1）・100 epoch・
+Plateau scheduler ON（factor=0.5、patience=2、min_lr=1e-7）。
+初期化やモデルサイズを切り替えても、入力済みのepochは保持する。
+Tinyの特徴蒸留epochは独立して指定し、既定10のまま。
+[モデル比較計画](../../docs/e2e_model_comparison.md)にサイズ・初期化・更新範囲・蒸留予算の比較条件を記載する。

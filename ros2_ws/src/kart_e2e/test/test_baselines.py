@@ -34,15 +34,16 @@ def test_cnn_scratch_defaults_train_restore_export_evaluate_features(tmp_path):
     argv=['train','--train',str(data),'--validation',str(data),'--repo',str(missing),
           '--architecture','simple_cnn','--initialization','scratch','--output',str(run),
           '--device','cpu','--num-workers','0','--seed','42']
-    # No weights and no epochs: actually exercises the default 50 epochs.
+    # No weights/epochs/scheduler: actually exercises the default control recipe.
     with patch.object(sys,'argv',argv): main()
     provenance=json.loads((run/'run.json').read_text())
-    assert provenance['epochs']==50 and provenance['initialization']=='scratch'
+    assert provenance['epochs']==100 and provenance['initialization']=='scratch'
+    assert provenance['loss']=='smooth_l1' and provenance['lr_scheduler']=='plateau'
     assert provenance['finetune'] and not provenance['feature_cache_effective']
     assert provenance['weights_sha256'] is None
     assert provenance['learning_rate']==1e-4
     assert provenance['total_parameters']==provenance['trainable_parameters']
-    assert len((run/'metrics.jsonl').read_text().splitlines())==50
+    assert len((run/'metrics.jsonl').read_text().splitlines())==100
     policy=load_checkpoint(run/'best.pt',missing)
     assert not torch.equal(before,policy.encoder.blocks[0].weight)
     assert policy.spec==rgb_spec('simple_cnn') and policy.feature_dim==192

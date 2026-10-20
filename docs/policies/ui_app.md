@@ -264,3 +264,19 @@ DataLoader worker数は既定8を表示し、要求値と実効cache設定を実
 復帰のsuspectを衝突確定と表示しない。topicのstampと受信時刻の両方で鮮度を確認し、
 切断・古い状態・未起動を正常状態に見せない。ステア補正は既存の加算方式を維持し、
 `steering_offset`とD-pad trimを区別する。動的offsetはSTOP時に適用し、YAMLへ自動保存しない。
+
+## Section headの学習工程
+
+学習UIのMulti-head側の「割当・区間抽出」に、割当保存・offline pose・教師datasetの区間採用をまとめる。
+既存mapの生成ラインと速度区間を選択でき、頭数はsection数へ固定せず同じhead名を共有する。
+全周割当`*`を選ぶ場合はposeを要求しない。車両bringup・記録開始操作は追加しない。
+地図hash・routing hash・bag由来の一致を検証し、未局在を全周headへ暗黙に割り当てない。
+専門と全周datasetの複数選択から学習routingを自動で渡し、全headの学習／検証データ不足を表示する。
+ROS/GPU依存のoffline処理も既存の中止可能なジョブへ接続し、正常な再生終了と有効poseを確認して公開する。
+割当・poseは日付階層とごみ箱へ対応する。gate／fallbackの実装完了をUI上で示唆しない。
+
+通常モデルとMulti-headは学習画面上部の別pipelineとして扱う。
+通常側にsection操作を混ぜず、Multi-headは割当・抽出から開始する。
+元の教師抽出は共通の任意工程とし、各pipelineで同じ作成操作を繰り返す必要を作らない。
+学習入力・実験・モデル・評価履歴をmetadataに基づいて分け、切替時のフォーム状態も分ける。
+HTTP入力もpipelineと実際のroutingの一致を検証する。内部の学習実装は共通化を維持する。

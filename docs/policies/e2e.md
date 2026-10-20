@@ -182,12 +182,12 @@ EVS特徴量可視化は学習済みcheckpointの実encoder/headから生成し�
 
 制御学習はSmooth L1（既定β=0.1）と従来MSEを選択可能とする。
 実目的関数のlossと比較用MSEを混同しない。best checkpointは検証MSE、
-opt-in Plateau schedulerは検証lossを使用する。使用LRと次epoch LRを明示し、
+既定ONのPlateau schedulerは通常モデルで検証loss、Multi-headでhead平均の検証MSEを使用する。使用LRと次epoch LRを明示し、
 損失・scheduler設定を成果物へ保存する。Tiny特徴蒸留の目的関数と分ける。
 
 RGB baseline比較は事前学習済みとscratchを初期化方法で明示する。
-scratchはencoderも更新し、既定50 epoch・LR1e-4、重み読込と特徴量キャッシュを禁止する。
-事前学習済みは既定10 epochを維持する。ViT-Bの公式factory・専用重みパスを使用し、
+scratchはencoderも更新し、既定100 epoch・LR1e-4、重み読込と特徴量キャッシュを禁止する。
+事前学習済みも既定100 epochとする。ViT-Bの公式factory・専用重みパスを使用し、
 CNNは4段stride2 Conv/GroupNorm/GELU＋global meanと既存headを使う。
 前処理・損失・評価契約を共通化し、architecture/初期化/seed/学習parameter数を保存する。
 モデル間の比較はbag分割とテスト条件を揃え、学習途中と収束後の比較を区別する。
@@ -240,3 +240,43 @@ ORTでの推論成功だけをTensorRT対応の根拠にせず、parser非対応
 batch/loss/schedulerを独立した軸とし、異なるloss同士の比較は共通MSEを使用する。
 同じtrain/validationも許可し、その事実を結果に明示する。最良epochとepoch予算別の到達精度・時間を残し、
 上限近傍の最良値から収束を断定しない。学習のみでONNX以降へ自動進行しない。
+
+## 位置に基づくsection別head
+
+共有backbone＋複数制御headを一つのcheckpointに保存する。sectionとheadは多対一で対応し、
+straight/curve等のheadを複数sectionから共有できる。headごとの逐次finetuneは行わず、
+headを均等にサンプリングした混合バッチで、対象headと共有backboneへ損失を逆伝播する。
+検証は全サンプルを一度ずつ使い、best.ptはhead別MSEの単純平均で選ぶ。
+
+sectionは登録済みmap上の基準ライン距離[start,end)で定義する。既存の速度区間を自動でheadへ
+読み替えず、明示したsection→head対応とライン形状をrouting JSONへ固定する。
+HDMapとVSLAM DBのハッシュを持ち、offlineラベル作成と実走行で同じ地図を使用する。
+頭出し地点が違うodomをmap座標と見なさない。cuVSLAMの既存map局在成功・VO正常・
+診断鮮度と、画像時刻のmap→base TFが確認できたサンプルのみ使う。
+距離・向き・近接別区間の曖昧性・進行距離の飛びで不確かな判定は不採用とする。
+
+ONNXはbackbone一回＋全headを出力する。decoderは画像と完全一致するstampの
+E2EHeadSelectionとroutingハッシュで出力を選択する。選択不能・古い自己位置・地図不一致を
+通常headへ暗黙fallbackしない。既存watchdogとSTOPラッチを維持する。
+RGB sectionモデルのmission起動だけは、既存地図のVSLAM localizationを追加し、Pure Pursuitを
+起動しない。単一headモデルのE2Eは従来構成のまま。EVSの複数headは学習可能だが、
+RAW時刻とRGB CameraInfo時刻が一致しないため現段階の実走行launchでは明示拒否する。
+
+section抽出は、複数の固定スロットル＋人間操舵の走行から採用区間を選ぶ用途に対応する。
+`split --sections`はpose判定後に区間を絞り、`extract`は既存sectionラベルを再利用する。
+教師採用条件・steering/throttle値は変更しない。section→headのroutingも元の全体定義を保持し、
+選択sectionに応じてhead番号を振り直さない。複数走行を学習入力で合流させる。
+画像gate・確率差による切替・安定policyへのfallbackは現段階では設計案であり未実装。
+共有backboneの更新によって既存headの出力も変わるため、headの重み凍結だけを
+安定policyの保存と見なさない。
+
+全周用の追加headは`sections`の`{"id":"*","head":"stable"}`で明示する。
+位置区間を持たないwildcard割当は一つに限り、通常sectionとの幾何的な重複として扱わない。
+`section_dataset assign`は既存の人間教師datasetをpose不要で全採用し、そのheadへ割り当てる。
+専門headのdatasetと共通routingで同時学習する。教師の有効区間の判定は前段の抽出を維持する。
+通常split/extractにおける選択`*`は既存ラベルを保持した全区間選択とし、headの再割当はassignで明示する。
+wildcard割当は実走行時の位置不明を許容する機能ではなく、gateのfallback実装とは分ける。
+
+制御学習の共通既定はSmooth L1（β=0.1）・100 epoch・Plateau ONとし、
+CLI・HTTP省略値・UIを揃える。epochは学習予算であり、収束の保証やearly stoppingではない。
+Tiny特徴蒸留は別工程のepoch・目的関数を保持する。

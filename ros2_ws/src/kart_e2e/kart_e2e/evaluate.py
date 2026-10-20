@@ -59,6 +59,13 @@ def evaluate(model_dir, dataset, output):
     import onnxruntime as ort
 
     contract, mode = model_contract(model_dir)
+    from .contract import routing_settings, output_width
+    from .sections import digest
+    routing = routing_settings(model_dir)
+    if routing:
+        data_meta = json.loads((dataset / 'metadata.json').read_text())
+        if data_meta.get('routing_sha256') != digest(routing):
+            raise ValueError('Evaluation dataset routing mismatch')
     runtime = runtime_settings(model_dir)
     modality, input_name, shape = input_contract(model_dir)
     if modality == 'evs':
@@ -96,6 +103,11 @@ def evaluate(model_dir, dataset, output):
             started = time.perf_counter()
             prediction = session.run(["control"], {input_name: tensor})[0]
             elapsed = (time.perf_counter() - started) * 1000
+            if routing:
+                if row.get('head_id') not in routing['heads']:
+                    raise ValueError('Evaluation sample missing head_id')
+                prediction = prediction.reshape(1, len(routing['heads']), -1)[:, routing['heads'].index(row['head_id']), :]
+
             if (
                 prediction.shape != (1, 1 if mode == "steer_only" else 2)
                 or not np.isfinite(prediction).all()

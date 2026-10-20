@@ -1342,3 +1342,34 @@ summary {
 .vehicle-state [data-tone=warn]{color:#925600;font-weight:600}
 .vehicle-state [data-tone=unknown]{color:var(--muted)}
 .vehicle-state [data-tone=ok]{color:var(--accent)}
+
+.section-workflow-step { border: 1px solid var(--border, #d8dee7); border-radius: 10px; padding: 14px; margin: 12px 0; }
+.section-workflow-step > summary { cursor: pointer; font-size: 16px; font-weight: 650; margin-bottom: 14px; }
+.section-assignment-rows { display: grid; gap: 12px; margin: 12px 0; }
+.section-assignment-row { border: 1px solid var(--border, #d8dee7); border-radius: 8px; padding: 12px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.section-assignment-row label:first-child { grid-column: 1 / -1; }
+.section-assignment-row input, .section-assignment-row select, #e2e-pane-sections select { font-size: 16px; min-height: 42px; width: 100%; }
+.section-assignment-row .quiet { justify-self: start; }
+.section-picks { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+.section-picks label { font-size: 16px; padding: 10px; border: 1px solid var(--border, #d8dee7); border-radius: 8px; }
+.section-picks input { width: 20px; height: 20px; }
+#e2e-head-coverage { overflow-wrap: anywhere; }
+
+.learning-steps { grid-template-columns: repeat(7,minmax(0,1fr)); }
+#e2e-pane-sections .help { font-size: 13px; line-height: 1.6; }
+#e2e-pane-sections .section-picks label { font-size: 16px; }
+@media(max-width:900px) { .learning-steps { grid-template-columns: repeat(4,minmax(0,1fr)); } }
+@media(max-width:650px) { .learning-steps { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+
+.learning-pipelines { display:flex; gap:10px; max-width:1160px; }
+.learning-pipelines button { flex:1; padding:13px 18px; font-size:16px; font-weight:650; background:#fff; text-align:left; }
+.learning-pipelines button.active { border-color:var(--accent); background:#e7f4f1; color:#12645e; }
+.pipeline-help { margin:0; font-size:14px; color:var(--muted, #596973); max-width:1160px; }
+.learning-steps[data-pipeline="single"] { grid-template-columns:repeat(6,minmax(0,1fr)); }
+.learning-steps[data-pipeline="multi"] { grid-template-columns:repeat(5,minmax(0,1fr)); }
+@media(max-width:900px) {
+  .learning-steps[data-pipeline] { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+@media(max-width:650px) {
+  .learning-steps[data-pipeline] { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}

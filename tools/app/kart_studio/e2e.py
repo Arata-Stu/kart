@@ -16,8 +16,8 @@ from . import transfers
 from .storage import atomic_json, name, read_json, within
 
 
-KINDS = ("datasets", "runs", "models", "evaluations", "engines", "features", "encoders")
-DATED = ("datasets", "models", "evaluations", "features", "encoders")
+KINDS = ("datasets", "runs", "models", "evaluations", "engines", "features", "encoders", "routings", "trajectories")
+DATED = ("datasets", "models", "evaluations", "features", "encoders", "routings", "trajectories")
 
 
 class Learning:
@@ -27,8 +27,11 @@ class Learning:
         self.settings_file = state / "e2e.json"
         for kind in KINDS:
             (self.root / kind).mkdir(parents=True, exist_ok=True)
+        for package in ('kart_e2e','kart_hdmap'):
+            path=str(repo/'ros2_ws/src'/package)
+            if path not in sys.path:sys.path.insert(0,path)
         spec = importlib.util.spec_from_file_location(
-            "kart_ui_e2e_contract", repo / "ros2_ws/src/kart_e2e/kart_e2e/contract.py"
+            "kart_e2e._ui_contract", repo / "ros2_ws/src/kart_e2e/kart_e2e/contract.py"
         )
         contract = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(contract)
@@ -84,7 +87,13 @@ class Learning:
                     continue
                 try:
                     self.folder(kind, relative)
-                    entries.append({**read_json(artifact), "id": relative, "name": path.name})
+                    row={**read_json(artifact), "id": relative, "name": path.name, "pipeline": self.artifact_pipeline(kind,relative)}
+                    extra=within(path,'metadata.json',exists=False)
+                    if kind in ('datasets','models') and extra.is_file():
+                        info=read_json(extra)
+                        for field in ('routing','routing_sha256','section_counts','selected_sections','section_assignment'):
+                            if field in info:row[field]=info[field]
+                    entries.append(row)
                 except (ValueError, OSError):
                     continue
             result[kind] = sorted(
@@ -174,7 +183,44 @@ class Learning:
             raise ValueError("同じ名前の成果物が存在します。別名にしてください")
         return target
 
+    def artifact_pipeline(self, kind, key, depth=0):
+        if depth>3:raise ValueError('Invalid artifact reference chain')
+        folder=self.folder(kind,key)
+        row=read_json(folder/'artifact.json')
+        if kind in ('routings','trajectories'):return 'multi'
+        extra=within(folder,'run.json' if kind=='runs' else 'metadata.json',exists=False)
+        info=read_json(extra) if extra.is_file() else {}
+        if row.get('section_heads') or row.get('routing') or row.get('routing_sha256') or info.get('routing') or info.get('routing_sha256'):
+            return 'multi'
+        if kind=='datasets':return 'shared'
+        reference='run' if kind=='features' else 'model' if kind in ('engines','evaluations') else None
+        if reference and row.get(reference):
+            source='runs' if reference=='run' else 'models'
+            try:return self.artifact_pipeline(source,row[reference],depth+1)
+            except (OSError,ValueError):pass
+        return 'multi' if row.get('pipeline')=='multi' else 'single'
+
     def prepare(self, action, body):
+        requested=body.get('pipeline')
+        if requested not in (None,'single','multi'):raise ValueError('学習pipelineは通常またはMulti-headを選択してください')
+        plan=self._prepare(action,body)
+        if action=='dataset':actual='shared'
+        elif action.startswith('section-'):actual='multi'
+        elif action=='train':actual='multi' if plan.get('routing') else 'single'
+        elif action=='distill':actual='single'
+        elif action in ('export','features'):actual=self.artifact_pipeline('runs',body['run'])
+        else:actual=self.artifact_pipeline('models',body['model'])
+        if requested and actual!='shared' and requested!=actual:
+            raise ValueError('通常モデルとMulti-headの入力は混在できません。上部で該当pipelineを選択してください')
+        if actual=='multi' and action in ('features','quantize'):
+            raise ValueError('Multi-headでは特徴量可視化・INT8比較は未対応です')
+        plan['pipeline']=actual
+        return plan
+
+    def _prepare(self, action, body):
+        if action in ('section-routing','section-offline','section-dataset'):
+            from .section_learning import prepare
+            return prepare(self,action,body)
         key = name(body.get("name"))
         python, cfg, env = self.runtime(action, body.get("modality", "rgb"))
         common = dict(key=key, python=python, env=env)
@@ -257,6 +303,8 @@ class Learning:
                     meta = read_json(within(dataset, "metadata.json"))
                     if meta.get("modality", "rgb") != modality:
                         raise ValueError("選択したデータセットの入力種別が一致しません")
+            from .section_learning import training_routing
+            section_routing = training_routing(self,groups,action)
             if action == "distill" and modality != "rgb":
                 raise ValueError("Tiny特徴蒸留はRGBのみ対応しています")
             mode = body.get("mode", "steer_throttle")
@@ -297,7 +345,7 @@ class Learning:
                     f"{'EVS encoder重み' if modality == 'evs' else 'DINOv3公式重み'}が見つかりません: {weights}。"
                     "UI「学習環境」の重みパスをコンテナ内のパスで指定してください"
                 )
-            epochs = self.integer(body.get("epochs", 50 if scratch else 10), 1, 100000)
+            epochs = self.integer(body.get("epochs", 10 if action == "distill" else 100), 1, 100000)
             batch = self.integer(body.get("batch_size", 32), 1, 4096)
             fixed = self.number(body.get("fixed_throttle", 0.0), 0, 1)
             maximum = self.number(body.get("max_throttle", 0.2), 0, 1)
@@ -332,7 +380,7 @@ class Learning:
                         "resources":["e2e-compute", *source_resources,
                                      *["e2e:datasets:"+item for item in (*body["train"],*body["validation"])]]}
             loss = body.get("loss", "smooth_l1")
-            scheduler = body.get("lr_scheduler", "none")
+            scheduler = body.get("lr_scheduler", "plateau")
             if loss not in ("smooth_l1", "mse") or scheduler not in ("none", "plateau"):
                 raise ValueError("損失関数またはschedulerが不正です")
             beta = self.number(body.get("smooth_l1_beta", 0.1), 1e-9, 100)
@@ -384,14 +432,18 @@ class Learning:
                      "--ram-preload" if ram_preload else "--no-ram-preload"]
             if finetune:
                 args.append("--finetune")
+            if section_routing:
+                args += ['--section-routing','@ROUTING@']
             return {
                 **common,
                 "kind": "runs",
+                "routing": section_routing,
                 "target": target,
                 "module": "train",
                 "args": args,
                 "provenance": {
                     "mode": mode,
+                    "section_heads": section_routing["heads"] if section_routing else [],
                     "modality": modality,
                     "architecture": architecture,
                     "initialization": initialization, "seed": seed, "precision": precision,
@@ -486,14 +538,14 @@ class Learning:
             target = self.target("evaluations", key)
             model = self.folder("models", body.get("model"))
             self.contract(model)
-            if read_json(within(model, "metadata.json")).get("modality") == "evs":
+            if read_json(within(model, "metadata.json")).get("modality") == "evs" or read_json(within(model, "metadata.json")).get("routing"):
                 dataset = self.folder("datasets", body.get("dataset"))
-                if read_json(within(dataset, "metadata.json")).get("modality") != "evs":
-                    raise ValueError("EVS評価用データセットを選択してください")
+                if read_json(within(dataset, "metadata.json")).get("modality", "rgb") != read_json(within(model,"metadata.json")).get("modality", "rgb"):
+                    raise ValueError("EVS評価用データセットを選択してください" if read_json(model/"metadata.json").get("modality")=="evs" else "モデルと同じ入力種別の評価datasetを選択してください")
                 return {**common, "kind":"evaluations", "target":target,
                         "key":target.relative_to(self.root/"evaluations").as_posix(),
                         "module":"evaluate", "args":["--dataset",str(dataset),"--model",str(model),"--output","@OUTPUT@"],
-                        "provenance":{"dataset":body["dataset"],"model":body["model"],"modality":"evs"},
+                        "provenance":{"dataset":body["dataset"],"model":body["model"],"modality":read_json(model/"metadata.json").get("modality","rgb")},
                         "resources":["e2e-compute","e2e:models:"+body["model"],"e2e:datasets:"+body["dataset"]]}
             # Share extraction validation with dataset creation; do not publish images.
             extraction = self.prepare(
@@ -570,12 +622,19 @@ class Learning:
             prefix=".work-", dir=plan["target"].parent
         ) as directory:
             output = Path(directory) / "output"
-            args = [str(output) if v == "@OUTPUT@" else v for v in plan["args"]]
+            replacements={'@OUTPUT@':str(output)}
+            if plan.get('request') is not None:
+                request=Path(directory)/'request.json';atomic_json(request,plan['request'])
+                replacements['@REQUEST@']=str(request)
+            if plan.get('routing') is not None:
+                routing=Path(directory)/'routing.json';atomic_json(routing,plan['routing'])
+                replacements['@ROUTING@']=str(routing)
+            args = [replacements.get(v,v) for v in plan["args"]]
             from .remote_agent import signature
 
             before = (
                 signature(Path(plan["provenance"]["bag"]), ignore_raw_indexes=plan["module"] == "preprocess_evs")
-                if "bag" in plan["provenance"] and plan["kind"] in ("datasets", "evaluations")
+                if "bag" in plan["provenance"] and plan["module"] in ("preprocess_bag", "preprocess_evs", "evaluate", "section_workflow")
                 else None
             )
             job.run(
@@ -592,6 +651,7 @@ class Learning:
                 **plan["provenance"],
                 "created": time.time(),
                 "kind": plan["kind"],
+                "pipeline": plan.get("pipeline", "single"),
             }
             if plan["kind"] == "datasets":
                 data = read_json(within(output, "metadata.json"))
@@ -600,6 +660,16 @@ class Learning:
                     raise ValueError("有効なデータがありません")
                 metadata["samples"] = data["samples"]
                 metadata["image_format"] = data.get("image_format", "png")
+                for field in ('routing_sha256','routing','section_counts','selected_sections','section_assignment'):
+                    if field in data:metadata[field]=data[field]
+            elif plan["kind"] in ('routings','trajectories'):
+                data=read_json(within(output,'metadata.json'))
+                if plan['kind']=='routings':
+                    from .section_learning import modules
+                    modules(self)[0](read_json(within(output,'routing.json')))
+                elif data.get('valid_poses',0)<1:
+                    raise ValueError('既存mapに局在した有効poseがありません')
+                metadata.update(data)
             elif plan["kind"] == "engines":
                 report = read_json(within(output, "report.json"))
                 if within(output, "model.plan").stat().st_size <= 0:
@@ -648,6 +718,8 @@ class Learning:
                 _, mode = self.contract(output)
                 metadata["mode"] = mode
                 metadata["modality"] = read_json(output / "metadata.json").get("modality", "rgb")
+                if read_json(output / "metadata.json").get("routing"):
+                    metadata["routing"] = read_json(output / "metadata.json")["routing"]
                 metadata["ort_max_abs_error"] = read_json(output / "metadata.json")[
                     "ort_max_abs_error"
                 ]

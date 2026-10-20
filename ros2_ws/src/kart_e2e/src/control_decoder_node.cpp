@@ -3,6 +3,8 @@
 #include "isaac_ros_tensor_msgs/msg/tensor_list.hpp"
 #include "kart_e2e/control_gate.hpp"
 #include "kart_interfaces/msg/control_command.hpp"
+#include "kart_interfaces/msg/e2_e_head_selection.hpp"
+#include "kart_e2e/head_routing.hpp"
 #include "kart_interfaces/msg/operation_mode_request.hpp"
 #include "kart_interfaces/msg/operation_mode_state.hpp"
 #include "rcl_interfaces/msg/parameter_descriptor.hpp"
@@ -26,6 +28,9 @@ class ControlDecoderNode : public rclcpp::Node {
   static double seconds(const builtin_interfaces::msg::Time &t) {
     return double(t.sec) + double(t.nanosec) * 1e-9;
   }
+  static double steady_seconds() {
+    return std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
+  }
   static double age(Clock::time_point t) {
     return std::chrono::duration<double>(Clock::now() - t).count();
   }
@@ -37,6 +42,13 @@ public:
     if (mode != "steer_only" && mode != "steer_throttle")
       throw std::invalid_argument("Invalid output_mode");
     count_ = mode == "steer_only" ? 1 : 2;
+    head_count_ = setting<int>("head_count", 1);
+    routing_sha_ = setting<std::string>("routing_sha256", "");
+    head_timeout_ = setting<double>("head_timeout_s", .3);
+    if (head_count_ < 1 || head_count_ > 64 || !std::isfinite(head_timeout_) || head_timeout_ <= 0 ||
+        (head_count_ > 1 && routing_sha_.empty()))
+      throw std::invalid_argument("Invalid head routing settings");
+    multihead_ = !routing_sha_.empty();
     tensor_name_ = setting<std::string>("output_tensor_name", "control");
     timeout_ = setting<double>("input_timeout_s", .15);
     mode_timeout_ = setting<double>("mode_timeout_s", .3);
@@ -62,11 +74,24 @@ public:
           if (msg->mode != mode_.mode) {
             ++generation_;
             prediction_.clear();
+            pending_.clear();
             gate_->transition();
           }
           mode_ = *msg;
           mode_received_ = Clock::now();
         });
+    if (multihead_) {
+      head_routing_ = std::make_unique<HeadRouting>(head_count_, routing_sha_, head_timeout_);
+      head_sub_ = create_subscription<kart_interfaces::msg::E2EHeadSelection>(
+        "e2e/head_selection", 10, [this](kart_interfaces::msg::E2EHeadSelection::ConstSharedPtr msg) {
+          std::lock_guard<std::mutex> lock(mutex_);
+          const int64_t stamp = int64_t(msg->header.stamp.sec)*1000000000LL + msg->header.stamp.nanosec;
+          if (!head_routing_->update(stamp, msg->head_index, msg->valid, msg->routing_sha256, steady_seconds())) {
+            prediction_.clear();
+            if (mode_.mode == Mode::AUTO) gate_->fault();
+          }
+        });
+    }
     // CUDA readback may wait for the producer. Keep the watchdog in another
     // group.
     tensor_group_ =
@@ -98,12 +123,12 @@ private:
       const auto &tensor = msg->tensors[0];
       if (tensor.dtype_code != 2 || tensor.dtype_bits != 32 ||
           tensor.dtype_lanes != 1 || tensor.shape.size() != 2 ||
-          tensor.shape[0] != 1 || tensor.shape[1] != count_ ||
+          tensor.shape[0] != 1 || tensor.shape[1] != count_ * head_count_ ||
           !tensor.strides.empty() || tensor.byte_offset != 0 ||
-          tensor.data.size() != static_cast<size_t>(count_) * sizeof(float))
+          tensor.data.size() != static_cast<size_t>(count_ * head_count_) * sizeof(float))
         throw std::runtime_error(
             "Expected contiguous FP32 [1,N], N matching output_mode");
-      values.resize(count_);
+      values.resize(count_ * head_count_);
       auto handle =
           cuda_buffer_backend::from_input_buffer(tensor.data, *stream_);
       if (!handle.get_ptr())
@@ -122,9 +147,16 @@ private:
     std::lock_guard<std::mutex> lock(mutex_);
     if (generation != generation_)
       return;
-    prediction_ = std::move(values);
-    header_ = msg->header;
-    received_ = received;
+    if (multihead_) {
+      if (values.empty()) prediction_.clear();
+      pending_ = std::move(values);
+      pending_header_ = msg->header;
+      pending_received_ = received;
+    } else {
+      prediction_ = std::move(values);
+      header_ = msg->header;
+      received_ = received;
+    }
   }
   void tick() {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -134,8 +166,24 @@ private:
       gate_->fault();
       ++generation_;
       prediction_.clear();
+      pending_.clear();
+      if (head_routing_) head_routing_->reset();
     }
     last_time_ = sec;
+    if (multihead_) {
+      const int64_t stamp = int64_t(pending_header_.stamp.sec)*1000000000LL + pending_header_.stamp.nanosec;
+      if (!head_routing_->fresh(steady_seconds())) {
+        prediction_.clear();
+      } else if (!pending_.empty()) {
+        const auto selected = head_routing_->select(stamp, pending_, count_, steady_seconds());
+        if (selected) {
+          prediction_ = *selected;
+          header_ = pending_header_;
+          received_ = pending_received_;
+          pending_.clear();
+        }
+      }
+    }
     const auto prediction_count = prediction_.size();
     const double predicted_steering = prediction_count > 0 ? prediction_[0] : 0.;
     const double predicted_throttle = prediction_count > 1 ? prediction_[1] : 0.;
@@ -188,7 +236,15 @@ private:
       reported_ = Clock::now();
     }
   }
-  std::string tensor_name_, last_status_;
+  std::string tensor_name_, last_status_, routing_sha_;
+  int head_count_{1};
+  double head_timeout_{.3};
+  bool multihead_{false};
+  std::unique_ptr<HeadRouting> head_routing_;
+  std::vector<float> pending_;
+  std_msgs::msg::Header pending_header_;
+  Clock::time_point pending_received_{};
+  rclcpp::Subscription<kart_interfaces::msg::E2EHeadSelection>::SharedPtr head_sub_;
   bool last_stop_result_{false};
   int count_;
   bool drive_;

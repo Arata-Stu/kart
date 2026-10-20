@@ -320,6 +320,7 @@ class MissionCompositionTests(unittest.TestCase):
             lu.include.reset_mock()
             args.mode = "e2e"
             with (
+                patch("kart_e2e.contract.routing_settings", return_value=None),
                 patch("kart_e2e.contract.model_contract"),
                 patch("kart_e2e.contract.input_contract", return_value=("rgb", "image", [1, 3, 120, 212])),
                 patch("kart_e2e.contract.runtime_settings"),
@@ -343,6 +344,7 @@ class MissionCompositionTests(unittest.TestCase):
             args.rgb_profile = ''
             args.rgb_fps = '0'
             with (
+                patch('kart_e2e.contract.routing_settings', return_value=None),
                 patch('kart_e2e.contract.model_contract'),
                 patch('kart_e2e.contract.runtime_settings'),
                 patch('kart_e2e.contract.input_contract', return_value=('evs', 'input_tensor', [1,20,120,160])),
@@ -365,6 +367,7 @@ class MissionCompositionTests(unittest.TestCase):
             args.create_sensor_container = 'true'
             args.sensor_container = 'kart_sensor_container'
             with (
+                patch('kart_e2e.contract.routing_settings', return_value=None),
                 patch('kart_e2e.contract.model_contract'),
                 patch('kart_e2e.contract.runtime_settings'),
                 patch('kart_e2e.contract.input_contract', return_value=('evs', 'input_tensor', [1,20,120,160])),

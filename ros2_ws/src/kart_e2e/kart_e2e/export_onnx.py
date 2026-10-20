@@ -26,7 +26,7 @@ class ExportPolicy(nn.Module):
 
 
 def export(policy, output):
-    from .contract import validate_runtime
+    from .contract import validate_runtime, output_width
 
     runtime = validate_runtime(policy.runtime)
     output = Path(output)
@@ -84,10 +84,12 @@ def export(policy, output):
         "input_name": input_name,
         "input_shape": list(shape),
         "output_name": "control",
-        "output_shape": [1, 1 if policy.mode == "steer_only" else 2],
+        "output_shape": [1, output_width(policy.mode, getattr(policy, "routing", None))],
         "onnx_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "ort_max_abs_error": maximum_error,
     }
+    if hasattr(policy, "routing"):
+        metadata["routing"] = policy.routing
     if is_evs:
         metadata.update(modality="evs", evs_metadata=policy.evs_metadata)
     (output / "metadata.json").write_text(json.dumps(metadata, indent=2))

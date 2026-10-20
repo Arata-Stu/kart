@@ -1046,3 +1046,40 @@ bringupのdriveで「Map Studio 動的調整」を有効にして起動すると
 実車ラインの切替ボタンはJetsonに適用済みの選択laneの生成ラインを再転送せず切り替える。
 設定の意味・値域・topic/serviceは各package READMEと[調整窓口](../kart_hdmap/README.md#jetsonパラメータ調整窓口)を参照。
 portable testは通信state machine・read_only・STOP・一括検証・復帰resetを確認し、ROS結合／実車は未確認。
+
+### Section head付きRGB E2E
+
+exportの`metadata.json.routing`があるRGBモデルでは、`mission mode:=e2e`が自動で保存地図の
+VSLAM localizationを追加する。Pure Pursuitは起動しない。VGLは追加せず、cuVSLAMの
+保存map再局在を使う。単一headモデルは従来どおりlocalizationなし。
+
+```bash
+bash scripts/bringup.sh --mode e2e --e2e-model-dir /workspaces/e2e/models/section_model \
+  --map-file /workspaces/map/course/map.json --map-dir /workspaces/map/course/bundle
+```
+
+対話起動でもsectionモデル選択後にHDMapとVSLAM地図を選べる。
+両mapのハッシュがrouting作成時と一致する必要がある。左右Infraを有効にし、
+`base_link→camera_link`の実測TFを設定する。異なるmapの見かけの同一座標は許可しない。
+`/localization/vslam/diagnostics`で既存mapへの再局在・追跡正常を確認してからAUTOへ切り替える。
+`e2e_section_selector`は別PythonプロセスでCameraInfo時刻のTFを照会し、
+`/e2e/head_selection`（kart_interfaces/msg/E2EHeadSelection）を発行する。
+RGB encoder・TensorRT・C++ decoderは従来と同じsensor containerへ配置する。
+selectorのparameterは`config/e2e/section_selector.yaml`、項目はkart_e2e READMEを参照。
+decoderの`head_count=1`、`routing_sha256=''`、`head_timeout_s=0.3`はexport metadataから解決する。
+記録topic一覧には`/e2e/head_selection`を追加。無効選択は既存decoderのSTOPラッチで処理する。
+
+`e2e_sections_offline.launch.py`は`bag`、`map_file`、`map_dir`、`routing_file`、
+`trajectory_output`を必須とし、記録済み左右画像・RGB CameraInfo・TFを再生して
+map座標poseを新規JSONLへ出力する。`tracking_mode=0`（1はVIOでIMU入力追加）、
+`rate=''`（既存replay YAML）、`camera_info_topic=/realsense/color/camera_info`。
+全て起動時指定。自己位置推定以外の走行制御・実センサ・車両は起動しない。
+Replay moduleの`section_camera_info_topic=''`は指定時だけそのtopicを明示再生へ追加する。
+操作指令や旧dynamic TF、記録済みの自己位置は再生しない。
+起動例・dataset作成・同時学習・閾値の意味は[kart_e2e README](../kart_e2e/README.md#section別head共有backbone同時学習)を参照。
+ROS/GPUでのoffline・実車確認は未実施。EVS複数headの実走行は画像時刻対応が未実装のため拒否する。
+
+学習UIのoffline poseジョブは`e2e_sections_offline.launch.py exit_when_done:=true`を使用する。
+追加引数`exit_when_done=false`（既定、従来の手動終了）、`completion_file=''`（指定時はbag playerの
+returncodeをJSONへ保存）をReplay moduleへ渡す。再生終了後1秒の猶予を置いてlaunchを終了し、
+UI workerが正常なplayer終了と有効poseを検証する。画像・tfの再生対象や実車起動範囲は変更しない。

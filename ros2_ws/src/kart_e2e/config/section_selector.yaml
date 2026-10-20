@@ -1,0 +1,10 @@
+/**:
+  ros__parameters:
+    use_sim_time: false
+    model_dir: '' # exported multi-head model; routing_file overrides for offline recording
+    routing_file: ''
+    trajectory_output: '' # optional JSONL; must not already exist
+    camera_info_topic: /realsense/color/camera_info
+    diagnostics_topic: /localization/vslam/diagnostics
+    output_topic: /e2e/head_selection
+    diagnostics_timeout_s: 1.5

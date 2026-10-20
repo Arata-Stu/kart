@@ -1,3 +1,5 @@
+import { pipelineRows, pipelineSteps } from "./learning_pipeline.js";
+import { installSections, headCoverage } from "./section_learning.js";
 import { showLoss } from "./loss_curve.js";
 import { installBagPicker } from "./bag_picker.js";
 import { showFeatures } from "./features.js";
@@ -6,10 +8,91 @@ import { showEvaluation, showEngine, showInt8 } from "./evaluation.js";
 import { $, state, api, action, on, emit, item, toast } from "./api.js";
 import { nextVersion, datasetOption, datasetName, artifactOption } from "./learning_names.js";
 const refreshBagPicker = installBagPicker();
+const refreshSections = installSections({options,start});
 let catalog = null;
 let bags = [];
 let step = "dataset";
+let pipeline = "single";
+const pipelineForms = new Map();
+const pipelineLastStep = new Map([['single','dataset'],['multi','sections']]);
+function formSnapshot() {
+  return [...document.querySelectorAll('.learning-form input[id],.learning-form select[id]')].map(el=>({
+    id:el.id,value:el.value,checked:el.checked,disabled:el.disabled,
+    selected:el.multiple ? [...el.selectedOptions].map(o=>o.value) : null,dataset:{...el.dataset},
+  }));
+}
+const pipelineDefaults=formSnapshot();
+function restoreForm(snapshot) {
+  for(const value of snapshot) {
+    const el=$(value.id);if(!el)continue;
+    if(value.selected)for(const option of el.options)option.selected=value.selected.includes(option.value);
+    else el.value=value.value;
+    if(typeof value.checked==='boolean')el.checked=value.checked;
+    el.disabled=value.disabled;
+    for(const key of Object.keys(el.dataset))delete el.dataset[key];
+    Object.assign(el.dataset,value.dataset);
+  }
+}
+function workflowRows(kind, teacher=false) {
+  return pipelineRows(catalog || {},kind,pipeline,{teacher});
+}
+function viewCatalog() {
+  return {...catalog,...Object.fromEntries(['datasets','runs','models','evaluations','engines','features','encoders'].map(kind=>[
+    kind,workflowRows(kind,kind==='datasets' && step==='dataset')]))};
+}
+function updatePipelineUI() {
+  const multi=pipeline==='multi';
+  for(const value of ['single','multi']) {
+    $('e2e-pipeline-'+value).classList.toggle('active',pipeline===value);
+    $('e2e-pipeline-'+value).setAttribute('aria-pressed',String(pipeline===value));
+  }
+  $('e2e-pipeline-help').textContent=multi
+    ? '区間割当・専門dataset＋全周「*」 → 共有backboneと複数headの学習。'
+    : '通常の教師dataset → 1つの制御headの学習。';
+  const captions=multi ? {sections:'1 割当・区間抽出',dataset:'元データ準備',train:'2 Multi-head学習',export:'3 ONNX export',evaluate:'4 dataset評価',push:'5 Jetson転送'}
+    : {dataset:'1 データセット',train:'2 学習',export:'3 ONNX export',evaluate:'4 rosbag評価',features:'特徴量を確認',push:'5 Jetson転送'};
+  for(const name of Object.keys(kinds)) {
+    const button=$('e2e-tab-'+name);
+    button.hidden=!pipelineSteps(pipeline).includes(name) || (multi && name==='dataset');
+    const text=[...button.childNodes].find(node=>node.nodeType===3 && node.textContent.trim());
+    if(text && captions[name])text.textContent=captions[name]+' ';
+  }
+  document.querySelector('.learning-steps').dataset.pipeline=pipeline;
+  $('e2e-head-coverage').hidden=!multi;
+  $('e2e-distill-controls').hidden=multi;
+  $('e2e-tiny-control-title').textContent=multi?'蒸留済みTiny encoderを使用':'第2段階：蒸留済みTinyで制御学習';
+  $('e2e-shared-teacher-help').hidden=!multi;
+  $('e2e-return-sections').hidden=!multi;
+  $('e2e-pane-train').querySelector('h2').textContent=multi?'共有backbone・複数headを同時学習':'学習・検証データと条件を選択';
+  $('e2e-pane-dataset').querySelector('h2').textContent=multi?'区間分け前の教師datasetを準備':'走行記録から教師データを作成';
+  $('e2e-start-train').textContent=multi?'Multi-head学習を開始':'学習を開始';
+  const int8=$('e2e-engine-precision').querySelector('option[value="int8"]');
+  if(int8)int8.disabled=multi;
+  if(multi && $('e2e-engine-precision').value==='int8')$('e2e-engine-precision').value='fp32';
+  $('e2e-int8-history').parentElement.hidden=multi;
+}
+async function switchPipeline(next) {
+  if(next===pipeline)return;
+  pipelineForms.set(pipeline,formSnapshot());pipelineLastStep.set(pipeline,step);
+  pipeline=next;
+  const snapshot=pipelineForms.get(next) || pipelineDefaults;
+  restoreForm(snapshot);
+  if(!pipelineForms.has(next) && next==='multi')$('e2e-clock').value='header';
+  step=pipelineLastStep.get(next);
+  await refreshLearning();
+  restoreForm(snapshot);
+  if(!pipelineForms.has(next) && next==='multi')$('e2e-clock').value='header';
+  updateInitialization({preserveSettings:true});updateRamPreload();syncTrainingHelp();
+  $('e2e-evs-options').hidden=$('e2e-modality').value!=='evs';
+  $('e2e-rgb-model').hidden=$('e2e-train-modality').value==='evs';
+  $('e2e-plateau-options').hidden=$('e2e-lr-scheduler').value!=='plateau';
+  $('e2e-loss-beta').disabled=$('e2e-loss-kind').value!=='smooth_l1';
+  updateEvalInput();updateFeatureDatasets();updateInt8Inputs();updateHeadCoverage();
+  if(pipeline==='multi')await refreshSections(catalog);
+  updatePipelineUI();setStep(step);
+}
 const kinds = {
+  sections: "datasets",
   dataset: "datasets",
   train: "runs",
   export: "runs",
@@ -44,7 +127,7 @@ function suggestNames() {
     input.value = suggestion;
     input.dataset.suggestion = suggestion;
   }
-  const base = ($("e2e-train-modality").value === "evs" ? "evs20" : ({dinov3_vitt16:"dinov3-tiny",dinov3_vits16:"dinov3",dinov3_vitb16:"dinov3-base",simple_cnn:"cnn"}[$("e2e-architecture").value]) + ($("e2e-initialization").value === "scratch" ? "-scratch" : "")) + ($("e2e-mode").value === "steer_only" ? "-steer" : "-control");
+  const base = (pipeline==="multi" ? "multi-" : "") + ($("e2e-train-modality").value === "evs" ? "evs20" : ({dinov3_vitt16:"dinov3-tiny",dinov3_vits16:"dinov3",dinov3_vitb16:"dinov3-base",simple_cnn:"cnn"}[$("e2e-architecture").value]) + ($("e2e-initialization").value === "scratch" ? "-scratch" : "")) + ($("e2e-mode").value === "steer_only" ? "-steer" : "-control");
   for (const [id, prefix, kind] of [
     ["e2e-distill-name", "dinov3-tiny-encoder", "encoders"],
     ["e2e-run-name", base + ($("e2e-finetune").checked && $("e2e-initialization").value !== "scratch" ? "-finetune" : ""), "runs"],
@@ -92,7 +175,7 @@ function options(id, rows, title) {
 function render() {
   if (!catalog) return;
   for (const kind of ["datasets", "runs", "models", "evaluations"])
-    $("e2e-count-" + kind).textContent = catalog[kind].length;
+    $("e2e-count-" + kind).textContent = viewCatalog()[kind].length;
   $("e2e-device").textContent = "学習: " + catalog.settings.device;
   $("e2e-storage").textContent = catalog.root;
   $("e2e-model-root").textContent = catalog.settings.model_root;
@@ -101,10 +184,10 @@ function render() {
     ? `${connection.user}@${connection.host}:${connection.port}`
     : "Jetson接続未設定";
   const kind = kinds[step];
-  $("e2e-library-title").textContent = labels[kind];
+  $("e2e-library-title").textContent = (step==='dataset' && pipeline==='multi' ? '元の教師データ · ' : pipeline==='multi' ? 'Multi-head · ' : '通常モデル · ') + labels[kind];
   const list = $("e2e-library");
   list.replaceChildren();
-  if (!catalog[kind].length) {
+  if (!viewCatalog()[kind].length) {
     const p = document.createElement("p");
     p.className = "empty";
     p.textContent =
@@ -115,10 +198,10 @@ function render() {
           : kind === "features" ? "可視化が完了すると、ここから比較画像を開けます。" : "ONNXの変換・検証が完了すると表示されます。";
     list.append(p);
   }
-  for (const row of catalog[kind]) {
+  for (const row of viewCatalog()[kind]) {
     let detail =
       kind === "datasets"
-        ? `${row.id.includes("/") ? row.id.split("/").slice(0, -1).join(" ") + " · " : ""}${row.samples.toLocaleString()} samples · ${row.bag.split("/").pop()}`
+        ? `${row.id.includes("/") ? row.id.split("/").slice(0, -1).join(" ") + " · " : ""}${row.samples.toLocaleString()} samples · ${(row.bag || row.source_dataset || "section dataset").split("/").pop()}`
         : kind === "runs"
           ? `${row.architecture || "dinov3_vits16"} · ${row.effective_precision || "fp32"} · ${row.initialization === "scratch" ? "scratch" : row.finetune ? "全体fine-tuning" : "head学習"} · ${row.mode} · epoch ${row.metrics?.epoch ?? "—"} · val MSE ${row.metrics?.validation_mse?.toPrecision(4) ?? "—"}`
           : `${row.mode} · ORT最大誤差 ${Number(row.ort_max_abs_error).toExponential(2)}`;
@@ -131,11 +214,19 @@ function render() {
       item((row.modality === "evs" ? "EVS · " : "") + (row.name || row.id), (kind !== "datasets" && row.id.includes("/") ? row.id.split("/").slice(0,-1).join(" ") + " · " : "") + detail, () => {
         if (kind === "features") return showFeatures(row.id);
         if (kind === "evaluations") return showEvaluation(row.id);
-        if (step === "dataset") {
+        if (step === "sections") {
+          $("section-operation").value="extract";$("section-operation").dispatchEvent(new Event("change"));
+          $("section-source-dataset").value=row.id;$("section-source-dataset").dispatchEvent(new Event("change"));
+        } else if (step === "dataset" && pipeline === "multi") {
+          setStep("sections");$("section-operation").value="split";$("section-operation").dispatchEvent(new Event("change"));
+          $("section-source-dataset").value=row.id;
+          $("section-source-dataset").dispatchEvent(new Event("change"));
+        } else if (step === "dataset") {
           $("e2e-train-modality").value = row.modality || "rgb";
           $("e2e-train-modality").dispatchEvent(new Event("change"));
           setStep("train");
           $("e2e-train-data").value = row.id;
+          updateHeadCoverage();
         } else if (kind === "runs") {
           if (step === "train") return showLoss(row.id);
           setStep("export");
@@ -149,7 +240,9 @@ function render() {
   }
 }
 function setStep(next) {
+  if (!pipelineSteps(pipeline).includes(next)) return;
   step = next;
+  updatePipelineUI();
   for (const name of Object.keys(kinds)) {
     $("e2e-pane-" + name).hidden = name !== step;
     $("e2e-tab-" + name).classList.toggle("active", name === step);
@@ -157,8 +250,9 @@ function setStep(next) {
   render();
 }
 export async function refreshLearning() {
-  const [data, records] = await Promise.all([api("e2e"), api("records")]);
-  catalog = data;
+  const [allData, records] = await Promise.all([api("e2e"), api("records")]);
+  catalog = allData;
+  const data = {...viewCatalog(),datasets:workflowRows("datasets")};
   bags = records;
   refreshBagPicker(records);
   for (const id of ["e2e-train-data", "e2e-validation-data"])
@@ -180,12 +274,16 @@ export async function refreshLearning() {
   options("e2e-int8-history", data.models.filter(row => row.quantization).map(artifactOption), "INT8比較結果を選択");
   updateInt8Inputs();
   updateEvalInput();
+  if(pipeline==="multi")await refreshSections(catalog);
+  updateHeadCoverage();
   suggestNames();
   render();
 }
 $("e2e-bag").addEventListener("change", suggestNames);
 function updateEvalInput() {
-  const evs = catalog?.models.find(row => row.id === $("e2e-eval-model").value)?.modality === "evs";
+  const model = catalog?.models.find(row => row.id === $("e2e-eval-model").value);
+  const evs = model?.modality === "evs" || Boolean(model?.routing);
+  if (catalog) options("e2e-eval-data", workflowRows("datasets").filter(row => model?.routing ? row.routing_sha256 && JSON.stringify(row.routing)===JSON.stringify(model.routing) : row.modality==="evs").map(datasetOption), "評価datasetを選択");
   $("e2e-eval-data-label").hidden = !evs;
   $("e2e-eval-bag-label").hidden = evs;
 }
@@ -196,7 +294,7 @@ function selected(id) {
   return [...$(id).selectedOptions].map((o) => o.value);
 }
 async function start(operation, body) {
-  const job = await api("e2e/" + operation, body);
+  const job = await api("e2e/" + operation, {...body,pipeline});
   emit("job-started", job);
   $("jobs-drawer").hidden = false;
   toast(job.title + "を開始しました");
@@ -296,13 +394,17 @@ action("e2e-settings-save", async () => {
 });
 on("job-finished", async ({detail:job}) => {
   if (catalog) await refreshLearning();
-  if (job.status === 'succeeded' && job.result?.kind === 'models') {
+  if (job.status === 'succeeded' && job.result?.kind === 'models' && viewCatalog().models.some(r=>r.id===job.result.id)) {
     const quantized = catalog.models.find(row => row.id === job.result.id)?.quantization;
     if (quantized) { $("e2e-int8-history").value = job.result.id; await showInt8(job.result.id); }
     else { $("e2e-engine-model").value = job.result.id; updateInt8Inputs(); }
   }
+  if (pipeline==='multi' && job.status === 'succeeded' && job.result?.kind === 'routings') {
+    $("section-routing").value=job.result.id;$("section-routing").dispatchEvent(new Event('change'));
+  }
+  if (pipeline==='multi' && job.status === 'succeeded' && job.result?.kind === 'trajectories') $("section-trajectory").value=job.result.id;
   if (job.status === 'succeeded' && job.result?.kind === 'encoders') $("e2e-tiny-encoder").value = job.result.id;
-  if (job.status === 'succeeded' && ['runs','encoders'].includes(job.result?.kind) &&
+  if (job.status === 'succeeded' && ['runs','encoders'].includes(job.result?.kind) && viewCatalog()[job.result.kind].some(r=>r.id===job.result.id) &&
       step === 'train' && !$("learning-page").hidden && !document.querySelector('dialog[open]'))
     await showLoss(job.result.id, job.result.kind);
 });
@@ -312,7 +414,7 @@ function updateInt8Inputs() {
   if (!catalog) return;
   const modality = catalog.models.find(row => row.id === $("e2e-engine-model").value)?.modality || "rgb";
   for (const field of ["calibration", "evaluation"])
-    options("e2e-int8-" + field, catalog.datasets.filter(row => (row.modality || "rgb") === modality).map(datasetOption), "データセットを選択");
+    options("e2e-int8-" + field, workflowRows("datasets").filter(row => (row.modality || "rgb") === modality).map(datasetOption), "データセットを選択");
 }
 $("e2e-engine-model").addEventListener("change", updateInt8Inputs);
 $("e2e-engine-precision").addEventListener("change", () => {
@@ -345,7 +447,7 @@ installTrash(refreshLearning);
 function updateFeatureDatasets() {
   if (!catalog) return;
   const modality = catalog.runs.find(row => row.id === $("e2e-features-run").value)?.modality || "rgb";
-  options("e2e-features-data", catalog.datasets.filter(row => (row.modality || "rgb") === modality).map(datasetOption), `${modality === "evs" ? "EVS 20ch" : "RGB"}データセットを選択`);
+  options("e2e-features-data", workflowRows("datasets").filter(row => (row.modality || "rgb") === modality).map(datasetOption), `${modality === "evs" ? "EVS 20ch" : "RGB"}データセットを選択`);
 }
 $("e2e-features-run").addEventListener("change", () => {updateFeatureDatasets(); suggestNames();});
 action("e2e-start-features", () => start("features", {
@@ -395,7 +497,7 @@ $("e2e-train-modality").addEventListener("change", () => {
   updateInitialization();
   $("e2e-tiny-options").hidden = evs || $("e2e-initialization").value === "scratch" || $("e2e-architecture").value !== "dinov3_vitt16";
   for (const id of ["e2e-train-data", "e2e-validation-data"])
-    options(id, catalog.datasets.filter(row => (row.modality || "rgb") === (evs ? "evs" : "rgb")).map(datasetOption), "");
+    options(id, workflowRows("datasets").filter(row => (row.modality || "rgb") === (evs ? "evs" : "rgb")).map(datasetOption), "");
   suggestNames();
 });
 
@@ -406,7 +508,7 @@ $("e2e-loss-kind").addEventListener("change", () => {
   $("e2e-loss-beta").disabled = $("e2e-loss-kind").value !== "smooth_l1";
 });
 
-function updateInitialization() {
+function updateInitialization({preserveSettings=false}={}) {
   const evs = $("e2e-train-modality").value === "evs";
   const cnn = !evs && $("e2e-architecture").value === "simple_cnn";
   const initialization = $("e2e-initialization");
@@ -429,15 +531,13 @@ function updateInitialization() {
     $("e2e-training-scope").textContent = "ランダム初期化したencoderと制御headを全体学習。既定学習率 1e-4。";
     $("e2e-feature-cache").disabled = true;
     $("e2e-cache-help").textContent = "scratchではencoderを更新するため、特徴量キャッシュを使用しません。";
-    if (Number($("e2e-lr").value) === 1e-5) $("e2e-lr").value = "0.0001";
+    if (!preserveSettings && Number($("e2e-lr").value) === 1e-5) $("e2e-lr").value = "0.0001";
   } else if (finetune.disabled) {
     finetune.checked = finetune.dataset.previous === "true";
     finetune.dispatchEvent(new Event("change"));
   }
   finetune.disabled = scratch;
-  const epochs = $("e2e-epochs");
-  if ([10,50].includes(Number(epochs.value))) epochs.value = scratch ? "50" : "10";
-  suggestNames();
+  if (!preserveSettings) suggestNames();
 }
 $("e2e-initialization").addEventListener("change",updateInitialization);
 
@@ -449,3 +549,29 @@ function updateRamPreload() {
 }
 $("e2e-ram-preload").addEventListener("change", updateRamPreload);
 updateRamPreload();
+
+function updateHeadCoverage() {
+  if (!catalog) return;
+  const text=['train','validation'].map((key,i)=>{
+    const ids=new Set(selected('e2e-'+key+'-data'));
+    return `${i===0?'学習':'検証'}: ${ids.size ? headCoverage(workflowRows('datasets').filter(r=>ids.has(r.id))) : 'dataset未選択'}`;
+  });
+  $('e2e-head-coverage').textContent=text.join(' ｜ ');
+}
+for (const id of ['e2e-train-data','e2e-validation-data']) $(id).addEventListener('change',updateHeadCoverage);
+
+for (const next of ['single','multi']) action('e2e-pipeline-'+next,()=>switchPipeline(next));
+action('section-open-teachers',()=>setStep('dataset'));
+action('e2e-return-sections',()=>setStep('sections'));
+action('section-go-train',()=>setStep('train'));
+updatePipelineUI();
+
+function syncTrainingHelp() {
+  const scratch=$('e2e-initialization').value==='scratch';
+  const finetune=$('e2e-finetune').checked;
+  $('e2e-feature-cache').disabled=scratch || finetune;
+  $('e2e-training-scope').textContent=scratch?'ランダム初期化したencoderと制御headを全体学習。':
+    finetune?'backboneとheadを一緒に更新。':'backboneを凍結してheadのみ学習。';
+  $('e2e-cache-help').textContent=scratch || finetune?'encoderを更新するため、特徴量キャッシュを使用しません。':
+    '初回に特徴量を保存し、同じ入力・重み・前処理なら再利用します。';
+}

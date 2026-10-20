@@ -1,0 +1,38 @@
+{
+  "base_frame": "base_link",
+  "heads": [
+    "straight",
+    "curve",
+    "stable"
+  ],
+  "sections": [
+    {
+      "id": "s01",
+      "start_m": 0.0,
+      "end_m": 5.0,
+      "head": "straight"
+    },
+    {
+      "id": "s02",
+      "start_m": 5.0,
+      "end_m": 10.0,
+      "head": "curve"
+    },
+    {
+      "id": "s03",
+      "start_m": 10.0,
+      "end_m": 15.0,
+      "head": "straight"
+    },
+    {
+      "id": "*",
+      "head": "stable"
+    }
+  ],
+  "max_distance_m": 1.0,
+  "max_heading_rad": 1.2,
+  "ambiguity_distance_m": 0.15,
+  "max_jump_m": 3.0,
+  "max_pose_age_s": 0.3,
+  "max_pose_skew_s": 0.05
+}

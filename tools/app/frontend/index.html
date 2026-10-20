@@ -360,10 +360,16 @@
           ><button id="e2e-settings-open">学習環境</button>
         </div>
       </div>
+      <div class="learning-pipelines" role="group" aria-label="学習pipeline">
+        <button id="e2e-pipeline-single" class="active" aria-pressed="true">通常モデル · 1 head</button>
+        <button id="e2e-pipeline-multi" aria-pressed="false">Multi-head · section別</button>
+      </div>
+      <p id="e2e-pipeline-help" class="pipeline-help">通常の教師datasetから、1つの制御headを学習します。</p>
       <nav class="learning-steps" aria-label="学習工程">
         <button id="e2e-tab-dataset" class="active">
           1 データセット <small id="e2e-count-datasets">0</small>
         </button>
+        <button id="e2e-tab-sections">Section head</button>
         <button id="e2e-tab-train">
           2 学習 <small id="e2e-count-runs">0</small>
         </button>
@@ -428,9 +434,48 @@
           <p class="help">
             固定収集bagは固定AUTOのみ、通常bagはMANUALを採用。ブレーキ・後退は除外します。Jetson内のbagは「転送」で先に受信してください。
           </p>
+          <p id="e2e-shared-teacher-help" class="help" hidden>ここでは区間分け前の元データだけを作成します。完了後「割当・区間抽出」に進んでください。</p>
+          <button id="e2e-return-sections" class="full" hidden>割当・区間抽出へ →</button>
           <button id="e2e-create-dataset" class="primary full">
             データセットを作成
           </button>
+        </section>
+        <section id="e2e-pane-sections" class="learning-form" hidden>
+          <h2>Multi-head用データを準備</h2>
+          <div class="actions"><button id="section-open-teachers">元の教師datasetを作成</button><button id="section-go-train">Multi-head学習へ →</button></div>
+          <p class="help">専門headは指定区間を採用。全周用「*」はpose不要で、人間の教師データを全て採用します。</p>
+          <details open class="section-workflow-step">
+            <summary>① 地図のsection → headを割り当てる</summary>
+            <label>既存map<select id="section-map"></select></label>
+            <label>基準lane / ライン<select id="section-line"></select></label>
+            <p class="help">既存の速度区間を選ぶか、距離[m]で指定します。同じhead名は共有されます。「*」は全周用です。</p>
+            <div id="section-assignment-rows" class="section-assignment-rows"></div>
+            <button id="section-add-row" type="button">＋ 区間 / 全周用headを追加</button>
+            <label>割当の保存名<input id="section-routing-name" maxlength="64" placeholder="course-heads" /></label>
+            <button id="section-save-routing" class="primary full">割当を保存</button>
+          </details>
+          <label>使用する割当<select id="section-routing"></select></label>
+          <p id="section-routing-summary" class="help">まず割当を保存してください。</p>
+          <details id="section-offline-step" class="section-workflow-step">
+            <summary>② 専門head用のposeを取得する</summary>
+            <p class="help">全周「*」はこの工程を飛ばせます。元datasetと同じbagを選び、登録済みmapで自己位置推定します。</p>
+            <label>Notebookのrosbag<button type="button" id="section-bag-choose">bagを階層から選択</button></label><input type="hidden" id="section-bag" />
+            <label>追跡方式<select id="section-tracking-mode"><option value="0">Stereo VO</option><option value="1">Stereo VIO（IMUあり）</option></select></label>
+            <label>poseの保存名<input id="section-pose-name" value="section-poses" maxlength="64" /></label>
+            <button id="section-start-offline" class="primary full">offline VSLAMでposeを取得</button>
+            <p class="help">ROS / CUDAコンテナで実行。再生終了で保存します。中止した処理は成果物として公開しません。</p>
+          </details>
+          <details class="section-workflow-step">
+            <summary>③ 必要なsectionのdatasetを作る</summary>
+            <label>作成方法<select id="section-operation"><option value="split">専門head：poseで区間分け・指定区間を採用</option><option value="assign">全周head「*」：VSLAMなしで全採用</option><option value="extract">区間分け済みdatasetから再抽出</option></select></label>
+            <label>元の教師dataset<select id="section-source-dataset"></select></label>
+            <label id="section-pose-label">保存済みpose<select id="section-trajectory"></select></label>
+            <div id="section-picks" class="section-picks" aria-label="採用section"></div>
+            <p id="section-selection-help" class="help"></p>
+            <label>datasetの保存名<input id="section-dataset-name" value="section-data" maxlength="64" /></label>
+            <button id="section-create-dataset" class="primary full">選択したデータからdatasetを作成</button>
+          </details>
+          <p class="help">④ 「学習」で専門datasetと全周datasetを複数選択してください。割当は自動判定し、同じbackboneと複数headを同時学習します。</p>
         </section>
         <section id="e2e-pane-train" class="learning-form" hidden>
           <h2>学習・検証データと条件を選択</h2>
@@ -457,7 +502,9 @@
           <p class="help">
             複数選択はCtrl / ⌘＋クリック。同じbag・データセットも選択できます。
           </p>
+          <p id="e2e-head-coverage" class="help" aria-live="polite"></p>
           <div id="e2e-tiny-options" hidden>
+            <div id="e2e-distill-controls">
             <h3>第1段階：ViT-SからTinyへ特徴蒸留</h3>
             <p class="help">上で選択した学習・検証データの同じRGBを使用。教師は凍結し、Tiny本体と192→384の射影を学習します。制御headは次の段階で学習します。</p>
             <label>教師<select id="e2e-distill-teacher"></select></label>
@@ -467,7 +514,8 @@
               <label>蒸留学習率<input id="e2e-distill-lr" type="number" min="0.000000001" step="0.00001" value="0.0001" /></label>
             </div>
             <button id="e2e-start-distill" class="full">第1段階：特徴蒸留を開始</button>
-            <h3>第2段階：蒸留済みTinyで制御学習</h3>
+            </div>
+            <h3 id="e2e-tiny-control-title">第2段階：蒸留済みTinyで制御学習</h3>
             <label>Tiny encoder<select id="e2e-tiny-encoder"></select></label>
             <button id="e2e-distill-curve" class="quiet">選択encoderの蒸留損失カーブ</button>
           </div>
@@ -509,7 +557,7 @@
               >Epoch<input
                 id="e2e-epochs"
                 type="number"
-                value="10"
+                value="100"
                 min="1" /></label
             ><label
               >Batch<input
@@ -530,14 +578,14 @@
             <label>損失関数<select id="e2e-loss-kind"><option value="smooth_l1">Smooth L1</option><option value="mse">MSE（従来）</option></select></label>
             <label>Smooth L1 β<input id="e2e-loss-beta" type="number" min="0.000000001" step="0.01" value="0.1" /></label>
           </div>
-          <label>学習率スケジューラ<select id="e2e-lr-scheduler"><option value="none">OFF · 固定学習率</option><option value="plateau">検証lossの停滞時に低下（Plateau）</option></select></label>
-          <div id="e2e-plateau-options" hidden>
+          <label>学習率スケジューラ<select id="e2e-lr-scheduler"><option value="none">OFF · 固定学習率</option><option value="plateau" selected>検証指標の停滞時に低下（Plateau）</option></select></label>
+          <div id="e2e-plateau-options">
             <div class="form-grid">
               <label>低下係数<input id="e2e-lr-factor" type="number" min="0.000001" max="0.999999" step="0.1" value="0.5" /></label>
               <label>patience<input id="e2e-lr-patience" type="number" min="0" value="2" /></label>
               <label>最低学習率<input id="e2e-min-lr" type="number" min="0" step="0.0000001" value="0.0000001" /></label>
             </div>
-            <p class="help">検証lossを監視。patience=2では改善しないepochが3回続いた後、次epochの学習率を下げます。best.ptは従来どおり検証MSEで選びます。</p>
+            <p class="help">通常モデルは検証loss、Multi-headはhead平均の検証MSEを監視。patience=2では改善しないepochが3回続いた後、次epochの学習率を下げます。best.ptは検証MSEで選びます。</p>
           </div>
           <label>学習精度<select id="e2e-precision">
             <option value="auto">AMP 自動 · CUDAはBF16優先、CPUはFP32</option>
@@ -625,10 +673,10 @@
           <h2>ONNXを記録データでオフライン評価</h2>
           <label>ONNXモデル<select id="e2e-eval-model"></select></label>
           <label id="e2e-eval-bag-label">評価rosbag<button type="button" id="e2e-eval-bag-choose">bagを階層から選択</button></label><input type="hidden" id="e2e-eval-bag" />
-          <label id="e2e-eval-data-label" hidden>EVS評価用データセット<select id="e2e-eval-data"></select></label>
+          <label id="e2e-eval-data-label" hidden>評価用データセット<select id="e2e-eval-data"></select></label>
           <label>評価名<input id="e2e-eval-name" maxlength="64" /></label>
           <p class="help">
-            RGBは「データセット」の画像・操作・モードtopic、時計、許容時間差を使用。EVSは作成済み20chデータセットを使用。収集設定から自動判定した教師区間を評価します。同じ学習bagも使用できます。
+            RGBは「データセット」の画像・操作・モードtopic、時計、許容時間差を使用。EVS・section headモデルは作成済みデータセットを使用。収集設定から自動判定した教師区間を評価します。同じ学習bagも使用できます。
           </p>
           <button id="e2e-start-evaluate" class="primary full">
             評価を開始
@@ -690,7 +738,7 @@
       <label>表示対象<select id="e2e-manage-kind">
         <option value="trash">ごみ箱</option><option value="datasets">データセット</option>
         <option value="encoders">蒸留済みTiny encoder</option><option value="runs">学習実験</option><option value="models">ONNXモデル</option>
-        <option value="features">特徴量の確認結果</option><option value="evaluations">評価結果</option><option value="engines">TensorRT計測</option>
+        <option value="features">特徴量の確認結果</option><option value="evaluations">評価結果</option><option value="engines">TensorRT計測</option><option value="routings">section割当</option><option value="trajectories">offline pose</option>
       </select></label>
       <button id="e2e-manage-refresh">更新</button>
       <div id="e2e-manage-list" class="scroll"></div>

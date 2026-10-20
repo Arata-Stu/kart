@@ -11,3 +11,6 @@
     mode_timeout_s: 0.3
     control_rate_hz: 50.0
     drive_enabled: false
+    head_count: 1 # resolved from export routing metadata
+    routing_sha256: '' # empty preserves single-head operation
+    head_timeout_s: 0.3 # steady-time receipt watchdog for section selector

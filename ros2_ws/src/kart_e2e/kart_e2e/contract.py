@@ -83,6 +83,19 @@ def evs_spec(meta):
                 padded_shape=meta['input_shape'], mean=mean, std=std)
 
 
+def routing_settings(directory):
+    metadata = json.loads((Path(directory) / 'metadata.json').read_text())
+    routing = metadata.get('routing')
+    if routing is not None:
+        from .sections import Router
+        Router(routing)
+    return routing
+
+
+def output_width(mode, routing=None):
+    return (1 if mode == 'steer_only' else 2) * (len(routing['heads']) if routing else 1)
+
+
 def input_contract(directory):
     """Return modality, input binding name and FP32 shape after validation."""
     model_contract(directory)
@@ -99,6 +112,7 @@ def model_contract(directory):
     path = directory / "model.onnx"
     metadata = json.loads((directory / "metadata.json").read_text())
     mode = metadata.get("output_mode")
+    routing = routing_settings(directory)
     modality = metadata.get('modality', 'rgb')
     if modality == 'evs':
         spec = evs_spec(metadata.get('evs_metadata', {}))
@@ -114,7 +128,7 @@ def model_contract(directory):
         or metadata.get("input_name") != name
         or metadata.get("input_shape") != shape
         or metadata.get("output_name") != "control"
-        or metadata.get("output_shape") != [1, 1 if mode == "steer_only" else 2]
+        or metadata.get("output_shape") != [1, output_width(mode, routing)]
     ):
         raise ValueError("ONNX metadata does not match the kart E2E contract")
     digest = hashlib.sha256(path.read_bytes()).hexdigest()

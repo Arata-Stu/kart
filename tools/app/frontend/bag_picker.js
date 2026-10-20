@@ -5,6 +5,7 @@ export function installBagPicker() {
   let records = [], target = null;
   const expanded = new Set(['']);
   const dialog = $('e2e-bag-dialog');
+  const targets = ['e2e-bag','e2e-eval-bag','section-bag'].filter(id => $(id));
   function caption(id) {
     $(id + '-choose').textContent = $(id).value || 'bagを階層から選択';
   }
@@ -53,7 +54,7 @@ export function installBagPicker() {
     if (!records.length) {list.textContent='Notebookにbagがありません。「転送」から先に受信してください。';return;}
     branch(root,list);
   }
-  for (const id of ['e2e-bag','e2e-eval-bag']) action(id+'-choose', () => {
+  for (const id of targets) action(id+'-choose', () => {
     target = id;
     const parts = $(id).value.split('/');
     for (let i=0;i<parts.length;i++) expanded.add(parts.slice(0,i).join('/'));
@@ -62,7 +63,7 @@ export function installBagPicker() {
   action('e2e-bag-close', () => dialog.close());
   return function refresh(rows) {
     records = rows;
-    for (const id of ['e2e-bag','e2e-eval-bag']) {
+    for (const id of targets) {
       if (!rows.some(row=>row.id===$(id).value)) $(id).value='';
       caption(id);
     }

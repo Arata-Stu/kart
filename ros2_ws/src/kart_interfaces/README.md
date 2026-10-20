@@ -120,3 +120,8 @@ Pure Pursuitが実際に選んだ追従点の観測用メッセージ。
 
 表示用の再計算で代用しない。AUTOモードや車両への出力許可を表すメッセージではない。
 ノード・parameterの追加なし。型生成・ROS結合ビルドはROS環境で別途確認する。
+
+`E2EHeadSelection`は`/e2e/head_selection`（reliable / volatile / depth 10）で
+section selector → E2E decoderへ送信する。headerは判定対象画像と同じ時刻、
+`valid`、`section_id`、`head_id`、0始まり`head_index`、`routing_sha256`、`reason`を持つ。
+未局在・曖昧・時刻不整合はvalid=false、head_index=-1。位置そのものや操作指令ではない。

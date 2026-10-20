@@ -151,6 +151,9 @@ class Studio:
         if path == "/api/e2e/settings":
             return self.learning.save_settings(b)
         if path in (
+            "/api/e2e/section-routing",
+            "/api/e2e/section-offline",
+            "/api/e2e/section-dataset",
             "/api/e2e/dataset",
             "/api/e2e/train",
             "/api/e2e/distill",
@@ -163,6 +166,9 @@ class Studio:
             action = path.rsplit("/", 1)[1]
             plan = self.learning.prepare(action, b)
             titles = {
+                "section-routing": "section → head割当の保存",
+                "section-offline": "offline VSLAM・pose取得",
+                "section-dataset": "section dataset作成",
                 "features": "特徴量の可視化",
                 "dataset": "データセット作成",
                 "train": "制御モデル学習",

@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {headCoverage} from '../frontend/section_learning.js';
+const routing={heads:['curve','stable'],sections:[{id:'s1',head:'curve'},{id:'*',head:'stable'}]};
+const expert={routing_sha256:'same',routing,section_counts:{s1:8}};
+const stable={routing_sha256:'same',routing,section_counts:{'*':20}};
+assert.equal(headCoverage([expert,stable]),'curve: 8 / stable: 20');
+assert.match(headCoverage([expert]),/stable: 0（不足）/);
+assert.match(headCoverage([expert,{}]),/割当が異なります/);
+assert.equal(headCoverage([]),'単一head');
+console.log('Section head coverage: passed');

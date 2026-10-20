@@ -19,6 +19,7 @@
     - /recovery/active
     - /recovery/status
     - e2e/status
+    - /e2e/head_selection
     - vehicle/control_cmd
     - /control/fixed_config
     - /control/fixed_status
