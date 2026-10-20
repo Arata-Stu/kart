@@ -5,7 +5,12 @@
 通常の単一headで比較し、Multi-head・gateの影響は別実験にする。
 ONNX export・TensorRT buildはこの比較に含めない。
 
-一括実行は`bash scripts/e2e_model_compare.sh --train <dataset> --hours 6`を使用する。
+サイズ優先の一括実行は`bash scripts/e2e_model_compare.sh --train <dataset> --preset sizes --hours 6`を使用する。
+既定のsizesはViT-S/B/Tinyのfreezeと全体fine-tuningの6条件。
+Tinyは50 epoch蒸留した同じencoderから両条件を開始する（`--size-distill-epochs`で変更可能）。
+scratchや蒸留epochの差まで含める従来の11条件は`--preset full`で実行する。
+sizesは実用的なモデル候補の比較であり、Tinyの蒸留と公式S/Bの初期重みの違いも含む。
+`size_comparison.md/csv`にparameter数、checkpointサイズ、MSE、同じ更新範囲のBに対する比率を保存する。
 各方式の2 epoch試走から時間を見積もり、収まる条件を100 epochのまま実行する。
 時間不足の条件を自動で短縮せず、未実行として記録する。
 全条件の6時間内完了を保証するものではない。

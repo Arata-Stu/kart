@@ -249,14 +249,28 @@ bash scripts/e2e_sweep.sh --summarize /path/to/sweep
 # Notebook Docker内、/workspacesで実行。validation省略時はtrainと同じ。
 bash scripts/e2e_model_compare.sh \
   --train /workspaces/e2e/datasets/日付/時刻/dataset名 \
-  --hours 6
+  --preset sizes --hours 6
 ```
 
 `e2e_model_compare.sh`は既存の`kart_e2e.train`／`kart_e2e.distill`を逐次実行する。
 新しいtrainerは作らず、通常のRGB単一headの比較に限定する。ONNX以降と車両操作は実行しない。
-全11条件、制御学習はSmooth L1（β=0.1）・100 epoch・Plateau ON・batch32・seed42。
+既定の`--preset sizes`はサイズ比較を優先する6条件。
+制御学習はSmooth L1（β=0.1）・100 epoch・Plateau ON・batch32・seed42。
 
-既定の優先順（時間不足時は後続でも収まる条件を試す）:
+| モデル | 凍結head学習 | 全体fine-tuning |
+|---|---|---|
+| 公式pretrained ViT-S | `s_freeze` | `s_finetune` |
+| 公式pretrained ViT-B | `b_freeze` | `b_finetune` |
+| ViT-Sから50 epoch蒸留したTiny | `tiny_distill_50` | `tiny_distill_50_finetune` |
+
+先にS/B/Tinyの凍結3条件、その後にS/B/Tinyの全体更新3条件を実行する。
+同じ更新範囲の中でサイズを比較し、更新範囲による差と混同しない。
+Tinyの本番蒸留は1回だけ行い、両方の制御学習で同じencoderを読み込む。
+freezeのhead学習済み重みをfinetuneの初期値には使用しない。
+Tinyには独自構成の蒸留重み、S/Bには公式重みを使用するので、純粋なarchitectureだけの比較ではない。
+`--size-distill-epochs 20`のようにTinyの共通蒸留予算を変更できる（既定50）。
+
+以前の全11条件は`--preset full`で実行する。fullの優先順:
 
 1. `s_freeze`、`b_freeze`: 公式ViT-S/B pretrained＋headのみ。
 2. `s_finetune`、`s_scratch`: 同じViT-Sでpretrained全体更新とscratch。
@@ -267,11 +281,11 @@ bash scripts/e2e_model_compare.sh \
 
 各方式を本番と同じ全datasetで2 epoch試走し、初期化・キャッシュ作成等の時間＋
 試走で遅い方のepoch時間×本番epoch数を1.3倍して見積もる。
-Tiny蒸留とTiny凍結headの時間profileは各予算で共有するが、
-本番encoderは毎回同じseedから独立学習し、試走のencoderを本番重みには使用しない。
-蒸留＋headは両段階の合計時間で開始可否を判定する。
+Tiny蒸留の時間profileは共有し、Tiny headはfreezeとfinetuneの別profileで測定する。
+fullの異なる蒸留予算は同じseedから独立学習し、試走encoderを本番重みには使用しない。
+蒸留＋headは未完了stageの合計時間で開始可否を判定する。共有encoderの完成後はその時間を追加見積もりしない。
 試走も6時間の予算に含む。100 epochを黙って減らさず、収まらない条件は`budget_skipped`にする。
-6時間で全11条件を完了できる保証はない。見積もりを超えて期限に達したprocessは停止し、
+6時間で全条件を完了できる保証はない。見積もりを超えて期限に達したprocessは停止し、
 `budget_timeout`として途中checkpoint・ログを保持する。停止待ちは最大10秒、その後に集計する。
 RAM preload ON、凍結時だけ特徴量キャッシュON。制御学習はAMP auto、特徴蒸留は現実装どおりFP32。
 head LR=1e-4、pretrained全体更新LR=1e-5、scratch LR=1e-4。
@@ -288,11 +302,16 @@ scratchには重みを渡さない。B scratchにも固定公式DINOv3ソース�
 - `summary.md/csv/json`: 条件別status、最良制御MSE・steering MAE・採用epoch、
   encoder採用epoch、初期LR、parameter数、蒸留＋制御学習の時間。
 - `epoch_budgets.csv`: 10/25/50/75/100 epochまでの最良制御MSE。
+- `size_comparison.md/csv`: 更新範囲・初期重みの由来・parameter数・PyTorch checkpointのバイト数・MSE。
+  成功済みの同じfreeze/finetuneのViT-Bを基準にMSE比とparameter数の比を表示する。
+  基準が未完了、またはMSEが0で除算できない場合は該当比率を空欄とする。
+  checkpointの大きさからTensorRTの実行速度を推定しない。
 - `runs/<条件>/output/`: 既存CLIのcheckpoint・run.json・metrics・timing。
 - `runs/<条件>/{command.json,status.json,train.log}`、`pilots/`: 実行履歴と時間試走。
 - `invocations.jsonl`: 試走・集計を含む各起動の実時間と時間予算。
 
 summaryの準備時間は本番の蒸留・制御学習processの合計で、試走時間を除く。
+共有encoderの蒸留時間は各Tiny条件の独立した準備費用として両方に載せるので、表を足して全実時間としない。
 試走時に構築したキャッシュは本番でも再利用されるため、完全なcold-cache時間ではない。
 全体所要時間は`invocations.jsonl`で確認する。
 蒸留は予算内のalignment loss最良encoder、制御はMSE最良checkpointを採用する。
@@ -307,7 +326,7 @@ bash scripts/e2e_model_compare.sh --train /path/dataset --hours 6 \
   --cases s_freeze s_finetune tiny_scratch tiny_distill_10 tiny_distill_50
 # 別のvalidation、batch、蒸留予算を選ぶ
 bash scripts/e2e_model_compare.sh --train /path/train --validation /path/val \
-  --batch-size 64 --distill-epochs 5 20 50 --hours 6
+  --preset full --batch-size 64 --distill-epochs 5 20 50 --hours 6
 # 時間不足・中断した条件を、追加6時間の予算で実行
 bash scripts/e2e_model_compare.sh --resume /path/comparison --hours 6
 bash scripts/e2e_model_compare.sh --summarize /path/comparison
@@ -317,6 +336,8 @@ resumeは新しい時間予算。成功済みの本番・試走を再利用し�
 失敗・OOM・unavailable確定条件は再実行しない。再試行する場合は新しい比較を作る。
 中断stageは途中出力を退避し、同じseedから再実行する（optimizerの途中再開ではない）。
 データ・重み・実装・encoderソースの変更と同時実行を拒否する。
+以前の11条件のplanは新しい6条件へ自動変更しない。サイズ優先比較は新しい出力先で開始する。
+実験の実行中にスクリプトを更新すると変更検知で停止するため、更新は終了後または中止後に行う。
 resume時は`--hours`以外の比較設定を変更しない。`--stream`でRAM一括読込を無効化できる。
 CPUで時間予算・依存関係・集計・既存sweep互換をテストし、CNNの試走→本番→集計を確認。
 GPU上の全比較と6時間内の完了数は未検証。

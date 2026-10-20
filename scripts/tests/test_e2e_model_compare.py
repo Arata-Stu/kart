@@ -13,7 +13,7 @@ spec=importlib.util.spec_from_file_location('model_compare',LIB/'e2e_model_compa
 compare=importlib.util.module_from_spec(spec);spec.loader.exec_module(compare)
 
 
-def fixture(tmp_path,extra=()):
+def fixture(tmp_path,extra=(),*,preset='full'):
     data=tmp_path/'data';data.mkdir();(data/'image.npy').write_bytes(b'image')
     (data/'samples.jsonl').write_text('{"image":"image.npy","steering":0.1,"throttle":0.1}\n')
     (data/'metadata.json').write_text('{"modality":"rgb"}')
@@ -22,7 +22,9 @@ def fixture(tmp_path,extra=()):
     base=tmp_path/'base.pt';base.write_bytes(b'fixture-base')
     root=tmp_path/'comparison'
     argv=['compare','--train',str(data),'--repo',str(repo),'--weights',str(small),
-          '--base-weights',str(base),'--output',str(root),'--dry-run',*extra]
+          '--base-weights',str(base),'--output',str(root),'--dry-run']
+    if preset is not None:argv+=['--preset',preset]
+    argv+=extra
     # Fixture need not be an actual DINOv3 Git checkout.
     with patch.object(sys,'argv',argv),patch.object(compare.subprocess,'check_output',return_value=b'fixture-git'):
         compare.main()
@@ -90,6 +92,38 @@ def test_budget_skips_whole_distillation_chain_without_lowering_epochs(tmp_path)
     with patch.object(compare.subprocess,'check_output',return_value=b'fixture-git'),patch.object(compare,'run',fake_run):
         compare.execute(root,plan,hours=1)
     assert compare.status(root/'cases/tiny_distill_100')['status']=='succeeded'
+
+
+def test_size_preset_shares_encoder_and_compares_matching_scopes(tmp_path):
+    root,plan=fixture(tmp_path,preset=None)
+    assert len(plan['cases'])==6 and plan['preset']=='sizes'
+    assert not any(c['initialization']=='scratch' for c in plan['cases'])
+    calls=[]
+    def run(folder,args,deadline):
+        calls.append((folder,args))
+        return fake_run(folder,args,deadline)
+    with patch.object(compare.subprocess,'check_output',return_value=b'fixture-git'),patch.object(compare,'run',run):
+        compare.execute(root,plan)
+    encoders=[folder for folder,args in calls if 'kart_e2e.distill' in args and folder.parent.name=='runs']
+    assert [f.name for f in encoders]==['tiny_distill_50_encoder']
+    frozen=json.loads((root/'runs/tiny_distill_50/command.json').read_text())
+    fine=json.loads((root/'runs/tiny_distill_50_finetune/command.json').read_text())
+    assert frozen[frozen.index('--weights')+1]==fine[fine.index('--weights')+1]
+    assert '--finetune' not in frozen and '--feature-cache' in frozen
+    assert '--finetune' in fine and '--no-feature-cache' in fine
+    assert fine[fine.index('--learning-rate')+1]=='1e-05'
+    assert (root/'pilots/tiny_distilled_finetune/status.json').exists()
+    import csv
+    rows=list(csv.DictReader((root/'size_comparison.csv').open()))
+    for row in rows:
+        assert row['reference']==('b_finetune' if row['scope']=='finetune' else 'b_freeze')
+        assert float(row['mse_ratio_to_b'])==1
+    assert 'not architecture alone' in (root/'size_comparison.md').read_text()
+    # Incomplete B results cannot act as the comparison reference.
+    compare.save(root/'cases/b_finetune/status.json',dict(status='budget_timeout'))
+    compare.summarize(root,plan)
+    rows=list(csv.DictReader((root/'size_comparison.csv').open()))
+    assert all(not row['reference'] for row in rows if row['scope']=='finetune')
 
 
 def test_failed_pilot_continues_other_cases_and_missing_base_is_explicit(tmp_path):
