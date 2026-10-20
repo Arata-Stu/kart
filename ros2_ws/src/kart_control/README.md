@@ -100,6 +100,8 @@ AUTO/MANUALの指令選択は既存muxが担当し、このpackageからAUTOへ�
 | 出力 | /control/tracking_cmd | ackermann_msgs/msg/AckermannDriveStamped | reliable/volatile/depth1、30 Hz、舵角rad左正・速度m/s前進のみ |
 | 出力 | /control/tracking_status | std_msgs/msg/String | reliable/volatile/depth1、30 Hz、trackingまたは無効理由 |
 | 出力 | /control/lookahead | geometry_msgs/msg/PointStamped | reliable/volatile/depth1、計算成功時、map座標の追従点 |
+| 出力 | /control/tracking_reference | kart_interfaces/msg/TrackingReference | reliable/volatile/depth1、30 Hzとwatchdog無効通知。実参照点・計測時の車両位置・設定lookahead・直線距離・valid |
+| 出力 | /control/tracking_markers | visualization_msgs/msg/MarkerArray | reliable/volatile/depth1、同周期。参照点・車両→参照点の矢印・L/pathと直線距離dのラベル |
 
 Pure Pursuit基準は**後輪軸中心**。既定`rear_axle`へ校正済みTFが必要。
 base_linkが後輪軸中心ならtracking_frameをbase_linkに設定できる。
@@ -297,3 +299,23 @@ active=trueのまま受信がmode_timeout_s（既定0.3秒、wall_timeout_s指�
 超えると中立＋STOP要求をラッチする。新規parameter/service/actionなし。
 復帰観測はVSLAM非依存だが、ruleの既存localization健全性要件は緩和しない。
 [復帰仕様・全設定](../kart_recovery/README.md)を参照。
+
+
+### Pure Pursuit参照点の表示
+
+`/control/tracking_reference`は追従計算が実際に使用したtargetを配信する。
+`lookahead_m`は最近傍経路投影点から前方へ進む設定経路長で、車両からtargetへの
+直線距離`target_distance_m`と区別する。開路終端では参照点が終点へ制限される。
+表示のために参照点や制御指令を再計算しない。新規parameter・config項目はない。
+
+Foxgloveの3Dパネルは表示frameを`map`にし、`/control/tracking_markers`を有効にする。
+黄色い球が参照点、矢印が制御に使った車両位置から参照点、ラベルが`L(path)`と`d`（m）。
+計算無効・watchdog失効時はDELETEALLで消去し、有効markerにも0.5秒のlifetimeを付ける。
+元の`/control/lookahead`（PointStamped）も維持するが、こちらは成功時のみの出力。
+現在のAUTO状態とは独立した計算結果の表示である。
+
+Map Studioの実車調整でも同じTrackingReferenceを読み、黄色い参照点・結線・数値を表示する。
+受信と計測stampが0.5秒を超えたもの、無効結果は調整bridgeで転送しない。
+UIの切断・通信停止時も参照点表示を消す。
+portable C++計算テストでは横ずれ時の経路長／直線距離の違い・開路終端の参照点を検証。
+ROSメッセージ生成・marker表示・実車での確認は別途必要。

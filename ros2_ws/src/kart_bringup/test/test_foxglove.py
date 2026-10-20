@@ -33,6 +33,8 @@ class FoxgloveTests(unittest.TestCase):
             "/system/jetson/diagnostics",
             "/e2e/status",
             "/bag/status",
+            "/control/tracking_reference",
+            "/control/tracking_markers",
         ):
             self.assertTrue(allowed("topic_whitelist", name), name)
         for name in (
@@ -59,6 +61,8 @@ class FoxgloveTests(unittest.TestCase):
             "/tf",
             "/operation_mode/request",
             "/bag/request",
+            "/control/tracking_reference",
+            "/control/tracking_markers",
             "/localization/pose_hint/extra",
         ):
             self.assertFalse(allowed("client_topic_whitelist", name), name)

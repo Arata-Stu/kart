@@ -9,6 +9,11 @@ int main() {
   assert(r.valid && std::abs(r.steering) < 1e-12 && r.speed == 1);
   r = pursue(straight, false, {0, -0.2, 0}, c);
   assert(r.valid && r.steering > 0);
+  // The displayed target is selected by the controller: arc length from the
+  // nearest projection is L, while vehicle-to-target distance may be larger.
+  assert(std::abs(r.target_x - c.lookahead) < 1e-12);
+  assert(std::abs(r.target_y) < 1e-12);
+  assert(std::hypot(r.target_x, r.target_y + 0.2) > c.lookahead);
   r = pursue(straight, false, {0, 0.2, 0}, c);
   assert(r.valid && r.steering < 0);
   assert(!pursue(straight, false, {0, 2, 0}, c).valid);
@@ -38,6 +43,10 @@ int main() {
   assert(r.valid && std::abs(r.steering) < 1e-10 && r.speed == 1);
   r = pursue(straight, false, {2.8, 0, 0}, c);
   assert(r.valid && r.speed < 0.3);
+  // Near an open-line end the actual reference is clamped to the endpoint.
+  assert(std::abs(r.target_x - 3) < 1e-12);
+  assert(std::abs(r.target_y) < 1e-12);
+  assert(std::hypot(r.target_x - 2.8, r.target_y) < c.lookahead);
   c.wheelbase = 0;
   assert(!pursue(straight, false, {0, 0, 0}, c).valid);
 }

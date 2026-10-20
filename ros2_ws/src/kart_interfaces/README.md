@@ -102,3 +102,21 @@ ROS上での生成・結合ビルドは未検証。各consumerの単体ロジッ
 同一map座標のオフライン参照。点列順が前進方向、速度はm/s・非負で各点1値。
 閉路は始点を末尾へ重複追加しない。空点列は以前の参照を無効化する。
 header stampは配信時刻であり、地図座標のTF検索時刻ではない。
+
+### TrackingReference
+
+Pure Pursuitが実際に選んだ追従点の観測用メッセージ。
+既定topicは`/control/tracking_reference`、送信元は`kart_control/pure_pursuit`、
+受信先はMap Studio調整bridge・Foxglove等。reliable/volatile/depth1、既定30 Hz。
+
+| フィールド | 型 | 意味 |
+| --- | --- | --- |
+| header | std_msgs/Header | 有効時は制御に使ったposeの計測時刻・map座標。無効時は通知時刻 |
+| valid | bool | 制御の参照点計算が成功したか。falseなら位置・距離を表示しない |
+| vehicle_position | geometry_msgs/Point | 制御に使用した車両基準位置のXY、z=0 |
+| target | geometry_msgs/Point | 実際の追従点XY、z=0 |
+| lookahead_m | float64 | 設定した前方経路長m。最近傍経路投影点が起点 |
+| target_distance_m | float64 | vehicle_positionからtargetへのXY直線距離m |
+
+表示用の再計算で代用しない。AUTOモードや車両への出力許可を表すメッセージではない。
+ノード・parameterの追加なし。型生成・ROS結合ビルドはROS環境で別途確認する。

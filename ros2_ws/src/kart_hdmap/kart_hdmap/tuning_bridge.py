@@ -12,7 +12,7 @@ from .tuning import MAX_BYTES, StopGate, digest, encoded, map_identity, validate
 
 class TuningBridge:
     def __init__(self, node):
-        from kart_interfaces.msg import OperationModeState
+        from kart_interfaces.msg import OperationModeState, TrackingReference
         from nav_msgs.msg import Odometry
         from diagnostic_msgs.msg import DiagnosticArray
         from rclpy.clock import Clock, ClockType
@@ -34,12 +34,14 @@ class TuningBridge:
         self.gate = StopGate()
         self.previous = None
         self.pose = None
+        self.tracking = None
         self.localized = False
         self.localized_at = float('-inf')
         self.requests = queue.Queue(maxsize=4)
         self.buffer = Buffer()
         self.listener = TransformListener(self.buffer, node)
         self.subscriptions = [
+            node.create_subscription(TrackingReference, 'control/tracking_reference', self.reference, 1),
             node.create_subscription(OperationModeState, 'operation_mode/state', self.mode, 1),
             node.create_subscription(Odometry, 'visual_slam/tracking/odometry', self.speed, qos_profile_sensor_data),
             node.create_subscription(DiagnosticArray, 'localization/vslam/diagnostics', self.localization, 10),
@@ -97,6 +99,25 @@ class TuningBridge:
         speed = math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z) if self.fresh(msg.header.stamp, .5) else None
         self.gate.update_speed(speed)
 
+    def reference(self, msg):
+        self.tracking = None
+        points = (msg.vehicle_position, msg.target)
+        values = [v for p in points for v in (p.x, p.y, p.z)] + [msg.lookahead_m, msg.target_distance_m]
+        if (msg.valid and msg.header.frame_id == self.node.settings['frame_id'] and
+                self.fresh(msg.header.stamp, .5) and all(math.isfinite(v) for v in values) and
+                msg.lookahead_m > 0 and msg.target_distance_m >= 0):
+            self.tracking = (msg, time.monotonic())
+
+    def tracking_status(self):
+        if self.tracking is None:
+            return None
+        msg, received = self.tracking
+        if time.monotonic() - received > .5 or not self.fresh(msg.header.stamp, .5):
+            return None
+        return dict(origin=[msg.vehicle_position.x, msg.vehicle_position.y],
+                    target=[msg.target.x, msg.target.y], lookahead_m=msg.lookahead_m,
+                    target_distance_m=msg.target_distance_m)
+
     def localization(self, msg):
         for status in msg.status:
             if status.hardware_id == 'visual_slam':
@@ -125,7 +146,7 @@ class TuningBridge:
         result = dict(map_id=self.identity, revision=revision,
                       mode=self.gate.mode if now - self.gate.mode_at <= .3 else None,
                       speed_mps=self.gate.speed if now - self.gate.speed_at <= .5 else None,
-                      pose=self.pose, localized=self.localized and now - self.localized_at <= 1.5,
+                      pose=self.pose, tracking_reference=self.tracking_status(), localized=self.localized and now - self.localized_at <= 1.5,
                       apply_issue=self.issue(), can_rollback=self.previous is not None)
         if revision != known:
             result['active'] = self.active()
@@ -147,6 +168,7 @@ class TuningBridge:
             n.selected = candidate['lane_id']
         finally:
             n.tuning_transaction = False
+        self.tracking = None
         n.runtime_centerline_speed = candidate['centerline_speed_mps']
         n.publish()
 

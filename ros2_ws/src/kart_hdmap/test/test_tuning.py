@@ -89,6 +89,7 @@ class TransactionTests(unittest.TestCase):
         b.identity = 'map-a'
         b.previous = None
         b.pose = None
+        b.tracking = None
         b.localized = False
         b.localized_at = float('-inf')
         b.gate = StopGate()
@@ -146,3 +147,32 @@ class TransactionTests(unittest.TestCase):
         result=self.call('/apply',snapshot=snapshot(),expected_revision=b.revision())
         self.assertIn('error',result)
         b.replace.assert_not_called()
+
+
+class TrackingReferenceTests(unittest.TestCase):
+    def test_only_valid_finite_map_frame_and_fresh_reference_is_forwarded(self):
+        from kart_hdmap.tuning_bridge import TuningBridge
+        from types import SimpleNamespace as NS
+        from unittest.mock import patch
+        bridge = TuningBridge.__new__(TuningBridge)
+        bridge.node = NS(settings={'frame_id':'map'})
+        bridge.tracking = None
+        bridge.fresh = lambda stamp, timeout: stamp == 'fresh'
+        def message(**changes):
+            values = dict(valid=True,header=NS(frame_id='map',stamp='fresh'),
+                          vehicle_position=NS(x=1.,y=2.,z=0.),target=NS(x=1.8,y=2.,z=0.),
+                          lookahead_m=.8,target_distance_m=.8)
+            return NS(**(values | changes))
+        with patch('kart_hdmap.tuning_bridge.time.monotonic',return_value=10):
+            bridge.reference(message())
+            view = bridge.tracking_status()
+            self.assertEqual(view['target'],[1.8,2.])
+            self.assertEqual(view['lookahead_m'],.8)
+        with patch('kart_hdmap.tuning_bridge.time.monotonic',return_value=10.6):
+            self.assertIsNone(bridge.tracking_status())
+        for msg in (message(valid=False),message(header=NS(frame_id='odom',stamp='fresh')),
+                    message(header=NS(frame_id='map',stamp='old')),message(lookahead_m=float('nan')),
+                    message(target_distance_m=-1),message(lookahead_m=0)):
+            with self.subTest(msg=msg):
+                bridge.reference(msg)
+                self.assertIsNone(bridge.tracking_status())

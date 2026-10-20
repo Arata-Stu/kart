@@ -241,3 +241,7 @@ DataLoader worker数は既定8を表示し、要求値と実効cache設定を実
 - 現場調整の有効／無効はbringupのdrive TUIから選択できる。調整用地図を再選択させず、
   既存のHDMap・localization地図を内容で照合して転送フォルダーを導出する。
   CLIは`--tuning`／`--no-tuning`、未指定はbringup YAMLの既定を使う。
+
+- Pure Pursuitの参照点は`/control/tracking_reference`から受け、同じ計算に使った車両位置と
+  結んで表示する。設定lookahead（最近傍経路投影点からの経路長）と直線距離を区別し、
+  ブラウザ側で参照点を再計算しない。無効・古い情報は表示対象から除外する。

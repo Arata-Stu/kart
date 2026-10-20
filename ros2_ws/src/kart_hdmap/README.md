@@ -201,3 +201,11 @@ Center速度の起動parameterは保持し、適用値はHTTP active.centerline_
 
 検証: `test_tuning.py`で停車継続・鮮度・NaN・地図不一致・hash・形状不整合を検証。
 実ROS環境の結合・Jetson負荷・実車は別途確認が必要。
+
+
+実車調整が有効なときは追加で`/control/tracking_reference`
+（`kart_interfaces/msg/TrackingReference`、reliable/volatile/depth1）を購読する。
+有効かつmap座標・有限値で、計測stampと受信から0.5秒以内のものだけ
+HTTP statusの`tracking_reference`として返す。origin/targetは制御計測時の座標、
+lookahead_mは経路長、target_distance_mは直線距離。無効通知・timeout・地図適用時には消去する。
+この観測追加による新しいparameter、publisher、serviceはない。

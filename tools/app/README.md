@@ -855,3 +855,16 @@ node --test tools/app/tests/test_tuning.mjs
 ```
 
 ROS結合・Jetsonの負荷・実車動作の確認は別途必要。
+
+
+### sectionとPure Pursuit参照点
+
+現在のsection分けはCustomlineの「区間速度」。開始／終了waypointと速度上限を
+最大40区間設定でき、閉路の始点跨ぎ・重複区間の低い上限・区間前の減速に対応する。
+名前付きsection・section別lookaheadは未実装。区間変更後はCustomlineを再生成して保存する。
+
+「実車調整」の自己位置接続中、実際のPure Pursuit参照点を黄色い点、制御に使った車両位置からの
+結線で表示する。パネルには設定lookahead（最近傍経路投影点からの経路長）と、車両から参照点までの
+直線距離をm単位で表示する。参照点をブラウザで再計算せず、Jetsonの制御出力を読む。
+無効通知・0.5秒以上古い計測や受信はbridgeで除外し、画面切断・通信停止時も消去する。
+Foxgloveでは3Dパネルの`/control/tracking_markers`で同じ参照点を表示できる。

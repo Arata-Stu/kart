@@ -3,6 +3,9 @@
 #include "geometry_msgs/msg/point_stamped.hpp"
 #include "kart_control/pure_pursuit.hpp"
 #include "kart_interfaces/msg/reference_line.hpp"
+#include "kart_interfaces/msg/tracking_reference.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
+#include <cstdio>
 #include "nav_msgs/msg/odometry.hpp"
 #include "rcl_interfaces/msg/parameter_descriptor.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -54,6 +57,10 @@ public:
         create_publisher<std_msgs::msg::String>("control/tracking_status", 1);
     target_ = create_publisher<geometry_msgs::msg::PointStamped>(
         "control/lookahead", 1);
+    reference_view_ = create_publisher<kart_interfaces::msg::TrackingReference>(
+        "control/tracking_reference", 1);
+    markers_ = create_publisher<visualization_msgs::msg::MarkerArray>(
+        "control/tracking_markers", 1);
     line_sub_ = create_subscription<kart_interfaces::msg::ReferenceLine>(
         "planning/reference_line", rclcpp::QoS(1).transient_local(),
         [this](kart_interfaces::msg::ReferenceLine::ConstSharedPtr m) {
@@ -129,7 +136,7 @@ private:
     return stamp.nanoseconds() > 0 && age >= -0.05 && age <= limit &&
            steady() - received <= receive_limit(limit, wall_timeout_);
   }
-  void publish(const Result &r, const std::string &reason) {
+  void publish(const Result &r, const std::string &reason, Pose pose = {}) {
     ackermann_msgs::msg::AckermannDriveStamped cmd;
     cmd.header.stamp = now();
     cmd.header.frame_id = frame_;
@@ -139,6 +146,58 @@ private:
     std_msgs::msg::String status;
     status.data = reason;
     status_->publish(status);
+    kart_interfaces::msg::TrackingReference view;
+    view.header.frame_id = map_;
+    view.header.stamp = r.valid ? pose_stamp_ : now();
+    view.valid = r.valid;
+    view.lookahead_m = c_.lookahead;
+    if (r.valid) {
+      view.vehicle_position.x = pose.x;
+      view.vehicle_position.y = pose.y;
+      view.target.x = r.target_x;
+      view.target.y = r.target_y;
+      view.target_distance_m = std::hypot(r.target_x - pose.x, r.target_y - pose.y);
+    }
+    reference_view_->publish(view);
+    visualization_msgs::msg::MarkerArray markers;
+    visualization_msgs::msg::Marker marker;
+    marker.header = view.header;
+    marker.ns = "pure_pursuit";
+    marker.action = visualization_msgs::msg::Marker::DELETEALL;
+    markers.markers.push_back(marker);
+    if (r.valid) {
+      marker.action = visualization_msgs::msg::Marker::ADD;
+      marker.lifetime.nanosec = 500000000;
+      marker.pose.orientation.w = 1;
+      marker.color.r = 1.0f;
+      marker.color.g = 0.72f;
+      marker.color.b = 0.12f;
+      marker.color.a = 1;
+      marker.type = visualization_msgs::msg::Marker::SPHERE;
+      marker.pose.position = view.target;
+      marker.pose.position.z = 0.06;
+      marker.scale.x = marker.scale.y = marker.scale.z = 0.12;
+      markers.markers.push_back(marker);
+      marker.id = 1;
+      marker.type = visualization_msgs::msg::Marker::ARROW;
+      marker.pose.position = geometry_msgs::msg::Point();
+      marker.points = {view.vehicle_position, view.target};
+      marker.scale.x = 0.025;
+      marker.scale.y = 0.08;
+      marker.scale.z = 0.10;
+      markers.markers.push_back(marker);
+      marker.id = 2;
+      marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+      marker.points.clear();
+      marker.pose.position = view.target;
+      marker.pose.position.z = 0.25;
+      marker.scale.z = 0.12;
+      char label[128];
+      std::snprintf(label, sizeof(label), "L(path)=%.2f m / d=%.2f m", c_.lookahead, view.target_distance_m);
+      marker.text = label;
+      markers.markers.push_back(marker);
+    }
+    markers_->publish(markers);
     if (r.valid) {
       geometry_msgs::msg::PointStamped p;
       p.header = cmd.header;
@@ -183,7 +242,8 @@ private:
           {t.transform.translation.x, t.transform.translation.y, yaw}, c_);
       publish(result, result.valid ? (result.speed > 0 ? "tracking"
                                                        : "zero_speed_target")
-                                   : "invalid_geometry_or_off_path");
+                                   : "invalid_geometry_or_off_path",
+              {t.transform.translation.x, t.transform.translation.y, yaw});
     } catch (const tf2::TransformException &) {
       publish({}, "tf_unavailable");
     }
@@ -207,6 +267,8 @@ private:
       command_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_;
   rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr target_;
+  rclcpp::Publisher<kart_interfaces::msg::TrackingReference>::SharedPtr reference_view_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr markers_;
   rclcpp::TimerBase::SharedPtr timer_, watchdog_;
 };
 } // namespace kart_control

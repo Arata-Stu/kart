@@ -1020,3 +1020,15 @@ ros2 launch kart_bringup tracking.launch.py \
 
 通常bringupがtrackingを起動済みなら追加起動しない。TUIの選択または`--tuning`で同じノードを有効化する。
 実行スクリプト追加なし。HDMap表示だけのlaunchは車両・センサー・自己位置推定を起動しない。
+
+
+### Pure Pursuitの参照点をFoxgloveで表示
+
+既存Foxglove Bridgeのallowlistに`/control/tracking_reference`
+（`kart_interfaces/msg/TrackingReference`）と`/control/tracking_markers`
+（`visualization_msgs/msg/MarkerArray`）を追加した。読み取り専用公開で書き込み権限は追加しない。
+設定の正本は`config/visualization/foxglove.yaml`。追加parameterなし。
+Foxgloveの3Dパネルでframeを`map`、topicを`/control/tracking_markers`にすると
+実際の参照点・車両からの矢印・lookaheadの経路長と直線距離を表示できる。
+ノードとQoSの詳細は[kart_control README](../kart_control/README.md#pure-pursuit参照点の表示)を参照。
+allowlistはportable testで検証。ROS配信・実際のFoxglove描画・実車は未確認。

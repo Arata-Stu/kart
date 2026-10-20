@@ -28,7 +28,7 @@
       - '^/operation_mode/state$'
       - '^/bag/status$'
       - '^/system/jetson/diagnostics$'
-      - '^/control/(tracking_cmd|tracking_status|lookahead|speed_diagnostics)$'
+      - '^/control/(tracking_cmd|tracking_status|lookahead|tracking_reference|tracking_markers|speed_diagnostics)$'
       - '^/e2e/(control_cmd|status)$'
       - '^/auto/control_cmd$'
       - '^/vehicle/(control_cmd|trim/state|rc_channels|output_channels|vbec|active_path)$'

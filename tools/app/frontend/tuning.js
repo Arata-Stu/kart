@@ -61,6 +61,11 @@ function render() {
     ? `${mode} · ${s.localized?'自己位置確定':'自己位置未確定'} · ${s.speed_mps==null?'速度不明':s.speed_mps.toFixed(2)+' m/s'} · ${s.apply_issue || '適用可能'}`
     : '未接続・受信停止');
   $('tuning-revision').textContent=`実車 ${s?.revision?.slice(0,10) || '—'} / 候補 ${previewValid()?tuning.preview.revision.slice(0,10):'—'}`;
+  const ref = fresh() ? s?.tracking_reference : null;
+  $('tuning-lookahead').textContent=ref
+    ? `Pure Pursuit: lookahead ${ref.lookahead_m.toFixed(2)} m（経路長） / 参照点まで ${ref.target_distance_m.toFixed(2)} m（直線）`
+    : 'Pure Pursuit参照点: 未受信・無効・受信停止';
+
 }
 action('tuning-connect', async()=> {
   if(tuning.connected){stop();return;}
@@ -125,7 +130,19 @@ export function paintTuning(ctx, project, line) {
     line(lane.lines[p.line_type].points,'#1599df',lane.closed,false,3);
   }
   const s=tuning.status;
-  if(!fresh() || !s?.pose || !s.localized)return;
+  if(!fresh())return;
+  const reference=s?.tracking_reference;
+  if(reference) {
+    line([reference.origin,reference.target],'#efb62d',false,false,2);
+    const target=project(reference.target);
+    ctx.save();
+    ctx.beginPath();ctx.arc(target[0],target[1],7,0,Math.PI*2);
+    ctx.fillStyle='#efb62d';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#745000';ctx.font='12px sans-serif';
+    ctx.fillText(`参照点 · L=${reference.lookahead_m.toFixed(2)} m`,target[0]+12,target[1]-10);
+    ctx.restore();
+  }
+  if(!s?.pose || !s.localized)return;
   line(tuning.trail,'#e78228',false,false,2);
   const p=project([s.pose.x,s.pose.y]), end=project([s.pose.x+Math.cos(s.pose.yaw),s.pose.y+Math.sin(s.pose.yaw)]);
   const yaw=Math.atan2(end[1]-p[1],end[0]-p[0]);
