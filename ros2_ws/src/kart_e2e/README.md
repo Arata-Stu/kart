@@ -1092,3 +1092,14 @@ GUIはこの行を履歴から分離し、現在の進捗だけを固定欄で�
 警告・例外・通常ログは省略せず、raw job logも保持する。コピーは表示中の要約＋最新進捗を対象とする。
 診断用`timing.jsonl`、学習指標`metrics.jsonl`は従来どおり保持し、詳細はそちらで確認する。
 画面更新は最大0.5秒ごと。`--log-interval`は詳細JSONLの記録間隔で、画面更新間隔とは分離する。
+
+### TensorRT向けINT8 biasの扱い
+
+ONNX RuntimeのQ/DQ変換は`QuantizeBias=False`を明示し、Conv/Gemmのbiasを元のFP32のまま保持する。
+ORT既定のINT32 bias＋DequantizeLinearはORTで実行できてもTensorRT 10.16.1がparse時に拒否するため使用しない。
+生成後にQ/DQのzero-pointがINT8かつ0、scaleが正の有限FP32、定数DQ入力がINT8であること、
+元のFP32 biasが値を含めて保持されることを検査する。metadataのquantization.biasへ`fp32_unquantized`を保存する。
+これはFP32入出力やactivation/weightのINT8校正を変更せず、biasだけを浮動小数点に残す。
+旧形式のINT8 ONNXは元のFP32モデルから再校正する。再学習・元ONNXの再exportは不要。
+CPUで旧INT32 bias DQの生成・早期拒否と修正後のConv/ViT-S/Tiny＋ORT推論をテストする。
+TensorRTのparse/build成功は対象NVIDIA GPU上で別途確認する。

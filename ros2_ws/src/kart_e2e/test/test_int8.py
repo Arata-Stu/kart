@@ -1,5 +1,6 @@
 """Real CPU Q/DQ conversion plus mocked GPU orchestration; no hardware claims."""
 import json
+import importlib.util
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,7 +11,7 @@ import pytest
 import torch
 
 from kart_e2e.benchmark_data import DatasetInputs, digest
-from kart_e2e.int8_quantize import quantize
+from kart_e2e.int8_quantize import quantize, validate_trt_qdq
 from kart_e2e.int8_benchmark import benchmark_pair, run, accuracy
 from kart_e2e.model import Policy, backbone
 from kart_e2e.export_onnx import export
@@ -44,6 +45,8 @@ def test_real_qdq_preserves_fp32_contract_and_source(inputs,tmp_path):
     assert q['calibration']['input_sha256'] and len(q['quantized_nodes'])==4
     assert all('head' not in node for node in q['quantized_nodes'])
     graph=onnx.load(output/'model.onnx')
+    validate_trt_qdq(graph,onnx.load(model/'model.onnx'))
+    assert q['bias']=='fp32_unquantized'
     assert graph.graph.input[0].type.tensor_type.elem_type==onnx.TensorProto.FLOAT
     assert graph.graph.output[0].type.tensor_type.elem_type==onnx.TensorProto.FLOAT
     for tensor in graph.graph.initializer:
@@ -138,16 +141,22 @@ def test_evs_raw_count_calibration_contract(tmp_path):
 
 
 @pytest.mark.skipif(not __import__('os').environ.get('KART_DINOV3_REPO'),reason='optional pinned DINO source required')
-def test_real_vit_qdq_static_linear_excludes_control_head(tmp_path):
+@pytest.mark.parametrize("architecture",["dinov3_vitt16","dinov3_vits16"])
+def test_real_vit_qdq_static_linear_excludes_control_head(tmp_path,architecture):
     import os
     torch.set_num_threads(2);torch.manual_seed(42)
-    policy=Policy(backbone(os.environ['KART_DINOV3_REPO'],'dinov3_vitt16'),'steer_only',architecture='dinov3_vitt16')
+    policy=Policy(backbone(os.environ['KART_DINOV3_REPO'],architecture),'steer_only',architecture=architecture)
     model=tmp_path/'model';export(policy,model)
     data=tmp_path/'data';data.mkdir();Image.new('RGB',(212,120),(123,40,90)).save(data/'image.png')
     (data/'metadata.json').write_text('{}')
     (data/'samples.jsonl').write_text(json.dumps(dict(image='image.png',steering=0,throttle=0,stamp_ns=0)))
     meta=quantize(model,data,tmp_path/'int8')
     selected=meta['quantization']['quantized_nodes']
+    graph=onnx.load(tmp_path/'int8/model.onnx')
+    validate_trt_qdq(graph,onnx.load(model/'model.onnx'))
+    bias=next(t for t in graph.graph.initializer if t.name.endswith('patch_embed.proj.bias'))
+    assert bias.data_type==onnx.TensorProto.FLOAT
+    assert not any(node.op_type=='DequantizeLinear' and node.output[0]==bias.name for node in graph.graph.node)
     assert len(selected)>24 and any('qkv' in name for name in selected)
     assert not any('head' in name.lower() for name in selected)
 
@@ -188,3 +197,52 @@ def test_native_runner_cuda_bindings_timing_and_cleanup(tmp_path):
     assert calls.count('cudaFree')==2 and calls.count('cudaEventDestroy')==2
     assert calls.count('cudaStreamDestroy')==1
     assert calls.index('cudaStreamSynchronize')<calls.index('cudaEventElapsedTime')
+
+
+def test_trt_preflight_rejects_int32_bias_dequantize():
+    # Matches the failing policy.encoder.patch_embed.proj.bias_DequantizeLinear.
+    bias=onnx.numpy_helper.from_array(np.array([123],np.int32),'bias_quantized')
+    scale=onnx.numpy_helper.from_array(np.array([.01],np.float32),'bias_scale')
+    zero=onnx.numpy_helper.from_array(np.array([0],np.int32),'bias_zero_point')
+    node=onnx.helper.make_node('DequantizeLinear',[bias.name,scale.name,zero.name],['bias'],name='patch_embed.proj.bias_DequantizeLinear',axis=0)
+    graph=onnx.helper.make_model(onnx.helper.make_graph([node],'int32_bias',[],[],[bias,scale,zero]))
+    with pytest.raises(ValueError,match='INT32'):validate_trt_qdq(graph)
+
+
+def test_bias_quantization_is_disabled_not_only_checked(inputs,tmp_path):
+    from onnxruntime.quantization import quantize_static as real_quantize
+    def capture(*args,**kwargs):
+        assert kwargs['extra_options']['QuantizeBias'] is False
+        return real_quantize(*args,**kwargs)
+    model,data=inputs
+    with patch('kart_e2e.int8_quantize.quantize_static',side_effect=capture):
+        quantize(model,data,tmp_path/'int8')
+    initializers={t.name:t for t in onnx.load(tmp_path/'int8/model.onnx').graph.initializer}
+    for node in onnx.load(model/'model.onnx').graph.node:
+        if node.op_type=='Conv' and len(node.input)>2:
+            assert initializers[node.input[2]].data_type==onnx.TensorProto.FLOAT
+
+
+def test_ort_int32_bias_regression_stops_before_publication(inputs,tmp_path):
+    from onnxruntime.quantization import quantize_static as real_quantize
+    def previous_behavior(*args,**kwargs):
+        kwargs['extra_options']['QuantizeBias']=True
+        return real_quantize(*args,**kwargs)
+    model,data=inputs;output=tmp_path/'bad-int8'
+    with patch('kart_e2e.int8_quantize.quantize_static',side_effect=previous_behavior):
+        with pytest.raises(ValueError,match='INT32'):quantize(model,data,output)
+    assert not output.exists()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available() or importlib.util.find_spec('tensorrt') is None,
+                    reason='NVIDIA CUDA GPU and TensorRT Python required')
+def test_tensorrt_parser_accepts_int8_with_fp32_bias(inputs,tmp_path):
+    import tensorrt as trt
+    model,data=inputs;output=tmp_path/'int8'
+    quantize(model,data,output)
+    logger=trt.Logger(trt.Logger.WARNING)
+    with trt.Builder(logger) as builder:
+        network=builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
+        parser=trt.OnnxParser(network,logger)
+        parsed=parser.parse((output/'model.onnx').read_bytes())
+        assert parsed,'\n'.join(str(parser.get_error(i)) for i in range(parser.num_errors))

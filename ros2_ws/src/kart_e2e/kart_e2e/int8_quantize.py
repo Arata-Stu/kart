@@ -22,6 +22,37 @@ class Reader(CalibrationDataReader):
     def rewind(self): self.index=0
 
 
+def validate_trt_qdq(graph, reference=None):
+    """Reject ORT-valid integer bias DQ and enforce the signed INT8 TRT contract."""
+    tensors={tensor.name:tensor for tensor in graph.graph.initializer}
+    for node in graph.graph.node:
+        if node.op_type not in ('QuantizeLinear','DequantizeLinear'): continue
+        if len(node.input)<3 or node.input[2] not in tensors:
+            raise ValueError(f'INT8 Q/DQ requires an explicit constant zero point: {node.name}')
+        zero=tensors[node.input[2]]
+        if zero.data_type!=onnx.TensorProto.INT8:
+            raise ValueError(f'TensorRT INT8 Q/DQ cannot use INT32/other zero points (including bias): {node.name}')
+        if np.any(onnx.numpy_helper.to_array(zero)):
+            raise ValueError(f'TensorRT requires symmetric zero-point=0: {node.name}')
+        scale=tensors.get(node.input[1])
+        values=onnx.numpy_helper.to_array(scale) if scale is not None else None
+        if values is None or scale.data_type!=onnx.TensorProto.FLOAT or not np.isfinite(values).all() or (values<=0).any():
+            raise ValueError(f'Invalid FP32 positive Q/DQ scale: {node.name}')
+        if node.op_type=='DequantizeLinear' and node.input[0] in tensors:
+            if tensors[node.input[0]].data_type!=onnx.TensorProto.INT8:
+                raise ValueError(f'TensorRT INT8 DequantizeLinear input must be INT8; keep bias FP32: {node.name}')
+    if reference is not None:
+        originals={tensor.name:tensor for tensor in reference.graph.initializer}
+        for node in reference.graph.node:
+            if node.op_type not in ('Conv','Gemm') or len(node.input)<3: continue
+            name=node.input[2]
+            if name not in originals: continue
+            before,after=originals[name],tensors.get(name)
+            if before.data_type!=onnx.TensorProto.FLOAT: continue
+            if after is None or after.data_type!=onnx.TensorProto.FLOAT or not np.array_equal(onnx.numpy_helper.to_array(before),onnx.numpy_helper.to_array(after)):
+                raise ValueError(f'TensorRT calibration must preserve the original FP32 bias: {name}')
+
+
 def quantize(model, calibration, output, *, samples=256, seed=42, evaluation=None):
     model,output=Path(model),Path(output)
     contract,mode=model_contract(model)
@@ -51,16 +82,16 @@ def quantize(model, calibration, output, *, samples=256, seed=42, evaluation=Non
                         activation_type=QuantType.QInt8,weight_type=QuantType.QInt8,per_channel=True,
                         calibrate_method=CalibrationMethod.MinMax,nodes_to_quantize=selected,
                         extra_options={'ActivationSymmetric':True,'WeightSymmetric':True,
-                                       'CalibTensorRangeSymmetric':True})
+                                       'CalibTensorRangeSymmetric':True,
+                                       # ORT defaults to INT32 bias DQ, which TRT rejects.
+                                       'QuantizeBias':False})
         quantized=onnx.load(stage/'model.onnx');onnx.checker.check_model(quantized)
         if not any(n.op_type=='QuantizeLinear' for n in quantized.graph.node):
             raise ValueError('Quantization did not produce Q/DQ nodes')
         for tensor in [*quantized.graph.input,*quantized.graph.output]:
             if tensor.type.tensor_type.elem_type!=onnx.TensorProto.FLOAT:
                 raise ValueError('INT8 conversion changed FP32 I/O')
-        for tensor in quantized.graph.initializer:
-            if tensor.name.endswith('_zero_point') and np.any(onnx.numpy_helper.to_array(tensor)):
-                raise ValueError('TensorRT requires symmetric zero-point=0 quantization')
+        validate_trt_qdq(quantized, graph)
         # CPU ORT preflight checks Q/DQ executability and numerical drift; NOT a GPU speed measurement.
         checked=evaluation or data
         options=ort.SessionOptions();options.intra_op_num_threads=2
@@ -79,6 +110,7 @@ def quantize(model, calibration, output, *, samples=256, seed=42, evaluation=Non
                     ort_comparison='int8_qdq_vs_fp32_cpu_preflight_up_to_8_real_samples',
                     quantization=dict(format='QDQ',precision='int8',method='MinMax',
                                       activation='signed_symmetric_per_tensor',weight='signed_symmetric_per_channel',
+                                      bias='fp32_unquantized',
                                       source_onnx_sha256=source_hash,seed=seed,calibration=data.provenance(),
                                       quantized_nodes=selected,
                                       excluded='head; activation-only attention MatMul; normalization; Softmax'))

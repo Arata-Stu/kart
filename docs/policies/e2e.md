@@ -231,3 +231,7 @@ RGB/EVSの前処理済み入力、凍結時は特徴量キャッシュを読み�
 履歴へはepoch要約を残す。phase/epoch/batch/loss/速度/ETAを同じ行に明示する。
 詳細stage統計はtiming.jsonl、全学習指標はmetrics.jsonlに保存する。
 進捗表示のための追加GPU同期を行わず、警告・例外は隠さない。
+
+TensorRT向けINT8校正ではbiasのINT32 DequantizeLinearを生成しない。
+ORTのQuantizeBias=Falseで元のFP32 biasを保持し、Q/DQ dtype/scale/zero-pointとbias保持を生成直後に検査する。
+ORTでの推論成功だけをTensorRT対応の根拠にせず、parser非対応形式をbuild前に拒否する。
