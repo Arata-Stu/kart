@@ -65,13 +65,17 @@ def main():
     parser = argparse.ArgumentParser(
         description="kart: 収集 / 地図走行 / E2E / offline評価。--mode指定時は非対話。"
     )
-    parser.add_argument("--mode", choices=("collect", "drive", "e2e", "eval"))
+    parser.add_argument("--mode", choices=("collect", "environment", "drive", "e2e", "eval"))
     parser.add_argument("--map-root", type=Path, default=ROOT / "map")
     parser.add_argument("--model-root", type=Path, default=ROOT / "models")
     parser.add_argument("--rgb-fps", choices=("0", "30", "60", "90"))
     parser.add_argument("--infra-fps", choices=("0", "30", "60", "90"))
+    parser.add_argument("--rgb-profile", default="", help="RGB WIDTHxHEIGHTxFPS; 0 disables")
+    parser.add_argument("--infra-profile", default="", help="Infra WIDTHxHEIGHTxFPS; 0 disables")
     for key in ("device", "map-file", "map-dir", "model-dir", "lane-id", "line-type"):
         parser.add_argument("--" + key, default="")
+    parser.add_argument("--tuning", action=argparse.BooleanOptionalAction, default=None,
+                        help="driveでMap Studioの動的調整を有効化（--no-tuningで無効化）")
     parser.add_argument("--record-dir", default=str(ROOT / "record"))
     parser.add_argument(
         "--evs",
@@ -111,7 +115,7 @@ def main():
     if args.no_evs and selected_evs:
         raise ValueError("--no-evsとEVS指定は併用できません")
     args.evs = selected_evs
-    from kart_bringup.mission import discover, hdmap_choices, sensor_parameters
+    from kart_bringup.mission import discover, hdmap_choices, sensor_parameters, camera_config, recording_config
 
     interactive = args.mode is None
     if interactive and not sys.stdin.isatty():
@@ -120,34 +124,32 @@ def main():
     if interactive:
         args.mode = choose(
             "用途",
-            ["collect", "drive", "e2e", "eval"],
+            ["collect", "environment", "drive", "e2e", "eval"],
             lambda m: {
                 "collect": "データ収集 → 後でoffline mapping",
+                "environment": "環境記録（高解像度RGB・左右Infra・Depth・IMU）",
                 "drive": "地図走行（VSLAM + VGL + ライン追従）",
                 "e2e": "E2E（TensorRT、localizationなし）",
                 "eval": "offline bag評価（VO / VIO / 保存map localization・RViz）",
             }[m],
         )
         if args.mode != "eval":
-            sensor = sensor_parameters(config / "sensors/realsense.yaml")
+            sensor = sensor_parameters(camera_config(config, args.mode))
             for kind, key in (
                 ("rgb", "rgb_camera.color_profile"),
                 ("infra", "depth_module.infra_profile"),
             ):
-                if getattr(args, kind + "_fps") is None:
-                    rates = ["30", "60", "90", "0"]
-                    default = rates.index(sensor[key].split("x")[-1])
-                    setattr(
-                        args,
-                        kind + "_fps",
-                        choose(
-                            kind.upper() + " Hz（機種の対応profileを使用）",
-                            rates,
-                            label=lambda v: "なし" if v == "0" else v,
-                            default=default,
-                        ),
-                    )
-            if args.mode == "drive" and args.infra_fps == "0":
+                if getattr(args, kind + "_fps") is None and not getattr(args, kind + "_profile"):
+                    from kart_bringup.mission import CAMERA_PROFILES
+                    profiles = list(dict.fromkeys([sensor[key], *CAMERA_PROFILES, "0"]))
+                    enabled = sensor["enable_color" if kind == "rgb" else "enable_infra1"]
+                    setattr(args, kind + "_profile", choose(
+                        ("Infra（有効時はDepthも同じprofile）" if kind == "infra" and args.mode == "environment" else kind.upper()) + " 解像度 × FPS（USB3 D455候補）",
+                        profiles,
+                        label=lambda v: "なし" if v == "0" else v.replace("x", " × "),
+                        default=profiles.index(sensor[key] if enabled else "0"),
+                    ))
+            if args.mode == "drive" and (args.infra_fps == "0" or args.infra_profile == "0"):
                 raise ValueError("VSLAM/VGLにはInfraが必要です（なしは選択できません）")
             args.evs = not args.no_evs and (args.evs or choose(
                 "EVS（Tensor・画像・RAW記録）",
@@ -217,6 +219,12 @@ def main():
             args.model_dir = "" if vslam_only else args.model_dir or str(
                 choose("VGLモデル（実行GPU用engine）", models)
             )
+        if args.mode == "drive" and args.tuning is None:
+            import yaml
+            default_tuning = yaml.safe_load((config / "hdmap/hdmap.yaml").read_text())["/**/hdmap_server"]["ros__parameters"]["tuning_enabled"]
+            args.tuning = choose("Map Studio 動的調整", [False, True],
+                                 lambda enabled: "有効（HDMap・自己位置表示、停止中に編集を適用）" if enabled else "無効（通常走行）",
+                                 default=int(default_tuning))
         if args.mode == "e2e":
             candidates = sorted(
                 set(
@@ -233,11 +241,23 @@ def main():
             )
         elif args.run_name is None:
             args.run_name = input("run_name [run] > ").strip() or "run"
-    if args.mode not in ('collect', 'drive') and args.auto_fixed_throttle is not None:
-        raise ValueError('--auto-fixed-throttleは収集用（ステア手動）です。collect/driveで指定してください。E2Eは--e2e-fixed-throttleを使用します')
+    if args.tuning is not None and args.mode != 'drive':
+        raise ValueError('--tuning / --no-tuningはdrive専用です')
+    tuning_enabled = False
+    tuning_map_dir = ''
+    if args.mode == 'drive':
+        import yaml
+        settings = yaml.safe_load((config / 'hdmap/hdmap.yaml').read_text())["/**/hdmap_server"]["ros__parameters"]
+        tuning_enabled = settings['tuning_enabled'] if args.tuning is None else args.tuning
+        if tuning_enabled:
+            from kart_bringup.tuning import map_root
+            tuning_map_dir = map_root(args.map_file, args.map_dir)
+        print('Map Studio 動的調整: ' + ('有効 / 地図: ' + tuning_map_dir if tuning_enabled else '無効'))
+    if args.mode not in ('collect', 'environment', 'drive') and args.auto_fixed_throttle is not None:
+        raise ValueError('--auto-fixed-throttleは収集用（ステア手動）です。collect/environment/driveで指定してください。E2Eは--e2e-fixed-throttleを使用します')
     if args.e2e_fixed_throttle is not None and args.mode != 'e2e':
         raise ValueError('--e2e-fixed-throttleはe2e専用です')
-    if interactive and args.mode in ('collect', 'drive') and args.auto_fixed_throttle is None:
+    if interactive and args.mode in ('collect', 'environment', 'drive') and args.auto_fixed_throttle is None:
         from kart_bringup.configuration import load
         _, modules = load(config / 'bringup.yaml')
         fixed = modules['joy_manager']['effective']['auto_fixed_throttle']
@@ -275,7 +295,8 @@ def main():
             args.evs_bias_file = bias_selection(args.evs_bias_file)
         print(f"EVS: {overrides}; packet topic OFF; configs={paths}")
     sensors = sensor_parameters(
-        config / "sensors/realsense.yaml", args.rgb_fps or "", args.infra_fps or ""
+        camera_config(config, args.mode), args.rgb_fps or "", args.infra_fps or "",
+        args.rgb_profile, args.infra_profile
     )
     if args.mode in ("drive", "eval") and not fresh:
         if not sensors["enable_infra1"]:
@@ -354,6 +375,8 @@ def main():
         "recovery": args.recovery,
         "auto_fixed_throttle": None if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle),
         "e2e_fixed_throttle": None if args.e2e_fixed_throttle is None else str(args.e2e_fixed_throttle),
+        "rgb_profile": args.rgb_profile,
+        "infra_profile": args.infra_profile,
         "rgb_fps": args.rgb_fps,
         "infra_fps": args.infra_fps,
         "enable_bridge": str(not args.no_bridge).lower(),
@@ -375,6 +398,8 @@ def main():
                 for k in ("map_file", "map_dir", "model_dir", "lane_id", "line_type")
             }
         )
+    if args.mode == "drive":
+        values.update(tuning_enabled=str(tuning_enabled).lower(), tuning_map_dir=tuning_map_dir)
     if args.mode == "e2e":
         values["e2e_model_dir"] = args.e2e_model_dir
     launch = "mission.launch.py"
@@ -418,6 +443,12 @@ def main():
             if sensors["enable_infra1"]
             else "OFF",
         )
+    if args.mode == "environment":
+        print("環境記録: Depth Z16:", sensors["depth_module.depth_profile"],
+              "IMU: accel=", sensors["enable_accel"], "gyro=", sensors["enable_gyro"],
+              "unite_imu_method=", sensors["unite_imu_method"])
+        print("センサ設定:", camera_config(config, args.mode))
+        print("録画設定:", recording_config(config, args.mode, args.evs))
     print(shlex.join(command))
     if fresh:
         print("mapを読み込まず新規SLAMで追跡。RViz: 左右画像・観測点・ランドマーク・軌跡。終了はCtrl-C。")

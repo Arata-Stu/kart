@@ -6,6 +6,7 @@ import { poll } from "./jobs.js";
 import "./dialogs.js";
 import "./line_tools.js";
 import "./simulation.js";
+import "./tuning.js";
 import "./lanes.js";
 import "./obstacles.js";
 import "./copies.js";

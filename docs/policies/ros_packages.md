@@ -388,3 +388,15 @@ CLI/launchの旧`manual_fixed_throttle`は`auto_fixed_throttle`へ変更した�
 TUIの「AUTOスロットル」で通常／固定を選ぶ。collect/driveで利用可能。E2Eでは収集用の固定設定を無効化し、モデルのステア＋E2E専用固定スロットルを使用する。
 RGB/EVS教師抽出はbag内の固定AUTO有効設定を自動検出する。固定収集bagでは固定AUTOだけを採用し、MANUALの復帰・調整区間を全て除外する。通常bagは従来どおりMANUALだけを採用する。
 ROS結合・実車動作は未確認。portable testで固定出力、直接切替、異常ラッチ、HOST handshakeを検証する。
+
+## カメラ記録プロファイルの選択
+
+bringupの対話選択は解像度とFPSを組にした候補一覧とする。
+高解像度の環境記録も既存collectモードを使い、別の走行・録画制御経路を作らない。
+未指定時の静的YAMLは保持し、明示profileと同一streamの旧FPS指定は競合として拒否する。
+候補一覧は機器の対応保証ではなく、実際の採用profileはドライバ起動ログで確認する。
+
+環境そのものの記録には`environment`モードを用意し、RGB・左右Infra・Depth・IMU・
+校正・TFを保存する。通常collectの負荷や記録対象を暗黙に変えず、環境用の完全な
+センサ／bag YAMLを選択する。DepthとInfraが有効なら同一センサのprofileを揃える。
+録画の開始・停止は従来のJoy操作とし、起動時に自動録画やAUTO遷移を行わない。

@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict';
+const elements = new Map();
+function element(id) {
+  if (!elements.has(id)) elements.set(id, {value:'', hidden:false, disabled:false, textContent:'',
+    addEventListener(name, fn){this[name]=fn;}});
+  return elements.get(id);
+}
+globalThis.document = {getElementById:element};
+globalThis.CustomEvent = class extends Event {constructor(name,{detail}){super(name);this.detail=detail;}};
+globalThis.setInterval = () => 1;
+globalThis.setTimeout = () => 1;
+globalThis.clearTimeout = () => {};
+let now=10000;
+Date.now=()=>now;
+const {state, emit} = await import('../frontend/api.js');
+const {tuning, paintTuning} = await import('../frontend/tuning.js');
+const flush=()=>new Promise(resolve=>setImmediate(resolve));
+state.id='course'; state.laneId='main'; state.dirty=false;
+state.config={connection:{user:'kart',host:'192.168.1.2',port:2222}};
+state.doc={revision:1,lanes:[{id:'main',closed:false,lines:{customline:{points:[[0,0],[1,0]]}}}]};
+element('tuning-line').value='customline'; element('tuning-speed').value='0';
+const active={document:state.doc,lane_id:'main',line_type:'customline'};
+const calls=[];
+globalThis.fetch=async(url, options)=> {
+  calls.push([url,JSON.parse(options.body)]);
+  const result=url.endsWith('/prepare') ? {revision:'preview',document:structuredClone(state.doc),lane_id:'main',line_type:'customline',centerline_speed_mps:0}
+    : {map_id:'map-a',revision:url.endsWith('/apply')?'r2':'r1',mode:3,speed_mps:0,localized:true,pose:{x:1,y:2,yaw:0},active,apply_issue:'',can_rollback:true};
+  return {ok:true,json:async()=>result};
+};
+emit('ready'); await flush();
+assert.match(element('tuning-target').textContent,/kart@192.168.1.2:2222/);
+await element('tuning-connect').click(); await flush();
+assert.equal(tuning.connected,true);
+assert.equal(calls[0][1].connection.port,2222);
+await element('tuning-preview').click(); await flush();
+assert.equal(element('tuning-apply').disabled,false);
+let arrows=0, lines=[];
+const ctx=new Proxy({}, {get:(_,name)=>()=>{if(name==='fill')arrows++;},set:()=>true});
+paintTuning(ctx,p=>p,(...args)=>lines.push(args));
+assert.equal(arrows,1);
+assert.ok(lines.some(args=>args[1]==='#ffffff'));
+assert.ok(lines.some(args=>args[1]==='#1599df'));
+now+=3100;
+paintTuning(ctx,p=>p,()=>{});
+assert.equal(arrows,1,'stale pose must not be drawn');
+emit('status'); await flush();
+assert.equal(element('tuning-apply').disabled,true);
+now-=3100;
+state.dirty=true; emit('document'); await flush();
+assert.equal(tuning.preview,null);
+assert.equal(element('tuning-apply').disabled,true);
+state.dirty=false; emit('document'); await flush();
+await element('tuning-preview').click(); await flush();
+await element('tuning-apply').click(); await flush();
+assert.equal(tuning.status.revision,'r2');
+assert.equal(calls.at(-1)[1].expected_revision,'r1');
+assert.equal(calls.at(-1)[0],'/api/tuning/apply');
+emit('connection'); await flush();
+assert.equal(tuning.connected,false);
+assert.equal(tuning.active,null);
+assert.equal(element('tuning-apply').disabled,true);
+assert.ok(calls.every(([url])=>url.startsWith('/api/tuning/')));
+console.log('Tuning connection reuse, preview guards, stale pose hiding and revisioned apply passed');

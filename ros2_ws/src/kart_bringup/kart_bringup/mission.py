@@ -16,7 +16,30 @@ def boolean(value):
     return str(value).lower() == "true"
 
 
-def sensor_parameters(path, rgb_fps="", infra_fps=""):
+# Curated USB3 D455 candidates; actual availability depends on device/firmware.
+# Source: Intel D400 Series Datasheet (October 2024), D450/D455 USB3 formats.
+# https://www.intelrealsense.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf
+CAMERA_PROFILES = (
+    "424x240x30", "424x240x60", "424x240x90",
+    "640x480x30", "640x480x60", "848x480x30", "848x480x60",
+    "848x480x90", "1280x720x15", "1280x720x30", "1280x800x30",
+)
+
+
+def camera_config(root, mode):
+    """Select the full static sensor config, shared by CLI and launch."""
+    return Path(root) / "sensors" / (
+        "realsense_environment.yaml" if mode == "environment" else "realsense.yaml"
+    )
+
+
+def recording_config(root, mode, evs=False):
+    suffix = "_environment" if mode == "environment" else ""
+    suffix += "_openeb" if evs else ""
+    return Path(root) / "recording" / f"bag_manager{suffix}.yaml"
+
+
+def sensor_parameters(path, rgb_fps="", infra_fps="", rgb_profile="", infra_profile=""):
     params = yaml.safe_load(Path(path).read_text())["/**/realsense"]["ros__parameters"]
     params = dict(params)
     for stream, value, key, flags in (
@@ -37,6 +60,23 @@ def sensor_parameters(path, rgb_fps="", infra_fps=""):
             params[key] = f"{width}x{height}x{int(value)}"
         for flag in flags:
             params[flag] = int(value) != 0
+    for stream, value, fps, key, flags in (
+        ("RGB", rgb_profile, rgb_fps, "rgb_camera.color_profile", ("enable_color",)),
+        ("Infra", infra_profile, infra_fps, "depth_module.infra_profile", ("enable_infra1", "enable_infra2")),
+    ):
+        if not value:
+            continue
+        if str(fps) != "":
+            raise ValueError(f"{stream}: profile and FPS cannot both be specified")
+        if value != "0" and value not in CAMERA_PROFILES:
+            raise ValueError(f"{stream}: unsupported profile selection: {value}")
+        if value != "0":
+            params[key] = value
+        for flag in flags:
+            params[flag] = value != "0"
+    # Depth and Infra share the D455 stereo sensor. Keep one capture profile.
+    if params["enable_depth"] and (params["enable_infra1"] or params["enable_infra2"]):
+        params["depth_module.depth_profile"] = params["depth_module.infra_profile"]
     return params
 
 
@@ -80,7 +120,7 @@ def composition(path, mode, overrides=None):
         type(v) is not bool for v in selected.values()
     ):
         raise ValueError("Invalid mode flags")
-    if mode == "collect" and any(selected.values()):
+    if mode in ("collect", "environment") and any(selected.values()):
         raise ValueError("Collection must not start localization/tracking")
     cfg.update(selected)
     return cfg

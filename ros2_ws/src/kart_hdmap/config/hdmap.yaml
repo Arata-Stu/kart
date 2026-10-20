@@ -1,5 +1,8 @@
 /**/hdmap_server:
   ros__parameters:
+    tuning_enabled: false  # Optional loopback tuning endpoint, TCP 8782
+    tuning_map_dir: ""  # Same bundle root used for localization
+    tuning_tracking_frame: rear_axle  # Vehicle pose frame, no TF publication
     map_file: ""  # Required absolute map.json or exported hd_map.yaml
     frame_id: map  # Must match file. Never relabel or transform coordinates.
     lane_id: ""  # Empty: all markers, no selected paths

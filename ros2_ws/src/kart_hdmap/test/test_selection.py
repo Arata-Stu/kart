@@ -75,3 +75,36 @@ class SelectionTest(unittest.TestCase):
             self.assertFalse(result.successful)
             self.assertEqual(self.node.line_type, "centerline")
             publish.assert_not_called()
+
+    def test_tuning_replace_publishes_only_complete_transaction(self):
+        from kart_hdmap.tuning_bridge import TuningBridge
+        bridge = TuningBridge.__new__(TuningBridge)
+        bridge.node = self.node
+        candidate = dict(document={"frame_id":"map", "lanes":[], "obstacles":[]},
+                         lane_id='next', line_type='customline', centerline_speed_mps=.4,
+                         speed_override_mps=-1.)
+        seen = []
+        with patch.object(self.node, 'publish', side_effect=lambda: seen.append(
+                (self.node.document, self.node.selected, self.node.line_type,
+                 self.node.runtime_centerline_speed))):
+            bridge.replace(candidate)
+        self.assertEqual(seen, [(candidate['document'], 'next', 'customline', .4)])
+        self.assertEqual(self.node.get_parameter('line_type').value, 'customline')
+        self.assertFalse(self.node.tuning_transaction)
+
+    def test_tuning_parameter_rejection_keeps_previous_map(self):
+        from kart_hdmap.tuning_bridge import TuningBridge
+        bridge = TuningBridge.__new__(TuningBridge)
+        bridge.node = self.node
+        old = self.node.document
+        self.node.add_on_set_parameters_callback(
+            lambda _: SetParametersResult(successful=False, reason='reject tuning'))
+        with patch.object(self.node, 'publish') as publish:
+            with self.assertRaises(ValueError):
+                bridge.replace(dict(document={'changed':True}, lane_id='next',
+                                    line_type='customline', centerline_speed_mps=.4,
+                                    speed_override_mps=-1.))
+            publish.assert_not_called()
+        self.assertIs(self.node.document, old)
+        self.assertEqual(self.node.line_type, 'centerline')
+        self.assertFalse(self.node.tuning_transaction)

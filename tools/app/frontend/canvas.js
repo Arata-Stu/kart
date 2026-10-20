@@ -1,3 +1,4 @@
+import { paintTuning } from "./tuning.js";
 import { placementPreview } from "./placement.js";
 import { paintOccupancy } from "./occupancy.js";
 import { centers, compatible, movePair, appendPair } from "./paired.js";
@@ -381,6 +382,7 @@ export function draw() {
             line(data.points, "#119caa", preview.closed, true, 2);
         }
       }
+      paintTuning(ctx, project, line);
       const target =
         state.step === "bounds"
           ? state.target
@@ -413,6 +415,7 @@ export function draw() {
     ctx.fillText(`${spacing.toPrecision(1)} m`, width - 25, height - 36);
   });
 }
+let tuningPanelOpen = false;
 new ResizeObserver(() => {
   const r = canvas.getBoundingClientRect(),
     dpr = devicePixelRatio || 1;
@@ -421,6 +424,11 @@ new ResizeObserver(() => {
   canvas.width = width * dpr;
   canvas.height = height * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const opened = document.querySelector('.tuning-panel').open;
+  if (opened !== tuningPanelOpen) {
+    tuningPanelOpen = opened;
+    fit();
+  }
   invalidate();
 }).observe(canvas);
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -555,3 +563,5 @@ on("loaded", () => {
   hover = null;
   fit();
 });
+
+on("tuning", draw);

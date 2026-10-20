@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kart_bringup.mission import composition, discover, sensor_parameters
+from kart_bringup.mission import composition, discover, sensor_parameters, camera_config, recording_config
 
 PACKAGE = Path(__file__).resolve().parents[1]
 ROOT = PACKAGE.parents[2]
@@ -61,6 +61,55 @@ class MissionTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             sensor_parameters(path, "nan", "")
+
+    def test_resolution_profiles_and_conflicts(self):
+        path = CONFIG / "sensors/realsense.yaml"
+        params = sensor_parameters(path, rgb_profile="1280x720x30", infra_profile="0")
+        self.assertEqual(params["rgb_camera.color_profile"], "1280x720x30")
+        self.assertTrue(params["enable_color"])
+        self.assertFalse(params["enable_infra1"])
+        self.assertFalse(params["enable_infra2"])
+        self.assertEqual(params["depth_module.infra_profile"], "424x240x60")
+        for kwargs in ({"rgb_profile": "1280x720x90"},
+                       {"rgb_profile": "1280x720x30", "rgb_fps": "30"},
+                       {"infra_profile": "0", "infra_fps": "0"}):
+            with self.assertRaises(ValueError):
+                sensor_parameters(path, **kwargs)
+
+    def test_environment_depth_imu_and_recording_contract(self):
+        import yaml
+        cfg = composition(CONFIG / "mission.yaml", "environment")
+        self.assertFalse(any(cfg[k] for k in ("localization", "tracking", "e2e")))
+        camera = camera_config(CONFIG, "environment")
+        params = sensor_parameters(camera)
+        self.assertEqual(params["rgb_camera.color_profile"], "1280x720x30")
+        self.assertTrue(params["enable_depth"])
+        self.assertEqual(params["depth_module.depth_format"], "Z16")
+        self.assertTrue(params["enable_accel"])
+        self.assertTrue(params["enable_gyro"])
+        self.assertEqual(params["unite_imu_method"], 2)
+        changed = sensor_parameters(camera, infra_profile="640x480x60")
+        self.assertEqual(changed["depth_module.depth_profile"], "640x480x60")
+        self.assertEqual(sensor_parameters(camera, infra_profile="0")["depth_module.depth_profile"], "848x480x30")
+        for evs in (False, True):
+            bag = yaml.safe_load(recording_config(CONFIG, "environment", evs).read_text())["/**/kart_bag_manager"]["ros__parameters"]
+            for topic in ("realsense/depth/image_rect_raw", "realsense/depth/camera_info",
+                          "realsense/color/image_raw", "realsense/infra1/image_rect_raw",
+                          "realsense/infra2/image_rect_raw", "realsense/imu",
+                          "realsense/accel/sample", "realsense/gyro/sample", "/tf_static"):
+                self.assertIn(topic, bag["topics"])
+            self.assertEqual(bool(bag["raw_recording_driver_node"]), evs)
+        normal = sensor_parameters(camera_config(CONFIG, "collect"))
+        self.assertFalse(normal["enable_depth"])
+
+    def test_environment_cli_dry_run(self):
+        result = subprocess.run([sys.executable, str(ROOT / "scripts/lib/bringup.py"),
+                                 "--mode", "environment", "--dry-run"],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("mode:=environment", result.stdout)
+        self.assertIn("Depth Z16: 848x480x30", result.stdout)
+        self.assertIn("bag_manager_environment.yaml", result.stdout)
 
     def test_discovery_excludes_trash_pending_symlinks_and_malformed(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -208,6 +257,8 @@ class MissionCompositionTests(unittest.TestCase):
             }
             values.update(
                 mode="collect",
+                rgb_profile="1280x720x30",
+                infra_profile="",
                 auto_fixed_throttle="0.10",
                 enable_bridge="false",
                 create_sensor_container="false",
@@ -225,6 +276,15 @@ class MissionCompositionTests(unittest.TestCase):
             vehicle_args = lu.include.call_args_list[-1].kwargs['launch_arguments']
             self.assertEqual(vehicle_args['auto_fixed_throttle'], '0.10')
             lu.component_container.assert_not_called()
+            lu.include.reset_mock()
+            lu.include.reset_mock()
+            args.mode = "environment"
+            module.add_mission(args)
+            camera_args = lu.include.call_args_list[0].kwargs["launch_arguments"]
+            self.assertTrue(camera_args["camera_config"].endswith("realsense_environment.yaml"))
+            vehicle_args = lu.include.call_args_list[1].kwargs["launch_arguments"]
+            self.assertTrue(vehicle_args["bag_config"].endswith("bag_manager_environment.yaml"))
+            self.assertEqual(len(lu.include.call_args_list), 2)
             lu.include.reset_mock()
             args.mode = "drive"
             args.lane_id = "lane_001"
@@ -254,6 +314,8 @@ class MissionCompositionTests(unittest.TestCase):
             self.assertEqual(localization["vslam_container"], "/external/sensors")
             self.assertEqual(localization["create_vslam_container"], "false")
             self.assertEqual(localization['multicam_mode'],'2')
+            camera_args = lu.include.call_args_list[0].kwargs["launch_arguments"]
+            self.assertEqual(camera_args["rgb_profile"], "1280x720x30")
             lu.component_container.assert_not_called()
             lu.include.reset_mock()
             args.mode = "e2e"
@@ -278,6 +340,7 @@ class MissionCompositionTests(unittest.TestCase):
             lu.include.reset_mock()
             args.enable_evs = 'true'
             args.evs_tensor_config = '/model/openeb.yaml'
+            args.rgb_profile = ''
             args.rgb_fps = '0'
             with (
                 patch('kart_e2e.contract.model_contract'),

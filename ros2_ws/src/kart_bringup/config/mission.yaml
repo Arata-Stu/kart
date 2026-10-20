@@ -7,6 +7,10 @@ enable_foxglove: false
 enable_bridge: true
 e2e_drive_enabled: true  # Decoder may publish only while vehicle mode is AUTO
 modes:
+  environment:
+    localization: false
+    tracking: false
+    e2e: false
   collect:
     localization: false
     tracking: false

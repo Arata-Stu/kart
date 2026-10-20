@@ -62,7 +62,11 @@ def csv_line(root, relative, kind):
 
 def load(path, frame_id="map"):
     path = Path(path).expanduser().resolve(strict=True)
-    doc = read_document(path)
+    return normalize(read_document(path), frame_id, path.parent)
+
+
+def normalize(doc, frame_id="map", root=None):
+    """Validate an in-memory Studio document or a disk export."""
     if not isinstance(doc, dict):
         raise TypeError("HDMap must be an object")
     if doc.get("schema") != "kart.hdmap.v2":
@@ -106,7 +110,7 @@ def load(path, frame_id="map"):
         }
         data = (
             {
-                k: csv_line(path.parent, v, k)
+                k: csv_line(root, v, k)
                 for k, v in raw.get("offline_lines", {}).items()
                 if k in KINDS
             }

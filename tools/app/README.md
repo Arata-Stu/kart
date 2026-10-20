@@ -819,3 +819,39 @@ CLIは`--ram-preload` / `--no-ram-preload`。詳細はkart_e2e READMEを参照�
 詳細CUDA/stage計測は実験内のtiming.jsonlへ保持する。
 「詳細計測ログの間隔」はJSONLの記録頻度で、画面更新は最大0.5秒ごと。
 警告・例外は通常ログに残し、コピーは画面の履歴＋最新進捗。元のjob logも保持する。
+
+## HDMap・自己位置を見ながら現場調整
+
+地図画面のキャンバス上部に「実車調整」を追加した。接続先は既存「転送」の
+IPプリセット・SSHユーザー・portを共用する。新しい接続設定や車両操作UIはない。
+
+1. 地図一式を既存の「転送」でJetsonへ送り、同じ地図で自己位置推定を起動する。
+2. Jetsonで`bash scripts/bringup.sh` → `drive`を選び、通常の地図・モデル選択後に
+   「Map Studio 動的調整」を有効にする。調整用地図のパスは選択済み地図から自動設定され、YAML編集は不要。
+   起動例は[kart_bringup README](../../ros2_ws/src/kart_bringup/README.md#map-studioからの現場調整)。
+   JetsonのSSH先ホストから127.0.0.1:8782へ到達できる必要があり、Dockerはhost networkingを使う。
+3. Notebookで同じ地図を開き、「自己位置を接続」。確定した位置・向き・直近1,200点の軌跡を橙で表示する。
+4. 既存の境界／Custom waypoint／区間速度を編集し、ライン生成して保存する。
+5. Center／Race／Customを選び「保存済み編集をプレビュー」。青が候補、白が実車の適用済みライン。
+   Centerのみパネルの一定速度を使用し、Race/Customは既存エディターで生成した速度profileを使用する。
+6. STOP・1秒以上の停車後に「停止中に適用」。Jetsonの適用版を確認し、既存操作系でAUTOへ戻す。
+   問題があればSTOP後に「直前の版へ」で戻せる。
+
+地図一致はcuvslam_mapの内容（なければsnapshot.json）で確認する。geometry編集では一致は変わらない。
+資産hashは接続中に再計算しない。自己位置推定用地図を置換した場合はStudio・HDMapノードを再起動する。
+約1 Hzの通信は位置・状態とrevisionだけ。HDMap全体は初回・適用版変更時のみ取得し、
+点群・画像の常時転送やJetson側のライン最適化は行わない。
+適用データは3 MiB・生成点20,000点まで。通信失敗時に適用を自動再送しない。
+未保存編集・地図不一致・古い候補・適用元版の競合・STOP/速度情報不足は拒否する。
+画面切断は車両を停止しない。停止・再開は既存の操作系で行う。
+編集の正本はNotebookのmap.json。Jetsonへの適用はメモリ上のみで、再起動時は元の起動地図へ戻る。
+
+検証コマンド:
+
+```bash
+PYTHONPATH=tools/app:ros2_ws/src/kart_mapping python3 -m unittest discover -s tools/app/tests -p test_tuning.py -v
+PYTHONPATH=ros2_ws/src/kart_hdmap python3 -m unittest discover -s ros2_ws/src/kart_hdmap/test -v
+node --test tools/app/tests/test_tuning.mjs
+```
+
+ROS結合・Jetsonの負荷・実車動作の確認は別途必要。

@@ -1,4 +1,4 @@
-"""Read-only HDMap server. No TF broadcaster or online planner."""
+"""HDMap server with optional stop-gated tuning; no TF or online planner."""
 
 import json
 import math
@@ -25,6 +25,9 @@ class HDMapNode(Node):
         super().__init__("hdmap_server")
         defaults = {
             "map_file": "",
+            "tuning_enabled": False,
+            "tuning_map_dir": "",
+            "tuning_tracking_frame": "rear_axle",
             "frame_id": "map",
             "lane_id": "",
             "line_type": "centerline",
@@ -84,7 +87,17 @@ class HDMapNode(Node):
         self.add_on_set_parameters_callback(self.validate_parameters)
         self.add_post_set_parameters_callback(self.apply_parameters)
         self.get_logger().info("HDMap settings: " + json.dumps(self.settings))
+        self.runtime_centerline_speed = self.settings["centerline_speed_mps"]
+        self.tuning = None
         self.publish()
+        if self.settings["tuning_enabled"]:
+            from .tuning_bridge import TuningBridge
+            self.tuning = TuningBridge(self)
+
+    def destroy_node(self):
+        if self.tuning is not None:
+            self.tuning.close()
+        return super().destroy_node()
 
     def validate_parameters(self, parameters):
         for parameter in parameters:
@@ -111,7 +124,8 @@ class HDMapNode(Node):
                 changed = True
         if changed:
             self.line_type = self.settings["line_type"]
-            self.publish()
+            if not getattr(self, "tuning_transaction", False):
+                self.publish()
 
     def choose_line(self, msg):
         result = self.set_parameters_atomically(
@@ -144,7 +158,7 @@ class HDMapNode(Node):
         stamp = self.get_clock().now().to_msg()
         lane = select(self.document, self.selected)
         reference = reference_message(
-            lane, self.line_type, self.settings["centerline_speed_mps"],
+            lane, self.line_type, self.runtime_centerline_speed,
             self.document["frame_id"], stamp,
         )
         reference.speeds = override_speeds(

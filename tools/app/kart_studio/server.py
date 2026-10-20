@@ -18,6 +18,7 @@ from .mapping import Mapping, local_records
 from .maps import Maps
 from .storage import atomic_json, name, read_json, within
 from .transfers import Transfers, profile
+from .tuning import Tuning
 
 
 class Studio:
@@ -40,6 +41,7 @@ class Studio:
         self.mapping = Mapping(repo, self.records, self.maps)
         self.transfers = Transfers(self.records, self.maps)
         self.learning = Learning(repo, base, self.records, self.state)
+        self.tuning = Tuning(self.maps)
         self.profile_file = self.state / "connection.json"
 
     def connection_defaults(self):
@@ -129,6 +131,10 @@ class Studio:
         raise KeyError("Not found")
 
     def post(self, path, b):
+        if path == "/api/tuning/prepare":
+            return self.tuning.prepare(b)
+        if path in ("/api/tuning/status", "/api/tuning/apply", "/api/tuning/rollback"):
+            return self.tuning.request(b, path.rsplit("/", 1)[1])
         key = b.get("id", "")
         if path in ("/api/e2e/trash", "/api/e2e/restore"):
             from . import e2e_trash

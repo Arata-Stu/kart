@@ -14,10 +14,10 @@ def setup(context):
         Path(get_package_share_directory("kart_bringup")) / "config/hdmap/hdmap.yaml"
     )
     overrides = {}
-    for key in ("map_file", "lane_id", "line_type", "use_sim_time"):
+    for key in ("map_file", "lane_id", "line_type", "use_sim_time", "tuning_enabled", "tuning_map_dir", "tuning_tracking_frame"):
         value = LaunchConfiguration(key).perform(context)
         if value:
-            if key == "use_sim_time":
+            if key in ("use_sim_time", "tuning_enabled"):
                 if value.lower() not in ("true", "false"):
                     raise ValueError("use_sim_time must be true or false")
                 value = value.lower() == "true"
@@ -37,6 +37,9 @@ def setup(context):
 def generate_launch_description():
     return LaunchDescription(
         [
+            DeclareLaunchArgument("tuning_enabled", default_value=""),
+            DeclareLaunchArgument("tuning_map_dir", default_value=""),
+            DeclareLaunchArgument("tuning_tracking_frame", default_value=""),
             DeclareLaunchArgument("map_file", default_value=""),
             DeclareLaunchArgument("lane_id", default_value=""),
             DeclareLaunchArgument(

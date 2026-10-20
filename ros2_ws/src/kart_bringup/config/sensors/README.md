@@ -120,3 +120,14 @@ Bias配置先はproject rootの`bias/evs/`。運用YAMLのbias_file既定は空�
 起動時overrideのevs_bias_fileは空ならYAML保持、@defaultならカメラ既定、
 それ以外は検証した.bias絶対パス。evs_backend/evs_serialも明示時のみ上書きする。
 `bringup.sh`のTUIでdecoderとbiasを選択できる。
+
+`rgb_profile` / `infra_profile` launch引数（空=YAML保持、`0`=OFF）は
+解像度とFPSを一括指定する。例：`rgb_profile:=1280x720x30`。
+候補一覧・対応条件は[bringup README](../../README.md#解像度とfpsの明示選択)を参照。
+同一streamの`*_fps`との併用は拒否する。既定YAMLの解像度は変更しない。
+
+環境記録用の完全な設定は`realsense_environment.yaml`。
+`mission mode:=environment`でのみ選択し、RGB 1280×720×30・Depth/Infra 848×480×30・
+加速度250Hz・gyro200Hz・線形補間統合IMUを有効にする。
+DepthはZ16、未整列、点群なし、emitter無効。Infra profileの変更はDepthにも適用する。
+通常の`realsense.yaml`はDepth無効のまま。

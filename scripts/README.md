@@ -242,3 +242,48 @@ bash scripts/e2e_sweep.sh --summarize /path/to/sweep
 途中成果物はinterrupted日時ディレクトリへ退避する。同じ出力への上書き・同時実行は拒否する。
 重み・manifest/metadataのhash、入力ファイルのsize/mtime、実装のhashが変わった場合は同じ比較への追記を拒否する。
 既定12条件×100epochは、25秒/epochなら学習・検証だけで概算約8時間。実際はbatchで異なる。
+
+### 高解像度で環境を記録する
+
+`bash scripts/bringup.sh`のRGB / Infra選択は「解像度 × FPS」のプロファイル一覧。
+通常のYAML既定（RGB 424×240×30、Infra 424×240×60）を最初に表示する。
+用途は従来の`collect`を使用し、記録はR1開始・L1停止のまま。
+
+```bash
+bash scripts/bringup.sh --mode collect --rgb-profile 1280x720x30 --infra-profile 0
+```
+
+RGBだけ高解像度でbagへ記録する例。Infraも必要なら`--infra-profile 424x240x60`などを指定する。
+候補は424×240（30/60/90）、640×480（30/60）、848×480（30/60/90）、
+1280×720（15/30）、1280×800（30）とOFF（`0`）。
+USB3 D455向けの候補であり、全stream・機種・firmwareでの対応保証ではない。
+対応状況はRealSense起動ログの実際のstream profileで確認する。
+高解像度ではUSB帯域とbag容量が増加する。
+旧`--rgb-fps` / `--infra-fps`も利用できるが、同一streamのprofile指定との併用はエラー。
+未指定の非対話起動はYAMLを保持する。
+
+### 環境記録モード（Depth・IMU付き）
+
+```bash
+bash scripts/bringup.sh --mode environment
+# カメラを手持ちで記録する場合は --no-bridge を追加可能
+```
+
+対話起動の「環境記録」でも選択できる。RGB=1280×720×30、左右InfraとDepth=848×480×30、
+加速度=250Hz・gyro=200Hz、統合IMU=線形補間を既定とする。
+RGB・左右Infra・Z16 Depth・各camera_info・IMU・TFをMCAPへ記録する。
+Infraを有効にしてprofileを変更すると、同じセンサのDepthも同じprofileになる。
+InfraをOFFにしてもDepthは848×480×30で継続する。
+`--rgb-profile`等の既存選択は利用可能。`--evs`併用では従来どおりRAW連動記録も行う。
+通常collectのDepth無効設定は変更しない。点群やRGBへのDepth整列は行わない。
+R1開始・L1停止で記録し、起動だけでは録画・AUTOを開始しない。
+Jetson上の実際の解像度・Hz・Depth欠落は起動ログと`ros2 bag info`で確認する。
+
+### bringupのMap Studio動的調整
+
+`bash scripts/bringup.sh` → `drive` → 通常のHDMap・地図・モデル選択 →
+「Map Studio 動的調整」で有効／無効を選ぶ。地図は既存選択を再利用し、調整用の再選択は不要。
+HDMapの転送フォルダーと選択したVSLAM/VGL地図の内容を照合し、調整用パスを自動設定する。
+CLIでは通常のdrive引数へ`--tuning`を追加（`--no-tuning`で無効化、未指定はhdmap.yamlの既定値）。
+`--dry-run`は接続せず、地図の一致・採用値と生成された起動コマンドを確認する。
+操作手順は[Map Studio](../tools/app/README.md#hdmap自己位置を見ながら現場調整)を参照。

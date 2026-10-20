@@ -37,6 +37,9 @@ def add_tracking(args):
             "kart_bringup",
             "launch/hdmap.launch.py",
             launch_arguments={
+                "tuning_enabled": getattr(args, "tuning_enabled", ""),
+                "tuning_map_dir": getattr(args, "tuning_map_dir", ""),
+                "tuning_tracking_frame": getattr(args, "tuning_tracking_frame", ""),
                 "map_file": args.map_file,
                 "lane_id": args.lane_id,
                 "line_type": args.line_type,
@@ -74,6 +77,9 @@ def add_tracking(args):
 
 def generate_launch_description():
     args = lu.ArgumentContainer()
+    args.add_arg("tuning_enabled", "", cli=True)
+    args.add_arg("tuning_map_dir", "", cli=True)
+    args.add_arg("tuning_tracking_frame", "", cli=True)
     args.add_arg("map_file", description="HDMap map.json or hd_map.yaml", cli=True)
     args.add_arg(
         "lane_id", "", description="Lane to track; empty disables selection", cli=True

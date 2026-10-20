@@ -5,7 +5,7 @@ import isaac_ros_launch_utils.all_types as lut
 from ament_index_python.packages import get_package_share_directory
 from kart_bringup.configuration import load
 from kart_bringup.localization import resolve
-from kart_bringup.mission import composition, hdmap_choices, sensor_parameters
+from kart_bringup.mission import composition, hdmap_choices, sensor_parameters, camera_config, recording_config
 from kart_bringup.vehicle_tf import load_transforms
 
 OVERRIDES = (
@@ -23,7 +23,8 @@ def add_mission(args):
         root / "mission.yaml", args.mode, {k: getattr(args, k) for k in OVERRIDES}
     )
     params = sensor_parameters(
-        root / "sensors/realsense.yaml", args.rgb_fps, args.infra_fps
+        camera_config(root, args.mode), args.rgb_fps, args.infra_fps,
+        getattr(args, "rgb_profile", ""), getattr(args, "infra_profile", "")
     )
     vehicle = {
         "enable_bridge": str(cfg["enable_bridge"]).lower(),
@@ -32,6 +33,8 @@ def add_mission(args):
         "run_name": args.run_name,
         "auto_fixed_throttle": getattr(args, "auto_fixed_throttle", ""),
     }
+    if args.mode == "environment" or cfg["enable_evs"]:
+        vehicle["bag_config"] = str(recording_config(root, args.mode, cfg["enable_evs"]))
     if cfg['e2e']:
         # Collection's Joy throttle must never take ownership of E2E steering.
         vehicle['auto_fixed_throttle'] = '-1'
@@ -42,7 +45,6 @@ def add_mission(args):
         from kart_bringup.evs import pipeline_configuration
         pipeline_configuration(root / "sensors", *evs_values.values())
         get_package_share_directory("openeb_ros2")
-        vehicle["bag_config"] = str(root / "recording/bag_manager_openeb.yaml")
         vehicle["bag_shutdown_timeout"] = "26"
     _, vehicle_modules = load(
         root / "bringup.yaml", vehicle
@@ -119,6 +121,9 @@ def add_mission(args):
                 "modules/sensors/realsense.launch.py",
                 {
                     "container_name": "/" + cfg["sensor_container"].lstrip("/"),
+                    "camera_config": str(camera_config(root, args.mode)),
+                    "rgb_profile": getattr(args, "rgb_profile", ""),
+                    "infra_profile": getattr(args, "infra_profile", ""),
                     "rgb_fps": args.rgb_fps,
                     "infra_fps": args.infra_fps,
                 },
@@ -150,6 +155,9 @@ def add_mission(args):
             include(
                 "tracking.launch.py",
                 {
+                    "tuning_enabled": getattr(args, "tuning_enabled", ""),
+                    "tuning_map_dir": getattr(args, "tuning_map_dir", ""),
+                    "tuning_tracking_frame": getattr(args, "tuning_tracking_frame", ""),
                     "map_file": args.map_file,
                     "lane_id": args.lane_id,
                     "line_type": args.line_type,
@@ -181,7 +189,7 @@ def add_mission(args):
 
 def generate_launch_description():
     args = lu.ArgumentContainer()
-    args.add_arg("mode", "collect", choices=["collect", "drive", "e2e"], cli=True)
+    args.add_arg("mode", "collect", choices=["collect", "environment", "drive", "e2e"], cli=True)
     for key in (
         *OVERRIDES,
         "device",
@@ -195,10 +203,15 @@ def generate_launch_description():
         "evs_serial",
         "evs_bias_file",
         "evs_tensor_config",
+        "rgb_profile",
+        "infra_profile",
         "rgb_fps",
         "infra_fps",
         "map_dir",
         "model_dir",
+        "tuning_enabled",
+        "tuning_map_dir",
+        "tuning_tracking_frame",
         "map_file",
         "lane_id",
         "line_type",

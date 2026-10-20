@@ -941,3 +941,82 @@ mission→tracking→speed_controller、mission→RGB/EVS E2E→inferenceの両�
 画像topicは`config/recovery/launch.yaml profiles`で切替え、細かなnode parameterはrecovery.yamlを保持する。
 必要な画像/IMU/EVSが無効、または固定AUTOスロットルで手動ステアの場合は起動前エラー。
 collect/evalでは復帰選択を受け付けない。起動による録画/AUTO要求は追加しない。
+
+### 解像度とFPSの明示選択
+
+`mission.launch.py`と`modules/sensors/realsense.launch.py`の`rgb_profile` / `infra_profile`
+（文字列、既定は空）は`WIDTHxHEIGHTxFPS`で該当streamの解像度・FPSを一括指定する。
+`0`は無効化、空はYAML保持。旧`rgb_fps` / `infra_fps`と同一streamで併用するとエラー。
+候補は424×240（30/60/90）、640×480（30/60）、848×480（30/60/90）、
+1280×720（15/30）、1280×800（30）。USB3 D455向けの候補で、実機対応は起動ログで確認する。
+元のノード名・topic名・型は変更しない。記録画像の寸法とcamera_infoが選択に従って変わる。
+
+```bash
+bash scripts/bringup.sh --mode collect --rgb-profile 1280x720x30 --infra-profile 0
+```
+
+対話起動でもRGBとInfraそれぞれをプロファイル一覧から選べる。
+高解像度記録は既存collectモードを使い、R1/L1による記録開始・停止は従来通り。
+選択値は起動時固定。E2Eや地図走行で解像度を変更する場合は入力・校正の整合を確認する。
+
+### 環境記録専用 `environment`
+
+`bash scripts/bringup.sh --mode environment`、または対話の「環境記録」で選択する。
+`mission.launch.py mode:=environment`も同じ構成。localization / tracking / E2Eは起動しない。
+車両・Joy・記録操作はcollectと同じ。`--no-bridge`で基板を使わない記録も可能。
+
+静的センサ設定は`config/sensors/realsense_environment.yaml`の完全なYAMLを使用する。
+通常設定と同じRealSense node `/realsense`、既定RGB=1280×720×30、
+`enable_depth=true`・Z16 Depth=848×480×30・左右Infra=848×480×30、
+`enable_accel=true`（250Hz）・`enable_gyro=true`（200Hz）・`unite_imu_method=2`。
+Depthは未整列・未フィルタ、emitter=0、点群無効。機器対応は実機で確認する。
+Infraが有効ならDepthにも同じ最終profileを適用し、InfraをOFFにしてもDepthは継続する。
+カメラmoduleの`camera_config` launch引数（空=通常YAML）は完全な設定YAMLのパスを受け取る。
+missionがモードに応じて明示指定する。設定は起動時に固定。
+
+記録設定は`config/recording/bag_manager_environment.yaml`。
+EVS有効時は`bag_manager_environment_openeb.yaml`へ切り替え、RAW連動記録を維持する。
+通常bagのtopic一覧にDepth・Depth校正・IMU校正を追加する。主な追加／継続topicは次の通り。
+
+| topic | 型 | 内容 |
+| --- | --- | --- |
+| `/realsense/depth/image_rect_raw` | `sensor_msgs/msg/Image` | Z16 Depth |
+| `/realsense/depth/camera_info` | `sensor_msgs/msg/CameraInfo` | Depth内部校正 |
+| `/realsense/extrinsics/depth_to_color` | `realsense2_camera_msgs/msg/Extrinsics` | Depth→RGB外部校正（配信時） |
+| `/realsense/imu` | `sensor_msgs/msg/Imu` | 統合IMU |
+| `/realsense/accel/sample`, `/realsense/gyro/sample` | `sensor_msgs/msg/Imu` | 個別IMU（ドライバ配信時） |
+| `/realsense/accel/imu_info`, `/realsense/gyro/imu_info` | `realsense2_camera_msgs/msg/IMUInfo` | IMU校正（配信時） |
+
+RGB・左右Infra・camera_info・`/tf`・`/tf_static`も保存する。
+画像／camera_infoのQoSはSENSOR_DATA、TF等は既存ドライバ設定。独自ノード・serviceの追加なし。
+R1で記録開始、L1で停止。portable testで設定・topic一覧・launch引数伝達・CLIを確認し、
+ROS結合・USB3帯域・全topicの実記録は未確認。
+
+### Map Studioからの現場調整
+
+`bash scripts/bringup.sh`で`drive`を選び、通常どおりHDMap・自己位置推定地図・モデルを
+選択した後、「Map Studio 動的調整」で有効／無効を選べる。既定の選択は
+`config/hdmap/hdmap.yaml`の`tuning_enabled`（標準false）。YAMLの手編集は不要。
+HDMapを含む転送フォルダーを自動検出し、選択した自己位置推定地図の内容hashと照合して
+`tuning_map_dir`を設定する。転送先`vgl/<bundle>`内にある同内容の地図にも対応する。
+不一致なら起動前に拒否する。地図・lane・ラインの既存選択手順は維持する。
+CLIは`--mode drive --tuning`、無効化は`--no-tuning`。未指定はYAMLに従い、drive以外では指定不可。
+`--dry-run`で有効状態・採用した地図パス・launchへの伝達を確認できる。
+追加ノード・topic・ROS parameterはなく、以下の既存調整窓口を起動する。
+
+`hdmap.launch.py`・`tracking.launch.py`・`mission.launch.py`は
+`tuning_enabled`・`tuning_map_dir`・`tuning_tracking_frame`を明示指定できる。
+未指定は`config/hdmap/hdmap.yaml`を保持する。通常は`tuning_enabled: false`。
+`tuning_map_dir`は自己位置推定と同じ転送bundleの絶対パス、`tuning_tracking_frame`既定は`rear_axle`。
+ノード・topic・parameterの全仕様は[kart_hdmap README](../kart_hdmap/README.md#notebookからの動的調整)を参照。
+
+既存のセンサー・自己位置推定・操作系・車両ノードを起動済みで、trackingを別に起動する例:
+
+```bash
+ros2 launch kart_bringup tracking.launch.py \
+  map_file:=/workspaces/map/course/export/hd_map.yaml lane_id:=main line_type:=customline \
+  tuning_enabled:=true tuning_map_dir:=/workspaces/map/course
+```
+
+通常bringupがtrackingを起動済みなら追加起動しない。TUIの選択または`--tuning`で同じノードを有効化する。
+実行スクリプト追加なし。HDMap表示だけのlaunchは車両・センサー・自己位置推定を起動しない。

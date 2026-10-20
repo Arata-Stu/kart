@@ -161,3 +161,43 @@ ros2 topic pub --once /hdmap/select_line std_msgs/msg/String '{data: centerline}
 既存select_line topic、ROS parameter、selected_line出力は同じ状態を表す。
 実行中変更はYAMLへ自動保存せず、再起動時はlaunch/YAMLの選択に戻る。
 変更後のラインへ即時切替するため、走行中の軌道接続や操舵の連続性は保証しない。
+
+## Notebookからの動的調整
+
+`hdmap_server`に任意の調整窓口を追加した。通常は無効。
+新しい実行ファイルは追加せず、既存`hdmap_server`（Python単体ノード）の中で扱う。
+表示・編集・ライン生成はNotebookのMap Studio、JetsonはROS状態の取得・snapshot検証と
+既存`/planning/reference_line`等の配信を担当する。TFの発行や車両モード要求は行わない。
+
+| 起動時固定parameter | 既定値 | 意味 |
+| --- | --- | --- |
+| tuning_enabled | false | loopback TCP 8782の調整窓口を有効化 |
+| tuning_map_dir | 空文字 | 自己位置推定に使用する転送bundleの絶対パス。map_fileはこの配下に限定 |
+| tuning_tracking_frame | rear_axle | mapから取得する車両のTF frame |
+
+有効時のみ追加される入力（namespace/remapは通常の相対topic規則に従う）:
+
+| 方向 | 既定topic | 型 | QoS・用途 |
+| --- | --- | --- | --- |
+| 入力 | /operation_mode/state | kart_interfaces/msg/OperationModeState | reliable/volatile/depth1、STOP状態とstamp/受信期限0.3秒 |
+| 入力 | /visual_slam/tracking/odometry | nav_msgs/msg/Odometry | sensor data QoS、速度normとstamp/受信期限0.5秒 |
+| 入力 | /localization/vslam/diagnostics | diagnostic_msgs/msg/DiagnosticArray | reliable/volatile/depth10、表示用の位置確定状態、1.5秒期限 |
+| 入力 | /tf、/tf_static | tf2_msgs/msg/TFMessage | tf2_ros標準QoS、map→tuning_tracking_frameの取得、動的TFは0.5秒期限 |
+
+出力topic・既存serviceは上記の表と同じ。追加ROS service/actionなし。
+HTTP `POST /status`・`/apply`・`/rollback`は127.0.0.1:8782固定、Originなし・JSONのみ、
+3 MiB＋request envelope上限。Notebookから既存SSH接続設定で呼ぶ。Dockerはhost networkingが必要。
+状態監視は10 Hz、HTTP取得は約1 Hz。状態変更はHTTPスレッドで行わずexecutorで一括処理する。
+
+適用には最新STOP、速度推定の絶対値0.05 m/s未満が1秒以上継続、参照ライン配信元が
+このノードだけであること、地図資産hashと適用元revisionの一致が必要。
+速度推定はVSLAM由来であり、物理的な停車の保証ではない。
+有効なStudio v2 geometryを最大20,000生成点で受け、選択lane・lineと速度を一括交換する。
+Center速度はsnapshotの値、Race/Customは生成済みprofileを使う。uniform speed overrideは適用時に-1へ戻す。
+Center速度の起動parameterは保持し、適用値はHTTP active.centerline_speed_mpsで確認する。
+旧版へ戻す際はgeometry・lane・line・Center速度・uniform overrideをまとめて戻す。
+元ファイルは上書きせずメモリ上に適用するため、再起動時は起動地図へ戻る。
+画面切断によるSTOP要求は出さず、既存Joy/モード管理・watchdogに従う。
+
+検証: `test_tuning.py`で停車継続・鮮度・NaN・地図不一致・hash・形状不整合を検証。
+実ROS環境の結合・Jetson負荷・実車は別途確認が必要。
