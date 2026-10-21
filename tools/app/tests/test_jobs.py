@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from kart_studio.jobs import Job, Jobs, Task, JobRef, resource_conflict
+from kart_studio.jobs import Job, Jobs, Task, JobRef, resource_conflict, process_identity
 from kart_studio.storage import atomic_json, read_json
 
 REPO = Path(__file__).resolve().parents[3]
@@ -69,6 +69,10 @@ class JobsTests(unittest.TestCase):
         state=first.jobs[started['id']].info()
         self.assertEqual(state['process_pid'],int(ready.read_text()))
         self.assertIsNotNone(state['worker_pid'])
+        identity = process_identity(state['process_pid'])
+        if identity is not None:
+            self.assertEqual(state['process_identity'], identity)
+            self.assertEqual(state['worker_identity'], process_identity(state['worker_pid']))
         first.shutdown()  # Detach, never cancel.
         again=self.controller()
         self.assertEqual(again.jobs[started['id']].info()['worker_pid'],state['worker_pid'])

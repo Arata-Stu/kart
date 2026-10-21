@@ -19,7 +19,7 @@ from .storage import atomic_json
 
 
 def process_identity(pid):
-    """PID reuse guard. Linux boot/start ticks; macOS birth time + command line."""
+    """PID reuse guard. Linux boot/start ticks; macOS birth time (argv may change after exec)."""
     if type(pid) is not int or pid <= 1:
         return None
     try:
@@ -29,7 +29,7 @@ def process_identity(pid):
             if fields[0] in ('Z', 'X'):
                 return None
             return Path('/proc/sys/kernel/random/boot_id').read_text().strip() + ':' + fields[19]
-        result = subprocess.run(['ps', '-ww', '-p', str(pid), '-o', 'stat=', '-o', 'lstart=', '-o', 'args='],
+        result = subprocess.run(['ps', '-ww', '-p', str(pid), '-o', 'stat=', '-o', 'lstart='],
                                 capture_output=True, text=True, timeout=2, env={**os.environ, 'LC_ALL':'C'})
         value = result.stdout.strip()
         if result.returncode or not value or value.split()[0].startswith('Z'):
@@ -263,7 +263,7 @@ class Jobs:
         self.repo = Path(repo or Path(__file__).resolve().parents[3]).resolve()
         self.base = Path(base or self.root.parent.parent).resolve()
         self.lock = threading.RLock()
-        self._guards = set()
+        self._guards = []
         self._spawned = {}
         self.jobs = {}
         self.list()
@@ -279,7 +279,8 @@ class Jobs:
         state = read_json(path)
         if state.get('status') in ACTIVE:
             alive = worker_locked(self.root / (path.stem + '.worker.lock'))
-            startup = time.time() - state.get('started', 0) < 10
+            started = state.get('started_monotonic')
+            startup = 0 <= time.monotonic() - started < 10 if isinstance(started, (float, int)) else 0 <= time.time() - state.get('started', 0) < 10
             if not alive and not startup:
                 pid = state.get('process_pid')
                 identity = process_identity(pid)
@@ -317,7 +318,7 @@ class Jobs:
 
     @property
     def claimed(self):
-        return self._guards | {r for s in self._states() if s['status'] in ACTIVE for r in s.get('resources', [])}
+        return set(self._guards) | {r for s in self._states() if s['status'] in ACTIVE for r in s.get('resources', [])}
 
     def _require_available(self, resources):
         states = [s for s in self._states() if s['status'] in ACTIVE]
@@ -332,12 +333,13 @@ class Jobs:
     def guard(self, *resources):
         with self.registry():
             self._require_available(resources)
-            self._guards.update(resources)
+            self._guards.extend(resources)
         try:
             yield
         finally:
             with self.lock:
-                self._guards.difference_update(resources)
+                for resource in resources:
+                    self._guards.remove(resource)
 
     def start(self, title, resources, work):
         if not isinstance(work, Task):

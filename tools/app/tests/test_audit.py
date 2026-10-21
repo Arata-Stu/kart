@@ -6,7 +6,7 @@ import sys
 import threading
 from types import SimpleNamespace
 from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.request import urlopen, Request
 from urllib.error import HTTPError
 from http.server import ThreadingHTTPServer
 
@@ -115,6 +115,34 @@ def test_real_cli_job_publishes_report_and_cancel_discards_stage(tmp_path):
     assert len(service.catalog()['results']) == 1 and not list(service.root.glob('.build-*'))
 
 
+def test_detached_audit_task_reconstructs_service_and_paths(tmp_path, monkeypatch):
+    import time
+    from kart_studio.jobs import Jobs, Task
+    records = tmp_path / 'record'
+    records.mkdir()
+    make_bag(records / 'run')
+    monkeypatch.setenv('KART_AUDIT_PYTHON', sys.executable)
+    service = Audit(REPO, tmp_path, records)
+    jobs = Jobs(tmp_path / '.kart-studio/jobs', REPO, tmp_path)
+    info = jobs.start('audit', ['read:record:run', 'audit-output:test'],
+                      Task('audit', [service.prepare(dict(bag='run'))]))
+    jobs.shutdown()
+    again = Jobs(jobs.root, REPO, tmp_path)
+    end = time.monotonic() + 30
+    try:
+        while time.monotonic() < end:
+            state = again.jobs[info['id']].info()
+            if state['status'] not in ('running', 'orphaned'):
+                break
+            time.sleep(.05)
+        assert state['status'] == 'succeeded', (state, (jobs.root / (info['id'] + '.log')).read_text())
+        assert service.artifact(state['result']['audit'], 'report.html').stat().st_size > 100000
+        assert state['worker_pid'] and state['last_process_pid']
+    finally:
+        if again.jobs[info['id']].info()['status'] in ('running', 'orphaned'):
+            again.jobs[info['id']].stop()
+
+
 def test_api_uses_fixed_worker_and_resource_lock(service):
     calls = []
     jobs = SimpleNamespace(start=lambda title, resources, work: calls.append((title, resources)) or {'id':'job'})
@@ -139,6 +167,11 @@ def test_http_report_scoped_csp_downloads_and_traversal(service):
             assert '<script nonce="' in body and '/audit-file?id=' in body and 'href="events.csv"' not in body
         with urlopen(base + urlencode(dict(id=key, file='events.csv'))) as response:
             assert response.read() == b'{}' and 'attachment' in response.headers['Content-Disposition']
+        opaque_headers = {'Origin':'null', 'Sec-Fetch-Site':'cross-site'}
+        with pytest.raises(HTTPError):
+            urlopen(Request(base + urlencode(dict(id=key, file='events.csv')), headers=opaque_headers))
+        with urlopen(Request(base + urlencode(dict(id=key, file='events.csv', token=service.download_token)), headers=opaque_headers)) as response:
+            assert response.read() == b'{}'
         with pytest.raises(HTTPError):
             urlopen(base + urlencode(dict(id=key, file='../metadata.yaml')))
     finally:

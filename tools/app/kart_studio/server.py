@@ -356,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
-    def trusted(self):
+    def trusted(self, report_token=None):
         host = self.headers.get("Host", "")
         expected = {
             f"127.0.0.1:{self.server.server_port}",
@@ -364,6 +364,8 @@ class Handler(BaseHTTPRequestHandler):
         }
         if host not in expected:
             raise ValueError("Invalid Host")
+        if report_token and secrets.compare_digest(report_token, self.server.studio.audit.download_token):
+            return  # Read-only artifact links from our opaque-origin sandbox; POST never uses this.
         origin = self.headers.get("Origin")
         if origin and origin != f"http://{host}":
             raise ValueError("Cross-origin request refused")
@@ -372,8 +374,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         try:
-            self.trusted()
             url = urlsplit(self.path)
+            query = {k: v[-1] for k, v in parse_qs(url.query).items()}
+            self.trusted(query.get('token') if url.path == '/audit-file' else None)
             if url.path == '/audit-file':
                 query = {k: v[-1] for k, v in parse_qs(url.query).items()}
                 filename = query.get('file', 'report.html')
@@ -383,7 +386,7 @@ class Handler(BaseHTTPRequestHandler):
                     body = path.read_text()
                     body = body.replace('<h2>時系列</h2>', '<h2 id="timeseries">時系列</h2>')
                     for artifact in AUDIT_FILES:
-                        link = '/audit-file?' + urlencode(dict(id=query['id'], file=artifact))
+                        link = '/audit-file?' + urlencode(dict(id=query['id'], file=artifact, token=self.server.studio.audit.download_token))
                         body = body.replace('href="' + artifact + '"', 'href="' + link.replace('&', '&amp;') + '"')
                     body = body.replace('<script>', '<script nonce="' + nonce + '">')
                     raw = body.encode()
@@ -391,6 +394,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_header('Content-Type', 'text/html; charset=utf-8')
                     self.send_header('Content-Length', str(len(raw)))
                     self.send_header('Cache-Control', 'no-store')
+                    self.send_header('Referrer-Policy', 'no-referrer')
                     self.send_header('X-Content-Type-Options', 'nosniff')
                     self.send_header('Content-Security-Policy',
                         "default-src 'none'; script-src 'nonce-" + nonce + "'; style-src 'unsafe-inline'; "

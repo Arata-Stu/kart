@@ -20,7 +20,7 @@ def test_features_plan_publication_and_trash(tmp_path):
     (service.root/'datasets/data/samples.jsonl').write_text('{}\n')
     plan=service.prepare('features',dict(name='inspect',run='run',dataset='data'))
     assert len(plan['key'].split('/'))==3
-    assert 'e2e:runs:run' in plan['resources'] and 'e2e:datasets:data' in plan['resources']
+    assert 'read:e2e:runs:run' in plan['resources'] and 'read:e2e:datasets:data' in plan['resources']
     assert plan['python']==sys.executable and plan['args'][-1]=='12'
     class Job:
         def run(self,args,env):

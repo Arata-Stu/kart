@@ -7,6 +7,7 @@ import shutil
 import sys
 import time
 import uuid
+import secrets
 
 from .storage import atomic_json, read_json, within
 
@@ -20,6 +21,7 @@ class Audit:
         self.root = base / 'analysis/pipeline'
         self.root.mkdir(parents=True, exist_ok=True)
         self.python = os.environ.get('KART_AUDIT_PYTHON', sys.executable)
+        self.download_token = secrets.token_urlsafe(24)
 
     def folder(self, key):
         if not isinstance(key, str) or not KEY.fullmatch(key):

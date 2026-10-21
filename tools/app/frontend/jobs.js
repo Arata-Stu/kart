@@ -34,7 +34,7 @@ async function stopJob(id) {
     const result = await api("stop", { id });
     const job = state.jobs.find((j) => j.id === id);
     if (job) Object.assign(job, result);
-    toast(result.status === "running" ? "停止を要求しました。終了処理を待っています" : "この処理は終了しています");
+    toast(activeJob(result) ? "停止を要求しました。終了処理を待っています" : "この処理は終了しています");
   } catch (error) {
     toast(error.message, true);
   } finally {
