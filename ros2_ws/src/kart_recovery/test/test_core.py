@@ -40,9 +40,11 @@ def test_full_recovery_same_sign_fixed_steering_and_duration():
     for _ in range(24):
         out = t.step(Command(-.9, .2), MOVING)
         assert out == Command(steering=.3, reverse=.08)
-    t.until('resume_neutral', MOVING, Command(-.9, .2))
+    out=t.until('post_reverse_braking', MOVING, Command(-.9, .2))
+    assert out == Command(steering=.3, brake=t.r.p.brake_command)
     assert t.t - started == pytest.approx(.5, abs=.021)
     assert t.r.reverse_progress
+    t.until('resume_neutral', STILL)
     t.until('driving', STILL)
     assert t.r.attempts == 1
 
@@ -123,7 +125,8 @@ def test_no_reverse_movement_and_rotation_limit_fail_closed():
 def test_repeated_attempts_are_bounded():
     t = Trial(max_recovery_attempts=1)
     t.until('reversing')
-    t.until('resume_neutral', MOVING)
+    t.until('post_reverse_braking', MOVING)
+    t.until('resume_neutral', STILL)
     t.until('driving', STILL)
     for _ in range(300):
         t.step()
@@ -155,3 +158,48 @@ def test_invalid_commands(command):
 def test_settings_validation(settings):
     with pytest.raises(ValueError):
         Settings(**settings)
+
+
+def test_post_reverse_brake_continues_during_coast_and_requires_continuous_stillness():
+    t=Trial()
+    t.until('reversing')
+    out=t.until('post_reverse_braking', MOVING)
+    assert out.reverse == out.throttle == 0 and out.brake == t.r.p.brake_command
+    assert t.r.active
+    for _ in range(20):
+        out=t.step(observation=MOVING)
+        assert out.brake == t.r.p.brake_command
+        assert t.r.state == 'post_reverse_braking'
+    for _ in range(8):t.step(observation=STILL)
+    t.step(observation=MOVING)  # One moving sample invalidates the stop dwell.
+    for _ in range(8):
+        assert t.step(observation=STILL).brake == t.r.p.brake_command
+    assert t.until('resume_neutral', STILL) == Command()
+    assert t.r.active
+    assert t.until('driving', STILL) == Command()
+    assert not t.r.active
+
+
+def test_post_reverse_brake_timeout_never_resumes_forward():
+    t=Trial()
+    t.until('reversing')
+    t.until('post_reverse_braking', MOVING)
+    for _ in range(120):
+        out=t.step(observation=MOVING)
+        assert out.throttle == out.reverse == 0
+        if t.r.state == 'fault':break
+    assert t.r.reason == 'stop_after_reverse_brake_not_observed'
+    assert out == Command()
+
+
+@pytest.mark.parametrize('interruption', ['stop','manual','propo','stale','sensor','clock'])
+def test_post_reverse_brake_aborts_on_interruption(interruption):
+    t=Trial()
+    t.until('reversing')
+    t.until('post_reverse_braking', MOVING)
+    if interruption in ('stop','manual','propo'):
+        out=t.step(mode={'stop':3,'manual':2,'propo':4}[interruption])
+    elif interruption == 'stale':out=t.step(healthy=False)
+    elif interruption == 'sensor':out=t.step(observation=Observation(False))
+    else:out=t.r.step(t.t+.5,1,FORWARD,STILL)
+    assert out == Command() and not t.r.active

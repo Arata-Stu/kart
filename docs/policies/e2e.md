@@ -171,6 +171,7 @@ EVSの評価は作成済みデータセットを入力し、RGBのbag直接評�
 
 EVS RAW抽出はOpenEB Pythonバインディングに合わせたNumPy 1.26専用環境を用い、
 NumPy 2の学習・ONNX環境から分離する。import成功だけをイベント読出しの互換性の証拠にしない。
+この専用環境はamd64 Notebookのデータセット作成用とし、記録・推論を行うJetson（arm64）では作成しない。
 
 RAWの局所的順序乱れは既定5msのbounded reorderで処理する。
 窓終端＋許容幅まで先読みし、元時刻のまま窓を確定する。chunk内だけのsortでは確定しない。

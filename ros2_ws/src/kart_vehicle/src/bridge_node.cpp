@@ -27,6 +27,13 @@ public:
     if(!std::isfinite(offset_) || std::abs(offset_)>0.5) {throw std::invalid_argument("Invalid steering_offset");}
     command_timeout_=number(*this,"command_timeout",0.15,0.02,0.2);
     status_timeout_=number(*this,"status_timeout",0.2,0.05,0.5);
+    EscSequenceSettings sequence_settings;
+    sequence_settings.enabled=declare_parameter<bool>("esc_sequencer_enabled",false,fixed());
+    sequence_settings.reverse_neutral_s=number(*this,"esc_reverse_neutral_s",0.2,0.001,2.0);
+    sequence_settings.brake_entry_throttle=number(*this,"esc_brake_entry_throttle",0.08,0.002,1.0);
+    sequence_settings.brake_entry_s=number(*this,"esc_brake_entry_s",0.05,0.001,0.5);
+    sequence_settings.max_step_gap_s=number(*this,"esc_max_step_gap_s",0.1,0.001,0.2);
+    session_.configure_esc(sequence_settings);
     steering_trim_limit_=number(*this,"steering_trim_limit",0.25,0,0.5);
     throttle_trim_limit_=number(*this,"throttle_trim_limit",0.1,0,0.5);
     trim_.steering=number(*this,"initial_steering_trim",0,-steering_trim_limit_,steering_trim_limit_);
@@ -117,7 +124,7 @@ private:
         if(gate_.active() && !gate_.check(t,0.3,healthy())) {trip("mode_or_board_unavailable");}
         const bool active=gate_.active();
         auto frame=session_.output(values(command_.msg),command_.available(t,now().seconds(),command_timeout_),t,scale_,offset_,trim_,gate_.mode()==MANUAL);
-        if(active && session_.phase()==HostSession::Phase::disarmed) {trip("command_or_handshake_failed");}
+        if(active && session_.phase()==HostSession::Phase::disarmed) {trip(session_.sequencer().failed() ? "esc_sequence:"+session_.sequencer().reason() : "command_or_handshake_failed");}
         frame.sequence=sequence_++;
         serial_->write_line(encode_command(frame));
       }
@@ -174,6 +181,8 @@ private:
     add("steering_trim",std::to_string(trim_.steering)); add("throttle_trim",std::to_string(trim_.throttle));
     add("device",device_); add("host_active",gate_.active()?"true":"false");
     add("host_phase",std::to_string(static_cast<int>(session_.phase())));
+    add("esc_sequence_phase",session_.sequencer().name());
+    add("esc_sequence_reason",session_.sequencer().reason());
     add("esc_command_state",session_.esc().name());
     add("esc_brake_rejected",session_.esc().brake_rejected()?"true":"false");
     add("protocol_errors",std::to_string(protocol_errors_)); add("last_interlock",error_);

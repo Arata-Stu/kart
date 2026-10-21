@@ -166,3 +166,15 @@ CLI/launchの旧`manual_fixed_throttle`は`auto_fixed_throttle`へ変更した�
 TUIの「AUTOスロットル」で通常／固定を選ぶ。collect/driveで利用可能。E2Eでは収集用の固定設定を無効化し、モデルのステア＋E2E専用固定スロットルを使用する。
 RGB/EVS教師抽出はbag内の固定AUTO有効設定を自動検出する。固定収集bagでは固定AUTOだけを採用し、MANUALの復帰・調整区間を全て除外する。通常bagは従来どおりMANUALだけを採用する。
 ROS結合・実車動作は未確認。portable testで固定出力、直接切替、異常ラッチ、HOST handshakeを検証する。
+
+
+### ESCシーケンサとの接続
+
+MANUAL時の○は既存の`ControlCommand.brake=1`を出し、R2/L2より優先する。
+後退中の○も同じ要求であり、vehicleのESCシーケンサが有効なら正パルス→負入力制動へ変換する。
+Joy managerにESC状態モデル・パルス生成・追加の意図topicは設けない。
+○を離してトリガーも離せば中立要求となり、保留中のパルスを中断する。
+L2負側は`reverse`要求。シーケンサ有効時は中立保持後に後退するため、制動だけを望む操作には○を使う。
+無効時は従来どおりESC履歴で負入力が制動/後退へ分類される。
+固定スロットルAUTO中の○＋STOP、L2＋STOPは既存の中断動作を維持し、
+STOPによってHOST解除されるため制動信号の保持完了を保証しない。

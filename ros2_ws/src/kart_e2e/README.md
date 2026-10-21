@@ -768,8 +768,9 @@ NumPy 1.26.4では同じRAWの両reader先頭30万イベントが正常だった
 h5py更新だけではSDKのイベント読み出しの互換性は解決しない。
 EVS RAW抽出は専用venvのNumPy 1.26.4 / h5py 3.11.0を使用し、
 学習・ONNX用Pythonとは分離する。GUIの「EVS RAW抽出用Python」で指定する。
-DockerのEVS最終イメージは`/opt/evs-raw/bin/python`を用意する。
-既存コンテナでは次で作成できる。
+DockerのEVS最終イメージはamd64 Notebookの場合に`/opt/evs-raw/bin/python`を用意する。
+Jetson（arm64）は記録・推論を行い、RAW抽出はNotebookで実行するため、この専用venvを作成しない。
+既存のamd64 Notebookコンテナでは次で作成できる。
 
 ```bash
 uv venv --python /usr/bin/python3 --system-site-packages /workspaces/.venv/evs-raw

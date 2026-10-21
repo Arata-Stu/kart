@@ -251,3 +251,5 @@ Center速度は有限・非負のdouble。tuning有効時のline_type／速度�
 車両パラメータ対象`vehicle`は`kart_bridge`の`steering_offset`を変更可能、
 `steering_scale`・`initial_steering_trim`・`steering_trim_limit`は参照専用。
 通常の新しいSTOP・1秒以上の低速確認を適用し、bridge自身のSTOPチェックも必要。
+
+復帰状態の許可リストに`post_reverse_braking`（後退後の制動・停車確認）を含む。topicとJSON schema名は既存のまま。

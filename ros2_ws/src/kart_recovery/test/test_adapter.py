@@ -159,3 +159,25 @@ def test_dynamic_recovery_settings_require_stop_and_validate_whole_candidate(ada
     assert n.command_msg is None
     n.samples['mode']=(9.,time.monotonic())
     assert not n.validate_settings(parameters).successful
+
+
+def test_reverse_end_publishes_brake_without_neutral_and_keeps_ownership(adapter):
+    import json
+    n=adapter
+    reversing(n)
+    n.machine.phase_at=n.clock_value-n.machine.p.reverse_duration_s
+    n.machine.reverse_progress=True
+    n.tick()
+    out=n.auto_pub.messages[-1]
+    assert n.machine.state=='post_reverse_braking'
+    assert out.brake==n.machine.p.brake_command and out.reverse==out.throttle==0
+    assert out.steering==-.2
+    assert n.active_pub.messages[-1].data is True
+    assert n.command_msg is not None
+    assert json.loads(n.status_pub.messages[-1].data)['state']=='post_reverse_braking'
+    # No source/observation freshness relaxation while holding the brake request.
+    n.samples['image']=(9,time.monotonic())
+    n.tick()
+    assert n.machine.state=='fault'
+    assert n.auto_pub.messages[-1].brake==0
+    assert n.stop_pub.messages[-1].mode==3

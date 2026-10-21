@@ -220,6 +220,8 @@ APTパッケージの完全なバージョン固定はまだ行っていない�
 
 Python依存は **uv 0.12.0 + Python 3.12** を使用する。
 Docker内のPython本体はUbuntuの`/usr/bin/python3`を使い、uvによる別Pythonのダウンロードは禁止する。
+EVS RAWデータセット抽出用の`/opt/evs-raw`は、OpenEBがあるamd64 Notebookイメージだけに作成する。
+Jetson（arm64）の記録・推論ではこの専用venvを作らず、NumPy/h5pyのwheel取得も実行しない。
 
 | 環境 | 定義・lock | 用途 |
 | --- | --- | --- |

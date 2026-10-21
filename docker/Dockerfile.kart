@@ -146,8 +146,11 @@ RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
 
 # OpenEB Python event buffers on this SDK build require NumPy 1.x. Keep RAW
 # extraction isolated from Notebook NumPy 2 and from training/inference venvs.
+# RAW dataset extraction runs on the amd64 notebook; Jetson only records/infers.
+# Use the target image architecture so cross-builds skip this environment too.
 # system-site-packages exposes ROS and the installed SDK; local pins take precedence.
-RUN if /usr/bin/python3 -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("metavision_core") else 1)'; then \
+RUN if [ "$(dpkg --print-architecture)" = "amd64" ] && \
+       /usr/bin/python3 -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("metavision_core") else 1)'; then \
       uv venv --python /usr/bin/python3 --system-site-packages /opt/evs-raw \
       && uv pip install --python /opt/evs-raw/bin/python --no-deps --only-binary=:all: \
         'numpy==1.26.4' 'h5py==3.11.0' \

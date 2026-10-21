@@ -39,3 +39,5 @@ EVS補助では`--evs`も指定し、使用する画像のFPSを0にしない。
 core Settings（履歴・閾値・停止確認・ブレーキ／後退・操舵・回数等）をSTOP中に変更できる。
 適用時に復帰履歴／phaseをresetする。sensor/topic・画像処理・timeoutは起動時固定。
 静的YAMLの全項目・既定値は維持し、UI変更はメモリ上だけで次回起動には保存しない。
+
+後退後はbrake_commandによる制動・静止確認を挟んで中立/再開へ進む。brake_min_s、stop_confirm_s、stop_timeout_sは開始時と後退後で共用する。実ESCの信号列にはvehicle/bridge.yamlのesc_sequencer_enabled=trueが必要。

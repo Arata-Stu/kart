@@ -11,3 +11,9 @@
     throttle_trim_limit: 0.1
     command_timeout: 0.15
     status_timeout: 0.2
+    # Optional protocol sequencer; pulse values are provisional, not ESC-calibrated.
+    esc_sequencer_enabled: false
+    esc_reverse_neutral_s: 0.2
+    esc_brake_entry_throttle: 0.08
+    esc_brake_entry_s: 0.05
+    esc_max_step_gap_s: 0.1

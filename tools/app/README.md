@@ -719,6 +719,7 @@ RAWとstream/epochの対応を記載する（形式はkart_e2e README参照）�
 EVS選択時にheaderへ切り替わり、sample strideは既定10。固定収集bagは固定AUTOのみを採用する。
 RAW抽出を実行する「EVS RAW抽出用Python」にはMetavision/OpenEBのRAW readerが必要。
 NumPy 1.26.4 / h5py 3.11.0の専用venvを指定し、学習用Pythonとは分離する。
+この専用venvはamd64 Notebook用で、Jetsonの記録・推論イメージには作成しない。
 
 「学習環境」のEVS encoder PT/JSONの既定パスはrepo内
 `weights/evs/event_encoder.pt`と`weights/evs/event_encoder.json`。
@@ -951,3 +952,5 @@ Plateau scheduler ON（factor=0.5、patience=2、min_lr=1e-7）。
 初期化やモデルサイズを切り替えても、入力済みのepochは保持する。
 Tinyの特徴蒸留epochは独立して指定し、既定10のまま。
 [モデル比較計画](../../docs/e2e_model_comparison.md)にサイズ・初期化・更新範囲・蒸留予算の比較条件を記載する。
+
+復帰パネルは`post_reverse_braking`を「後退後の制動・停車確認」と表示する。制動要求段階であり実ESCの制動成立を示すものではない。

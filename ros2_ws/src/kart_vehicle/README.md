@@ -155,3 +155,58 @@ ROSパラメータのatomic commit後、次の10 ms周期で反映する。STOP�
 `steering_offset`は倍率適用後であり、`steering_scale=-1`では符号の意味が異なる。
 `/diagnostics`は両方の現在値と`steering_scale`を1 Hzで公開する。
 UIのHOST有効表示はbridgeのauthority状態であり、物理的な動作・停止確認ではない。
+
+## ESC要求シーケンサ（任意有効化）
+
+`EscSequencer`は`HostSession`内、補正・整数化の後、USB送信の直前で動くROS非依存クラス。
+controllerは既存の`ControlCommand`（前進=`throttle`、後退=`reverse`、制動=`brake`、全ゼロ=中立）を
+周期送信する。特別な意図topic、パルス指令、新ノードは不要。`EscState`は実際に選択した出力指令の履歴モデルを担当する。
+
+`esc_sequencer_enabled=false`が既定で、従来の指令モデルをそのまま使う。
+有効時の規則は以下。いずれもESC・車体の実測状態ではない。
+
+| 現在の指令モデル | 要求 | 出力・段階 |
+| --- | --- | --- |
+| forward / brake | 後退 | `reverse_neutral`で中立保持 → 指定量の後退 |
+| neutral | 後退 | `reverse_neutral`で中立保持 → 指定量の後退 |
+| reverse | 後退 | 指定量の後退を継続 |
+| reverse | 制動 | `brake_entry`で正パルス → 中立を挟まず指定量の負入力 → `braking`で保持 |
+| forward / brake | 制動 | 正パルスを挟まず指定量の制動 |
+| neutral / unknown | 制動 | `rejected`。中立へ抑制し、未知の方向から正パルスを生成しない |
+| 既知状態 | 前進 | 指定量の前進。後退からも直接切替 |
+| 任意 | 中立（ステアだけの入力を含む） | 保留中の段階を即時中断して中立 |
+
+- 同じ制動要求の再送や制動量変更で正パルスをやり直さない。正パルス中の前進要求は即時採用、
+  後退要求は中立保持へ切替。中立後の新しい制動要求は方向不明として拒否する。
+- 要求の鮮度・排他性・範囲チェックは`HostSession`が毎周期行う。入力不正、timeout、STOP、
+  制御権喪失、USB切断ではHOSTを解除し、遷移履歴を破棄する。復旧で自動再開しない。
+- シーケンサ有効時、送信周期の逆行・非有限時刻・過大な間隔は`failed`となりHOSTを解除する。
+  各段階はsteady clockで進め、sleepせず、10 msのbridge周期で出力を選ぶ。
+- 時間の満了は信号列の進行だけを意味する。中立保持は停車確認ではなく、`braking`も制動成功・停車完了ではない。
+  復帰moduleが画像/IMU等で停車を判定し、中立へ切り替える責務は維持する。
+- 正パルス量はMANUALのスロットルトリムを加算しない。ステアは各周期の要求を通常どおり補正して使用する。
+- `/diagnostics` (`diagnostic_msgs/msg/DiagnosticArray`, reliable/volatile/depth 1, 1 Hz) に
+  `esc_sequence_phase`（idle/reverse_neutral/brake_entry/braking/rejected/failed）と
+  `esc_sequence_reason`を追加。失敗でbridgeがSTOP要求した後はidleへリセットし、理由は`last_interlock`に残る。
+  既存の入力・出力topic名、型、ノード名に変更はない。
+
+全て起動時固定。パルス量と時間は実機未校正の仮値。
+
+| 名前 | 既定値 | 意味・許容範囲 |
+| --- | --- | --- |
+| `esc_sequencer_enabled` | `false` | 要求を信号列へ変換するシーケンサを有効化。falseは従来動作 |
+| `esc_reverse_neutral_s` | `0.2` s | 後退要求時の中立保持。0.001..2 |
+| `esc_brake_entry_throttle` | `0.08` | 後退から制動へ移る正パルス量。0.002..1 |
+| `esc_brake_entry_s` | `0.05` s | 正パルスの保持時間。0.001..0.5 |
+| `esc_max_step_gap_s` | `0.1` s | シーケンサ出力周期の許容間隔。0.001..0.2 |
+
+実運用はbringupの`config/vehicle/bridge.yaml`で設定する。
+実際の保持時間は送信周期分の量子化を受け、USB送信やESC内部受信の個別ACKはない。
+実ESCが正パルスを認識する時間、後続の負入力による後退中の制動成立、停止距離は実機確認が必要。
+復帰moduleは`reversing → post_reverse_braking → resume_neutral`で、
+後退から中立を挟まず`brake`を要求する。上位の別controllerでも同じ要求を利用できる。
+Joy managerのMANUAL時○ボタンも既存の`brake`要求経路をそのまま利用する。
+
+検証: `bash scripts/tests/test-vehicle.sh`。正パルス/中立保持の時間、要求再送、量変更、
+中立・前進・後退への切替、量子化、時計異常、freshness/STOP/基板制御権喪失による中断を
+ROSなしのC++テストで確認する。ROS component結合と実ESCの制動性能は未確認。

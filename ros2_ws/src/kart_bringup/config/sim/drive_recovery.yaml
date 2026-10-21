@@ -30,6 +30,7 @@
     stationary_flow_px_s: 2.0
     moving_flow_px_s: 6.0
     stationary_gyro_rad_s: 0.12
+    # Shared by initial and post-reverse braking; hardware reverse braking needs vehicle ESC sequencer.
     brake_command: 0.1
     brake_min_s: 0.2
     stop_confirm_s: 0.25

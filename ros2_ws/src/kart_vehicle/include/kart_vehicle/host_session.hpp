@@ -1,7 +1,7 @@
 #pragma once
 #include "kart_system/control_core.hpp"
 #include "kart_vehicle/bridge_protocol.hpp"
-#include "kart_vehicle/esc_state.hpp"
+#include "kart_vehicle/esc_sequencer.hpp"
 namespace kart_vehicle {
 // Status sequence is a BOARD counter, not a host command acknowledgement.
 class StatusSequence {
@@ -17,9 +17,11 @@ private:
 class HostSession {
 public:
   enum class Phase {disarmed, waiting_input, neutral_sent, armed};
-  void start(double now) {phase_=Phase::waiting_input; started_=now; esc_.reset();}
-  void stop() {phase_=Phase::disarmed; esc_.reset();}
-  const EscState & esc() const {return esc_;}
+  void configure_esc(EscSequenceSettings settings) {if(phase_!=Phase::disarmed)throw std::logic_error("ESC configuration requires disarm");sequencer_.configure(settings);}
+  const EscSequencer & sequencer() const {return sequencer_;}
+  void start(double now) {phase_=Phase::waiting_input; started_=now; sequencer_.reset();}
+  void stop() {phase_=Phase::disarmed; sequencer_.reset();}
+  const EscState & esc() const {return sequencer_.esc();}
   // Called only for a new, CRC-valid, fresh board frame received after a write.
   void status(const StatusFrame & s) {
     if (s.fault_bits || s.selector!=RcSelector::automatic || s.active_path==ActivePath::failsafe || s.active_path==ActivePath::manual) {stop();}
@@ -39,7 +41,7 @@ public:
     }
     if (phase_!=Phase::armed) {
       if (!kart_system::neutral(c)) {stop(); return frame;}
-      frame.flags |= HOST_REQUEST; phase_=Phase::neutral_sent; return esc_.apply(frame);
+      frame.flags |= HOST_REQUEST; phase_=Phase::neutral_sent; return sequence_output(frame,now);
     }
     frame.flags |= HOST_REQUEST;
     const auto corrected=kart_system::apply_trim(c,trim,manual);
@@ -47,11 +49,16 @@ public:
     frame.throttle_milli=static_cast<int>(std::lround(corrected.throttle*1000));
     frame.reverse_milli=static_cast<int>(std::lround(corrected.reverse*1000));
     frame.brake_milli=static_cast<int>(std::lround(corrected.brake*1000));
-    return esc_.apply(frame);
+    return sequence_output(frame,now);
   }
   Phase phase() const {return phase_;}
 private:
+  CommandFrame sequence_output(CommandFrame frame,double now) {
+    auto output=sequencer_.apply(frame,now);
+    if(sequencer_.failed())phase_=Phase::disarmed;
+    return output;
+  }
   Phase phase_{Phase::disarmed}; double started_{0};
-  EscState esc_;
+  EscSequencer sequencer_;
 };
 }

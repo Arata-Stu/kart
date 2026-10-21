@@ -154,6 +154,8 @@ Dockerfile.openebはCOMPILE_PYTHON3_BINDINGS=ON、Python3_EXECUTABLE=/usr/bin/py
 base/core/stream/uiを構築し、build時にmetavision_core.event_io.RawReaderのimportを確認する。
 core_mlは選択しない。既存のPython bindingsなしimageはLinuxホストで
 `./scripts/dev.sh --evs --build-local`から再ビルドする必要がある。
+最終kart layerの`/opt/evs-raw`（NumPy 1.26.4 / h5py 3.11.0）はamd64 NotebookでのRAW抽出専用。
+Jetson（arm64）では記録・推論を実行し、このvenvの作成・wheel取得を省略する。
 Docker build自体はこの変更のローカル検証では未実施。
 
 [kart_e2e EVS手順](../../ros2_ws/src/kart_e2e/README.md#evs-rawから制御policyまで2026-10-18)で

@@ -10,7 +10,7 @@ assert.match(el('host').textContent,/無効/);
 assert.match(el('recovery').textContent,/疑い/);
 assert.equal(el('health').dataset.tone,'error');
 assert.match(el('calibration').textContent,/0.01/);
-for(const [state,label] of [['reversing','後退中'],['braking','制動中'],['fault','中断']]){
+for(const [state,label] of [['post_reverse_braking','後退後の制動'],['reversing','後退中'],['braking','制動中'],['fault','中断']]){
  status.vehicle.recovery.state=state;renderVehicle(status);assert.match(el('recovery').textContent,new RegExp(label));
 }
 status.vehicle.recovery={availability:'stale'};renderVehicle(status);

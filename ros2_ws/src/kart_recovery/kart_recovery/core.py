@@ -80,7 +80,7 @@ class Observation:
 
 
 class Recovery:
-    ACTIVE = {'braking', 'reverse_neutral', 'reversing', 'resume_neutral'}
+    ACTIVE = {'braking', 'reverse_neutral', 'reversing', 'post_reverse_braking', 'resume_neutral'}
 
     def __init__(self, settings=Settings()):
         self.p = settings
@@ -231,9 +231,23 @@ class Recovery:
             self.reverse_progress |= (obs.flow >= self.p.moving_flow_px_s
                                       and obs.gyro <= self.p.stationary_gyro_rad_s)
             if elapsed >= self.p.reverse_duration_s:
+                # Direct reverse -> brake demand preserves the ESC's reverse history.
+                # The vehicle sequencer owns any positive entry pulse, not recovery.
+                self._phase('post_reverse_braking', now)
+                return Command(steering=self.fixed_steering, brake=self.p.brake_command)
+            return Command(steering=self.fixed_steering, reverse=self.p.reverse_throttle)
+        if self.state == 'post_reverse_braking':
+            if self._stationary(obs):
+                self.stopped_at = now if self.stopped_at is None else self.stopped_at
+            else:
+                self.stopped_at = None
+            if elapsed > self.p.stop_timeout_s:
+                return self.fault('stop_after_reverse_brake_not_observed')
+            if (elapsed >= self.p.brake_min_s and self.stopped_at is not None
+                    and now - self.stopped_at >= self.p.stop_confirm_s):
                 self._phase('resume_neutral', now)
                 return Command()
-            return Command(steering=self.fixed_steering, reverse=self.p.reverse_throttle)
+            return Command(steering=self.fixed_steering, brake=self.p.brake_command)
         if self._stationary(obs):
             self.stopped_at = now if self.stopped_at is None else self.stopped_at
         else:

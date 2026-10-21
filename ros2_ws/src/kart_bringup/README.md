@@ -1083,3 +1083,16 @@ ROS/GPUでのoffline・実車確認は未実施。EVS複数headの実走行は�
 追加引数`exit_when_done=false`（既定、従来の手動終了）、`completion_file=''`（指定時はbag playerの
 returncodeをJSONへ保存）をReplay moduleへ渡す。再生終了後1秒の猶予を置いてlaunchを終了し、
 UI workerが正常なplayer終了と有効poseを検証する。画像・tfの再生対象や実車起動範囲は変更しない。
+
+### ESC要求シーケンサ
+
+vehicle bridge内蔵のESCシーケンサは`config/vehicle/bridge.yaml`で起動時に設定する。
+`esc_sequencer_enabled: false`が既定。有効化すると既存`ControlCommand`の後退/制動要求から
+中立保持・後退中の正パルス→負入力制動を生成する。controllerのtopicやmsg変更は不要。
+既定の`esc_reverse_neutral_s: 0.2`、`esc_brake_entry_throttle: 0.08`、
+`esc_brake_entry_s: 0.05`、`esc_max_step_gap_s: 0.1`は秒/正規化出力の起動時固定値。
+実ESC未校正のため、機能を使う際は量・時間を実機に合わせる。
+入力timeout、STOP、制御権喪失は生成を中断し、異常からの自動再開はしない。
+入出力、全範囲と遷移表は[kart_vehicle README](../kart_vehicle/README.md#esc要求シーケンサ任意有効化)を参照。
+
+復帰は後退終了後に`post_reverse_braking`でbrakeを要求する。実ESCでの変換にはvehicle設定の`esc_sequencer_enabled=true`が必要で、既定falseは維持する。復帰の既存brake量・最低時間・静止確認・期限を両制動段階で使う。
