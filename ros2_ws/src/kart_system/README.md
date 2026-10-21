@@ -82,7 +82,7 @@ sim時刻での入力鮮度と実時間での通信断を分離する。元stamp
 | `bag_start_button` | `4` | L1。録画START要求 |
 | `bag_stop_button` | `5` | R1。録画STOP要求。同時押しはSTOP優先 |
 | `deadman_button` | `-1` | 保持条件なし。4にするとL1をMANUAL操作とモード・トリム要求時に保持 |
-| `brake_button` | `1` | ○。専用brake=1を優先 |
+| `brake_button` | `1` | ○。MANUALでは正パルス→brake=1、トリガーより優先 |
 | `stop_button` | `0` | ×。STOP要求、deadman不要 |
 | `manual_button` | `2` | △。STOP時は中立でMANUAL要求。AUTOからは直接引継ぎ |
 | `auto_button` | `3` | □。STOP時は中立でAUTO要求。MANUALからは直接切替 |
@@ -95,6 +95,8 @@ sim時刻での入力鮮度と実時間での通信断を分離する。元stamp
 | `deadzone` | `0.08` | ステア入力の不感帯。0..0.5、外側を再正規化 |
 | `steering_scale` | `1.0` | ステア倍率。0.01..1 |
 | `speed_scale` | `0.3` | 正負スロットル倍率。0.01..1。車速[m/s]ではない |
+| `brake_pulse_throttle` | `0.08` | MANUALの○押下時の正throttle要求、0.002..1。起動時固定 |
+| `brake_pulse_s` | `0.05` | 正パルス保持時間[秒]、steady時刻、0.04..0.5。起動時固定 |
 | `auto_fixed_throttle` | `-1.0` | AUTO時の固定正規化指令（手動ステア）。-1で通常操作、0..speed_scaleで固定。起動時固定 |
 
 スロットルは`(R2 − L2) × speed_scale`。各トリガー0.01以下を0とし、負側は`reverse`へ格納する。
@@ -168,10 +170,34 @@ RGB/EVS教師抽出はbag内の固定AUTO有効設定を自動検出する。固
 ROS結合・実車動作は未確認。portable testで固定出力、直接切替、異常ラッチ、HOST handshakeを検証する。
 
 
-### ESCへの手動要求
+### ESCへの手動要求と○による制動試験
 
-R2/L2は通常の前進/負入力要求、○はbrake=1を出してトリガーより優先する。
-Joy managerとvehicleは時間付きのパルスや中立保持を生成しない。
-前進後のL2長押しは制動を維持し、一度離して中立に戻した後、再度L2で後退となる。
-後退中の○は低レベルモデルで中立に抑制され、自動の正パルスは発生しない。
-固定AUTO中の○やL2によるSTOPは従来どおり。HOST解除は制動成立を保証しない。
+R2/L2は通常の前進/負入力要求。L2の自動シーケンスはない。
+MANUALの○はトリガーより優先し、押下からbrake_pulse_throttleをbrake_pulse_sだけ要求し、
+その後は押している間brake=1.0を要求する。ステアは現在の手動入力を維持する。
+正パルス中はbrake/reverse=0、制動中はthrottle/reverse=0。長押しでパルスを再開始しない。
+○を離すとパルスを中断し、通常トリガー操作に戻る。短すぎる押下では制動段階に達しない。
+MANUAL進入後に○を一度離した入力を観測してから、新しい押下でのみ正パルスを開始する。
+
+パルス時間はsteady時刻で判断し、出力はJoy到着周期に量子化する（標準100 Hz）。
+Joy/ready途絶、不正入力、deadman解除、×STOP、モード変更、mode鮮度喪失で中断し、
+復帰後に○が押されたままでも正パルスを再開しない。入力間隔100 ms超や時計逆行でも中断する。
+元Joy stampを保持し、timerから新しいstampで駆動を延命しない。
+AUTOでは正パルスを生成せず、固定AUTOでの○＋STOP、L2＋STOPも従来どおり。
+AUTOから△への引継ぎ時に○を押していてもパルスは始まらない。
+
+説明されたESC規則では正入力でforward履歴を作り、次の負入力が制動となる。
+ただし正パルスは実際の駆動要求であり、停止中にも一瞬前進する可能性がある。
+出力はbridgeのMANUAL throttle trimを受ける。負trimで正パルスが0になる場合もあるため、
+最初の確認ではthrottle trimを0にし、実際の出力量とESC応答を確認する。
+時間満了やモデルのbrake表示は制動成立のフィードバックではない。実ESCで値は未校正。
+
+実運用値はkart_bringup/config/input/joy_manager.yamlを編集して再ビルド・再起動する。
+新規topic/serviceはなく、既存/teleop/control_cmd（kart_interfaces/msg/ControlCommand）へ出す。
+ログのJoy brake signalはpositive_pulse / brake / idleを示す。
+/vehicle/control_cmdはbridge補正前の要求なので、trim反映後のPWM値そのものではない。
+
+車輪を浮かせてMANUALへ入り、後退を確認してから○を押し続けると、同じ信号列を試験できる。
+ROSなしのscripts/tests/test-vehicle.shで一度だけの生成、中断、再接続時の抑制、および
+HostSessionへ接続した全ての既知ESC履歴からの正パルス→brake=1.0を検証する。
+ROS結合・実PWM・実制動は未確認。

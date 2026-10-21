@@ -25,6 +25,8 @@ public:
     teleop_.deadzone=number(*this,"deadzone",0.08,0,0.5);
     teleop_.steering_scale=number(*this,"steering_scale",1.0,0.01,1);
     teleop_.speed_scale=number(*this,"speed_scale",0.3,0.01,1);
+    brake_pulse_.throttle=number(*this,"brake_pulse_throttle",0.08,0.002,1.0);
+    brake_pulse_.duration_s=number(*this,"brake_pulse_s",0.05,0.04,0.5);
     manual_fixed_.throttle=number(*this,"auto_fixed_throttle",-1.0,-1.0,1.0);
     if (!manual_fixed_.valid_settings(teleop_.speed_scale)) {
       throw std::invalid_argument("auto_fixed_throttle must be -1 (disabled) or 0..speed_scale");
@@ -38,7 +40,8 @@ public:
       ready_=msg->data; ready_at_=steady_now(); if (!ready_) {lose_input();}
     });
     mode_sub_=create_subscription<Mode>("operation_mode/state",1,[this](Mode::ConstSharedPtr msg) {
-      mode_=msg->mode;
+      if (mode_!=msg->mode) {brake_pulse_.reset();}
+      mode_=msg->mode; mode_at_=steady_now(); mode_stamp_=seconds(msg->header.stamp);
       manual_fixed_.observe(mode_,seconds(msg->header.stamp),now().seconds(),steady_now(),
         input_healthy() && !blocked_,neutral_input_);
       if (mode_==STOP) {blocked_=false;}
@@ -50,6 +53,7 @@ public:
                !manual_fixed_.allowed(now().seconds(),steady_now(),!blocked_)) {
         stop_fixed({},"joy_manager:fixed_throttle_mode_unavailable");
       }
+      if (!manual_brake_permitted()) {brake_pulse_.reset();}
       if (steady_now()-last_config_>=0.1) {publish_fixed_config(); last_config_=steady_now();}
     });
   }
@@ -61,6 +65,10 @@ private:
   }
   bool input_healthy() const {
     return ready_ && fresh(steady_now(),ready_at_,0.1) && fresh(steady_now(),joy_at_,0.1);
+  }
+  bool manual_brake_permitted() const {
+    return mode_==MANUAL && !blocked_ && input_healthy() &&
+      fresh(steady_now(),mode_at_,0.3) && fresh_stamp(now().seconds(),mode_stamp_,0.3);
   }
   void publish_fixed_config() {
     std_msgs::msg::String msg;
@@ -79,7 +87,7 @@ private:
     if (steady_now()-last_stop_>=0.1) {request(*this,request_pub_,STOP,reason); last_stop_=steady_now();}
   }
   void lose_input() {
-    buttons_.reset(); neutral_input_=false; manual_fixed_.trip();
+    brake_pulse_.reset(); buttons_.reset(); neutral_input_=false; manual_fixed_.trip();
     if (mode_==MANUAL || (mode_==AUTO && manual_fixed_.enabled())) {
       if (manual_fixed_.enabled() && mode_==AUTO) {stop_fixed({},"joy_manager:fixed_throttle_input_unavailable"); return;}
       blocked_=true;
@@ -101,6 +109,7 @@ private:
       RCLCPP_INFO(get_logger(),"Bag request: %s",actions->bag_stop ? "STOP" : "START");
     }
     if (actions->stop) {
+      brake_pulse_.reset();
       if (manual_fixed_.enabled() && mode_==AUTO) {stop_fixed({},"joy_manager:stop_button");}
       else {blocked_=true; request(*this,request_pub_,STOP,"joy_manager:stop_button");}
       return;
@@ -114,11 +123,15 @@ private:
       if (trim.steering!=0 || trim.throttle!=0) {trim_pub_->publish(trim);}
     }
     if (actions->manual && mode_==AUTO) {
+      brake_pulse_.reset();
       request(*this,request_pub_,MANUAL,"joy_manager:manual_takeover");
       Control msg; msg.header=joy.header; set_values(msg,teleop_.command(joy.axes,actions->brake)); pub_->publish(msg); return;
     }
     const auto raw=teleop_.command(joy.axes,actions->brake);
-    const auto result=manual_fixed_.command(raw,joy.axes[teleop_.reverse_axis]>0.01,
+    const std::string brake_phase=brake_pulse_.phase();
+    const auto manual=brake_pulse_.command(raw,actions->brake,manual_brake_permitted(),steady_now());
+    if (brake_phase!=brake_pulse_.phase()) {RCLCPP_INFO(get_logger(),"Joy brake signal: %s",brake_pulse_.phase());}
+    const auto result=manual_fixed_.command(manual,joy.axes[teleop_.reverse_axis]>0.01,
       now().seconds(),steady_now(),input_healthy() && !blocked_);
     if (result.stop) {stop_fixed(result.command,"joy_manager:fixed_throttle_cancelled"); return;}
     Control msg; msg.header=joy.header; set_values(msg,result.command); pub_->publish(msg);
@@ -127,6 +140,8 @@ private:
       else if (actions->automatic) {request(*this,request_pub_,AUTO,"joy_manager:auto_button");}
     }
   }
+  JoyBrakePulse brake_pulse_;
+  double mode_at_{NEVER}, mode_stamp_{NEVER};
   TeleopInput teleop_;
   JoyButtons buttons_;
   ManualFixedThrottle manual_fixed_;

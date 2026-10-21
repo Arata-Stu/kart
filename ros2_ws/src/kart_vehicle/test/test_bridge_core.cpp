@@ -2,6 +2,7 @@
 #include "kart_vehicle/host_session.hpp"
 #include "kart_vehicle/serial_port.hpp"
 #include "kart_system/manual_throttle.hpp"
+#include "kart_system/joy_controls.hpp"
 #include <cassert>
 #include <iomanip>
 #include <sstream>
@@ -122,6 +123,32 @@ int main() {
     assert(frame.reverse_milli==230 && frame.brake_milli==0 && frame.throttle_milli==0);
     frame=direct.output({0,0,1,0},true,41.06,1,0);
     assert(frame.throttle_milli==0 && frame.reverse_milli==0 && frame.brake_milli==0);
+  }
+  {
+    // The actual Joy pulse -> HostSession path ends in brake from every known
+    // history subtype. HOST handshake establishes neutral before any propulsion.
+    using kart_system::Command;
+    const Command f{0,.2,0,0}, neg{0,0,0,.1}, neutral{};
+    const std::vector<std::vector<Command>> histories{
+      {}, {f}, {f,neutral}, {f,neg}, {f,neg,neutral},
+      {neg}, {neg,neutral}
+    };
+    for(const auto & history: histories) {
+      HostSession host; host.start(50); host.output({},true,50.01,1,0); host.status(*status);
+      double t=50.02;
+      for(const auto & c:history) {host.output(c,true,t,1,0); t+=.01;}
+      kart_system::JoyBrakePulse pulse;
+      pulse.command({},false,true,t);
+      const double start=t+.01;
+      for(int n=0;n<100;++n) {
+        const auto demand=pulse.command({.3,0,1,0},true,true,start+.01*n);
+        const auto frame=host.output(demand,true,start+.01*n,1,0);
+        assert(frame.flags==3 && frame.reverse_milli==0);
+        if(n<5) {assert(frame.throttle_milli==80 && frame.brake_milli==0);}
+        if(n>=6) {assert(frame.throttle_milli==0 && frame.brake_milli==1000);}
+      }
+      assert(host.esc().state()==EscState::State::brake);
+    }
   }
   // POSIX pseudo terminal: framing, fragmented status, nonblocking reads, no physical USB.
   int master=posix_openpt(O_RDWR|O_NOCTTY|O_NONBLOCK); assert(master>=0);

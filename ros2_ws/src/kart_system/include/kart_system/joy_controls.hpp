@@ -30,6 +30,40 @@ public:
   }
 };
 
+// MANUAL circle-button signal generator. Time is steady seconds; caller owns
+// freshness, mode, deadman and STOP gates. Reset requires a release before a pulse.
+class JoyBrakePulse {
+public:
+  double throttle{0.08}, duration_s{0.05};
+  bool valid_settings() const {
+    return std::isfinite(throttle) && throttle>=0.002 && throttle<=1 &&
+      std::isfinite(duration_s) && duration_s>=0.04 && duration_s<=0.5;
+  }
+  void reset() {released_=false; held_=false; pulsing_=false; started_=last_=NEVER;}
+  const char * phase() const {return !held_ ? "idle" : pulsing_ ? "positive_pulse" : "brake";}
+  Command command(Command raw, bool pressed, bool permitted, double steady) {
+    if (!permitted) {reset(); return raw;}
+    if (!valid_settings() || !valid(raw) || !std::isfinite(steady)) {reset(); return {};}
+    if (std::isfinite(last_) && (steady<last_ || steady-last_>0.1)) {
+      reset(); last_=steady;
+      return pressed ? Command{raw.steering,0,1,0} : Command{};
+    }
+    last_=steady;
+    if (!pressed) {released_=true; held_=false; pulsing_=false; return raw;}
+    if (!held_) {
+      held_=true;
+      pulsing_=released_;
+      started_=steady;
+      released_=false;
+    }
+    if (steady-started_>=duration_s) {pulsing_=false;}
+    return pulsing_ ? Command{raw.steering,throttle,0,0} : Command{raw.steering,0,1,0};
+  }
+private:
+  bool released_{false}, held_{false}, pulsing_{false};
+  double started_{NEVER}, last_{NEVER};
+};
+
 struct ButtonActions {
   bool deadman{false}, brake{false}, stop{false}, manual{false}, automatic{false};
   bool bag_start{false}, bag_stop{false};

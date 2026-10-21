@@ -171,3 +171,5 @@ neutral_after_brake、neutral_after_reverseを区別する。中立時間で履�
 既存diagnosticsのesc_command_state / esc_negative_actionは送信指令履歴のモデルであり、ESCの計測値ではない。
 後退中の明示brake要求は前進履歴がないため中立へ抑制する。
 復帰処理で必要な後退→正パルス→制動はkart_recoveryが生成する。
+
+MANUALの○では上流のJoy managerが短い正パルス→brake=1.0を生成する。vehicle自身は保持時間を生成しない。詳細は[kart_system README](../kart_system/README.md)。

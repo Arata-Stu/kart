@@ -74,5 +74,38 @@ int main() {
   actions=buttons.read(keys); assert(!actions->stop && actions->throttle_delta==0);
   buttons.auto_button=-1; keys.assign(17,0); buttons.read(keys);
   keys[3]=1; actions=buttons.read(keys); assert(!actions->automatic);
+  {
+    JoyBrakePulse pulse;
+    const Command brake{.2,0,1,0};
+    // Startup/reconnection with circle held must never synthesize propulsion.
+    assert(pulse.command(brake,true,true,10).brake==1);
+    pulse.command({},false,true,10.01);
+    auto out=pulse.command(brake,true,true,10.02);
+    assert(out.throttle==.08 && out.brake==0 && out.reverse==0 && out.steering==.2);
+    assert(pulse.command(brake,true,true,10.06).throttle==.08);
+    assert(pulse.command(brake,true,true,10.08).brake==1);
+    for(int n=0;n<100;++n) {assert(pulse.command(brake,true,true,10.09+.01*n).brake==1);}
+    // Release cancels immediately, and a new press starts exactly one pulse.
+    const Command reverse{-.3,0,0,.2};
+    assert(pulse.command(reverse,false,true,11.09).reverse==.2);
+    assert(pulse.command(brake,true,true,11.10).throttle==.08);
+    assert(pulse.command({},false,true,11.11).throttle==0);
+    pulse.command(brake,true,true,11.12);
+    pulse.reset(); // STOP, mode transition, input failure or deadman release.
+    assert(pulse.command(brake,true,true,11.13).brake==1);
+    pulse.command({},false,true,11.14);
+    pulse.command(brake,true,true,11.15);
+    assert(pulse.command(brake,true,false,11.16).brake==1); // AUTO is unchanged.
+    assert(pulse.command(brake,true,true,11.17).brake==1);
+    pulse.command({},false,true,11.18);
+    pulse.command(brake,true,true,11.19);
+    assert(pulse.command(brake,true,true,11.4).brake==1); // Control gap aborts pulse.
+    pulse.command({},false,true,11.41);
+    pulse.command(brake,true,true,11.42);
+    assert(pulse.command(brake,true,true,11.0).throttle==0); // Rewind cannot replay.
+    pulse.duration_s=.01; assert(!pulse.valid_settings());
+    pulse.duration_s=.05; pulse.throttle=0; assert(!pulse.valid_settings());
+    pulse.throttle=std::numeric_limits<double>::quiet_NaN(); assert(!pulse.valid_settings());
+  }
   std::cout<<"joy manager continuous input / button edges: passed\n";
 }

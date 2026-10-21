@@ -1087,7 +1087,13 @@ UI workerが正常なplayer終了と有効poseを検証する。画像・tfの�
 ### ESCと復帰時の信号生成
 
 vehicle内の時間付きシーケンサと、その起動設定は削除した。bringup.shからの起動でも
-MANUALに自動の制動保持・中立保持・正パルスは入らない。
-復帰を有効にしたAUTOだけ、kart_recoveryが後退終了後に短い正パルス→制動を生成する。
+R2/L2操作に自動の制動保持・中立保持・正パルスは入らない。
+復帰を有効にしたAUTOでは、kart_recoveryが後退終了後に短い正パルス→制動を生成する。
 config/recovery/recovery.yamlのpost_reverse_pulse_throttle（0.08）、post_reverse_pulse_s（0.05秒）で調整する。
 停車確認と中断監視は復帰moduleが継続する。実ESCでの値の校正は未実施。
+
+MANUALの○ではJoy managerが正パルス→brake=1.0を生成する。
+config/input/joy_manager.yamlのbrake_pulse_throttle（既定0.08、範囲0.002..1）、
+brake_pulse_s（既定0.05秒、範囲0.04..0.5）で設定する。起動時固定。
+○を離すと中断し、長押しでパルスを繰り返さない。STOPや入力喪失、モード変更でも中断する。
+AUTOと通常R2/L2は従来どおり。正パルスはMANUAL throttle trimを受け、実ESCでの値は未校正。
