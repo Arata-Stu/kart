@@ -272,8 +272,13 @@ def analyze(data, config):
             for index, value in enumerate(p.get('data', [])[:2]):
                 point('board', ('servo' if index == 0 else 'ESC') + ' reported output', row, value, 'us', True)
         if row['type'] == 'sensor_msgs/msg/Imu':
-            for key, value in p.items():
-                point('motion', topic + ' ' + key, row, value, 'rad/s')
+            if row.get('error'):
+                continue
+            frame = ' [frame=' + p['frame_id'] + ']' if p.get('frame_id') else ' [frame=unknown]'
+            for prefix, unit in (('gyro', 'rad/s'), ('accel', 'm/s²')):
+                for axis in 'xyz':
+                    key = prefix + '_' + axis
+                    point('motion', topic + frame + ' ' + key, row, p.get(key), unit)
         if row['type'] == 'nav_msgs/msg/Odometry':
             point('motion', topic + ' speed_x proxy', row, p.get('speed_x'), 'm/s')
         for entry in p.get('status', []):
@@ -300,6 +305,8 @@ def analyze(data, config):
         'AnyReader merges by bag timestamp; original arrival order across a recorder-clock reset cannot be recovered.',
         'Board output_channels are reported PWM settings, not measured ESC-pin waveforms, ESC feedback or measured vehicle response.',
         'VSLAM speed is a proxy, not calibrated ground truth. Correlated spikes do not establish causation.',
+        'Control/IMU response comparison uses recorder times and raw sensor axes. No vehicle-frame rotation, gravity removal, clock correction or actuator-delay calibration is applied.',
+        'Manual A/B time difference includes recording skew, drivetrain, vehicle dynamics, speed and surface effects; a constant input does not identify a response delay.',
         'Tensor topics are optional. Missing tensor captures cannot reveal GPU-only inference time or queue depth.',
         'EVS timing uses packet-receipt clock mapping, not hardware clock synchronization; accumulation windows and stream/epoch changes remain separate.',
         'Image callback-to-command, bridge serial transmit, board receive and physical actuator delay require additional instrumentation.',

@@ -57,20 +57,30 @@ def add_nodes(args):
     remappings, recovery_actions = (route(lu.get_path("kart_bringup", "config/recovery"), args.use_sim_time,
                                          selection=getattr(args, "recovery", ""))
                                      if decoder["drive_enabled"] else ([], []))
+    prefix = getattr(args, "tensor_topic_prefix", "") or "/e2e"
+    if getattr(args, "publish_decoded_frames", "") != "":
+        decoder["publish_decoded_frames"] = boolean(args.publish_decoded_frames)
+    # Explicit prefix isolates offline tensor transport as well as relative control topics.
+    if getattr(args, "tensor_topic_prefix", ""):
+        remappings = [("e2e/tensor_output", prefix + "/tensor_output"), *remappings]
+    if getattr(args, "clock_topic", ""):
+        remappings.append(("/clock", args.clock_topic))
     nodes = [
         lut.ComposableNode(
             name="e2e_tensor_rt",
+            namespace=getattr(args, "node_namespace", ""),
             package="isaac_ros_tensor_rt",
             plugin="nvidia::isaac_ros::dnn_inference::TensorRTNode",
             parameters=[trt],
-            remappings=[
-                ("tensor_pub", args.input_topic or "/e2e/tensor_input"),
-                ("tensor_sub", "/e2e/tensor_output"),
+            remappings=([("/clock", args.clock_topic)] if getattr(args, "clock_topic", "") else []) + [
+                ("tensor_pub", args.input_topic or prefix + "/tensor_input"),
+                ("tensor_sub", prefix + "/tensor_output"),
             ],
             extra_arguments=[{"use_intra_process_comms": True}],
         ),
         lut.ComposableNode(
             name="e2e_control_decoder",
+            namespace=getattr(args, "node_namespace", ""),
             package="kart_e2e",
             plugin="kart_e2e::ControlDecoderNode",
             parameters=[decoder],
@@ -97,6 +107,10 @@ def generate_launch_description():
         "force_engine_update",
         "use_sim_time",
         "input_topic",
+        "tensor_topic_prefix",
+        "node_namespace",
+        "clock_topic",
+        "publish_decoded_frames",
         "recovery",
     ):
         args.add_arg(key, "", cli=True)

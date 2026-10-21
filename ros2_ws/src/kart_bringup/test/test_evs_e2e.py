@@ -81,6 +81,7 @@ class EvsE2ETests(unittest.TestCase):
         with (patch.object(module, 'model_contract', return_value=({'model_file_path':'/model/model.onnx', 'engine_file_path':'/model/model.plan'}, 'steer_only')),
               patch.object(module, 'input_contract', return_value=('evs','input_tensor',[1,20,120,160])),
               patch.object(module, 'runtime_settings', return_value={'fixed_throttle':0.1,'max_throttle':0.2}),
+              patch.object(module, 'routing_settings', return_value=None),
               patch.object(module, 'require_engine')):
             module.add_nodes(args)
         container, nodes = lu.load_composable_nodes.call_args.args

@@ -11,6 +11,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
 #include "std_msgs/msg/string.hpp"
+#include "std_msgs/msg/header.hpp"
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -65,6 +66,8 @@ public:
     stream_ = nvidia::isaac_ros::common::createCudaStream("E2EControlDecoder");
     output_ = create_publisher<kart_interfaces::msg::ControlCommand>(
         drive_ ? "auto/control_cmd" : "e2e/control_cmd", 1);
+    if (setting<bool>("publish_decoded_frames", false))
+      decoded_frames_ = create_publisher<std_msgs::msg::Header>("e2e/decoded_frame", 10);
     stop_ = create_publisher<kart_interfaces::msg::OperationModeRequest>(
         "operation_mode/request", 10);
     status_ = create_publisher<std_msgs::msg::String>("e2e/status", 1);
@@ -144,6 +147,9 @@ private:
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "%s",
                            error.what());
     }
+    if (decoded_frames_ && !values.empty() &&
+        std::all_of(values.begin(), values.end(), [](float v) { return std::isfinite(v); }))
+      decoded_frames_->publish(msg->header);
     std::lock_guard<std::mutex> lock(mutex_);
     if (generation != generation_)
       return;
@@ -264,6 +270,7 @@ private:
   rclcpp::Publisher<kart_interfaces::msg::OperationModeRequest>::SharedPtr
       stop_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_;
+  rclcpp::Publisher<std_msgs::msg::Header>::SharedPtr decoded_frames_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 } // namespace kart_e2e

@@ -61,11 +61,36 @@ def choose(title, values, label=str, default=0):
     return rows[selected]
 
 
+def latency_entry(args, config, interactive):
+    from kart_bringup.e2e_latency import plan
+    from datetime import datetime
+    if args.evs or args.recovery or args.auto_fixed_throttle is not None or args.e2e_fixed_throttle is not None:
+        raise ValueError('E2E latencyはRGB bag・モデルのみを使います。実センサ／復帰／スロットル上書き指定を外してください')
+    if not args.bag or not args.e2e_model_dir:
+        raise ValueError('E2E latencyには--bagと--e2e-model-dirが必要です')
+    output = args.latency_output or str(ROOT/'analysis/e2e_latency'/datetime.now().strftime('%Y-%m-%d/%H-%M-%S-%f'))
+    run = plan(config, args.bag, args.e2e_model_dir, output, args.rate)
+    command = ['ros2', 'run', 'kart_bringup', 'e2e_latency', '--bag', run['bag'],
+               '--model-dir', run['model_dir'], '--output', run['output_dir'], '--rate', str(run['rate'])]
+    print('E2E offline latency: RGB → 実運用encoder/TensorRT/decoder。実センサ・車両出力なし。')
+    print('STOP warmup → 計測専用AUTO。元stampは保持し、所要時間はsteady clockで計測。')
+    print('全pipelineの購読準備後に再生開始。完了／Ctrl-CでCSV・JSON・時系列HTMLを保存。')
+    print('保存先:', run['output_dir'])
+    print(shlex.join(command))
+    if args.dry_run:
+        return
+    if interactive:
+        choose('この構成を起動', [True, False], lambda v: '起動' if v else '終了') or sys.exit(0)
+    if not shutil.which('ros2'):
+        raise ValueError('ROSコンテナ内でscripts/build.shを実行してから起動してください')
+    os.execvp(command[0], command)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="kart: 収集 / 地図走行 / E2E / offline評価。--mode指定時は非対話。"
     )
-    parser.add_argument("--mode", choices=("collect", "environment", "drive", "e2e", "eval"))
+    parser.add_argument("--mode", choices=("collect", "environment", "drive", "e2e", "eval", "e2e-latency"))
     parser.add_argument("--map-root", type=Path, default=ROOT / "map")
     parser.add_argument("--model-root", type=Path, default=ROOT / "models")
     parser.add_argument("--rgb-fps", choices=("0", "30", "60", "90"))
@@ -102,11 +127,12 @@ def main():
                         help="自動復帰: off / infra_imu / rgb_imu / evs_assisted（未指定はYAML）")
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--e2e-model-dir", default="")
-    parser.add_argument("--eval-localization", choices=("vslam", "vgl", "fresh"), default=None)
+    parser.add_argument("--eval-localization", choices=("vslam", "vgl", "fresh", "e2e_latency"), default=None)
     parser.add_argument("--multicam-mode", choices=("0","1","2"), default="", help="速度・精度: 0=Moderate / 1=Performance / 2=Precision")
     parser.add_argument("--tracking-mode", choices=("0", "1"), default="", help="offline評価: 0=stereo VO / 1=VIO")
     parser.add_argument("--base-frame", default="", help="offline評価の基準TF frame（例: camera_link）")
     parser.add_argument("--imu-frame", default="", help="offline VIO評価のIMU TF frame")
+    parser.add_argument("--latency-output", default="", help="E2E offline latencyの新規保存先（既定analysis/e2e_latency/日時）")
     parser.add_argument("--bag", default="")
     parser.add_argument("--rate", default="")
     args = parser.parse_args()
@@ -168,9 +194,9 @@ def main():
             )
         if args.mode == "eval" and args.eval_localization is None:
             args.eval_localization = choose(
-                "評価するlocalization", (["vslam_vio"] if args.tracking_mode == "1" else ["vslam"] if args.tracking_mode == "0" else ["vslam", "vslam_vio"]) + ["vgl"] +
-                (["fresh_vio" if args.tracking_mode == "1" else "fresh_vo"] if args.tracking_mode else ["fresh_vo", "fresh_vio"]),
-                lambda v: {"vslam": "保存mapでVO localization", "vslam_vio": "保存mapでVIO localization（左右画像＋IMU）", "vgl": "VSLAM＋VGL（準備済みbundle）",
+                "オフライン解析", (["vslam_vio"] if args.tracking_mode == "1" else ["vslam"] if args.tracking_mode == "0" else ["vslam", "vslam_vio"]) + ["vgl"] +
+                (["fresh_vio" if args.tracking_mode == "1" else "fresh_vo"] if args.tracking_mode else ["fresh_vo", "fresh_vio"]) + ["e2e_latency"],
+                lambda v: {"e2e_latency": "E2E latency（RGB bag → TensorRT → 制御topic、車両出力なし）", "vslam": "保存mapでVO localization", "vslam_vio": "保存mapでVIO localization（左右画像＋IMU）", "vgl": "VSLAM＋VGL（準備済みbundle）",
                            "fresh_vo": "mapなしVO評価（左右画像・特徴点群・軌跡）",
                            "fresh_vio": "mapなしVIO評価（左右画像＋IMU・特徴点群・軌跡）"}[v])
             if args.eval_localization == "vslam_vio":
@@ -181,6 +207,8 @@ def main():
             if args.eval_localization in ("fresh_vo", "fresh_vio"):
                 args.tracking_mode = "1" if args.eval_localization == "fresh_vio" else "0"
                 args.eval_localization = "fresh"
+        if args.mode == "eval" and args.eval_localization == "e2e_latency":
+            args.mode = "e2e-latency"
         if args.mode == "eval" and args.eval_localization == "fresh" and not args.tracking_mode:
             args.tracking_mode = choose("追跡方式", ["0", "1"], lambda v: "stereo VO（IMUなし）" if v == "0" else "VIO（IMUあり）")
         if args.mode in ("drive","eval") and not args.multicam_mode:
@@ -225,7 +253,7 @@ def main():
             args.tuning = choose("Map Studio 動的調整", [False, True],
                                  lambda enabled: "有効（HDMap・自己位置表示、停止中に編集を適用）" if enabled else "無効（通常走行）",
                                  default=int(default_tuning))
-        if args.mode == "e2e":
+        if args.mode in ("e2e", "e2e-latency"):
             candidates = sorted(
                 set(
                     discover(args.model_root, "e2e")
@@ -235,12 +263,18 @@ def main():
             args.e2e_model_dir = args.e2e_model_dir or str(
                 choose("E2E ONNXモデル（metadata付き）", candidates)
             )
-        if args.mode == "eval":
+        if args.mode in ("eval", "e2e-latency"):
             args.bag = args.bag or str(
                 choose("再生rosbag", discover(args.record_dir, "bag"))
             )
         elif args.run_name is None:
             args.run_name = input("run_name [run] > ").strip() or "run"
+    if args.mode == "eval" and args.eval_localization == "e2e_latency":
+        args.mode = "e2e-latency"
+    if args.mode == "e2e-latency":
+        return latency_entry(args, config, interactive)
+    if args.latency_output:
+        raise ValueError("--latency-outputはe2e-latency専用です")
     section_routing = None
     if args.mode == 'e2e':
         from kart_e2e.contract import routing_settings

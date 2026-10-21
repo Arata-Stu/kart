@@ -84,6 +84,7 @@ def test_bringup_cli_and_tui_forward_selection_without_editing_yaml(monkeypatch,
               '--rgb-fps', '30', '--infra-fps', '30', '--no-evs', '--foxglove']
     with (patch('kart_e2e.contract.input_contract', return_value=('rgb', 'image', [1,3,120,212])),
           patch('kart_e2e.contract.model_contract', return_value=({}, 'steer_only')),
+          patch('kart_e2e.contract.routing_settings', return_value=None),
           patch('kart_e2e.contract.runtime_settings', return_value={'fixed_throttle': .1, 'max_throttle': .2})):
         monkeypatch.setattr(sys, 'argv', common + ['--mode', 'e2e', '--recovery', 'rgb_imu'])
         cli.main()
@@ -115,6 +116,7 @@ def test_e2e_inference_routes_selection_only_when_drive_enabled():
                                      input_topic='', drive_enabled='true', recovery='infra_imu')
         with (patch.object(module, 'model_contract', return_value=({}, 'steer_only')),
               patch.object(module, 'input_contract', return_value=(modality, input_name, [])),
+              patch.object(module, 'routing_settings', return_value=None),
               patch.object(module, 'runtime_settings', return_value={'fixed_throttle': .1, 'max_throttle': .2}),
               patch.object(module, 'require_engine'),
               patch('kart_bringup.recovery.route', return_value=([('auto/control_cmd', '/recovery/input_cmd')], ['gate'])) as routing):

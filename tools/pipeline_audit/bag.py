@@ -47,7 +47,14 @@ def extract(msg, kind):
                 pass
         return {'data': value}
     if kind == 'sensor_msgs/msg/Imu':
-        return {f'gyro_{axis}': float(getattr(msg.angular_velocity, axis)) for axis in 'xyz'}
+        # ROS Imu: covariance[0] == -1 explicitly means the component is unavailable.
+        result = {'frame_id': msg.header.frame_id}
+        for prefix, field, covariance in (('gyro', 'angular_velocity', 'angular_velocity_covariance'),
+                                           ('accel', 'linear_acceleration', 'linear_acceleration_covariance')):
+            available = getattr(msg, covariance)[0] != -1
+            for axis in 'xyz':
+                result[f'{prefix}_{axis}'] = float(getattr(getattr(msg, field), axis)) if available else None
+        return result
     if kind == 'nav_msgs/msg/Odometry':
         v = msg.twist.twist
         return dict(speed_x=float(v.linear.x), yaw_rate=float(v.angular.z))

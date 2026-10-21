@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "namespace_prefix": "e2e_latency",
+  "image_topic": "/realsense/color/image_raw",
+  "camera_info_topic": "/realsense/color/camera_info",
+  "rate": 1.0,
+  "clock_hz": 200,
+  "read_ahead_queue_size": 100,
+  "drain_s": 2.0,
+  "use_fixed_throttle": true
+}

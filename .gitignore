@@ -47,3 +47,6 @@ __pycache__/
 /tools/vgl/reference/
 /tools/vgl/inputs/
 /models/vgl/
+
+# Local rosbag analysis reports and extracted metadata.
+/analysis/

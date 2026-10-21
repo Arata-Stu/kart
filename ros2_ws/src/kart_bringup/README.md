@@ -315,7 +315,8 @@ HDMapを選んだだけで無関係なbundleを自動対応させない。
 | collect | RealSense、Joy、mode manager、command mux、車両bridge、bag manager、Jetson jtop |
 | drive | collect一式＋VSLAM/VGL、HDMap/reference line、Pure Pursuit、速度PID |
 | e2e | collect一式＋公式image encoder/TensorRT＋control decoder。VSLAM/VGLなし |
-| eval | bag＋保存map localization、またはmapなしVSLAM診断＋RViz2。実センサ・車両・追従・録画なし |
+| eval | bag＋保存map localization、mapなしVSLAM診断、またはE2E latency。実センサ・車両・追従・録画なし |
+| e2e-latency | RGB bag＋実運用encoder/TensorRT/decoder＋steady latency観測、CSV/JSON/HTML保存 |
 
 EVSとFoxgloveは選択時だけ追加。collectでいうvehicle controlは手動操作の制御権・指令muxであり、
 自律追従は起動しない。jtopは既存vehicle launchが所有し、非Jetsonではskipする。
@@ -1099,3 +1100,72 @@ brake_pulse_s（既定0.01秒、範囲0.01..0.5）で設定する。起動時固
 AUTOと通常R2/L2は従来どおり。正パルスはMANUAL throttle trimを受け、実ESCでの値は未校正。
 
 Joyの10 ms正パルスは基板の20 ms PWM更新に捕捉されない可能性がある。出力時間と実ESCの認識は要実機確認。復帰moduleの時間設定は変更していない。
+
+## Offline E2E latency（RGB）
+
+`bash scripts/bringup.sh` → **offline bag評価** → **E2E latency** → モデル → bagで起動する。
+同じ実行GPU向けにengineを事前生成したsingle-head RGBモデルを使用する。
+EVS RAW/Tensorやsection routingは未対応で、起動前に拒否する。モデルに合うengineの準備は
+既存の`bash scripts/e2e_trt.sh <model>`を使う。bringup自身はbuildしない。
+
+```bash
+# ROS開発コンテナ内。追加C++ componentとentrypointを含めてbuildする。
+bash scripts/build.sh --packages-up-to kart_bringup
+bash scripts/bringup.sh --mode e2e-latency \
+  --bag /workspaces/record/<bag> --e2e-model-dir /workspaces/e2e/models/<model>
+# 既存eval入口からも指定可能
+bash scripts/bringup.sh --mode eval --eval-localization e2e_latency \
+  --bag /workspaces/record/<bag> --e2e-model-dir /workspaces/e2e/models/<model> \
+  --rate 1.0 --latency-output /workspaces/analysis/e2e_latency/<new-name>
+```
+
+`--dry-run`は入力metadata・モデル契約を検査してコマンドを表示し、出力先を作成しない。
+`--rate`未指定は1.0倍、許容は(0,4]。`--latency-output`未指定は
+`<repo>/analysis/e2e_latency/YYYY-MM-DD/HH-MM-SS-ffffff/`、既存ディレクトリは拒否する。
+実行GPU・TensorRT版に合うengineが必要。PlotlyはDocker同梱で、旧イメージは再buildする。
+
+`e2e_latency` CLI（`ros2 run kart_bringup e2e_latency --bag ... --model-dir ...`）は
+`e2e_latency.launch.py`を管理し、終了後にreportを生成する。独自ROS topic／parameterを持たない。
+CLIの`--output`は任意の新規directory（未指定はcwd下の`analysis/e2e_latency/日時`）。
+launch引数は`bag`／`model_dir`／`output_dir`が必須、`rate=''`はJSONの値を保持する。
+直接launchする場合は空のoutput_dirを事前作成し、終了後のreport生成はCLIを使う運用と区別する。
+
+再生するのはRGBとCameraInfoのみ。起動するのはC++ ingress probe、既存GPU encoder、TensorRT、decoder。
+入力から出力までの全subscriberを確認してpaused playerをresumeする。画像stampは改変しない。
+source headerはexact matchに使い、latencyはsteady clockだけで測る。
+STOPで最初のデコードを待ち、さらにwarmup後に計測専用AUTOを出版する。
+実センサ・Joy・車両bridge・command mux・復帰は起動せず、実車用`/auto/control_cmd`や
+`/vehicle/control_cmd`へ出版しない。namespaceと`/clock`は保存先から導出したsession IDで分離する。
+`/e2e_latency_<ID>/e2e/control_cmd`が計測の最終点で、車両入力までの時間は含まない。
+
+設定正本は`config/evaluation/e2e_latency.json`（CLI/launch設定）と
+`e2e_latency.yaml`（probeの全ROS parameter）。画像topic既定は`/realsense/color/image_raw`、
+CameraInfoは`/realsense/color/camera_info`。JSON既定はnamespace_prefix=`e2e_latency`、rate=1.0、
+clock_hz=200、read_ahead_queue_size=100、drain_s=2.0、use_fixed_throttle=true、schema=1。
+固定throttleはモデルmetadataのruntime値を使う。0.15の収集bagでも画像にモデルの推論を適用するだけで、
+bagの記録済み制御を再生したり新しい推論の教師と混同したりしない。
+各probe parameter／topic型・QoS・既定値は[kart_e2e README](../kart_e2e/README.md#offline-latency-probe)参照。
+既存encoder／TensorRT／decoder設定を再利用し、実行時のnamespace／clock／入力と
+`publish_decoded_frames=true`／`drive_enabled=false`だけを明示する。
+
+出力は次のとおり。Ctrl-C時も子processを止めて待機してから取得済みの結果を保存する。
+
+|ファイル|内容|
+|---|---|
+|`session.json`|bag・モデル・ONNX hash・設定hash・再生速度・実行namespace|
+|`samples.csv`|全入力・decoded通知・最初と反復の制御・状態・warmup／曖昧stamp／不一致|
+|`summary.json`|warmupを除いた平均／P50／P95／P99／最大、未観測件数、完了／中断|
+|`report.html`|単独で開けるPlotly時系列、共通zoom、hover。全点を保持|
+|`launch.log`|実際のROS起動・CUDA・decoderログ|
+|`playback.json`|playerの終了code。途中停止では存在しない場合がある|
+
+latencyは①relay受信→デコード通知受信、②relay受信→最初の制御topic受信を別集計する。
+後者にはdecoder timerと観測callbackの待ちが含まれる。GPU kernel単体時間や露光→制御時間ではない。
+既定50Hz制御では90Hz入力の全frameを指令に採用できないため、未観測指令件数を推論落ちと解釈しない。
+画像relayは同一container内のintra-process handoffを使うが、計測自体の負荷は含まれる。
+末尾のdrain中には入力途絶のwatchdog状態が現れる。warmup／反復は生CSVとplotに残し、集計は初回だけ。
+完了でもdecoded／commandの有効サンプルが0なら`incomplete`で、0msとして成功扱いにしない。
+実走行時のUSB・センサ取得・録画writer負荷・車両応答は再現しない。
+
+検証: portable計画・TUI/CLI dry-run・launch接続・集計／自己完結HTML、C++時刻対応付けをテスト。
+ROS/Isaac ROS/CUDA componentのbuild・実bagを使うJetson再生・実走行との差は未検証。

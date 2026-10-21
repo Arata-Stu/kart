@@ -1,0 +1,13 @@
+# Offline C++ ingress relay / steady-clock observer. No sensor/vehicle drivers.
+# Topics are relative to the dedicated /e2e_latency namespace; launch derives
+# the complete graph-readiness list from the same encoder pipeline prefix.
+/**/e2e_latency_probe:
+  ros__parameters:
+    use_sim_time: true
+    csv_path: '' # required new file, supplied by session runner
+    warmup_s: 2.0 # after first decoded frame; all warmup ingress frames remain in CSV
+    startup_timeout_s: 120.0 # real seconds until first successful decode
+    max_pending: 4096 # maximum stamp-to-ingress metadata entries; pixels are not retained
+    resume_service: /e2e_latency/rosbag2_player/resume
+    ready_topics: [] # launch supplies full pipeline list, not just first image subscriber
+    ready_nodes: [] # one exact subscriber name per topic; namespace must also match

@@ -284,3 +284,129 @@ def test_invalid_configuration_is_rejected(key, value):
     config[key] = value
     with pytest.raises(ValueError):
         validate(config)
+
+
+def response_fixture():
+    rows = []
+    for t in range(0, 1000, 10):
+        rows.append(sample('final', t, t, dict(steering=0. if t < 200 else .4, throttle=.15, brake=0., reverse=0.)))
+        rows.append(sample('/realsense/imu', t + 1, t - 1,
+                    dict(frame_id='camera_imu_optical_frame', gyro_x=.01, gyro_y=.02,
+                         gyro_z=0. if t < 280 else .3, accel_x=.2, accel_y=0., accel_z=9.81),
+                    kind='sensor_msgs/msg/Imu'))
+    return dict(bag='response fixture', records=rows, inventory={})
+
+
+def test_imu_acceleration_covariance_and_frame_from_real_mcap(tmp_path):
+    import numpy as np
+    from rosbags.rosbag2 import Writer, StoragePlugin
+    from rosbags.typesys import Stores, get_typestore
+    store = get_typestore(Stores.LATEST)
+    make = lambda kind, *args: store.types[kind](*args)
+    kind = 'sensor_msgs/msg/Imu'
+    header = make('std_msgs/msg/Header', make('builtin_interfaces/msg/Time', *divmod(BASE, 10**9)), 'imu_optical')
+    unavailable = np.zeros(9); unavailable[0] = -1.
+    message = make(kind, header, make('geometry_msgs/msg/Quaternion', 0.,0.,0.,1.), unavailable,
+                   make('geometry_msgs/msg/Vector3', 0.,0.,0.), unavailable,
+                   make('geometry_msgs/msg/Vector3', 1.,2.,9.81), np.zeros(9))
+    bag = tmp_path/'imu'
+    with Writer(bag, version=9, storage_plugin=StoragePlugin.MCAP) as writer:
+        conn = writer.add_connection('/imu_accel_only', kind, typestore=store)
+        writer.write(conn, BASE+10_000_000, store.serialize_cdr(message, kind))
+    data = read_bag(bag, CONFIG)
+    row = data['records'][0]
+    assert row['payload']['frame_id'] == 'imu_optical'
+    assert row['payload']['gyro_z'] is None  # No false zero gyro from an accel-only message.
+    assert row['payload']['accel_z'] == 9.81
+    assert row['stamp_ns'] == BASE and row['bag_ns'] == BASE+10_000_000
+    _, _, _, series = analyze(data, CONFIG)
+    assert not any('gyro_' in s['name'] for s in series)
+    assert any(s['name'].endswith('accel_z') and s['unit']=='m/s²' for s in series)
+
+
+def test_response_dual_axes_preserve_times_units_and_choose_final_command(tmp_path):
+    from tools.pipeline_audit.report import response_series, write_report
+    summary, matches, events, series = analyze(response_fixture(), CONFIG)
+    comparison, groups, topic = response_series(series, CONFIG['topics'])
+    assert topic == CONFIG['topics']['final']
+    assert groups['gyro'].endswith('gyro_y') and groups['accel'].endswith('accel_x')
+    steer = next(s for s in comparison if s['name'].endswith(' steering'))
+    gyro = next(s for s in comparison if s['name'].endswith('gyro_z'))
+    assert next(t for t,v in steer['points'] if v != 0) == .2
+    assert next(t for t,v in gyro['points'] if v != 0) == .281  # Recorder time, not .279 header time.
+    assert steer['secondary'] is False and gyro['secondary'] is True
+    assert steer['unit']=='normalized' and gyro['unit']=='rad/s'
+    write_report(tmp_path, summary, matches, events, series)
+    text = (tmp_path/'report.html').read_text()
+    assert 'response-gyro' in text and 'response-accel' in text and 'response-delta' in text
+    assert summary['response_comparison']['timestamp_correction'] is False
+    assert 'response_' not in (tmp_path/'timeline.csv').read_text() # Render duplicates do not duplicate raw CSV.
+    import re
+    figure=json.loads(re.search(r'<script id="figure" type="application/json">(.*?)</script>',text).group(1))
+    assert figure['layout']['yaxis2']['overlaying']=='y'
+    assert figure['layout']['yaxis4']['overlaying']=='y3'
+    assert figure['layout']['yaxis2']['title']['text']=='Angular rate [rad/s]'
+
+
+def test_response_ui_selects_imu_axis_and_reads_manual_time_difference(tmp_path):
+    node = shutil.which('node')
+    if node is None:pytest.skip('Node needed for generated interaction handlers')
+    from tools.pipeline_audit.report import write_report
+    write_report(tmp_path, *analyze(response_fixture(), CONFIG))
+    script = r'''
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const html=fs.readFileSync(process.argv[1],'utf8');
+const value=id=>html.match(new RegExp('<script id="'+id+'" type="application/json">([\\s\\S]*?)</script>'))[1];
+let clicked,updated,restyled;
+const elements={figure:{textContent:value('figure')},'response-choices':{textContent:value('response-choices')},
+ chart:{on(name,handler){clicked=handler;}},'response-gyro':{},'response-accel':{},
+ 'response-clear':{},'response-delta':{},start:{value:'0'},end:{value:'1'},zoom:{},reset:{}};
+const document={getElementById:id=>elements[id],querySelectorAll:()=>[]};
+const Plotly={newPlot(){},relayout(chart,changes){updated=changes;},restyle(chart,changes,indices){restyled={changes,indices};}};
+const handlers=[...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1];
+vm.runInNewContext(handlers,{document,Plotly,Number,Object,String,JSON});
+const choices=JSON.parse(elements['response-choices'].textContent).gyro;
+elements['response-gyro'].value=String(choices[0].index);elements['response-gyro'].onchange();
+assert.ok(restyled.indices.length===3);
+assert.equal(restyled.changes.visible.filter(v=>v===true).length,1);
+clicked({points:[{x:.2}]});clicked({points:[{x:.281}]});
+assert.ok(elements['response-delta'].textContent.includes('81.00 ms'));
+assert.equal(updated.shapes.length,2);
+elements['response-clear'].onclick();assert.equal(updated.shapes.length,0);
+assert.equal(elements['response-delta'].textContent,'A点を選択');
+console.log('Response axes and manual A/B time difference passed (no browser rendering)');
+'''
+    result=subprocess.run([node,'-e',script,str(tmp_path/'report.html')],text=True,capture_output=True)
+    assert result.returncode==0,result.stderr
+
+
+def test_response_model_gets_full_resolution_samples_and_distinct_prediction_axis(tmp_path):
+    from tools.pipeline_audit.report import write_report
+    import re
+    data=response_fixture()
+    # Force display decimation while preserving the original samples for fitting.
+    config=copy.deepcopy(CONFIG);config['plot_max_points']=100
+    rows=[]
+    for t in range(0,4000,5):
+        rows.append(sample('final',t,t,dict(steering=(t%500)/1000.,throttle=.15,brake=0.,reverse=0.)))
+        rows.append(sample('/realsense/imu',t+1,t-1,dict(frame_id='imu',gyro_y=-.5),kind='sensor_msgs/msg/Imu'))
+    data['records']=rows
+    write_report(tmp_path,*analyze(data,config))
+    text=(tmp_path/'report.html').read_text()
+    load=lambda key:json.loads(re.search(r'<script id="'+key+r'" type="application/json">(.*?)</script>',text).group(1))
+    fit=load('response-fit-data');fig=load('figure')
+    sensor=next(iter(fit['gyro'].values()))
+    assert len(sensor['points'])==800
+    assert sensor['points'][0][0]==.001
+    assert fit['origin_bag_ns']==str(BASE)
+    assert fig['data'][fit['model_index']]['yaxis']=='y2'
+    assert fig['data'][fit['model_index']]['visible'] is False
+    assert len(fig['data'][1]['x'])<=100
+    assert '操舵と角速度から応答遅れをモデル推定' in text
+
+
+def test_response_delay_model_portable_node_suite():
+    node=shutil.which('node')
+    if node is None:pytest.skip('Node needed for response estimator contracts')
+    result=subprocess.run([node,'--test',str(Path(__file__).with_name('test_response_delay.cjs'))],capture_output=True,text=True,timeout=30)
+    assert result.returncode==0,result.stdout+result.stderr

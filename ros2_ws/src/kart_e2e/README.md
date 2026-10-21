@@ -98,6 +98,7 @@ root namespace時の既定。相対topicはnamespace/remapに従う。
 |入力|`/e2e/tensor_output`|isaac_ros_tensor_msgs/msg/TensorList|reliable / depth 1|controlという名前の連続FP32 [1,N]、N=1または2|
 |入力|`/operation_mode/state`|kart_interfaces/msg/OperationModeState|reliable / depth 1|mode・元stamp・受信時刻|
 |出力|`/e2e/control_cmd`|kart_interfaces/msg/ControlCommand|reliable / depth 1|既定、50Hzの制御gate出力|
+|条件付き出力|`/e2e/decoded_frame`|std_msgs/msg/Header|reliable / depth 10|publish_decoded_frames=true時、各tensorのreadback完了通知|
 |条件付き出力|`/auto/control_cmd`|kart_interfaces/msg/ControlCommand|reliable / depth 1|drive_enabled=true時に上記を置換|
 |出力|`/e2e/status`|std_msgs/msg/String|reliable / depth 1|状態、10Hz＋状態変化時に即時|
 |条件付き出力|`/operation_mode/request`|kart_interfaces/msg/OperationModeRequest|reliable / depth 10|drive有効時の異常STOP要求、最大10Hz|
@@ -126,6 +127,7 @@ pkg基準値は`config/control_decoder.yaml`、実運用はbringupの同名YAML�
 |mode_timeout_s|0.3|modeのstamp・受信wall鮮度上限秒|
 |control_rate_hz|50.0|watchdog/指令周期[1,100]Hz|
 |drive_enabled|false|AUTO muxへの接続|
+|publish_decoded_frames|false|起動時固定。CUDA readback後に元headerを`e2e/decoded_frame`へ通知|
 
 ## 学習・ONNX export（PCのみ）
 
@@ -1313,3 +1315,59 @@ Map Studioの「学習 → Section head」で割当、offline pose、専門／�
 既存の学習画面で複数datasetを選ぶとroutingを自動で渡し、全headのtrain/validationの存在を検証する。
 `section_workflow`はUI内部workerであり、固定のrouting保存／offline起動のみを処理する。
 独自ROSノードやtopicは追加しない。詳細なUI操作は[Map Studio README](../../../tools/app/README.md#section-headの学習ui)を参照。
+
+## Offline latency probe
+
+C++ Component `kart_e2e::LatencyProbeNode`、既定ノード名`e2e_latency_probe`。
+単体実行ファイルは`e2e_latency_probe`（MultiThreadedExecutor）。画像の受信時点をsteady clockで保持して
+同じheaderのデコード完了と最初／反復の制御指令を追跡する。画像を保持せず、metadataだけを最大4096件保持する。
+同一containerのintra-process経路では画像をUniquePtrで渡す。通常走行にはロードしない。
+
+通常のdecoderへ`publish_decoded_frames`（bool、既定false、起動時固定）を追加した。
+trueならcontrol tensorのCUDA readbackが完了し、値が有限な場合に`/e2e/decoded_frame`
+（`std_msgs/msg/Header`、reliable/volatile/depth10）へ元headerを1回出版する。
+これは推論の完了観測であり、mode gateでの採用や実車への出力を示さない。
+既定falseではpublisherを作成せず、既存の制御判断・指令値・CUDA処理を変更しない。
+
+以下はroot namespaceでのprobeの既定topic名。launchは全体をsession専用の
+`/e2e_latency_<ID>`へ置き、元bagのRGB／CameraInfoとclockをそのnamespaceへremapする。
+全topicはvolatile。`/rosout`・`/parameter_events`などROS標準の自動生成topicは省略する。
+
+|方向|既定topic|型|QoS|内容|
+|---|---|---|---|---|
+|入力|`/replay/image`|sensor_msgs/msg/Image|best_effort / depth5|元stampを保持するbag RGB|
+|出力|`/input/image`|sensor_msgs/msg/Image|reliable / depth1|受信時刻を記録してencoderへ渡す|
+|入力|`/e2e/decoded_frame`|std_msgs/msg/Header|reliable / depth10|CUDA readback後のheader通知|
+|入力|`/e2e/control_cmd`|kart_interfaces/msg/ControlCommand|reliable / depth10|decoder timerのgate出力|
+|入力|`/e2e/status`|std_msgs/msg/String|reliable / depth10|decoder gate状態|
+|出力|`/operation_mode/state`|kart_interfaces/msg/OperationModeState|reliable / depth1|50Hz、STOP warmup→計測専用AUTO|
+
+probeは`rosbag2_interfaces/srv/Resume`のclientを持つ。既定serviceは
+`/e2e_latency/rosbag2_player/resume`で、launchがsession namespaceへ上書きする。
+全段の購読者名・namespaceとserviceを確認して再生する。最初のdecodeが期限内に来なければ
+CSVに`startup_failed`を残してcontainerを終了する。独自service/actionのserverは追加しない。
+CameraInfoはprobeを通らず、bagからencoderへ直接渡す。
+
+全独自parameterは起動時固定（read_only）。基準値は`config/latency_probe.yaml`、
+実運用の正本は`kart_bringup/config/evaluation/e2e_latency.yaml`。
+
+|parameter|ノード既定|意味|
+|---|---|---|
+|`use_sim_time`|false（YAMLではtrue）|ROS共通。元headerと再生clockでdecoderを動かす。計測はsteady clock|
+|`csv_path`|空、必須|新規CSV。既存ファイルは拒否|
+|`warmup_s`|2.0|最初のdecodeからAUTOまでの実秒、有限かつ0以上|
+|`startup_timeout_s`|120.0|最初のdecodeを待つ実秒、有限かつ正|
+|`max_pending`|4096|stamp照合metadataの上限、1..1,000,000。古いmetadataから除外|
+|`resume_service`|`/e2e_latency/rosbag2_player/resume`|paused playerのresume先|
+|`ready_topics`|空、launchで必須指定|再生前に確認する全段のtopic絶対名|
+|`ready_nodes`|空、launchで必須指定|各topicのsubscriber名。topicsと同じ要素数、同じnamespaceを確認|
+
+重複／巻戻りheaderは曖昧として除外し、近傍画像で代用しない。
+decoded通知と制御指令のfirstフラグは別管理する。制御の反復を推論FPSとして数えない。
+watchdog・AUTO進入中立は実運用decoderのまま残し、故障を無理に解除して数値を作らない。
+modeはあくまでこの計測専用の合成入力で、車両状態の再現ではない。
+
+実行入口・保存先・全CLI/launch設定は[kart_bringup README](../kart_bringup/README.md#offline-e2e-latencyrgb)参照。
+単体起動にはcsv_pathと全graphのready指定が必要なため、通常はbringup.shのoffline入口を使う。
+対応はsingle-head RGB。ROS/Isaac ROS componentのbuild・Jetson/GPUでの実bag再生は未検証。
+portable検証は`test_latency_tracker.cpp`、bringupの`test_e2e_latency.py`と既存compositionテスト。
