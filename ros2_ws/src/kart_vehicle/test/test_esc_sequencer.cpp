@@ -56,11 +56,11 @@ int main() {
     assert(f.brake_milli==0 && f.reverse_milli==0 && f.throttle_milli==0);
   }
   assert(s.apply(frame(0,180),2.73).reverse_milli==180);
-  // Neutral cancels entry; a later brake request cannot restart a positive pulse.
+  // Neutral cancels entry but preserves the positive pulse's pending-first-brake latch.
   s.apply(frame(0,0,500),2.74);
   f=s.apply(frame(),2.75);assert(f.throttle_milli==0 && f.brake_milli==0);
-  f=s.apply(frame(0,0,500),2.76);assert(f.throttle_milli==0 && f.brake_milli==0);
-  assert(std::string(s.name())=="rejected");assert(s.esc().brake_rejected());
+  f=s.apply(frame(0,0,500),2.76);assert(f.throttle_milli==0 && f.brake_milli==500);
+  assert(std::string(s.name())=="braking");assert(!s.esc().brake_rejected());
   // Changing from the positive pulse to reverse also brakes before neutral/backing.
   s.reset();dwell_reverse(s,3);s.apply(frame(0,0,500),3.23);
   for(int i=0;i<=19;++i) {
@@ -85,6 +85,38 @@ int main() {
   // Quantized neutral cannot generate a pulse or directional transition.
   s.reset();s.apply(frame(),6);f=s.apply(frame(0,0,1),6.01);
   assert(f.brake_milli==0 && f.throttle_milli==0);
+  // Real trigger handover can spend any length in neutral before L2.
+  for(int neutral_ticks : {1,3,37,1000}) {
+    EscSequenceSettings cfg;EscSequencer history(cfg);
+    double t=30;
+    history.apply(frame(),t);t+=.01;history.apply(frame(200),t);
+    for(int i=0;i<neutral_ticks;++i) {
+      t+=.01;history.apply(frame(),t);
+      assert(history.esc().negative_is_brake());
+    }
+    t+=.01;f=history.apply(frame(0,250),t);
+    assert(f.brake_milli==100 && f.reverse_milli==0);
+    assert(std::string(history.name())=="reverse_braking");
+    // Braking -> neutral -> reverse must finish without restarting the brake latch.
+    bool saw_neutral=false,saw_reverse=false;
+    for(int i=0;i<30;++i) {
+      t+=.01;f=history.apply(frame(0,250),t);
+      if(f.reverse_milli) {assert(saw_neutral && f.reverse_milli==250);saw_reverse=true;}
+      else if(!f.brake_milli) {assert(!saw_reverse);saw_neutral=true;}
+      else {assert(!saw_neutral && !saw_reverse && f.brake_milli==100);}
+    }
+    assert(saw_reverse);
+    // STOP/HOST loss erases the otherwise persistent history.
+    auto lost=frame();lost.flags=COMMAND_VALID;history.apply(lost,t+.01);
+    assert(std::string(history.esc().next_negative_name())=="unknown");
+  }
+  // Dedicated brake after forward + neutral also consumes the first negative latch.
+  s.reset();s.apply(frame(),50);s.apply(frame(200),50.01);s.apply(frame(),50.02);
+  assert(s.apply(frame(0,0,500),50.03).brake_milli==500);
+  s.apply(frame(),50.04);
+  assert(!s.esc().negative_is_brake());
+  assert(s.apply(frame(0,200),50.05).reverse_milli==0);
+  assert(std::string(s.name())=="reverse_neutral");
   // Disabled profile keeps legacy behavior, including rejection from reverse.
   EscSequenceSettings disabled_settings;disabled_settings.enabled=false;
   EscSequencer legacy(disabled_settings);legacy.apply(frame(),0);legacy.apply(frame(0,200),.01);

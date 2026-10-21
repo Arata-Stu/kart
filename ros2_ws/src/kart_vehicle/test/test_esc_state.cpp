@@ -2,6 +2,7 @@
 #include "kart_vehicle/host_session.hpp"
 #include <cassert>
 #include <iostream>
+#include <string>
 using namespace kart_vehicle;
 using State = EscState::State;
 CommandFrame input(int forward=0,int reverse=0,int brake=0) {
@@ -50,6 +51,26 @@ int main() {
   // Explicit brake from neutral must not drive backwards, even when held.
   s.apply(input());
   for (int i=0;i<1000;++i) {assert(s.apply(input(0,0,1000)).brake_milli==0);}
+  // Forward -> arbitrarily long neutral -> first negative is still brake.
+  for(bool dedicated : {false,true}) {
+    auto history=at(State::forward);
+    for(int i=0;i<1000;++i) {
+      history.apply(input());
+      assert(history.state()==State::neutral && history.negative_is_brake());
+    }
+    auto brake=history.apply(dedicated ? input(0,0,250) : input(0,250));
+    assert(brake.brake_milli==250 && brake.reverse_milli==0);
+    assert(history.state()==State::brake);
+    // Holding negative never transitions to reverse.
+    for(int i=0;i<100;++i)assert(history.apply(input(0,250)).brake_milli==250);
+    history.apply(input());
+    assert(!history.negative_is_brake());
+    assert(history.apply(input(0,250)).reverse_milli==250);
+    history.apply(input(200));history.apply(input());
+    assert(history.negative_is_brake()); // A new positive drive primes braking again.
+    history.reset();assert(std::string(history.next_negative_name())=="unknown");
+    assert(!history.negative_is_brake());
+  }
   // Quantization and HOST loss must not leave a false forward/brake history.
   EscSequenceSettings legacy; legacy.enabled=false;
   HostSession session; session.configure_esc(legacy); session.start(0);

@@ -8,8 +8,14 @@ namespace kart_vehicle {
 class EscState {
 public:
   enum class State {unknown, neutral, forward, brake, reverse};
-  void reset() {state_=State::unknown; brake_rejected_=false;}
+  void reset() {state_=State::unknown; brake_rejected_=false; forward_pending_=false;}
   State state() const {return state_;}
+  // After positive drive, neutral never consumes the first-negative brake latch.
+  // A negative brake sample followed by neutral permits a subsequent reverse.
+  bool negative_is_brake() const {return forward_pending_ || state_==State::brake;}
+  const char * next_negative_name() const {
+    return state_==State::unknown ? "unknown" : negative_is_brake() ? "brake" : "reverse";
+  }
   bool brake_rejected() const {return brake_rejected_;}
   const char * name() const {
     switch (state_) {
@@ -37,20 +43,20 @@ public:
       frame.throttle_milli=frame.reverse_milli=frame.brake_milli=0;
       return frame;
     }
-    const bool can_brake=state_==State::forward || state_==State::brake;
+    const bool can_brake=negative_is_brake();
     if (frame.brake_milli>0 && !can_brake) {
       // Brake and reverse have identical PWM. Never interpret an explicit
-      // brake request from neutral/reverse as permission to drive backwards.
+      // brake request without a pending forward brake as permission to drive backwards.
       frame.brake_milli=0;
       state_=State::neutral; brake_rejected_=true;
     } else if (frame.throttle_milli>0) {
       // Reverse -> forward has no separate brake stage on this ESC model.
-      state_=State::forward;
+      state_=State::forward; forward_pending_=true;
     } else if (frame.brake_milli>0 || frame.reverse_milli>0) {
       if (can_brake) {
         frame.brake_milli+=frame.reverse_milli;
         frame.reverse_milli=0;
-        state_=State::brake;
+        state_=State::brake; forward_pending_=false;
       } else {
         state_=State::reverse;
       }
@@ -59,6 +65,6 @@ public:
   }
 private:
   State state_{State::unknown};
-  bool brake_rejected_{false};
+  bool brake_rejected_{false},forward_pending_{false};
 };
 }  // namespace kart_vehicle

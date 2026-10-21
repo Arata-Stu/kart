@@ -79,14 +79,15 @@ Trim updated: steering=+0.000 -> +0.001, throttle=+0.000 -> +0.000
 ## ESC指令の状態管理
 
 [EscState](include/kart_vehicle/esc_state.hpp)をHostSessionの出力直前、トリムと整数化の後に適用する。
-以下はユーザー申告のTamiya ESC動作をモデル化したもの（2026-10-07）。
+以下はユーザー申告のTamiya ESC動作をモデル化したもの（2026-10-07、2026-10-21に中立中の履歴を補足）。
 **出力指令の履歴によるモデルであり、実測車速・実ESC状態のフィードバックではない。**
 `neutral`は中立指令であり、停止確認ではない。生成した指令の個別ACKも現protocolにはない。
 
 | 現在の指令モデル | 0入力 | ＋入力（throttle） | −入力（reverse） | 専用brake要求 |
 | --- | --- | --- | --- | --- |
 | unknown | neutral | 中立に抑制、unknown維持 | 中立に抑制、unknown維持 | 中立に抑制、unknown維持 |
-| neutral | neutral | forward | reverse | 拒否してneutral |
+| neutral・前進後の初回負入力待ち | neutral（待ちを維持） | forward | brake | brake |
+| neutral・初回負入力待ちでない | neutral | forward | reverse | 拒否してneutral |
 | forward | neutral | forward | brake | brake |
 | brake | neutral | forward | brake保持 | brake保持 |
 | reverse | neutral | forward（制動段階なし） | reverse | 拒否してneutral |
@@ -97,7 +98,7 @@ Trim updated: steering=+0.000 -> +0.001, throttle=+0.000 -> +0.000
   現firmwareでは両者が同じPWMのため、この分類変更だけでは物理出力波形は変わらない。
 - brake保持だけではreverseへ遷移しない。0入力を挟み、再び負入力するとreverseとなるモデル。
   中立の必要保持時間は実機未検証であり、現モデルは出力1回を中立として扱う。
-- neutral/reverseからの専用brakeは、後退を指示してしまうため中立化して警告する。
+- 初回負入力待ちでないneutral/reverseからの専用brakeは、後退を指示してしまうため中立化して警告する。
   **この場合、制動できたとは扱わない。** ステア指令は維持する。
 - 判定は送信値の0..1000整数化後。firmwareの整数`milli/2`変換では0と1が中立PWMになるため、
   どちらも0へ正規化する。微小な正値でforward扱いしない（ESC固有の不感帯は未モデル化）。
@@ -162,22 +163,23 @@ UIのHOST有効表示はbridgeのauthority状態であり、物理的な動作�
 controllerは既存の`ControlCommand`（前進=`throttle`、後退=`reverse`、制動=`brake`、全ゼロ=中立）を
 周期送信する。特別な意図topic、パルス指令、新ノードは不要。`EscState`は実際に選択した出力指令の履歴モデルを担当する。
 
-`esc_sequencer_enabled=true`が既定。falseを明示した場合は従来の指令モデルをそのまま使う。
+`esc_sequencer_enabled=true`が既定。falseを明示した場合は時間付き信号列の生成を止め、ESC履歴規則による指令分類だけを行う。
 有効時の規則は以下。いずれもESC・車体の実測状態ではない。
 
 | 現在の指令モデル | 要求 | 出力・段階 |
 | --- | --- | --- |
 | forward / brake | 後退 | `reverse_braking`で負入力制動保持 → `reverse_neutral`で中立保持 → 指定量の後退 |
-| neutral | 後退 | `reverse_neutral`で中立保持 → 指定量の後退 |
+| neutral・前進後の初回負入力待ち | 後退 | `reverse_braking`で負入力制動保持 → `reverse_neutral`で中立保持 → 後退 |
+| neutral・初回負入力待ちではない | 後退 | `reverse_neutral`で中立保持 → 指定量の後退 |
 | reverse | 後退 | 指定量の後退を継続 |
 | reverse | 制動 | `brake_entry`で正パルス → 中立を挟まず指定量の負入力 → `braking`で保持 |
-| forward / brake | 制動 | 正パルスを挟まず指定量の制動 |
-| neutral / unknown | 制動 | `rejected`。中立へ抑制し、未知の方向から正パルスを生成しない |
+| forward / brake / 初回負入力待ちのneutral | 制動 | 正パルスを挟まず指定量の制動 |
+| 初回負入力待ちでないneutral / unknown | 制動 | `rejected`。中立へ抑制し、未知の方向から正パルスを生成しない |
 | 既知状態 | 前進 | 指定量の前進。後退からも直接切替 |
 | 任意 | 中立（ステアだけの入力を含む） | 保留中の段階を即時中断して中立 |
 
 - 同じ制動要求の再送や制動量変更で正パルスをやり直さない。正パルス中の前進要求は即時採用、
-  後退要求は負入力制動保持→中立保持へ切替。中立後の新しい制動要求は方向不明として拒否する。
+  後退要求は負入力制動保持→中立保持へ切替。中立後でも前進後の初回負入力待ちなら負入力制動を受け付け、履歴がなければ拒否する。
 - 要求の鮮度・排他性・範囲チェックは`HostSession`が毎周期行う。入力不正、timeout、STOP、
   制御権喪失、USB切断ではHOSTを解除し、遷移履歴を破棄する。復旧で自動再開しない。
 - シーケンサ有効時、送信周期の逆行・非有限時刻・過大な間隔は`failed`となりHOSTを解除する。
@@ -217,8 +219,8 @@ ROSなしのC++テストで確認する。ROS component結合と実ESCの制動�
 後退要求の再送・量変更で保持時間をリセットしない。制動中の中立・前進・専用brake要求は
 即時採用し、中立/前進で後退への保留遷移を中断、専用brakeでは後退へ進まず制動を継続する。
 ブレーキ量と時間は仮値であり、時間満了は停車確認ではない。
-neutralモデルからの後退は従来どおり中立保持のみ。R2を離して中立を挟むと指令履歴はneutralとなるため、
-実際には惰性で前進中でもこの前進モデル向け制動分岐には入らない。
+R2を離してneutralになっても、前進後の初回負入力待ちを保持する。
+中立時間の長さでこの履歴を消さず、R2→中立→L2でも制動保持→中立保持→後退へ進む。
 
 
 後退前のvehicle中立保持の既定値は0.01秒（bridge 100 Hzの約1周期）。
@@ -228,3 +230,19 @@ USBやESCが中立を認識する時間を保証する値ではなく、必要�
 後退信号と同じPWM方向だが、前進からの負入力なので制動として扱う指令モデル。
 停止を検出して0.2秒待つ、あるいは0.2秒で必ず停止するという意味ではない。
 復帰module自身の`reverse_neutral_s`（後退開始前の停車確認側設定）は別設定で変更しない。
+
+
+### 前進後の初回負入力の履歴
+
+ユーザー申告の実ESC規則（2026-10-21）を採用する。正入力を送ると「初回負入力は制動」の
+履歴を立て、中立だけでは何秒経っても消さない。初回負入力はbrakeとして扱い、
+負入力を保持している間もbrakeを維持する。その後中立を挟んで再び負入力を送るとreverseとなる。
+この履歴はEscStateで管理し、出力モデルneutralと区別する。シーケンサ無効時の指令分類にも同じ規則を使う。
+
+`/diagnostics`に`esc_negative_action`（brake/reverse/unknown）を追加する。
+これは「次の負入力の指令モデル」であり、実ESC内部状態や車体の進行方向の測定ではない。
+STOP、HOST喪失、再接続等のresetで履歴を破棄してunknownへ戻す。
+中立handshake自体が実ESC内部の前進履歴を消したことを保証するわけではない。
+
+portableテストは前進→0.01/0.03/0.37/10秒の中立→後退要求を再現し、
+いずれも最初に制動を出すことと、制動→中立→後退が一巡して無限に制動を繰り返さないことを確認する。

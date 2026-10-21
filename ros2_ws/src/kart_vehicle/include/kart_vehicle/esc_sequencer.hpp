@@ -73,7 +73,7 @@ public:
       if(state==EscState::State::reverse) {
         phase_=Phase::brake_entry;since_=now;reason_.clear();return pulse(frame);
       }
-      if(state==EscState::State::forward || state==EscState::State::brake) {
+      if(esc_.negative_is_brake()) {
         phase_=Phase::braking;reason_.clear();return esc_.apply(frame);
       }
       phase_=Phase::rejected;reason_="brake_direction_unknown";
@@ -89,7 +89,7 @@ public:
         if(now-since_<settings_.reverse_neutral_s) {return neutral(frame);}
         phase_=Phase::idle;reason_.clear();return esc_.apply(frame);
       }
-      if(state==EscState::State::forward || state==EscState::State::brake) {
+      if(esc_.negative_is_brake()) {
         phase_=Phase::reverse_braking;since_=now;reason_.clear();return reverse_brake(frame);
       }
       if(state!=EscState::State::reverse && state!=EscState::State::unknown) {

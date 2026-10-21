@@ -185,6 +185,7 @@ private:
     add("host_phase",std::to_string(static_cast<int>(session_.phase())));
     add("esc_sequence_phase",session_.sequencer().name());
     add("esc_sequence_reason",session_.sequencer().reason());
+    add("esc_negative_action",session_.esc().next_negative_name());
     add("esc_command_state",session_.esc().name());
     add("esc_brake_rejected",session_.esc().brake_rejected()?"true":"false");
     add("protocol_errors",std::to_string(protocol_errors_)); add("last_interlock",error_);
