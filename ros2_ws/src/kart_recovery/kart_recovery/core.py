@@ -24,6 +24,8 @@ class Settings:
     reverse_neutral_s: float = 0.2
     reverse_throttle: float = 0.08
     reverse_duration_s: float = 0.5
+    post_reverse_pulse_throttle: float = 0.08
+    post_reverse_pulse_s: float = 0.05
     recovery_steering_scale: float = 1.0
     recovery_steering_limit: float = 0.5
     resume_neutral_s: float = 0.3
@@ -50,6 +52,8 @@ class Settings:
                 raise ValueError(f'{key} must be <= 1')
         if self.reverse_throttle <= 0 or self.brake_command <= 0 or self.min_forward_throttle <= 0:
             raise ValueError('forward threshold, brake and reverse commands must be positive')
+        if not 0.002 <= self.post_reverse_pulse_throttle <= 1 or not 0.04 <= self.post_reverse_pulse_s <= 0.5:
+            raise ValueError('post-reverse pulse requires throttle 0.002..1 and duration 0.04..0.5 s')
         if self.moving_flow_px_s <= self.stationary_flow_px_s:
             raise ValueError('moving threshold must exceed stationary threshold')
         if self.stop_timeout_s <= self.brake_min_s + self.stop_confirm_s:
@@ -80,7 +84,7 @@ class Observation:
 
 
 class Recovery:
-    ACTIVE = {'braking', 'reverse_neutral', 'reversing', 'post_reverse_braking', 'resume_neutral'}
+    ACTIVE = {'braking', 'reverse_neutral', 'reversing', 'post_reverse_braking', 'post_reverse_pulse', 'resume_neutral'}
 
     def __init__(self, settings=Settings()):
         self.p = settings
@@ -231,11 +235,14 @@ class Recovery:
             self.reverse_progress |= (obs.flow >= self.p.moving_flow_px_s
                                       and obs.gyro <= self.p.stationary_gyro_rad_s)
             if elapsed >= self.p.reverse_duration_s:
-                # Direct reverse -> brake demand preserves the ESC's reverse history.
-                # The vehicle sequencer owns any positive entry pulse, not recovery.
+                self._phase('post_reverse_pulse', now)
+                return Command(steering=self.fixed_steering, throttle=self.p.post_reverse_pulse_throttle)
+            return Command(steering=self.fixed_steering, reverse=self.p.reverse_throttle)
+        if self.state == 'post_reverse_pulse':
+            if elapsed >= self.p.post_reverse_pulse_s:
                 self._phase('post_reverse_braking', now)
                 return Command(steering=self.fixed_steering, brake=self.p.brake_command)
-            return Command(steering=self.fixed_steering, reverse=self.p.reverse_throttle)
+            return Command(steering=self.fixed_steering, throttle=self.p.post_reverse_pulse_throttle)
         if self.state == 'post_reverse_braking':
             if self._stationary(obs):
                 self.stopped_at = now if self.stopped_at is None else self.stopped_at

@@ -1,6 +1,6 @@
 import { $ } from './api.js';
 const phases={inactive:'待機',driving:'通常走行監視',suspect:'接触・スタックの疑い',
-  braking:'制動中',reverse_neutral:'後退前の中立',reversing:'後退中',post_reverse_braking:'後退後の制動・停車確認',resume_neutral:'再開前の中立',fault:'復帰中断・異常'};
+  braking:'制動中',reverse_neutral:'後退前の中立',reversing:'後退中',post_reverse_pulse:'後退後の制動準備（正パルス）',post_reverse_braking:'後退後の制動・停車確認',resume_neutral:'再開前の中立',fault:'復帰中断・異常'};
 const availability={absent:'未起動',waiting:'受信待ち・無効',stale:'受信停止',conflict:'配信元の競合'};
 export function renderVehicle(status) {
   const bridge=status?.vehicle?.bridge, recovery=status?.vehicle?.recovery;

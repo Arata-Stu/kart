@@ -1084,25 +1084,10 @@ ROS/GPUでのoffline・実車確認は未実施。EVS複数headの実走行は�
 returncodeをJSONへ保存）をReplay moduleへ渡す。再生終了後1秒の猶予を置いてlaunchを終了し、
 UI workerが正常なplayer終了と有効poseを検証する。画像・tfの再生対象や実車起動範囲は変更しない。
 
-### ESC要求シーケンサ
+### ESCと復帰時の信号生成
 
-vehicle bridge内蔵のESCシーケンサは`config/vehicle/bridge.yaml`で起動時に設定する。
-`esc_sequencer_enabled: true`が既定。既存`ControlCommand`の後退/制動要求から
-中立保持・後退中の正パルス→負入力制動を生成する。controllerのtopicやmsg変更は不要。
-既定の`esc_reverse_neutral_s: 0.04`、`esc_brake_entry_throttle: 0.08`、
-`esc_brake_entry_s: 0.05`、`esc_max_step_gap_s: 0.1`は秒/正規化出力の起動時固定値。
-実ESC未校正のため、機能を使う際は量・時間を実機に合わせる。
-入力timeout、STOP、制御権喪失は生成を中断し、異常からの自動再開はしない。
-入出力、全範囲と遷移表は[kart_vehicle README](../kart_vehicle/README.md#esc要求シーケンサ任意有効化)を参照。
-
-復帰は後退終了後に`post_reverse_braking`でbrakeを要求する。実ESCでの変換にはvehicle設定の`esc_sequencer_enabled=true`が必要で、既定true。falseを明示すると従来動作に戻る。復帰の既存brake量・最低時間・静止確認・期限を両制動段階で使う。
-
-前進/制動モデル中のreverse要求は、`esc_reverse_brake_command: 1.0`の負入力を
-`esc_reverse_brake_s: 0.2`秒保持してから中立→後退へ進む。両値は起動時固定で実機未校正。
-中立保持・制動時間の満了を停車確認と同一視しない。
-
-vehicleの後退前中立保持は0.04秒（JPBB PWMの2周期）を初期値・実効下限とし、実ESCの中立認識は実機で確認する。復帰module側の同名に近いreverse_neutral_sとは独立。
-
-前進後は中立時間にかかわらず初回負入力を制動として扱う。R2→中立→L2でも前進後の制動待ち履歴を使い、制動→中立→後退へ進む。追加設定は不要。
-
-ESC中立ログはneutral_initial/neutral_after_forward/neutral_after_brake/neutral_after_reverseを区別する。0.04秒未満の中立要求は実効0.04秒となり、起動WARNとesc_neutral_effective_sで確認できる。これはESCの受信ACKではない。
+vehicle内の時間付きシーケンサと、その起動設定は削除した。bringup.shからの起動でも
+MANUALに自動の制動保持・中立保持・正パルスは入らない。
+復帰を有効にしたAUTOだけ、kart_recoveryが後退終了後に短い正パルス→制動を生成する。
+config/recovery/recovery.yamlのpost_reverse_pulse_throttle（0.08）、post_reverse_pulse_s（0.05秒）で調整する。
+停車確認と中断監視は復帰moduleが継続する。実ESCでの値の校正は未実施。

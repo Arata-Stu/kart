@@ -40,10 +40,11 @@ def test_full_recovery_same_sign_fixed_steering_and_duration():
     for _ in range(24):
         out = t.step(Command(-.9, .2), MOVING)
         assert out == Command(steering=.3, reverse=.08)
-    out=t.until('post_reverse_braking', MOVING, Command(-.9, .2))
-    assert out == Command(steering=.3, brake=t.r.p.brake_command)
+    out=t.until('post_reverse_pulse', MOVING, Command(-.9, .2))
+    assert out == Command(steering=.3, throttle=t.r.p.post_reverse_pulse_throttle)
     assert t.t - started == pytest.approx(.5, abs=.021)
     assert t.r.reverse_progress
+    assert t.until('post_reverse_braking', MOVING) == Command(steering=.3, brake=t.r.p.brake_command)
     t.until('resume_neutral', STILL)
     t.until('driving', STILL)
     assert t.r.attempts == 1
@@ -193,13 +194,20 @@ def test_post_reverse_brake_timeout_never_resumes_forward():
 
 
 @pytest.mark.parametrize('interruption', ['stop','manual','propo','stale','sensor','clock'])
-def test_post_reverse_brake_aborts_on_interruption(interruption):
+@pytest.mark.parametrize('phase', ['post_reverse_pulse', 'post_reverse_braking'])
+def test_post_reverse_brake_aborts_on_interruption(interruption, phase):
     t=Trial()
     t.until('reversing')
-    t.until('post_reverse_braking', MOVING)
+    t.until(phase, MOVING)
     if interruption in ('stop','manual','propo'):
         out=t.step(mode={'stop':3,'manual':2,'propo':4}[interruption])
     elif interruption == 'stale':out=t.step(healthy=False)
     elif interruption == 'sensor':out=t.step(observation=Observation(False))
     else:out=t.r.step(t.t+.5,1,FORWARD,STILL)
     assert out == Command() and not t.r.active
+
+@pytest.mark.parametrize('values', [dict(post_reverse_pulse_throttle=0), dict(post_reverse_pulse_throttle=1.1),
+                                  dict(post_reverse_pulse_s=.01), dict(post_reverse_pulse_s=.51),
+                                  dict(post_reverse_pulse_s=math.nan)])
+def test_pulse_settings_reject_invalid_values(values):
+    with pytest.raises(ValueError): Settings(**values)

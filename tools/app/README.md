@@ -954,3 +954,5 @@ Tinyの特徴蒸留epochは独立して指定し、既定10のまま。
 [モデル比較計画](../../docs/e2e_model_comparison.md)にサイズ・初期化・更新範囲・蒸留予算の比較条件を記載する。
 
 復帰パネルは`post_reverse_braking`を「後退後の制動・停車確認」と表示する。制動要求段階であり実ESCの制動成立を示すものではない。
+
+復帰状態post_reverse_pulseを「後退後の制動準備（正パルス）」として表示する。復帰のpost_reverse_pulse_throttle / post_reverse_pulse_sもSTOP時の動的調整対象。

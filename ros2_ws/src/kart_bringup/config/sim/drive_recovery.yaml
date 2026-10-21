@@ -30,7 +30,7 @@
     stationary_flow_px_s: 2.0
     moving_flow_px_s: 6.0
     stationary_gyro_rad_s: 0.12
-    # Shared by initial and post-reverse braking; hardware reverse braking needs vehicle ESC sequencer.
+    # Shared by initial and post-reverse braking; recovery owns its entry pulse.
     brake_command: 0.1
     brake_min_s: 0.2
     stop_confirm_s: 0.25
@@ -38,6 +38,8 @@
     reverse_neutral_s: 0.2
     reverse_throttle: 0.08
     reverse_duration_s: 0.5
+    post_reverse_pulse_throttle: 0.08
+    post_reverse_pulse_s: 0.05
     recovery_steering_scale: 1.0
     recovery_steering_limit: 0.5
     resume_neutral_s: 0.3

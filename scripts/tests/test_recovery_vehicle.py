@@ -1,4 +1,4 @@
-"""Portable Python recovery -> C++ HostSession/ESC sequence check; no ROS/ESC."""
+"""Portable Python recovery -> C++ HostSession/ESC model check; no ROS/ESC."""
 from pathlib import Path
 import shutil
 import subprocess
@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT/'ros2_ws/src/kart_recovery'))
 from kart_recovery.core import Command, Observation, Recovery
 
 
-def test_recovery_brake_demand_reaches_real_vehicle_sequence(tmp_path):
+def test_recovery_pulse_and_brake_reach_vehicle_model(tmp_path):
     compiler=shutil.which('c++')
     if compiler is None:
         pytest.skip('C++ compiler unavailable')
@@ -28,7 +28,7 @@ def test_recovery_brake_demand_reaches_real_vehicle_sequence(tmp_path):
     seen_active=False
     for _ in range(1000):
         now+=.02
-        moving=recovery.state=='reversing' or (recovery.state=='post_reverse_braking' and brake_ticks<20)
+        moving=recovery.state in ('reversing','post_reverse_pulse') or (recovery.state=='post_reverse_braking' and brake_ticks<20)
         if recovery.state=='post_reverse_braking':brake_ticks+=1
         output=recovery.step(now,1,Command(steering=.3,throttle=.1),Observation(True,15 if moving else 0,0))
         assert recovery.state!='fault', recovery.reason
@@ -41,23 +41,20 @@ def test_recovery_brake_demand_reaches_real_vehicle_sequence(tmp_path):
     result=subprocess.run([str(probe)],input=payload,text=True,capture_output=True,check=True)
     frames=[line.split() for line in result.stdout.splitlines()]
     assert len(frames)==len(records)
+    pulse=[i for i,(_,state,_) in enumerate(records) if state=='post_reverse_pulse']
     indices=[i for i,(_,state,_) in enumerate(records) if state=='post_reverse_braking']
-    first=indices[0]
-    assert records[first-1][2].reverse>0  # No intervening neutral from recovery.
-    assert int(frames[first-1][1])>0
-    assert all(records[i][2].brake==recovery.p.brake_command for i in indices)
-    phases=[frames[i][3] for i in indices]
-    assert phases[0]=='brake_entry'
-    assert set(phases)=={'brake_entry','braking'}
-    switched=False
+    assert pulse == list(range(pulse[0],pulse[-1]+1))
+    assert records[pulse[0]-1][2].reverse>0
+    assert int(frames[pulse[0]-1][1])>0
+    assert indices[0]==pulse[-1]+1
+    duration=records[indices[0]][0]-records[pulse[0]][0]
+    assert recovery.p.post_reverse_pulse_s <= duration < recovery.p.post_reverse_pulse_s+.021
+    for i in pulse:
+        assert records[i][2].throttle==recovery.p.post_reverse_pulse_throttle
+        assert frames[i]==['80','0','0','forward','3']
     for i in indices:
-        forward,reverse,brake,phase,flags=frames[i]
-        assert int(flags)==3 and int(reverse)==0
-        if phase=='brake_entry':
-            assert not switched and int(forward)==80 and int(brake)==0
-        else:
-            switched=True
-            assert int(forward)==0 and int(brake)==100
+        assert records[i][2].brake==recovery.p.brake_command
+        assert frames[i]==['0','0','100','brake','3']
     resume=[i for i,(_,state,_) in enumerate(records) if state=='resume_neutral']
     assert resume
     assert all([int(x) for x in frames[i][:3]]==[0,0,0] for i in resume)

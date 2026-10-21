@@ -237,38 +237,14 @@ steeringはROS左正から、既存基板の左1000 µsへ既定`steering_scale=
 JetsonのCDC権限・抜き差し、実基板でのCH3切替・ESCブレーキ・watchdog動作。
 このMacにはROSがなくDocker daemonも稼働していないため、上記のコンテナ手順で続けて確認する。
 
-### ESCシーケンサの実装（2026-10-21）
+### ESC指令履歴と復帰時の信号生成
 
-`kart_vehicle::EscSequencer`をHostSessionの出力直前へ追加した。既存ControlCommandの意味から
-ESC固有の信号列を生成し、EscStateは生成後の指令履歴を追跡する。
-有効時は後退要求に中立保持を挟み、後退からの制動要求には正パルス→負入力保持を生成する。
-同じ要求の再送で正パルスを繰り返さず、中立・STOP・入力不正/timeout・制御権喪失で中断する。
-時計逆行・出力周期の過大な間隔もHOSTを解除する。
-`esc_sequencer_enabled=true`が既定。falseを明示すると従来動作に戻る。実機未校正の正パルス値は
-bringup/config/vehicle/bridge.yamlで調整する。時間満了は停止確認ではない。
-実機の制動成立は未確認。遅延時の能動制動・STOP中の制動保持は本追加の対象ではない。
-詳細は[kart_vehicle README](../ros2_ws/src/kart_vehicle/README.md#esc要求シーケンサ任意有効化)。
+vehicle内の時間付きシーケンサは削除した。MANUALの要求は通常の送信周期で反映する。
+前進後の初回負入力は制動、負入力長押しも制動、一度中立に戻して次の負入力で後退となる。
+中立時間だけでは前進履歴を解除しない。中立は初期・前進後・制動後・後退後を区別する。
+このモデルは送信指令履歴であり、ESCのフィードバックや計測された運動状態ではない。
 
-
-復帰の後退終了後は`post_reverse_braking`でbrakeを要求する。
-vehicleシーケンサの正パルス→負入力保持を利用し、静止傾向の確認後に中立・再確認へ進む。
-Joy managerのMANUAL ○も既存brake要求で接続済み。L2はreverse要求のため、
-シーケンサ有効時の制動操作は○とする。ESC固有の規則はvehicleに集約する。
-
-
-前進/制動モデルからの後退要求は負入力制動保持→中立保持→後退とする。
-制動量`esc_reverse_brake_command`・保持時間`esc_reverse_brake_s`はvehicle側の設定で管理し、
-controller/Joy managerにESC固有の手順を追加しない。時間満了は実測停止を意味しない。
-
-
-2026-10-21の実ESCに関するユーザー申告を反映し、前進後の初回負入力待ちは中立時間で失効させない。
-現在出力がneutralでも、次の負入力はbrakeとなる場合がある。
-初回負入力の制動を終えて中立を挟んだ後、次の負入力をreverseとする。
-シーケンサはこの履歴に従い、R2→中立→L2にも制動保持→中立保持→後退を適用する。
-出力モデルと次の負入力モデルは診断で分け、実ESC/車体の測定とは扱わない。
-
-
-ESC中立はneutral_initial、neutral_after_forward、neutral_after_brake、neutral_after_reverseに分離した。
-前進後の中立は初回負入力でbrake、brake後に中立を挟んだ次の負入力はreverseとする。
-後退前の中立保持は設定要求と40 msの大きい方。JPBBの20 ms PWM周期を踏まえた信号保持であり、
-ESC受信ACKや実停止確認とは分離する。設定の実効値はdiagnosticsのesc_neutral_effective_sで示す。
+AUTO復帰ではkart_recoveryがreversing→post_reverse_pulse→post_reverse_braking→resume_neutralを生成する。
+正パルスは既定0.08、0.05秒（復帰timer周期に量子化）。復帰configとMap Studioから調整できる。
+制動量・最低制動時間・静止確認・期限は既存の復帰設定を使用する。STOP等の中断監視は全段階で継続する。
+PWM受信・実制動・実停止は未検証であり、信号列の生成だけでは保証しない。

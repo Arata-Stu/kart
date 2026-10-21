@@ -15,13 +15,16 @@ TARGETS = {
         'min_forward_throttle', 'startup_grace_s', 'stuck_duration_s', 'stationary_flow_px_s',
         'moving_flow_px_s', 'stationary_gyro_rad_s', 'brake_command', 'brake_min_s',
         'stop_confirm_s', 'stop_timeout_s', 'reverse_neutral_s', 'reverse_throttle',
-        'reverse_duration_s', 'recovery_steering_scale', 'recovery_steering_limit',
+        'reverse_duration_s', 'post_reverse_pulse_throttle', 'post_reverse_pulse_s',
+        'recovery_steering_scale', 'recovery_steering_limit',
         'resume_neutral_s', 'max_recovery_attempts', 'progress_reset_s',
         'max_recovery_rotation_rad', 'max_tick_gap_s', 'sensor_profile', 'image_topic',
         'input_timeout_s', 'sensor_timeout_s', 'processing_width', 'image_rate_hz')),
 }
 
 LABELS = {
+    'post_reverse_pulse_throttle': '後退後の制動に入る正パルス出力 (0.002..1)',
+    'post_reverse_pulse_s': '後退後の正パルス保持時間 (s)',
     'steering_offset': 'スケール適用後のステア補正 (-0.5..0.5)',
     'steering_scale': 'ステア出力の符号・倍率',
     'initial_steering_trim': '起動時のステアtrim (offsetとは別)',

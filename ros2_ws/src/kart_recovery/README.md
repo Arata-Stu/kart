@@ -18,7 +18,7 @@ rule speed_controller / RGB・EVS E2E decoder
 IMUの回転が大きいときは停止と判定しない。回転補正付きフローや物理速度推定は未実装。
 特徴点不足、画像/IMU途絶はスタックではなく中立＋STOP要求になる。
 
-`driving → suspect → braking → reverse_neutral → reversing → post_reverse_braking → resume_neutral → driving`
+`driving → suspect → braking → reverse_neutral → reversing → post_reverse_pulse → post_reverse_braking → resume_neutral → driving`
 
 - 通常AUTOで選択した前進指令の操舵を履歴化。同じ元stampの再配信は追加しない。
 - 疑い開始をtとし、`[t-offset-span, t-offset]`の操舵中央値×scaleをlimitでclip。
@@ -114,6 +114,8 @@ simはkart_bringup/config/sim/drive_recovery.yamlを使用し、ROS stamp/動作
 | `reverse_neutral_s` | `0.2` | 制動後、後退前に中立を出す時間[秒]、非負 |
 | `reverse_throttle` | `0.08` | 一定後退要求(0,1]。物理速度ではない |
 | `reverse_duration_s` | `0.5` | 一定操舵・後退要求を出す時間[秒]、正値 |
+| `post_reverse_pulse_throttle` | `0.08` | 後退後の制動準備に使う正throttle、0.002..1 |
+| `post_reverse_pulse_s` | `0.05` | 正パルスの指令時間[秒]、0.04..0.5。timer周期に量子化 |
 | `recovery_steering_scale` | `1.0` | 過去操舵中央値への非負倍率。符号反転は禁止 |
 | `recovery_steering_limit` | `0.5` | 後退操舵の絶対値上限[0,1] |
 | `resume_neutral_s` | `0.3` | 後退後、再開前の中立最小時間[秒]。静止確認も要求 |
@@ -182,7 +184,7 @@ Map Studioの実車調整 → パラメータ調整 → 復帰モジュールか
 commit後に履歴・検出／後退phase・試行回数をresetし、STOP状態から次のAUTOを待つ。
 画像処理用のFrameMotionは作り直さず、画像処理負荷は変更しない。
 
-追加ROS topic/service/actionとparameterはなし。既存ROS parameterサービスを使う。
+調整UI専用のROS topic/service/actionは追加せず、既存ROS parameterサービスを使う。
 現在値は従来どおり`/recovery/status`のsettingsにも出力され、初期値はconfig/recovery.yamlと同じ。
 変更はメモリ上のみ。再起動後に使う値はbringupのrecovery.yamlへ反映する。
 復帰が未起動の場合、UIは未起動と表示し、勝手に起動／enableしない。
@@ -192,21 +194,21 @@ portable adapter testでSTOP／鮮度拒否、一括整合検証、commit後のr
 
 ### 後退後の制動接続
 
-`post_reverse_braking`は`/recovery/active`がtrueの段階。後退終了と同じtickから
-固定操舵＋`brake_command`を出し、throttle/reverseは0にする。パルス信号は生成しない。
-`brake_min_s`以上の制動要求と`stop_confirm_s`以上の連続した静止傾向を要求し、
-動きが再観測された場合は静止確認の継続時間をリセットする。
-`stop_timeout_s`で確認できなければ`stop_after_reverse_brake_not_observed`として中立＋STOP要求。
-その後の`resume_neutral`でも既存の静止確認を行い、再開時には新しい上流指令を要求する。
-観測や元指令の鮮度、競合、時計、角速度積分の監視とSTOP/MANUAL/PROPO中断は全段階で継続する。
-全parameterの名前・既定値と入出力topic/型は変えず、既存brake設定を両段階で使用する。
+後退終了と同じtickからpost_reverse_pulseで固定操舵＋正throttleを出し、
+post_reverse_pulse_s経過後にpost_reverse_brakingでbrake_commandを出す。中立は挟まない。
+両段階とも/recovery/activeはtrue。正パルスは既定0.08、0.05秒で、50 Hz timerでは約0.06秒になる。
+追加の2 parameterは上表とconfigに記載し、Map StudioでもSTOP時に動的調整できる。
+ESC固有の信号列は復帰moduleが所有し、vehicleに時間付きの生成処理はない。
 
-実ESCで後退から制動信号を生成するには、vehicleの`esc_sequencer_enabled=true`が必要。
-vehicleの既定はtrue。falseに変更すると後退中の制動要求は旧モデルで中立に抑制される。
-パルス量/時間の設定はvehicle側に集約し、復帰側はESC内部状態を推測しない。
-時間経過も画像/IMUの静止傾向も、校正済みの物理停止保証ではない。
+制動はbrake_min_s以上かつstop_confirm_s以上の連続した静止傾向を要求する。
+動きが再観測されれば静止確認をリセットし、stop_timeout_sで確認できなければ中立＋STOPを要求する。
+resume_neutralでも静止確認を行い、再開時には新しい上流指令を要求する。
+元指令と観測の鮮度、競合、時計、角速度、STOP/MANUAL/PROPOによる中断監視は全段階で継続する。
+時間満了も画像/IMUの静止傾向も、ESC受信や物理停止の保証ではない。実ESCのパルス値は未校正。
 
-portableな接続テスト:
-`PYTHONPATH=ros2_ws/src/kart_recovery python3 -m pytest scripts/tests/test_recovery_vehicle.py -q`
-はC++コンパイラを使い、実際のRecoveryの50 Hz指令列をHostSession/シーケンサの100 Hz出力へ渡す。
-中立を挟まない後退→制動要求、正パルス1回→制動保持→中立を検証する。ROS通信/実ESC試験ではない。
+portable接続テストは次のとおり。実Recoveryの50 Hz指令をC++ HostSession/ESCモデルの100 Hz送信へ渡し、
+後退→正パルス1回→制動保持→中立を検証する。ROS通信・実ESC試験ではない。
+
+```bash
+PYTHONPATH=ros2_ws/src/kart_recovery python3 -m pytest scripts/tests/test_recovery_vehicle.py -q
+```

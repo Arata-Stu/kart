@@ -169,6 +169,13 @@ def test_reverse_end_publishes_brake_without_neutral_and_keeps_ownership(adapter
     n.machine.reverse_progress=True
     n.tick()
     out=n.auto_pub.messages[-1]
+    assert n.machine.state=='post_reverse_pulse'
+    assert out.throttle==n.machine.p.post_reverse_pulse_throttle and out.brake==out.reverse==0
+    assert n.active_pub.messages[-1].data is True
+    for _ in range(3):
+        n.clock_value+=.02
+        n.tick()
+    out=n.auto_pub.messages[-1]
     assert n.machine.state=='post_reverse_braking'
     assert out.brake==n.machine.p.brake_command and out.reverse==out.throttle==0
     assert out.steering==-.2

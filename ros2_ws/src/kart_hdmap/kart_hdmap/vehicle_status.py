@@ -4,7 +4,7 @@ import math
 import time
 
 STATES = {'inactive', 'driving', 'suspect', 'braking', 'reverse_neutral',
-          'reversing', 'post_reverse_braking', 'resume_neutral', 'fault'}
+          'reversing', 'post_reverse_pulse', 'post_reverse_braking', 'resume_neutral', 'fault'}
 
 
 class VehicleStatus:

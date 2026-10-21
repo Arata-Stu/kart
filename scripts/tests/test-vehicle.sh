@@ -19,8 +19,6 @@ common=(-std=c++17 -Wall -Wextra -Wpedantic -UNDEBUG
 "$kart_build/bridge"
 "$cxx" "${common[@]}" "$kart_root/ros2_ws/src/kart_vehicle/test/test_esc_state.cpp" -o "$kart_build/esc"
 "$kart_build/esc"
-"$cxx" "${common[@]}" "$kart_root/ros2_ws/src/kart_vehicle/test/test_esc_sequencer.cpp" -o "$kart_build/sequencer"
-"$kart_build/sequencer"
 # Optional: pass the independent kart_bridge_board checkout; compiled read-only.
 if [[ $# -gt 0 ]]; then
   firmware="$1/firmware"

@@ -253,3 +253,5 @@ Center速度は有限・非負のdouble。tuning有効時のline_type／速度�
 通常の新しいSTOP・1秒以上の低速確認を適用し、bridge自身のSTOPチェックも必要。
 
 復帰状態の許可リストに`post_reverse_braking`（後退後の制動・停車確認）を含む。topicとJSON schema名は既存のまま。
+
+復帰状態post_reverse_pulseを「後退後の制動準備（正パルス）」として表示する。復帰のpost_reverse_pulse_throttle / post_reverse_pulse_sもSTOP時の動的調整対象。

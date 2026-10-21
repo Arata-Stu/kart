@@ -1,9 +1,8 @@
-// Portable probe: replay semantic requests through the real HostSession/sequencer.
+// Portable probe: replay semantic requests through the real HostSession/ESC model.
 #include "kart_vehicle/host_session.hpp"
 #include <iostream>
 int main() {
   kart_vehicle::HostSession session;
-  kart_vehicle::EscSequenceSettings settings;settings.enabled=true;session.configure_esc(settings);
   double now; kart_system::Command command;bool first=true;
   while(std::cin>>now>>command.steering>>command.throttle>>command.brake>>command.reverse) {
     if(first) {
@@ -13,6 +12,6 @@ int main() {
     }
     const auto frame=session.output(command,true,now,1,0);
     std::cout<<frame.throttle_milli<<' '<<frame.reverse_milli<<' '<<frame.brake_milli<<' '
-      <<session.sequencer().name()<<' '<<static_cast<int>(frame.flags)<<'\n';
+      <<session.esc().name()<<' '<<static_cast<int>(frame.flags)<<'\n';
   }
 }

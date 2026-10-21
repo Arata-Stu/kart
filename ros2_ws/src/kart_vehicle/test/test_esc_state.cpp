@@ -82,8 +82,7 @@ int main() {
     assert(!history.negative_is_brake());
   }
   // Quantization and HOST loss must not leave a false forward/brake history.
-  EscSequenceSettings legacy; legacy.enabled=false;
-  HostSession session; session.configure_esc(legacy); session.start(0);
+  HostSession session; session.start(0);
   session.output({},true,0.01,-1,0);
   StatusFrame status; status.selector=RcSelector::automatic; status.active_path=ActivePath::automatic;
   session.status(status);

@@ -13,7 +13,6 @@ std::string frame(const std::string & payload) {
   std::ostringstream out; out<<payload<<','<<std::hex<<std::uppercase<<std::setw(4)<<std::setfill('0')<<crc16_ccitt(payload)<<"\r\n"; return out.str();
 }
 int main() {
-  EscSequenceSettings legacy; legacy.enabled=false; // Explicitly exercise legacy protocol contracts.
   assert(crc16_ccitt("123456789")==0x29B1);
   CommandFrame cmd; cmd.sequence=42; cmd.steering_milli=-500; cmd.throttle_milli=750; cmd.flags=3;
   assert(encode_command(cmd)=="JPB1,C,42,-500,750,0,0,3,2524\n");
@@ -32,7 +31,7 @@ int main() {
   assert(!propo_pwm_to_command(0,1500,PropoCalibration{}));
   StatusSequence seq; assert(seq.accept(0xfffffffeU)); assert(seq.accept(0xffffffffU)); assert(seq.accept(0));
   assert(!seq.accept(0)); assert(!seq.accept(0xffffffffU)); assert(seq.accept(1));
-  HostSession session; session.configure_esc(legacy);
+  HostSession session;
   assert(session.output({0,1,0,0},true,0,-1,0).flags==1);
   session.start(1);
   assert(session.output({},false,1.1,-1,0).flags==1); // Callback ordering grace, no HOST flag.
@@ -84,7 +83,7 @@ int main() {
     const kart_system::Command raw{0.4,0.25,0,0};
     auto result=handshake.command(raw,false,30.11,0.11,true);
     assert(neutral(result.command));
-    kart_vehicle::HostSession session; session.configure_esc(legacy);
+    kart_vehicle::HostSession session;
     session.start(0.1);
     auto frame=session.output(result.command,true,0.11,1,0);
     assert(frame.flags & kart_vehicle::HOST_REQUEST);
@@ -99,10 +98,30 @@ int main() {
     assert(result.command.throttle==0.1);
     frame=session.output(result.command,true,0.42,1,0);
     assert(frame.throttle_milli==100);
-    kart_vehicle::HostSession unacknowledged; unacknowledged.configure_esc(legacy);
+    kart_vehicle::HostSession unacknowledged;
     unacknowledged.start(0.1);
     frame=unacknowledged.output(result.command,true,0.42,1,0);
     assert(frame.throttle_milli==0 && unacknowledged.phase()==kart_vehicle::HostSession::Phase::disarmed);
+  }
+  {
+    // MANUAL demands are immediate: no automatic brake hold, neutral or pulse.
+    HostSession direct;
+    direct.start(40);
+    direct.output({},true,40.01,1,0);
+    direct.status(*status);
+    auto frame=direct.output({0,.3,0,0},true,40.02,1,0);
+    assert(frame.throttle_milli==300);
+    frame=direct.output({},true,40.03,1,0);
+    assert(frame.throttle_milli==0 && frame.brake_milli==0);
+    for(int n=0;n<100;++n) {
+      frame=direct.output({0,0,0,.17},true,40.04+.01*n,1,0);
+      assert(frame.brake_milli==170 && frame.reverse_milli==0 && frame.throttle_milli==0);
+    }
+    direct.output({},true,41.04,1,0);
+    frame=direct.output({0,0,0,.23},true,41.05,1,0);
+    assert(frame.reverse_milli==230 && frame.brake_milli==0 && frame.throttle_milli==0);
+    frame=direct.output({0,0,1,0},true,41.06,1,0);
+    assert(frame.throttle_milli==0 && frame.reverse_milli==0 && frame.brake_milli==0);
   }
   // POSIX pseudo terminal: framing, fragmented status, nonblocking reads, no physical USB.
   int master=posix_openpt(O_RDWR|O_NOCTTY|O_NONBLOCK); assert(master>=0);

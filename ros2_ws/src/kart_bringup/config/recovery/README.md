@@ -40,4 +40,5 @@ core Settings（履歴・閾値・停止確認・ブレーキ／後退・操舵�
 適用時に復帰履歴／phaseをresetする。sensor/topic・画像処理・timeoutは起動時固定。
 静的YAMLの全項目・既定値は維持し、UI変更はメモリ上だけで次回起動には保存しない。
 
-後退後はbrake_commandによる制動・静止確認を挟んで中立/再開へ進む。brake_min_s、stop_confirm_s、stop_timeout_sは開始時と後退後で共用する。実ESCの信号列にはvehicle/bridge.yamlのesc_sequencer_enabled=trueが必要。
+後退後の正パルスは復帰moduleのpost_reverse_pulse_throttle / post_reverse_pulse_sで調整する（既定0.08 / 0.05秒）。
+後退後の制動・停車確認にはbrake_command、brake_min_s、stop_confirm_s、stop_timeout_sを共用する。
