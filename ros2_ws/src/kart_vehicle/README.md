@@ -162,12 +162,12 @@ UIのHOST有効表示はbridgeのauthority状態であり、物理的な動作�
 controllerは既存の`ControlCommand`（前進=`throttle`、後退=`reverse`、制動=`brake`、全ゼロ=中立）を
 周期送信する。特別な意図topic、パルス指令、新ノードは不要。`EscState`は実際に選択した出力指令の履歴モデルを担当する。
 
-`esc_sequencer_enabled=false`が既定で、従来の指令モデルをそのまま使う。
+`esc_sequencer_enabled=true`が既定。falseを明示した場合は従来の指令モデルをそのまま使う。
 有効時の規則は以下。いずれもESC・車体の実測状態ではない。
 
 | 現在の指令モデル | 要求 | 出力・段階 |
 | --- | --- | --- |
-| forward / brake | 後退 | `reverse_neutral`で中立保持 → 指定量の後退 |
+| forward / brake | 後退 | `reverse_braking`で負入力制動保持 → `reverse_neutral`で中立保持 → 指定量の後退 |
 | neutral | 後退 | `reverse_neutral`で中立保持 → 指定量の後退 |
 | reverse | 後退 | 指定量の後退を継続 |
 | reverse | 制動 | `brake_entry`で正パルス → 中立を挟まず指定量の負入力 → `braking`で保持 |
@@ -177,7 +177,7 @@ controllerは既存の`ControlCommand`（前進=`throttle`、後退=`reverse`、
 | 任意 | 中立（ステアだけの入力を含む） | 保留中の段階を即時中断して中立 |
 
 - 同じ制動要求の再送や制動量変更で正パルスをやり直さない。正パルス中の前進要求は即時採用、
-  後退要求は中立保持へ切替。中立後の新しい制動要求は方向不明として拒否する。
+  後退要求は負入力制動保持→中立保持へ切替。中立後の新しい制動要求は方向不明として拒否する。
 - 要求の鮮度・排他性・範囲チェックは`HostSession`が毎周期行う。入力不正、timeout、STOP、
   制御権喪失、USB切断ではHOSTを解除し、遷移履歴を破棄する。復旧で自動再開しない。
 - シーケンサ有効時、送信周期の逆行・非有限時刻・過大な間隔は`failed`となりHOSTを解除する。
@@ -186,7 +186,7 @@ controllerは既存の`ControlCommand`（前進=`throttle`、後退=`reverse`、
   復帰moduleが画像/IMU等で停車を判定し、中立へ切り替える責務は維持する。
 - 正パルス量はMANUALのスロットルトリムを加算しない。ステアは各周期の要求を通常どおり補正して使用する。
 - `/diagnostics` (`diagnostic_msgs/msg/DiagnosticArray`, reliable/volatile/depth 1, 1 Hz) に
-  `esc_sequence_phase`（idle/reverse_neutral/brake_entry/braking/rejected/failed）と
+  `esc_sequence_phase`（idle/reverse_braking/reverse_neutral/brake_entry/braking/rejected/failed）と
   `esc_sequence_reason`を追加。失敗でbridgeがSTOP要求した後はidleへリセットし、理由は`last_interlock`に残る。
   既存の入力・出力topic名、型、ノード名に変更はない。
 
@@ -194,8 +194,10 @@ controllerは既存の`ControlCommand`（前進=`throttle`、後退=`reverse`、
 
 | 名前 | 既定値 | 意味・許容範囲 |
 | --- | --- | --- |
-| `esc_sequencer_enabled` | `false` | 要求を信号列へ変換するシーケンサを有効化。falseは従来動作 |
-| `esc_reverse_neutral_s` | `0.2` s | 後退要求時の中立保持。0.001..2 |
+| `esc_sequencer_enabled` | `true` | 要求を信号列へ変換するシーケンサを有効化。falseは従来動作 |
+| `esc_reverse_brake_command` | `0.1` | 前進/制動モデルから後退へ移る際の負入力制動量。0.002..1 |
+| `esc_reverse_brake_s` | `0.2` s | 後退前の制動要求保持。0.001..2 |
+| `esc_reverse_neutral_s` | `0.01` s | 後退要求時の中立保持。0.001..2 |
 | `esc_brake_entry_throttle` | `0.08` | 後退から制動へ移る正パルス量。0.002..1 |
 | `esc_brake_entry_s` | `0.05` s | 正パルスの保持時間。0.001..0.5 |
 | `esc_max_step_gap_s` | `0.1` s | シーケンサ出力周期の許容間隔。0.001..0.2 |
@@ -210,3 +212,19 @@ Joy managerのMANUAL時○ボタンも既存の`brake`要求経路をそのま�
 検証: `bash scripts/tests/test-vehicle.sh`。正パルス/中立保持の時間、要求再送、量変更、
 中立・前進・後退への切替、量子化、時計異常、freshness/STOP/基板制御権喪失による中断を
 ROSなしのC++テストで確認する。ROS component結合と実ESCの制動性能は未確認。
+
+前進中にL2（reverse要求）を押すと、シーケンサ有効時は後退前に負入力制動を保持する。
+後退要求の再送・量変更で保持時間をリセットしない。制動中の中立・前進・専用brake要求は
+即時採用し、中立/前進で後退への保留遷移を中断、専用brakeでは後退へ進まず制動を継続する。
+ブレーキ量と時間は仮値であり、時間満了は停車確認ではない。
+neutralモデルからの後退は従来どおり中立保持のみ。R2を離して中立を挟むと指令履歴はneutralとなるため、
+実際には惰性で前進中でもこの前進モデル向け制動分岐には入らない。
+
+
+後退前のvehicle中立保持の既定値は0.01秒（bridge 100 Hzの約1周期）。
+USBやESCが中立を認識する時間を保証する値ではなく、必要に応じて実機で調整する。
+「負入力制動0.2秒」は、前進履歴のあるESCに正規化値−0.1相当
+（`esc_reverse_brake_command=0.1`）のブレーキ信号を0.2秒要求し続ける意味。
+後退信号と同じPWM方向だが、前進からの負入力なので制動として扱う指令モデル。
+停止を検出して0.2秒待つ、あるいは0.2秒で必ず停止するという意味ではない。
+復帰module自身の`reverse_neutral_s`（後退開始前の停車確認側設定）は別設定で変更しない。

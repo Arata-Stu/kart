@@ -202,7 +202,7 @@ portable adapter testでSTOP／鮮度拒否、一括整合検証、commit後のr
 全parameterの名前・既定値と入出力topic/型は変えず、既存brake設定を両段階で使用する。
 
 実ESCで後退から制動信号を生成するには、vehicleの`esc_sequencer_enabled=true`が必要。
-既定falseのままでは後退中の制動要求は旧モデルで中立に抑制される。
+vehicleの既定はtrue。falseに変更すると後退中の制動要求は旧モデルで中立に抑制される。
 パルス量/時間の設定はvehicle側に集約し、復帰側はESC内部状態を推測しない。
 時間経過も画像/IMUの静止傾向も、校正済みの物理停止保証ではない。
 

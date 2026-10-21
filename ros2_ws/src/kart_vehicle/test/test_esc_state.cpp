@@ -51,7 +51,8 @@ int main() {
   s.apply(input());
   for (int i=0;i<1000;++i) {assert(s.apply(input(0,0,1000)).brake_milli==0);}
   // Quantization and HOST loss must not leave a false forward/brake history.
-  HostSession session; session.start(0);
+  EscSequenceSettings legacy; legacy.enabled=false;
+  HostSession session; session.configure_esc(legacy); session.start(0);
   session.output({},true,0.01,-1,0);
   StatusFrame status; status.selector=RcSelector::automatic; status.active_path=ActivePath::automatic;
   session.status(status);

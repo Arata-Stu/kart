@@ -244,8 +244,8 @@ ESC固有の信号列を生成し、EscStateは生成後の指令履歴を追跡
 有効時は後退要求に中立保持を挟み、後退からの制動要求には正パルス→負入力保持を生成する。
 同じ要求の再送で正パルスを繰り返さず、中立・STOP・入力不正/timeout・制御権喪失で中断する。
 時計逆行・出力周期の過大な間隔もHOSTを解除する。
-`esc_sequencer_enabled=false`が既定で、既存動作を保つ。実機未校正の正パルス値は
-bringup/config/vehicle/bridge.yamlで明示有効化して調整する。時間満了は停止確認ではない。
+`esc_sequencer_enabled=true`が既定。falseを明示すると従来動作に戻る。実機未校正の正パルス値は
+bringup/config/vehicle/bridge.yamlで調整する。時間満了は停止確認ではない。
 実機の制動成立は未確認。遅延時の能動制動・STOP中の制動保持は本追加の対象ではない。
 詳細は[kart_vehicle README](../ros2_ws/src/kart_vehicle/README.md#esc要求シーケンサ任意有効化)。
 
@@ -254,3 +254,8 @@ bringup/config/vehicle/bridge.yamlで明示有効化して調整する。時間�
 vehicleシーケンサの正パルス→負入力保持を利用し、静止傾向の確認後に中立・再確認へ進む。
 Joy managerのMANUAL ○も既存brake要求で接続済み。L2はreverse要求のため、
 シーケンサ有効時の制動操作は○とする。ESC固有の規則はvehicleに集約する。
+
+
+前進/制動モデルからの後退要求は負入力制動保持→中立保持→後退とする。
+制動量`esc_reverse_brake_command`・保持時間`esc_reverse_brake_s`はvehicle側の設定で管理し、
+controller/Joy managerにESC固有の手順を追加しない。時間満了は実測停止を意味しない。

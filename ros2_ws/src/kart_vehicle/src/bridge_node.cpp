@@ -28,8 +28,10 @@ public:
     command_timeout_=number(*this,"command_timeout",0.15,0.02,0.2);
     status_timeout_=number(*this,"status_timeout",0.2,0.05,0.5);
     EscSequenceSettings sequence_settings;
-    sequence_settings.enabled=declare_parameter<bool>("esc_sequencer_enabled",false,fixed());
-    sequence_settings.reverse_neutral_s=number(*this,"esc_reverse_neutral_s",0.2,0.001,2.0);
+    sequence_settings.enabled=declare_parameter<bool>("esc_sequencer_enabled",true,fixed());
+    sequence_settings.reverse_brake_command=number(*this,"esc_reverse_brake_command",0.1,0.002,1.0);
+    sequence_settings.reverse_brake_s=number(*this,"esc_reverse_brake_s",0.2,0.001,2.0);
+    sequence_settings.reverse_neutral_s=number(*this,"esc_reverse_neutral_s",0.01,0.001,2.0);
     sequence_settings.brake_entry_throttle=number(*this,"esc_brake_entry_throttle",0.08,0.002,1.0);
     sequence_settings.brake_entry_s=number(*this,"esc_brake_entry_s",0.05,0.001,0.5);
     sequence_settings.max_step_gap_s=number(*this,"esc_max_step_gap_s",0.1,0.001,0.2);

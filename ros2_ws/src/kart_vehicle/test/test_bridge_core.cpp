@@ -13,6 +13,7 @@ std::string frame(const std::string & payload) {
   std::ostringstream out; out<<payload<<','<<std::hex<<std::uppercase<<std::setw(4)<<std::setfill('0')<<crc16_ccitt(payload)<<"\r\n"; return out.str();
 }
 int main() {
+  EscSequenceSettings legacy; legacy.enabled=false; // Explicitly exercise legacy protocol contracts.
   assert(crc16_ccitt("123456789")==0x29B1);
   CommandFrame cmd; cmd.sequence=42; cmd.steering_milli=-500; cmd.throttle_milli=750; cmd.flags=3;
   assert(encode_command(cmd)=="JPB1,C,42,-500,750,0,0,3,2524\n");
@@ -31,7 +32,7 @@ int main() {
   assert(!propo_pwm_to_command(0,1500,PropoCalibration{}));
   StatusSequence seq; assert(seq.accept(0xfffffffeU)); assert(seq.accept(0xffffffffU)); assert(seq.accept(0));
   assert(!seq.accept(0)); assert(!seq.accept(0xffffffffU)); assert(seq.accept(1));
-  HostSession session;
+  HostSession session; session.configure_esc(legacy);
   assert(session.output({0,1,0,0},true,0,-1,0).flags==1);
   session.start(1);
   assert(session.output({},false,1.1,-1,0).flags==1); // Callback ordering grace, no HOST flag.
@@ -83,7 +84,7 @@ int main() {
     const kart_system::Command raw{0.4,0.25,0,0};
     auto result=handshake.command(raw,false,30.11,0.11,true);
     assert(neutral(result.command));
-    kart_vehicle::HostSession session;
+    kart_vehicle::HostSession session; session.configure_esc(legacy);
     session.start(0.1);
     auto frame=session.output(result.command,true,0.11,1,0);
     assert(frame.flags & kart_vehicle::HOST_REQUEST);
@@ -98,7 +99,7 @@ int main() {
     assert(result.command.throttle==0.1);
     frame=session.output(result.command,true,0.42,1,0);
     assert(frame.throttle_milli==100);
-    kart_vehicle::HostSession unacknowledged;
+    kart_vehicle::HostSession unacknowledged; unacknowledged.configure_esc(legacy);
     unacknowledged.start(0.1);
     frame=unacknowledged.output(result.command,true,0.42,1,0);
     assert(frame.throttle_milli==0 && unacknowledged.phase()==kart_vehicle::HostSession::Phase::disarmed);

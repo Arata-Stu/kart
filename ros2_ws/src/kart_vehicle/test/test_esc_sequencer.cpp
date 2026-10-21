@@ -8,7 +8,8 @@ CommandFrame frame(int forward=0,int reverse=0,int brake=0) {
   CommandFrame f;f.flags=COMMAND_VALID|HOST_REQUEST;f.steering_milli=321;
   f.throttle_milli=forward;f.reverse_milli=reverse;f.brake_milli=brake;return f;
 }
-EscSequenceSettings enabled() {EscSequenceSettings s;s.enabled=true;return s;}
+// Keep explicit 0.2 s coverage for configurable long dwell independently of defaults.
+EscSequenceSettings enabled() {EscSequenceSettings s;s.enabled=true;s.reverse_neutral_s=.2;return s;}
 void dwell_reverse(EscSequencer &s,double t) {
   s.apply(frame(),t);
   assert(s.apply(frame(0,200),t+.01).reverse_milli==0);
@@ -16,6 +17,20 @@ void dwell_reverse(EscSequencer &s,double t) {
   assert(s.apply(frame(0,200),t+.22).reverse_milli==200);
 }
 int main() {
+  // New default is a short neutral sample; it must still be emitted before reverse.
+  EscSequenceSettings defaults;assert(defaults.enabled);
+  assert(defaults.reverse_neutral_s==.01);
+  EscSequencer short_dwell(defaults);
+  short_dwell.apply(frame(),20);
+  assert(short_dwell.apply(frame(0,200),20.01).reverse_milli==0);
+  assert(short_dwell.apply(frame(0,200),20.015).reverse_milli==0);
+  assert(short_dwell.apply(frame(0,200),20.0201).reverse_milli==200);
+  // Full forward -> brake -> new short neutral -> reverse using default settings.
+  short_dwell.reset();short_dwell.apply(frame(),21);short_dwell.apply(frame(300),21.01);
+  for(int i=0;i<20;++i)assert(short_dwell.apply(frame(0,200),21.02+i*.01).brake_milli==100);
+  assert(short_dwell.apply(frame(0,200),21.221).reverse_milli==0);
+  assert(short_dwell.apply(frame(0,200),21.226).reverse_milli==0);
+  assert(short_dwell.apply(frame(0,200),21.2311).reverse_milli==200);
   EscSequencer s(enabled());dwell_reverse(s,1);
   auto f=s.apply(frame(0,0,400),1.23);
   assert(f.throttle_milli==80 && f.brake_milli==0 && f.reverse_milli==0);
@@ -29,28 +44,36 @@ int main() {
     assert(f.brake_milli==300 && f.throttle_milli==0 && f.reverse_milli==0);
   }
   assert(s.esc().state()==EscState::State::brake);
-  // Forward demand from braking takes effect directly; reverse gets neutral dwell.
+  // Forward -> reverse demand first brakes, then holds neutral, then reverses.
   assert(s.apply(frame(250),2.30).throttle_milli==250);
-  assert(s.apply(frame(0,180),2.31).reverse_milli==0);
-  for(int i=1;i<=19;++i)assert(s.apply(frame(0,180),2.31+i*.01).reverse_milli==0);
-  assert(s.apply(frame(0,180),2.52).reverse_milli==180);
+  for(int i=0;i<=19;++i) {
+    f=s.apply(frame(0,i%2 ? 700 : 180),2.31+i*.01);
+    assert(f.brake_milli==100 && f.reverse_milli==0 && f.throttle_milli==0);
+    assert(std::string(s.name())=="reverse_braking");
+  }
+  for(int i=0;i<=19;++i) {
+    f=s.apply(frame(0,180),2.52+i*.01);
+    assert(f.brake_milli==0 && f.reverse_milli==0 && f.throttle_milli==0);
+  }
+  assert(s.apply(frame(0,180),2.73).reverse_milli==180);
   // Neutral cancels entry; a later brake request cannot restart a positive pulse.
-  s.apply(frame(0,0,500),2.53);
-  f=s.apply(frame(),2.54);assert(f.throttle_milli==0 && f.brake_milli==0);
-  f=s.apply(frame(0,0,500),2.55);assert(f.throttle_milli==0 && f.brake_milli==0);
-  assert(std::string(s.name())=="rejected");
-  assert(s.esc().brake_rejected());
-  // Demand changes to reverse during the positive pulse insert neutral before backing.
-  s.reset();dwell_reverse(s,3);
-  s.apply(frame(0,0,500),3.23);
-  assert(s.apply(frame(0,100),3.24).throttle_milli==0);
-  for(int i=1;i<=19;++i)assert(s.apply(frame(0,100),3.24+i*.01).reverse_milli==0);
-  assert(s.apply(frame(0,100),3.45).reverse_milli==100);
+  s.apply(frame(0,0,500),2.74);
+  f=s.apply(frame(),2.75);assert(f.throttle_milli==0 && f.brake_milli==0);
+  f=s.apply(frame(0,0,500),2.76);assert(f.throttle_milli==0 && f.brake_milli==0);
+  assert(std::string(s.name())=="rejected");assert(s.esc().brake_rejected());
+  // Changing from the positive pulse to reverse also brakes before neutral/backing.
+  s.reset();dwell_reverse(s,3);s.apply(frame(0,0,500),3.23);
+  for(int i=0;i<=19;++i) {
+    f=s.apply(frame(0,100),3.24+i*.01);
+    assert(f.throttle_milli==0 && f.reverse_milli==0 && f.brake_milli==100);
+  }
+  for(int i=0;i<=19;++i)assert(s.apply(frame(0,100),3.45+i*.01).reverse_milli==0);
+  assert(s.apply(frame(0,100),3.66).reverse_milli==100);
   // Output clock gaps abort and latch until reset. No automatic pulse resume.
-  s.apply(frame(0,0,500),3.46);
-  f=s.apply(frame(0,0,500),3.7);
+  s.apply(frame(0,0,500),3.67);
+  f=s.apply(frame(0,0,500),3.9);
   assert(s.failed() && f.flags==COMMAND_VALID && f.throttle_milli==0);
-  assert(s.apply(frame(100),3.71).flags==COMMAND_VALID);
+  assert(s.apply(frame(100),3.91).flags==COMMAND_VALID);
   s.reset();s.apply(frame(),4);assert(!s.failed());
   s.apply(frame(100),3.9);assert(s.failed());
   s.reset();s.apply(frame(),std::numeric_limits<double>::quiet_NaN());assert(s.failed());
@@ -63,16 +86,35 @@ int main() {
   s.reset();s.apply(frame(),6);f=s.apply(frame(0,0,1),6.01);
   assert(f.brake_milli==0 && f.throttle_milli==0);
   // Disabled profile keeps legacy behavior, including rejection from reverse.
-  EscSequencer legacy;legacy.apply(frame(),0);legacy.apply(frame(0,200),.01);
+  EscSequenceSettings disabled_settings;disabled_settings.enabled=false;
+  EscSequencer legacy(disabled_settings);legacy.apply(frame(),0);legacy.apply(frame(0,200),.01);
   f=legacy.apply(frame(0,0,400),.02);assert(f.brake_milli==0 && f.throttle_milli==0);
+  // Cancelling reverse during the brake stage never finishes backing on its own.
+  for(int choice=0;choice<4;++choice) {
+    s.reset();s.apply(frame(),7);s.apply(frame(200),7.01);
+    assert(s.apply(frame(0,200),7.02).brake_milli==100);
+    // Varying reverse magnitude must not restart the fixed brake dwell.
+    assert(s.apply(frame(0,700),7.04).brake_milli==100);
+    if(choice==0) {f=s.apply(frame(),7.05);assert(f.brake_milli==0 && f.reverse_milli==0);}
+    if(choice==1) {f=s.apply(frame(300),7.05);assert(f.throttle_milli==300 && f.reverse_milli==0);}
+    if(choice==2) {
+      f=s.apply(frame(0,0,500),7.05);assert(f.brake_milli==500);
+      for(int i=0;i<50;++i)assert(s.apply(frame(0,0,500),7.06+i*.01).reverse_milli==0);
+    }
+    if(choice==3) {s.apply(disarmed,7.05);assert(s.esc().state()==EscState::State::unknown);}
+  }
+  s.reset();s.apply(frame(),8);s.apply(frame(200),8.01);s.apply(frame(0,200),8.02);
+  assert(s.apply(frame(0,200),8.3).flags==COMMAND_VALID && s.failed());
   // Settings are bounded and finite, including values lost to PWM quantization.
-  for(int i=0;i<5;++i) {
+  for(int i=0;i<7;++i) {
     auto cfg=enabled();
     if(i==0)cfg.brake_entry_throttle=.001;
     if(i==1)cfg.brake_entry_s=0;
     if(i==2)cfg.reverse_neutral_s=3;
     if(i==3)cfg.max_step_gap_s=.3;
     if(i==4)cfg.brake_entry_s=std::numeric_limits<double>::quiet_NaN();
+    if(i==5)cfg.reverse_brake_command=.001;
+    if(i==6)cfg.reverse_brake_s=0;
     bool rejected=false;try{EscSequencer invalid(cfg);}catch(const std::invalid_argument&){rejected=true;}
     assert(rejected);
   }
@@ -116,6 +158,20 @@ int main() {
   axes[4]=axes[5]=0;
   f=session.output(joy.command(axes,false),true,12.33,1,0,{},true);
   assert(f.brake_milli==0 && f.throttle_milli==0 && f.reverse_milli==0);
+  // Real MANUAL mapping: held L2 while forward -> brake -> neutral -> reverse.
+  session.start(12.5);session.output({},true,12.51,1,0);session.status(status);
+  axes[5]=.8F;axes[4]=0;
+  assert(session.output(joy.command(axes,false),true,12.52,1,0,{},true).throttle_milli==240);
+  axes[5]=0;axes[4]=.8F;
+  bool saw_brake=false,saw_neutral=false,saw_reverse=false;
+  for(int i=0;i<48;++i) {
+    f=session.output(joy.command(axes,false),true,12.53+i*.01,1,0,{},true);
+    assert(f.throttle_milli==0);
+    if(f.brake_milli) {assert(!saw_neutral && !saw_reverse && f.brake_milli==100);saw_brake=true;}
+    else if(f.reverse_milli) {assert(saw_brake && saw_neutral && f.reverse_milli==240);saw_reverse=true;}
+    else {assert(saw_brake && !saw_reverse);saw_neutral=true;}
+  }
+  assert(saw_brake && saw_neutral && saw_reverse);
   session.start(13);session.output({},true,13.01,1,0);session.status(status);
   session.output({0,.2,0,0},true,13.3,1,0);
   assert(session.phase()==HostSession::Phase::disarmed);
