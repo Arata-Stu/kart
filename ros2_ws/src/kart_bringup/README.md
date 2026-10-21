@@ -1097,7 +1097,7 @@ vehicle bridge内蔵のESCシーケンサは`config/vehicle/bridge.yaml`で起�
 
 復帰は後退終了後に`post_reverse_braking`でbrakeを要求する。実ESCでの変換にはvehicle設定の`esc_sequencer_enabled=true`が必要で、既定true。falseを明示すると従来動作に戻る。復帰の既存brake量・最低時間・静止確認・期限を両制動段階で使う。
 
-前進/制動モデル中のreverse要求は、`esc_reverse_brake_command: 0.1`の負入力を
+前進/制動モデル中のreverse要求は、`esc_reverse_brake_command: 1.0`の負入力を
 `esc_reverse_brake_s: 0.2`秒保持してから中立→後退へ進む。両値は起動時固定で実機未校正。
 中立保持・制動時間の満了を停車確認と同一視しない。
 

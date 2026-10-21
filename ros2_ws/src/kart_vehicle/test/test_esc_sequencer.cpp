@@ -27,7 +27,7 @@ int main() {
   assert(short_dwell.apply(frame(0,200),20.0201).reverse_milli==200);
   // Full forward -> brake -> new short neutral -> reverse using default settings.
   short_dwell.reset();short_dwell.apply(frame(),21);short_dwell.apply(frame(300),21.01);
-  for(int i=0;i<20;++i)assert(short_dwell.apply(frame(0,200),21.02+i*.01).brake_milli==100);
+  for(int i=0;i<20;++i)assert(short_dwell.apply(frame(0,200),21.02+i*.01).brake_milli==1000);
   assert(short_dwell.apply(frame(0,200),21.221).reverse_milli==0);
   assert(short_dwell.apply(frame(0,200),21.226).reverse_milli==0);
   assert(short_dwell.apply(frame(0,200),21.2311).reverse_milli==200);
@@ -48,7 +48,7 @@ int main() {
   assert(s.apply(frame(250),2.30).throttle_milli==250);
   for(int i=0;i<=19;++i) {
     f=s.apply(frame(0,i%2 ? 700 : 180),2.31+i*.01);
-    assert(f.brake_milli==100 && f.reverse_milli==0 && f.throttle_milli==0);
+    assert(f.brake_milli==1000 && f.reverse_milli==0 && f.throttle_milli==0);
     assert(std::string(s.name())=="reverse_braking");
   }
   for(int i=0;i<=19;++i) {
@@ -65,7 +65,7 @@ int main() {
   s.reset();dwell_reverse(s,3);s.apply(frame(0,0,500),3.23);
   for(int i=0;i<=19;++i) {
     f=s.apply(frame(0,100),3.24+i*.01);
-    assert(f.throttle_milli==0 && f.reverse_milli==0 && f.brake_milli==100);
+    assert(f.throttle_milli==0 && f.reverse_milli==0 && f.brake_milli==1000);
   }
   for(int i=0;i<=19;++i)assert(s.apply(frame(0,100),3.45+i*.01).reverse_milli==0);
   assert(s.apply(frame(0,100),3.66).reverse_milli==100);
@@ -95,7 +95,7 @@ int main() {
       assert(history.esc().negative_is_brake());
     }
     t+=.01;f=history.apply(frame(0,250),t);
-    assert(f.brake_milli==100 && f.reverse_milli==0);
+    assert(f.brake_milli==1000 && f.reverse_milli==0);
     assert(std::string(history.name())=="reverse_braking");
     // Braking -> neutral -> reverse must finish without restarting the brake latch.
     bool saw_neutral=false,saw_reverse=false;
@@ -103,7 +103,7 @@ int main() {
       t+=.01;f=history.apply(frame(0,250),t);
       if(f.reverse_milli) {assert(saw_neutral && f.reverse_milli==250);saw_reverse=true;}
       else if(!f.brake_milli) {assert(!saw_reverse);saw_neutral=true;}
-      else {assert(!saw_neutral && !saw_reverse && f.brake_milli==100);}
+      else {assert(!saw_neutral && !saw_reverse && f.brake_milli==1000);}
     }
     assert(saw_reverse);
     // STOP/HOST loss erases the otherwise persistent history.
@@ -124,9 +124,9 @@ int main() {
   // Cancelling reverse during the brake stage never finishes backing on its own.
   for(int choice=0;choice<4;++choice) {
     s.reset();s.apply(frame(),7);s.apply(frame(200),7.01);
-    assert(s.apply(frame(0,200),7.02).brake_milli==100);
+    assert(s.apply(frame(0,200),7.02).brake_milli==1000);
     // Varying reverse magnitude must not restart the fixed brake dwell.
-    assert(s.apply(frame(0,700),7.04).brake_milli==100);
+    assert(s.apply(frame(0,700),7.04).brake_milli==1000);
     if(choice==0) {f=s.apply(frame(),7.05);assert(f.brake_milli==0 && f.reverse_milli==0);}
     if(choice==1) {f=s.apply(frame(300),7.05);assert(f.throttle_milli==300 && f.reverse_milli==0);}
     if(choice==2) {
@@ -199,7 +199,7 @@ int main() {
   for(int i=0;i<48;++i) {
     f=session.output(joy.command(axes,false),true,12.53+i*.01,1,0,{},true);
     assert(f.throttle_milli==0);
-    if(f.brake_milli) {assert(!saw_neutral && !saw_reverse && f.brake_milli==100);saw_brake=true;}
+    if(f.brake_milli) {assert(!saw_neutral && !saw_reverse && f.brake_milli==1000);saw_brake=true;}
     else if(f.reverse_milli) {assert(saw_brake && saw_neutral && f.reverse_milli==240);saw_reverse=true;}
     else {assert(saw_brake && !saw_reverse);saw_neutral=true;}
   }

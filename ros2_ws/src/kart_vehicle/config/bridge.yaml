@@ -13,7 +13,7 @@
     status_timeout: 0.2
     # Optional protocol sequencer; pulse values are provisional, not ESC-calibrated.
     esc_sequencer_enabled: true
-    esc_reverse_brake_command: 0.1
+    esc_reverse_brake_command: 1.0
     esc_reverse_brake_s: 0.2
     esc_reverse_neutral_s: 0.01
     esc_brake_entry_throttle: 0.08

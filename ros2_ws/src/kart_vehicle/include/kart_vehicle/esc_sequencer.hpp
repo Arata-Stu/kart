@@ -9,7 +9,7 @@ namespace kart_vehicle {
 // Open-loop protocol execution. Neither a pulse nor a dwell proves physical stop.
 struct EscSequenceSettings {
   bool enabled{true};
-  double reverse_brake_command{0.1};
+  double reverse_brake_command{1.0};
   double reverse_brake_s{0.2};
   double reverse_neutral_s{0.01};
   double brake_entry_throttle{0.08};
