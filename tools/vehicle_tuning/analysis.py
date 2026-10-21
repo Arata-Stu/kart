@@ -173,7 +173,8 @@ def analyze(data, cfg, turning=False):
         if (bridge is None or bridge['level'] != 0 or
                 bridge['values'].get('host_active') != 'true' or
                 bridge['values'].get('esc_brake_rejected') != 'false' or
-                bridge['values'].get('esc_command_state') not in ('neutral', 'forward', 'brake')):
+                bridge['values'].get('esc_command_state') not in ('neutral', 'neutral_initial', 'neutral_after_forward',
+                                                                 'neutral_after_brake', 'forward', 'brake')):
             reasons.append('bridge_not_ready')
         if path is None or path['value'] != 2:
             reasons.append('not_host_path')

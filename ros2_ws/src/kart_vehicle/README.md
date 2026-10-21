@@ -85,25 +85,27 @@ Trim updated: steering=+0.000 -> +0.001, throttle=+0.000 -> +0.000
 
 | 現在の指令モデル | 0入力 | ＋入力（throttle） | −入力（reverse） | 専用brake要求 |
 | --- | --- | --- | --- | --- |
-| unknown | neutral | 中立に抑制、unknown維持 | 中立に抑制、unknown維持 | 中立に抑制、unknown維持 |
-| neutral・前進後の初回負入力待ち | neutral（待ちを維持） | forward | brake | brake |
-| neutral・初回負入力待ちでない | neutral | forward | reverse | 拒否してneutral |
-| forward | neutral | forward | brake | brake |
-| brake | neutral | forward | brake保持 | brake保持 |
-| reverse | neutral | forward（制動段階なし） | reverse | 拒否してneutral |
+| unknown | neutral_initial | 中立に抑制、unknown維持 | 中立に抑制、unknown維持 | 中立に抑制、unknown維持 |
+| neutral_after_forward | neutral_after_forward | forward | brake | brake |
+| neutral_initial | neutral_initial | forward | reverse | 拒否してneutral_initial |
+| neutral_after_brake | neutral_after_brake | forward | reverse | 拒否してneutral_after_brake |
+| neutral_after_reverse | neutral_after_reverse | forward | reverse | 拒否してneutral_after_reverse |
+| forward | neutral_after_forward | forward | brake | brake |
+| brake | neutral_after_brake | forward | brake保持 | brake保持 |
+| reverse | neutral_after_reverse | forward（制動段階なし） | reverse | 拒否してneutral |
 
 - HOST中立handshakeでモデルを初期化する。停止・USB異常・基板fault・RCへの制御権移行でunknownへ戻す。
   RC中の入力履歴をHOSTへ引き継がない。unknownに戻ることは車両停止の確認ではない。
 - forward/brakeからの負入力は、同じ大きさの`brake`へ分類し直し`reverse=0`にする。
   現firmwareでは両者が同じPWMのため、この分類変更だけでは物理出力波形は変わらない。
 - brake保持だけではreverseへ遷移しない。0入力を挟み、再び負入力するとreverseとなるモデル。
-  中立の必要保持時間は実機未検証であり、現モデルは出力1回を中立として扱う。
+  低レベルモデルは中立の出力履歴を記録する。シーケンサ有効時の後退前中立は40 ms以上保持するが、ESCの認識確認ではない。
 - 初回負入力待ちでないneutral/reverseからの専用brakeは、後退を指示してしまうため中立化して警告する。
   **この場合、制動できたとは扱わない。** ステア指令は維持する。
 - 判定は送信値の0..1000整数化後。firmwareの整数`milli/2`変換では0と1が中立PWMになるため、
   どちらも0へ正規化する。微小な正値でforward扱いしない（ESC固有の不感帯は未モデル化）。
   新規パラメータ・topicはない。遷移時はINFO、brake拒否時は最大3秒に1回WARNを出す。
-- `/diagnostics`の`esc_command_state`にunknown/neutral/forward/brake/reverse、
+- `/diagnostics`の`esc_command_state`にunknown/forward/brake/reverseと4種のneutral（下記参照）、
   `esc_brake_rejected`に直近出力の拒否有無を載せる。連続故障のラッチではない。
 
 **未実装:** Bluetoothレポートの鮮度監視、遅延異常時のブレーキ優先出力・保持・解除の状態機械。
@@ -130,7 +132,7 @@ ros2 run kart_vehicle kart_bridge_node --ros-args -p device:=/dev/serial/by-id/�
 
 通常は[kart_bringup](../kart_bringup/README.md)で全体を起動する。
 macOSでprotocol・arm制御・擬似端末の単体テスト、実firmwareパーサーとの45指令の照合を確認済み。
-ESCモデルの全20遷移、負入力保持、専用brake拒否、制御権喪失、整数化境界を単体テスト済み。
+ESCモデルの全32遷移、負入力保持、専用brake拒否、制御権喪失、整数化境界を単体テスト済み。
 再実行: `scripts/tests/test-vehicle.sh /path/to/kart_bridge_board`（project rootから、実機アクセスなし）。
 ROS結合ビルド、実USB再接続、CH3切替・ESC動作は未検証。
 
@@ -199,7 +201,7 @@ controllerは既存の`ControlCommand`（前進=`throttle`、後退=`reverse`、
 | `esc_sequencer_enabled` | `true` | 要求を信号列へ変換するシーケンサを有効化。falseは従来動作 |
 | `esc_reverse_brake_command` | `1.0` | 前進/制動モデルから後退へ移る際の負入力制動量。0.002..1 |
 | `esc_reverse_brake_s` | `0.2` s | 後退前の制動要求保持。0.001..2 |
-| `esc_reverse_neutral_s` | `0.01` s | 後退要求時の中立保持。0.001..2 |
+| `esc_reverse_neutral_s` | `0.04` s | 後退要求時の中立保持要求。0.001..2、実効下限0.04秒 |
 | `esc_brake_entry_throttle` | `0.08` | 後退から制動へ移る正パルス量。0.002..1 |
 | `esc_brake_entry_s` | `0.05` s | 正パルスの保持時間。0.001..0.5 |
 | `esc_max_step_gap_s` | `0.1` s | シーケンサ出力周期の許容間隔。0.001..0.2 |
@@ -223,7 +225,7 @@ R2を離してneutralになっても、前進後の初回負入力待ちを保�
 中立時間の長さでこの履歴を消さず、R2→中立→L2でも制動保持→中立保持→後退へ進む。
 
 
-後退前のvehicle中立保持の既定値は0.01秒（bridge 100 Hzの約1周期）。
+後退前のvehicle中立保持の既定値・実効下限は0.04秒（JPBB 20 ms PWMの2周期分）。
 USBやESCが中立を認識する時間を保証する値ではなく、必要に応じて実機で調整する。
 「負入力制動0.2秒」は、前進履歴のあるESCに正規化値−1.0相当
 （`esc_reverse_brake_command=1.0`）のブレーキ信号を0.2秒要求し続ける意味。
@@ -237,7 +239,7 @@ USBやESCが中立を認識する時間を保証する値ではなく、必要�
 ユーザー申告の実ESC規則（2026-10-21）を採用する。正入力を送ると「初回負入力は制動」の
 履歴を立て、中立だけでは何秒経っても消さない。初回負入力はbrakeとして扱い、
 負入力を保持している間もbrakeを維持する。その後中立を挟んで再び負入力を送るとreverseとなる。
-この履歴はEscStateで管理し、出力モデルneutralと区別する。シーケンサ無効時の指令分類にも同じ規則を使う。
+この履歴はEscStateのneutral_after_forward / neutral_after_brake等の状態として管理する。シーケンサ無効時の指令分類にも同じ規則を使う。
 
 `/diagnostics`に`esc_negative_action`（brake/reverse/unknown）を追加する。
 これは「次の負入力の指令モデル」であり、実ESC内部状態や車体の進行方向の測定ではない。
@@ -246,3 +248,23 @@ STOP、HOST喪失、再接続等のresetで履歴を破棄してunknownへ戻す
 
 portableテストは前進→0.01/0.03/0.37/10秒の中立→後退要求を再現し、
 いずれも最初に制動を出すことと、制動→中立→後退が一巡して無限に制動を繰り返さないことを確認する。
+
+
+### 厳密な中立サブ状態と信号保持
+
+`EscState::State`はunknown/neutral_initial/forward/neutral_after_forward/brake/
+neutral_after_brake/reverse/neutral_after_reverseの8状態。別フラグとの組合せではなく状態そのものに履歴を持たせる。
+
+- `neutral_initial`: HOST中立handshake後。実ESC内部履歴のリセット確認ではない。
+- `neutral_after_forward`: 前進を離して中立を送った状態。何秒経っても初回負入力はbrake。
+- `neutral_after_brake`: 負入力制動後に中立を送った状態。シーケンサは後退前の中立保持を完了させてから次の負入力を出す。
+- `neutral_after_reverse`: 後退を離して中立を送った状態。次のreverse要求で正パルスを生成しない。
+
+シーケンサは`max(esc_reverse_neutral_s,0.04秒)`の連続中立を生成する。
+確認したJPBB firmwareは`JPBB_PWM_FRAME_US=20000`であり、従来の10 ms要求がPWM出力に現れない可能性を減らすための下限。
+設定0.01秒を持つ既存環境は起動時にWARNで実効0.04秒を通知する。
+`/diagnostics`（既存型/1 Hz）へ`esc_neutral_effective_s`を追加し、実際に使う保持時間を公開する。シーケンサ無効時は0（保持を生成しない）とする。
+状態ログと`esc_command_state`も中立サブ状態名を表示する。
+この名称は送信指令の履歴であり、`reverse_neutral`段階や保持満了をESCの中立認識・車体停車のACKと扱わない。
+実際のPWMがESCに届くこと、実ESCで後退へ切り替わることは別途実機確認が必要。
+停止/通信異常/制御権喪失では8状態のどこからでもunknownへ戻し、自動再開しない。

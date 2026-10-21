@@ -17,20 +17,26 @@ void dwell_reverse(EscSequencer &s,double t) {
   assert(s.apply(frame(0,200),t+.22).reverse_milli==200);
 }
 int main() {
-  // New default is a short neutral sample; it must still be emitted before reverse.
+  // Neutral hold spans two JPBB PWM frames; a 10 ms request must use this floor.
   EscSequenceSettings defaults;assert(defaults.enabled);
-  assert(defaults.reverse_neutral_s==.01);
+  assert(defaults.reverse_neutral_s==.04);
+  defaults.reverse_neutral_s=.01;assert(defaults.effective_neutral_s()==.04);
   EscSequencer short_dwell(defaults);
   short_dwell.apply(frame(),20);
   assert(short_dwell.apply(frame(0,200),20.01).reverse_milli==0);
   assert(short_dwell.apply(frame(0,200),20.015).reverse_milli==0);
-  assert(short_dwell.apply(frame(0,200),20.0201).reverse_milli==200);
+  assert(short_dwell.apply(frame(0,200),20.0201).reverse_milli==0);
+  assert(short_dwell.esc().state()==EscState::State::neutral_initial);
+  assert(short_dwell.apply(frame(0,200),20.0501).reverse_milli==200);
   // Full forward -> brake -> new short neutral -> reverse using default settings.
   short_dwell.reset();short_dwell.apply(frame(),21);short_dwell.apply(frame(300),21.01);
   for(int i=0;i<20;++i)assert(short_dwell.apply(frame(0,200),21.02+i*.01).brake_milli==1000);
   assert(short_dwell.apply(frame(0,200),21.221).reverse_milli==0);
   assert(short_dwell.apply(frame(0,200),21.226).reverse_milli==0);
-  assert(short_dwell.apply(frame(0,200),21.2311).reverse_milli==200);
+  assert(short_dwell.apply(frame(0,200),21.2311).reverse_milli==0);
+  assert(short_dwell.esc().state()==EscState::State::neutral_after_brake);
+  assert(std::string(short_dwell.name())=="reverse_neutral");
+  assert(short_dwell.apply(frame(0,200),21.2611).reverse_milli==200);
   EscSequencer s(enabled());dwell_reverse(s,1);
   auto f=s.apply(frame(0,0,400),1.23);
   assert(f.throttle_milli==80 && f.brake_milli==0 && f.reverse_milli==0);
@@ -119,7 +125,7 @@ int main() {
   assert(std::string(s.name())=="reverse_neutral");
   // Disabled profile keeps legacy behavior, including rejection from reverse.
   EscSequenceSettings disabled_settings;disabled_settings.enabled=false;
-  EscSequencer legacy(disabled_settings);legacy.apply(frame(),0);legacy.apply(frame(0,200),.01);
+  EscSequencer legacy(disabled_settings);assert(legacy.effective_neutral_s()==0);legacy.apply(frame(),0);legacy.apply(frame(0,200),.01);
   f=legacy.apply(frame(0,0,400),.02);assert(f.brake_milli==0 && f.throttle_milli==0);
   // Cancelling reverse during the brake stage never finishes backing on its own.
   for(int choice=0;choice<4;++choice) {

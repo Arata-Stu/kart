@@ -349,3 +349,5 @@ poseのSHA256、指定frame、適用TF、時計、設定、除外理由、検証
 合成円運動で取付オフセット補正・曲率回復、TF不足、時刻不一致、
 pose重複／跳躍／gap、オンライン診断必須条件、CLI成果物を単体検証。
 実際の公式TUM・実車bagでの精度検証は別途必要。
+
+ESC中立状態はneutral_initial/neutral_after_forward/neutral_after_brakeを受け付け、旧bagのneutralも保持する。neutral_after_reverseは前進特性の対象外とする。状態名は指令履歴であり、実測停止ではない。

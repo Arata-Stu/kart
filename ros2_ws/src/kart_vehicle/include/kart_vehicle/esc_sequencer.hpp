@@ -1,5 +1,6 @@
 #pragma once
 #include "kart_vehicle/esc_state.hpp"
+#include <algorithm>
 #include <cmath>
 #include <initializer_list>
 #include <stdexcept>
@@ -11,10 +12,13 @@ struct EscSequenceSettings {
   bool enabled{true};
   double reverse_brake_command{1.0};
   double reverse_brake_s{0.2};
-  double reverse_neutral_s{0.01};
+  double reverse_neutral_s{0.04};
   double brake_entry_throttle{0.08};
   double brake_entry_s{0.05};
   double max_step_gap_s{0.1};
+  // JPBB PWM frame is 20 ms. A 10 ms host request may miss the PWM output.
+  static constexpr double MIN_NEUTRAL_S=0.04;
+  double effective_neutral_s() const {return std::max(reverse_neutral_s,MIN_NEUTRAL_S);}
   void validate() const {
     for(double v : {reverse_brake_command,reverse_brake_s,reverse_neutral_s,brake_entry_throttle,brake_entry_s,max_step_gap_s}) {
       if(!std::isfinite(v) || v<=0) {throw std::invalid_argument("ESC sequence values must be finite and positive");}
@@ -36,6 +40,7 @@ public:
   void configure(EscSequenceSettings settings) {settings.validate();settings_=settings;reset();}
   void reset() {esc_.reset();phase_=Phase::idle;last_=since_=0;seen_=failed_=false;reason_.clear();}
   const EscState & esc() const {return esc_;}
+  double effective_neutral_s() const {return settings_.enabled ? settings_.effective_neutral_s() : 0.0;}
   bool failed() const {return failed_;}
   const std::string & reason() const {return reason_;}
   const char * name() const {
@@ -86,7 +91,7 @@ public:
         phase_=Phase::reverse_neutral;since_=now;return neutral(frame);
       }
       if(phase_==Phase::reverse_neutral) {
-        if(now-since_<settings_.reverse_neutral_s) {return neutral(frame);}
+        if(now-since_<settings_.effective_neutral_s()) {return neutral(frame);}
         phase_=Phase::idle;reason_.clear();return esc_.apply(frame);
       }
       if(esc_.negative_is_brake()) {

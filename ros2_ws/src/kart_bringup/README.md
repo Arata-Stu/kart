@@ -1089,7 +1089,7 @@ UI workerが正常なplayer終了と有効poseを検証する。画像・tfの�
 vehicle bridge内蔵のESCシーケンサは`config/vehicle/bridge.yaml`で起動時に設定する。
 `esc_sequencer_enabled: true`が既定。既存`ControlCommand`の後退/制動要求から
 中立保持・後退中の正パルス→負入力制動を生成する。controllerのtopicやmsg変更は不要。
-既定の`esc_reverse_neutral_s: 0.01`、`esc_brake_entry_throttle: 0.08`、
+既定の`esc_reverse_neutral_s: 0.04`、`esc_brake_entry_throttle: 0.08`、
 `esc_brake_entry_s: 0.05`、`esc_max_step_gap_s: 0.1`は秒/正規化出力の起動時固定値。
 実ESC未校正のため、機能を使う際は量・時間を実機に合わせる。
 入力timeout、STOP、制御権喪失は生成を中断し、異常からの自動再開はしない。
@@ -1101,6 +1101,8 @@ vehicle bridge内蔵のESCシーケンサは`config/vehicle/bridge.yaml`で起�
 `esc_reverse_brake_s: 0.2`秒保持してから中立→後退へ進む。両値は起動時固定で実機未校正。
 中立保持・制動時間の満了を停車確認と同一視しない。
 
-vehicleの後退前中立保持は0.01秒（送信約1周期）を初期値とし、実ESCの中立認識は実機で確認する。復帰module側の同名に近いreverse_neutral_sとは独立。
+vehicleの後退前中立保持は0.04秒（JPBB PWMの2周期）を初期値・実効下限とし、実ESCの中立認識は実機で確認する。復帰module側の同名に近いreverse_neutral_sとは独立。
 
 前進後は中立時間にかかわらず初回負入力を制動として扱う。R2→中立→L2でも前進後の制動待ち履歴を使い、制動→中立→後退へ進む。追加設定は不要。
+
+ESC中立ログはneutral_initial/neutral_after_forward/neutral_after_brake/neutral_after_reverseを区別する。0.04秒未満の中立要求は実効0.04秒となり、起動WARNとesc_neutral_effective_sで確認できる。これはESCの受信ACKではない。

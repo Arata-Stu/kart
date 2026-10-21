@@ -39,6 +39,18 @@ def synthetic():
 
 
 class AnalysisTests(unittest.TestCase):
+    def test_explicit_neutral_subtypes_and_legacy_bag_compatibility(self):
+        for subtype in ('neutral','neutral_initial','neutral_after_forward','neutral_after_brake'):
+            data=synthetic()
+            for row in data['bridge']:
+                if row['values']['esc_command_state']=='neutral':row['values']['esc_command_state']=subtype
+            _,rows,_,_=analyze(data,CONFIG)
+            assert not any('bridge_not_ready' in row['reason'] for row in rows)
+        data=synthetic()
+        for row in data['bridge']:row['values']['esc_command_state']='neutral_after_reverse'
+        _,rows,_,_=analyze(data,CONFIG)
+        assert all('bridge_not_ready' in row['reason'] for row in rows)
+
     @classmethod
     def setUpClass(cls): cls.data=synthetic()
 

@@ -54,7 +54,7 @@ ESCの実際のブレーキ・後退動作は設定と履歴に依存する。
 
 ### ESC状態管理と遅延時制動
 
-bridgeにunknown/neutral/forward/brake/reverseの出力指令モデルを実装した。
+bridgeにunknown/forward/brake/reverseと中立サブ状態の出力指令モデルを実装した。
 遷移表・専用brakeの拒否条件・診断項目は[kart_vehicle README](../ros2_ws/src/kart_vehicle/README.md#esc指令の状態管理)を参照。
 ユーザー申告（2026-10-07）では、前進から負入力へ切り替えるとブレーキになり、
 そのまま保持しても後退しない。一方、後退から正入力への切替にはブレーキ段階がない。
@@ -266,3 +266,9 @@ controller/Joy managerにESC固有の手順を追加しない。時間満了は�
 初回負入力の制動を終えて中立を挟んだ後、次の負入力をreverseとする。
 シーケンサはこの履歴に従い、R2→中立→L2にも制動保持→中立保持→後退を適用する。
 出力モデルと次の負入力モデルは診断で分け、実ESC/車体の測定とは扱わない。
+
+
+ESC中立はneutral_initial、neutral_after_forward、neutral_after_brake、neutral_after_reverseに分離した。
+前進後の中立は初回負入力でbrake、brake後に中立を挟んだ次の負入力はreverseとする。
+後退前の中立保持は設定要求と40 msの大きい方。JPBBの20 ms PWM周期を踏まえた信号保持であり、
+ESC受信ACKや実停止確認とは分離する。設定の実効値はdiagnosticsのesc_neutral_effective_sで示す。

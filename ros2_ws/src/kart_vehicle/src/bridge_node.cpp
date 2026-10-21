@@ -31,11 +31,15 @@ public:
     sequence_settings.enabled=declare_parameter<bool>("esc_sequencer_enabled",true,fixed());
     sequence_settings.reverse_brake_command=number(*this,"esc_reverse_brake_command",1.0,0.002,1.0);
     sequence_settings.reverse_brake_s=number(*this,"esc_reverse_brake_s",0.2,0.001,2.0);
-    sequence_settings.reverse_neutral_s=number(*this,"esc_reverse_neutral_s",0.01,0.001,2.0);
+    sequence_settings.reverse_neutral_s=number(*this,"esc_reverse_neutral_s",0.04,0.001,2.0);
     sequence_settings.brake_entry_throttle=number(*this,"esc_brake_entry_throttle",0.08,0.002,1.0);
     sequence_settings.brake_entry_s=number(*this,"esc_brake_entry_s",0.05,0.001,0.5);
     sequence_settings.max_step_gap_s=number(*this,"esc_max_step_gap_s",0.1,0.001,0.2);
     session_.configure_esc(sequence_settings);
+    if(sequence_settings.enabled && sequence_settings.reverse_neutral_s<sequence_settings.effective_neutral_s()) {
+      RCLCPP_WARN(get_logger(),"ESC neutral hold requested %.3f s; effective %.3f s minimum for JPBB 20 ms PWM (not ESC acknowledgement)",
+        sequence_settings.reverse_neutral_s,sequence_settings.effective_neutral_s());
+    }
     steering_trim_limit_=number(*this,"steering_trim_limit",0.25,0,0.5);
     throttle_trim_limit_=number(*this,"throttle_trim_limit",0.1,0,0.5);
     trim_.steering=number(*this,"initial_steering_trim",0,-steering_trim_limit_,steering_trim_limit_);
@@ -136,7 +140,7 @@ private:
       RCLCPP_WARN_THROTTLE(get_logger(),*get_clock(),3000,"Bridge disconnected: %s",e.what());
     }
     if(session_.esc().state()!=last_esc_state_) {
-      RCLCPP_INFO(get_logger(),"ESC command model: %s (not measured motion)",session_.esc().name());
+      RCLCPP_INFO(get_logger(),"ESC command model: %s (not ESC feedback or measured motion)",session_.esc().name());
       last_esc_state_=session_.esc().state();
     }
     if(session_.esc().brake_rejected()) {
@@ -185,6 +189,7 @@ private:
     add("host_phase",std::to_string(static_cast<int>(session_.phase())));
     add("esc_sequence_phase",session_.sequencer().name());
     add("esc_sequence_reason",session_.sequencer().reason());
+    add("esc_neutral_effective_s",std::to_string(session_.sequencer().effective_neutral_s()));
     add("esc_negative_action",session_.esc().next_negative_name());
     add("esc_command_state",session_.esc().name());
     add("esc_brake_rejected",session_.esc().brake_rejected()?"true":"false");
