@@ -96,7 +96,7 @@ sim時刻での入力鮮度と実時間での通信断を分離する。元stamp
 | `steering_scale` | `1.0` | ステア倍率。0.01..1 |
 | `speed_scale` | `0.3` | 正負スロットル倍率。0.01..1。車速[m/s]ではない |
 | `brake_pulse_throttle` | `0.08` | MANUALの○押下時の正throttle要求、0.002..1。起動時固定 |
-| `brake_pulse_s` | `0.05` | 正パルス保持時間[秒]、steady時刻、0.04..0.5。起動時固定 |
+| `brake_pulse_s` | `0.01` | 正パルス保持時間[秒]、steady時刻、0.01..0.5。起動時固定 |
 | `auto_fixed_throttle` | `-1.0` | AUTO時の固定正規化指令（手動ステア）。-1で通常操作、0..speed_scaleで固定。起動時固定 |
 
 スロットルは`(R2 − L2) × speed_scale`。各トリガー0.01以下を0とし、負側は`reverse`へ格納する。
@@ -201,3 +201,5 @@ AUTOから△への引継ぎ時に○を押していてもパルスは始まら�
 ROSなしのscripts/tests/test-vehicle.shで一度だけの生成、中断、再接続時の抑制、および
 HostSessionへ接続した全ての既知ESC履歴からの正パルス→brake=1.0を検証する。
 ROS結合・実PWM・実制動は未確認。
+
+○の正パルスは既定0.01秒。Joy・mux・bridgeの配信周期で量子化され、基板の20 ms PWM更新で捕捉されない可能性がある。実ESCで要確認。復帰moduleの正パルス時間は0.05秒のまま。

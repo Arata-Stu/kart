@@ -249,6 +249,6 @@ AUTO復帰ではkart_recoveryがreversing→post_reverse_pulse→post_reverse_br
 制動量・最低制動時間・静止確認・期限は既存の復帰設定を使用する。STOP等の中断監視は全段階で継続する。
 PWM受信・実制動・実停止は未検証であり、信号列の生成だけでは保証しない。
 
-MANUALの○はJoy managerが正パルス（既定0.08 / 0.05秒）→brake=1.0を生成する。
+MANUALの○はJoy managerが正パルス（既定0.08 / 0.01秒）→brake=1.0を生成する。
 ○長押しで制動を維持し、解除・STOP・入力喪失で中断する。R2/L2に自動の信号列はない。
 この正パルスはMANUAL throttle trimの影響を受け、実ESCでの校正は未実施。

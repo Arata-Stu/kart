@@ -34,10 +34,10 @@ public:
 // freshness, mode, deadman and STOP gates. Reset requires a release before a pulse.
 class JoyBrakePulse {
 public:
-  double throttle{0.08}, duration_s{0.05};
+  double throttle{0.08}, duration_s{0.01};
   bool valid_settings() const {
     return std::isfinite(throttle) && throttle>=0.002 && throttle<=1 &&
-      std::isfinite(duration_s) && duration_s>=0.04 && duration_s<=0.5;
+      std::isfinite(duration_s) && duration_s>=0.01 && duration_s<=0.5;
   }
   void reset() {released_=false; held_=false; pulsing_=false; started_=last_=NEVER;}
   const char * phase() const {return !held_ ? "idle" : pulsing_ ? "positive_pulse" : "brake";}
@@ -56,7 +56,7 @@ public:
       started_=steady;
       released_=false;
     }
-    if (steady-started_>=duration_s) {pulsing_=false;}
+    if (steady-started_+1e-9>=duration_s) {pulsing_=false;}
     return pulsing_ ? Command{raw.steering,throttle,0,0} : Command{raw.steering,0,1,0};
   }
 private:

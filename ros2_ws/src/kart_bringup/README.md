@@ -1094,6 +1094,8 @@ config/recovery/recovery.yamlのpost_reverse_pulse_throttle（0.08）、post_rev
 
 MANUALの○ではJoy managerが正パルス→brake=1.0を生成する。
 config/input/joy_manager.yamlのbrake_pulse_throttle（既定0.08、範囲0.002..1）、
-brake_pulse_s（既定0.05秒、範囲0.04..0.5）で設定する。起動時固定。
+brake_pulse_s（既定0.01秒、範囲0.01..0.5）で設定する。起動時固定。
 ○を離すと中断し、長押しでパルスを繰り返さない。STOPや入力喪失、モード変更でも中断する。
 AUTOと通常R2/L2は従来どおり。正パルスはMANUAL throttle trimを受け、実ESCでの値は未校正。
+
+Joyの10 ms正パルスは基板の20 ms PWM更新に捕捉されない可能性がある。出力時間と実ESCの認識は要実機確認。復帰moduleの時間設定は変更していない。

@@ -9,7 +9,7 @@
     deadman_button: -1
     brake_button: 1
     brake_pulse_throttle: 0.08  # MANUAL circle: positive pulse, then brake=1 while held
-    brake_pulse_s: 0.05         # Steady time; actual output is quantized to Joy delivery
+    brake_pulse_s: 0.01         # Steady time; actual output is quantized to Joy delivery
     stop_button: 0
     manual_button: 2
     auto_button: 3

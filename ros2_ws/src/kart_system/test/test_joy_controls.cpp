@@ -76,6 +76,7 @@ int main() {
   keys[3]=1; actions=buttons.read(keys); assert(!actions->automatic);
   {
     JoyBrakePulse pulse;
+    pulse.duration_s=.05; // Longer pulse remains configurable.
     const Command brake{.2,0,1,0};
     // Startup/reconnection with circle held must never synthesize propulsion.
     assert(pulse.command(brake,true,true,10).brake==1);
@@ -103,7 +104,13 @@ int main() {
     pulse.command({},false,true,11.41);
     pulse.command(brake,true,true,11.42);
     assert(pulse.command(brake,true,true,11.0).throttle==0); // Rewind cannot replay.
-    pulse.duration_s=.01; assert(!pulse.valid_settings());
+    pulse.duration_s=.005; assert(!pulse.valid_settings());
+    pulse.reset(); pulse.duration_s=.01;
+    assert(pulse.valid_settings());
+    pulse.command({},false,true,20);
+    assert(pulse.command(brake,true,true,20.01).throttle==.08);
+    assert(pulse.command(brake,true,true,20.02).brake==1);
+    assert(pulse.command(brake,true,true,20.03).brake==1);
     pulse.duration_s=.05; pulse.throttle=0; assert(!pulse.valid_settings());
     pulse.throttle=std::numeric_limits<double>::quiet_NaN(); assert(!pulse.valid_settings());
   }

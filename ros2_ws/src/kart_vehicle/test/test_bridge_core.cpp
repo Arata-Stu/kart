@@ -138,14 +138,15 @@ int main() {
       double t=50.02;
       for(const auto & c:history) {host.output(c,true,t,1,0); t+=.01;}
       kart_system::JoyBrakePulse pulse;
+      pulse.duration_s=.01;
       pulse.command({},false,true,t);
       const double start=t+.01;
       for(int n=0;n<100;++n) {
         const auto demand=pulse.command({.3,0,1,0},true,true,start+.01*n);
         const auto frame=host.output(demand,true,start+.01*n,1,0);
         assert(frame.flags==3 && frame.reverse_milli==0);
-        if(n<5) {assert(frame.throttle_milli==80 && frame.brake_milli==0);}
-        if(n>=6) {assert(frame.throttle_milli==0 && frame.brake_milli==1000);}
+        if(n==0) {assert(frame.throttle_milli==80 && frame.brake_milli==0);}
+        if(n>=1) {assert(frame.throttle_milli==0 && frame.brake_milli==1000);}
       }
       assert(host.esc().state()==EscState::State::brake);
     }

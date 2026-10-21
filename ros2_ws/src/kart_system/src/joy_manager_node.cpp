@@ -26,7 +26,7 @@ public:
     teleop_.steering_scale=number(*this,"steering_scale",1.0,0.01,1);
     teleop_.speed_scale=number(*this,"speed_scale",0.3,0.01,1);
     brake_pulse_.throttle=number(*this,"brake_pulse_throttle",0.08,0.002,1.0);
-    brake_pulse_.duration_s=number(*this,"brake_pulse_s",0.05,0.04,0.5);
+    brake_pulse_.duration_s=number(*this,"brake_pulse_s",0.01,0.01,0.5);
     manual_fixed_.throttle=number(*this,"auto_fixed_throttle",-1.0,-1.0,1.0);
     if (!manual_fixed_.valid_settings(teleop_.speed_scale)) {
       throw std::invalid_argument("auto_fixed_throttle must be -1 (disabled) or 0..speed_scale");
