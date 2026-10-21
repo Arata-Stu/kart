@@ -194,7 +194,12 @@ AUTOから△への引継ぎ時に○を押していてもパルスは始まら�
 
 実運用値はkart_bringup/config/input/joy_manager.yamlを編集して再ビルド・再起動する。
 新規topic/serviceはなく、既存/teleop/control_cmd（kart_interfaces/msg/ControlCommand）へ出す。
-ログのJoy brake signalはpositive_pulse / brake / idleを示す。
+ログのJoy brake signalは段階変化時だけ出力する（長押し中の毎周期出力はしない）。
+positive_pulseでは正throttle要求値・設定時間requested_s・その後のbrake=1.0保持を表示する。
+brakeへの切替時には設定時間とsteady時刻の段階経過時間elapsed_sを表示する。
+idleでは直前段階・経過時間・解除/STOP/入力喪失/モード変更等の終了理由を表示する。
+再接続時の押下保持などで正パルスを省略した場合も明記する。
+これらは補正前の指令生成とcallback間の経過時間であり、PWM実測値・ESC受信時間・物理制動の証明ではない。
 /vehicle/control_cmdはbridge補正前の要求なので、trim反映後のPWM値そのものではない。
 
 車輪を浮かせてMANUALへ入り、後退を確認してから○を押し続けると、同じ信号列を試験できる。

@@ -40,7 +40,7 @@ public:
       ready_=msg->data; ready_at_=steady_now(); if (!ready_) {lose_input();}
     });
     mode_sub_=create_subscription<Mode>("operation_mode/state",1,[this](Mode::ConstSharedPtr msg) {
-      if (mode_!=msg->mode) {brake_pulse_.reset();}
+      if (mode_!=msg->mode) {reset_brake_pulse("mode_changed");}
       mode_=msg->mode; mode_at_=steady_now(); mode_stamp_=seconds(msg->header.stamp);
       manual_fixed_.observe(mode_,seconds(msg->header.stamp),now().seconds(),steady_now(),
         input_healthy() && !blocked_,neutral_input_);
@@ -53,7 +53,7 @@ public:
                !manual_fixed_.allowed(now().seconds(),steady_now(),!blocked_)) {
         stop_fixed({},"joy_manager:fixed_throttle_mode_unavailable");
       }
-      if (!manual_brake_permitted()) {brake_pulse_.reset();}
+      if (!manual_brake_permitted()) {reset_brake_pulse("mode_or_input_unavailable");}
       if (steady_now()-last_config_>=0.1) {publish_fixed_config(); last_config_=steady_now();}
     });
   }
@@ -69,6 +69,32 @@ private:
   bool manual_brake_permitted() const {
     return mode_==MANUAL && !blocked_ && input_healthy() &&
       fresh(steady_now(),mode_at_,0.3) && fresh_stamp(now().seconds(),mode_stamp_,0.3);
+  }
+  void log_brake_signal(double steady, const char * reason) {
+    const std::string phase=brake_pulse_.phase();
+    if (phase==brake_log_phase_) {return;}
+    const double elapsed=std::isfinite(brake_log_at_) ? std::max(0.0,steady-brake_log_at_) : 0.0;
+    if (phase=="positive_pulse") {
+      RCLCPP_INFO(get_logger(),
+        "Joy brake signal: positive_pulse throttle=+%.3f requested_s=%.3f -> brake=1.000 while circle held (pre-trim command)",
+        brake_pulse_.throttle,brake_pulse_.duration_s);
+    } else if (phase=="brake" && brake_log_phase_=="positive_pulse") {
+      RCLCPP_INFO(get_logger(),
+        "Joy brake signal: brake=1.000; positive_pulse requested_s=%.3f elapsed_s=%.6f; hold until circle release (command timing, not ESC feedback)",
+        brake_pulse_.duration_s,elapsed);
+    } else if (phase=="brake") {
+      RCLCPP_INFO(get_logger(),
+        "Joy brake signal: brake=1.000; positive pulse skipped (release circle before a new pulse)");
+    } else {
+      RCLCPP_INFO(get_logger(),
+        "Joy brake signal: idle previous=%s phase_elapsed_s=%.6f reason=%s (command sequence ended)",
+        brake_log_phase_.c_str(),elapsed,reason);
+    }
+    brake_log_phase_=phase; brake_log_at_=steady;
+  }
+  void reset_brake_pulse(const char * reason) {
+    brake_pulse_.reset();
+    log_brake_signal(steady_now(),reason);
   }
   void publish_fixed_config() {
     std_msgs::msg::String msg;
@@ -87,7 +113,7 @@ private:
     if (steady_now()-last_stop_>=0.1) {request(*this,request_pub_,STOP,reason); last_stop_=steady_now();}
   }
   void lose_input() {
-    brake_pulse_.reset(); buttons_.reset(); neutral_input_=false; manual_fixed_.trip();
+    reset_brake_pulse("input_unavailable"); buttons_.reset(); neutral_input_=false; manual_fixed_.trip();
     if (mode_==MANUAL || (mode_==AUTO && manual_fixed_.enabled())) {
       if (manual_fixed_.enabled() && mode_==AUTO) {stop_fixed({},"joy_manager:fixed_throttle_input_unavailable"); return;}
       blocked_=true;
@@ -109,7 +135,7 @@ private:
       RCLCPP_INFO(get_logger(),"Bag request: %s",actions->bag_stop ? "STOP" : "START");
     }
     if (actions->stop) {
-      brake_pulse_.reset();
+      reset_brake_pulse("stop_button");
       if (manual_fixed_.enabled() && mode_==AUTO) {stop_fixed({},"joy_manager:stop_button");}
       else {blocked_=true; request(*this,request_pub_,STOP,"joy_manager:stop_button");}
       return;
@@ -123,14 +149,14 @@ private:
       if (trim.steering!=0 || trim.throttle!=0) {trim_pub_->publish(trim);}
     }
     if (actions->manual && mode_==AUTO) {
-      brake_pulse_.reset();
+      reset_brake_pulse("manual_takeover");
       request(*this,request_pub_,MANUAL,"joy_manager:manual_takeover");
       Control msg; msg.header=joy.header; set_values(msg,teleop_.command(joy.axes,actions->brake)); pub_->publish(msg); return;
     }
     const auto raw=teleop_.command(joy.axes,actions->brake);
-    const std::string brake_phase=brake_pulse_.phase();
-    const auto manual=brake_pulse_.command(raw,actions->brake,manual_brake_permitted(),steady_now());
-    if (brake_phase!=brake_pulse_.phase()) {RCLCPP_INFO(get_logger(),"Joy brake signal: %s",brake_pulse_.phase());}
+    const double brake_now=steady_now();
+    const auto manual=brake_pulse_.command(raw,actions->brake,manual_brake_permitted(),brake_now);
+    log_brake_signal(brake_now,"circle_release_or_control_gate");
     const auto result=manual_fixed_.command(manual,joy.axes[teleop_.reverse_axis]>0.01,
       now().seconds(),steady_now(),input_healthy() && !blocked_);
     if (result.stop) {stop_fixed(result.command,"joy_manager:fixed_throttle_cancelled"); return;}
@@ -140,6 +166,8 @@ private:
       else if (actions->automatic) {request(*this,request_pub_,AUTO,"joy_manager:auto_button");}
     }
   }
+  std::string brake_log_phase_{"idle"};
+  double brake_log_at_{NEVER};
   JoyBrakePulse brake_pulse_;
   double mode_at_{NEVER}, mode_stamp_{NEVER};
   TeleopInput teleop_;
