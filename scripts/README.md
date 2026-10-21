@@ -1,5 +1,16 @@
 # scripts
 
+## センサ・E2E・制御遅延のオフライン時系列解析
+
+```bash
+python3 -m pip install -r tools/pipeline_audit/requirements.txt
+bash scripts/pipeline_audit.sh --bag /path/to/recorded_bag --output /path/to/new_analysis
+```
+
+`report.html`に共通時間軸の折れ線・連動ズーム・スパイク／状態変化を出力する。
+画像／Tensorの画素展開やROS再生は行わず、全解像度CSVとJSONも保存する。
+EVSやtopic変更、計測範囲の詳細は[pipeline_audit](../tools/pipeline_audit/README.md)。
+
 固定操作の収録例: `vehicle_tuning.sh collect fixed_command:=true throttle:=0.10 steering:=0.0`。
 STOP→AUTO中だけ保持し、MANUALは手動操作。解析には`analyze --mode auto`を指定する。
 

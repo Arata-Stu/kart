@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 from kart_studio.geometry import Corridor, PathValidationError, centerline
 from kart_studio.lines import generate
-from kart_studio.jobs import Jobs
+from kart_studio.jobs import Jobs, Job
+from kart_studio.job_worker import perform
 from kart_studio.storage import read_json
 
 left=[[.75,.3],[.8,2.7],[1,3.3],[1.4,3.35],[3.4,3.2],[5.5,3.2],[7,3.5],[8.6,3.55],[8.75,3.3],[8.77,3],[8.4,2.9],[2.1,3.05],[1.6,2.5],[1.55,1.7],[1.9,1],[2.6,.7],[7.9,.55],[8.4,.4],[8.6,.15],[8.55,0],[8.1,-.1],[3.6,-.1],[1.4,.05]]
@@ -30,8 +31,11 @@ class CorrespondenceTests(unittest.TestCase):
         self.assertIn('XY=',str(error))
         with tempfile.TemporaryDirectory() as directory:
             jobs=Jobs(Path(directory))
-            def fail(job):raise error
-            started=jobs.start('centerline',[],fail)
+            job=Job(Path(directory),'centerline',[])
+            job.persist_enabled=True
+            def fail():raise error
+            perform(job,fail)
+            started={'id':job.id}
             deadline=time.monotonic()+3
             while read_json(Path(directory)/(started['id']+'.json'))['status']=='running' and time.monotonic()<deadline:time.sleep(.01)
             self.assertEqual(jobs.list()[0]['status'],'failed')

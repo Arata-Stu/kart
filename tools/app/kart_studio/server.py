@@ -6,19 +6,21 @@ import json
 import mimetypes
 import re
 import shutil
+import secrets
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlsplit, urlencode
 
 from . import capture, registration, vgl, dense, dense_steps, mesh_color
 from .copies import copy_map
 from .e2e import Learning
-from .jobs import Jobs
+from .jobs import Jobs, Task
 from .mapping import Mapping, local_records
 from .maps import Maps
 from .storage import atomic_json, name, read_json, within
 from .transfers import Transfers, profile
 from .tuning import Tuning
+from .audit import Audit, FILES as AUDIT_FILES
 
 
 class Studio:
@@ -37,11 +39,12 @@ class Studio:
             raise ValueError(
                 "同じデータのStudioが起動済みです。別データには--data-rootを使ってください"
             )
-        self.jobs = Jobs(self.state / "jobs")
+        self.jobs = Jobs(self.state / "jobs", repo, base)
         self.mapping = Mapping(repo, self.records, self.maps)
         self.transfers = Transfers(self.records, self.maps)
         self.learning = Learning(repo, base, self.records, self.state)
         self.tuning = Tuning(self.maps)
+        self.audit = Audit(repo, base, self.records)
         self.profile_file = self.state / "connection.json"
 
     def connection_defaults(self):
@@ -58,6 +61,14 @@ class Studio:
 
     def get(self, path, q):
         key = q.get("id", "")
+        if path == '/api/audits':
+            result = self.audit.catalog()
+            with self.jobs.lock:
+                workers = list(self.jobs.jobs.values())
+            result['running'] = [job.info() for job in workers if any(r.startswith('audit-output:') for r in job.resources) and job.status in ('running','orphaned')]
+            return result
+        if path == '/api/audit':
+            return read_json(self.audit.artifact(key, 'summary.json'))
         if path == "/api/config":
             hosts = read_json(self.repo / "config/jetson_hosts.json")
             connection = (
@@ -131,6 +142,11 @@ class Studio:
         raise KeyError("Not found")
 
     def post(self, path, b):
+        if path == '/api/audit/run':
+            plan = self.audit.prepare(b)
+            return self.jobs.start('走行記録の時刻解析: ' + plan['bag_key'],
+                                   ['read:record:' + plan['bag_key'], 'audit-output:' + plan['key']],
+                                   Task('audit', [plan]))
         if path == "/api/tuning/prepare":
             return self.tuning.prepare(b)
         if path in ("/api/tuning/status", "/api/tuning/apply", "/api/tuning/rollback", "/api/tuning/parameters_get", "/api/tuning/parameters_set"):
@@ -144,7 +160,7 @@ class Studio:
             else:
                 kind, key = b.get('kind'), b.get('id')
                 self.learning.folder(kind, key)
-            with self.jobs.guard('e2e-compute', 'e2e-trash', 'e2e:' + kind + ':' + key):
+            with self.jobs.guard('e2e-trash', 'e2e:' + kind + ':' + key):
                 if path.endswith('/restore'):
                     return e2e_trash.restore(self.learning, b['token'])
                 return e2e_trash.move(self.learning, kind, key)
@@ -181,7 +197,7 @@ class Studio:
             return self.jobs.start(
                 titles[action] + ": " + plan["key"],
                 plan["resources"] + ["e2e:" + plan["kind"] + ":" + plan["key"]],
-                lambda job: self.learning.execute(job, plan),
+                Task('learning', [plan]),
             )
         if path == "/api/e2e/push":
             p = profile(b["connection"])
@@ -192,8 +208,8 @@ class Studio:
             self.learning.folder("models", key)
             return self.jobs.start(
                 "モデル送信: " + key,
-                ["e2e:models:" + key],
-                lambda job: self.learning.push(job, p, key, root),
+                ["read:e2e:models:" + key],
+                Task('model_push', [p, key, root]),
             )
         if path == "/api/connection/reset":
             value = self.connection_defaults()
@@ -211,15 +227,15 @@ class Studio:
             return self.jobs.start(
                 "bagを受信: " + key,
                 ["record:" + key],
-                lambda job: self.transfers.pull(job, p, b["relative"], key),
+                Task('record_pull', [p, b['relative'], key]),
             )
         if path == "/api/push":
             p = profile(b["connection"])
             name(key)
             return self.jobs.start(
                 "地図を送信: " + key,
-                ["map:" + key],
-                lambda job: self.transfers.push(job, p, key),
+                ["read:map:" + key],
+                Task('map_push', [p, key]),
             )
         if path == "/api/import":
             key = name(b["name"])
@@ -239,10 +255,8 @@ class Studio:
             source, destination = name(key), name(b["name"])
             return self.jobs.start(
                 "地図を複製: " + source,
-                ["map:" + source, "map:" + destination],
-                lambda job: copy_map(
-                    self.maps, job, source, destination, b["revision"]
-                ),
+                ["read:map:" + source, "map:" + destination],
+                Task('map_copy', [source, destination, b['revision']]),
             )
         if path == "/api/delete-map":
             with self.jobs.guard("map:" + name(key), "map-trash"):
@@ -263,14 +277,7 @@ class Studio:
             return self.jobs.start(
                 b["kind"] + "生成",
                 ["map:" + name(key)],
-                lambda job: self.maps.generate(
-                    key,
-                    b["kind"],
-                    b.get("settings", {}),
-                    b["revision"],
-                    job.check,
-                    b.get("lane_id"),
-                ),
+                Task('line_generate', [key, b['kind'], b.get('settings', {}), b['revision'], b.get('lane_id')]),
             )
         if path == "/api/export":
             with self.jobs.guard("map:" + name(key)):
@@ -284,23 +291,23 @@ class Studio:
             key, source, models, output, size = vgl.prepare(self, b)
             return self.jobs.start(
                 "VGL地図生成: " + key,
-                ["map:" + key, "vgl:" + str(output), "e2e-compute"],
-                lambda job: vgl.build(job, source, models, output, size),
+                ["read:map:" + key, "vgl:" + str(output)],
+                Task('vgl', [source, models, output, size]),
             )
         if path == "/api/mesh-color":
             name(key)
             inputs = mesh_color.validate(self, key, b)
             return self.jobs.start(
-                "mesh RGB着色: " + key, ["map:" + key, "e2e-compute"],
-                lambda job: mesh_color.build(self, job, key, b, inputs),
+                "mesh RGB着色: " + key, ["map:" + key],
+                Task('mesh_color', [key, b, inputs]),
             )
         if path == "/api/dense-step":
             name(key)
             step, resolution = dense_steps.validate(self, key, b)
             return self.jobs.start(
                 ("深度推定: " if step == "depth" else "占有地図・メッシュ生成: ") + key,
-                ["map:" + key, "e2e-compute", "ros:" + str(self.mapping.defaults['ros_domain_id'])],
-                lambda job: dense_steps.build(self, job, key, b['revision'], step, resolution),
+                ["map:" + key, "ros:" + str(self.mapping.defaults['ros_domain_id'])],
+                Task('dense_step', [key, b['revision'], step, resolution]),
             )
         if path == "/api/capture":
             name(key)
@@ -308,17 +315,14 @@ class Studio:
             return self.jobs.start(
                 "HDMap用点群取得: " + key,
                 ["map:" + key, "ros:" + str(workflow["ros_domain_id"])],
-                lambda job: capture.capture(
-                    self, job, key, b["revision"], bag, workflow, options
-                ),
+                Task('capture', [key, b['revision'], bag, workflow, options]),
             )
         if path == "/api/build":
             key, bag, workflow = self.mapping.validate(b)
             return self.jobs.start(
                 "VSLAM地図作成: " + key,
-                ["map:" + key, "ros:" + str(workflow["ros_domain_id"])]
-                + (["e2e-compute"] if workflow.get("dense_reconstruction") else []),
-                lambda job: self.mapping.build(job, key, bag, workflow),
+                ["map:" + key, "ros:" + str(workflow["ros_domain_id"])],
+                Task('map_build', [key, bag, workflow]),
             )
         if path == "/api/stop":
             job = self.jobs.jobs.get(key)
@@ -370,6 +374,39 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self.trusted()
             url = urlsplit(self.path)
+            if url.path == '/audit-file':
+                query = {k: v[-1] for k, v in parse_qs(url.query).items()}
+                filename = query.get('file', 'report.html')
+                path = self.server.studio.audit.artifact(query.get('id', ''), filename)
+                if filename == 'report.html':
+                    nonce = secrets.token_urlsafe(24)
+                    body = path.read_text()
+                    body = body.replace('<h2>時系列</h2>', '<h2 id="timeseries">時系列</h2>')
+                    for artifact in AUDIT_FILES:
+                        link = '/audit-file?' + urlencode(dict(id=query['id'], file=artifact))
+                        body = body.replace('href="' + artifact + '"', 'href="' + link.replace('&', '&amp;') + '"')
+                    body = body.replace('<script>', '<script nonce="' + nonce + '">')
+                    raw = body.encode()
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'text/html; charset=utf-8')
+                    self.send_header('Content-Length', str(len(raw)))
+                    self.send_header('Cache-Control', 'no-store')
+                    self.send_header('X-Content-Type-Options', 'nosniff')
+                    self.send_header('Content-Security-Policy',
+                        "default-src 'none'; script-src 'nonce-" + nonce + "'; style-src 'unsafe-inline'; "
+                        "img-src data: blob:; frame-ancestors 'self'; sandbox allow-scripts allow-downloads")
+                    self.end_headers()
+                    self.wfile.write(raw)
+                else:
+                    with path.open('rb') as stream:
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/octet-stream')
+                        self.send_header('Content-Length', str(path.stat().st_size))
+                        self.send_header('Content-Disposition', 'attachment; filename="' + filename + '"')
+                        self.send_header('X-Content-Type-Options', 'nosniff')
+                        self.end_headers()
+                        shutil.copyfileobj(stream, self.wfile, length=1024 * 1024)
+                return
             if url.path == "/e2e-feature-image":
                 query = {k: v[-1] for k, v in parse_qs(url.query).items()}
                 filename = query.get("file", "")

@@ -269,7 +269,7 @@ class Learning:
                                 "--sample-stride", str(stride), "--max-reorder-us", str(reorder), "--max-skew-ms", str(skew),
                                 "--command-topic", topics["command_topic"], "--mode-topic", topics["mode_topic"]],
                         "provenance":{"bag":str(bag), "modality":"evs", "raw_manifest":str(manifest) if manifest is not None else None},
-                        "resources":["e2e-compute", "record:"+str(bag.relative_to(self.records.resolve()))]}
+                        "resources":["read:record:"+str(bag.relative_to(self.records.resolve()))]}
             args = [str(bag), "@OUTPUT@", "--clock", clock, "--max-skew-ms", str(skew)]
             for topic, value in topics.items():
                 args += ["--" + topic.replace("_", "-"), value]
@@ -281,7 +281,7 @@ class Learning:
                 "module": "preprocess_bag",
                 "args": args,
                 "provenance": {"bag": str(bag), "modality":"rgb"},
-                "resources": ["record:" + str(bag.relative_to(self.records.resolve()))],
+                "resources": ["read:record:" + str(bag.relative_to(self.records.resolve()))],
             }
         if action in ("train", "distill"):
             target = self.target("runs", key) if action == "train" else None
@@ -329,11 +329,11 @@ class Learning:
             if action == "distill" and body.get("teacher_run"):
                 teacher = self.folder("runs", body["teacher_run"])
                 weights = within(teacher, "best.pt")
-                source_resources.append("e2e:runs:" + body["teacher_run"])
+                source_resources.append("read:e2e:runs:" + body["teacher_run"])
             elif action == "train" and architecture == "dinov3_vitt16" and not scratch:
                 source = self.folder("encoders", body.get("encoder"))
                 weights = within(source, "encoder.pt")
-                source_resources.append("e2e:encoders:" + body["encoder"])
+                source_resources.append("read:e2e:encoders:" + body["encoder"])
             if architecture != "simple_cnn" and not repo.is_dir():
                 raise ValueError(
                     f"DINOv3ソースが見つかりません: {repo}。"
@@ -377,8 +377,8 @@ class Learning:
                         "key":target.relative_to(self.root/"encoders").as_posix(), "module":"distill", "args":args,
                         "provenance":dict(architecture="dinov3_vitt16", teacher_run=body.get("teacher_run"),
                                           train=body["train"], validation=body["validation"], epochs=epochs, ram_preload=ram_preload),
-                        "resources":["e2e-compute", *source_resources,
-                                     *["e2e:datasets:"+item for item in (*body["train"],*body["validation"])]]}
+                        "resources":[*source_resources,
+                                     *["read:e2e:datasets:"+item for item in (*body["train"],*body["validation"])]]}
             loss = body.get("loss", "smooth_l1")
             scheduler = body.get("lr_scheduler", "plateau")
             if loss not in ("smooth_l1", "mse") or scheduler not in ("none", "plateau"):
@@ -460,7 +460,7 @@ class Learning:
                     "feature_cache": feature_cache,
                     "feature_cache_effective": feature_cache and not finetune,
                 },
-                "resources": ["e2e-compute", *source_resources, *["e2e:datasets:" + item for item in (*body["train"], *body["validation"])]],
+                "resources": [*source_resources, *["read:e2e:datasets:" + item for item in (*body["train"], *body["validation"])]],
             }
         if action == "quantize":
             model = self.folder("models", body.get("model"))
@@ -491,8 +491,8 @@ class Learning:
                             "--warmup",str(warmup),"--repeats",str(repeats)],
                     "provenance":{"source_model":body["model"],"calibration":body["calibration"],
                                   "evaluation":body["evaluation"],"quantization":"int8"},
-                    "resources":["e2e-compute","e2e:models:"+body["model"],
-                                 "e2e:datasets:"+body["calibration"],"e2e:datasets:"+body["evaluation"]]}
+                    "resources":["read:e2e:models:"+body["model"],
+                                 "read:e2e:datasets:"+body["calibration"],"read:e2e:datasets:"+body["evaluation"]]}
         if action == "build-engine":
             precision = body.get("precision", "fp32")
             if precision not in ("fp16", "fp32"):
@@ -508,7 +508,7 @@ class Learning:
                 "module": "build_engine",
                 "args": ["--model", str(model), "--output", "@OUTPUT@", "--precision", precision],
                 "provenance": {"model": body["model"], "precision": precision},
-                "resources": ["e2e-compute", "e2e:models:" + body["model"]],
+                "resources": ["read:e2e:models:" + body["model"]],
             }
         if action == "features":
             run = self.folder("runs", body.get("run"))
@@ -532,8 +532,8 @@ class Learning:
                              "--repo", str(repo), "--output", "@OUTPUT@",
                              "--device", cfg["device"], "--max-frames", str(maximum)],
                     "provenance": {"run": body["run"], "dataset": body["dataset"]},
-                    "resources": ["e2e-compute", "e2e:runs:" + body["run"],
-                                  "e2e:datasets:" + body["dataset"]]}
+                    "resources": ["read:e2e:runs:" + body["run"],
+                                  "read:e2e:datasets:" + body["dataset"]]}
         if action == "evaluate":
             target = self.target("evaluations", key)
             model = self.folder("models", body.get("model"))
@@ -546,7 +546,7 @@ class Learning:
                         "key":target.relative_to(self.root/"evaluations").as_posix(),
                         "module":"evaluate", "args":["--dataset",str(dataset),"--model",str(model),"--output","@OUTPUT@"],
                         "provenance":{"dataset":body["dataset"],"model":body["model"],"modality":read_json(model/"metadata.json").get("modality","rgb")},
-                        "resources":["e2e-compute","e2e:models:"+body["model"],"e2e:datasets:"+body["dataset"]]}
+                        "resources":["read:e2e:models:"+body["model"],"read:e2e:datasets:"+body["dataset"]]}
             # Share extraction validation with dataset creation; do not publish images.
             extraction = self.prepare(
                 "dataset", dict(body, name="eval-" + uuid.uuid4().hex)
@@ -572,8 +572,7 @@ class Learning:
                     "model": body["model"],
                 },
                 "resources": [
-                    "e2e-compute",
-                    "e2e:models:" + body["model"],
+                    "read:e2e:models:" + body["model"],
                     *extraction["resources"],
                 ],
             }
@@ -596,7 +595,7 @@ class Learning:
                     str(Path(cfg["encoder_repo"]).expanduser()),
                 ],
                 "provenance": {"run": run.name},
-                "resources": ["e2e-compute", "e2e:runs:" + run.name],
+                "resources": ["read:e2e:runs:" + run.name],
             }
         raise ValueError("不明な学習操作です")
 

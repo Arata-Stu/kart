@@ -13,7 +13,8 @@
       <nav aria-label="作業">
         <button class="nav active" id="nav-map">地図</button
         ><button class="nav" id="nav-transfer">転送</button
-        ><button class="nav" id="nav-learning">学習</button>
+        ><button class="nav" id="nav-learning">学習</button
+        ><button class="nav" id="nav-audit">解析</button>
       </nav>
       <span class="local-tag"><i></i> Notebook · Local</span
       ><button class="quiet" id="connection-open">接続設定</button>
@@ -295,6 +296,29 @@
           </section>
         </div>
       </aside>
+    </main>
+    <main id="audit-page" hidden>
+      <aside class="library audit-library">
+        <div class="section-title"><strong>走行記録の解析</strong><button id="audit-refresh" class="icon" title="bagと解析履歴を更新">↻</button></div>
+        <form id="audit-form">
+          <label>rosbag<select id="audit-bag" required aria-label="解析するrosbag"><option value="">rosbagを選択</option></select></label>
+          <label>入力<select id="audit-source"><option value="/realsense/color/image_raw">RGB画像</option><option value="/realsense/infra1/image_rect_raw">左IR画像</option><option value="/event_camera/tensor_timing">EVS metadata</option><option value="custom">別のtopicを指定</option></select></label>
+          <label id="audit-custom-label" hidden>入力topic<input id="audit-custom" placeholder="/camera/color/image_raw" /></label>
+          <details><summary>検出設定</summary><label>スパイク閾値 [ms]<input id="audit-spike" type="number" min="1" max="10000" step="1" value="100" /></label></details>
+          <button id="audit-run" type="submit" class="primary full" disabled>選択したbagを解析</button>
+        </form>
+        <button id="audit-stop" hidden type="button">解析を停止</button>
+        <p id="audit-status" class="small" role="status">bagを選んで解析してください。</p>
+        <strong>解析履歴</strong><div id="audit-list" class="scroll list"></div>
+        <p class="small">Jetsonのbagは「転送」で取得できます。</p><span id="audit-record-root" class="small"></span>
+      </aside>
+      <section class="workspace audit-workspace">
+        <div class="workspace-toolbar"><div><strong id="audit-title">解析結果を選択</strong><span id="audit-meta" class="small"></span></div>
+          <div class="actions"><a id="audit-open" hidden target="_blank" rel="noopener">大きく開く ↗</a><a id="audit-csv" hidden>イベントCSV</a><a id="audit-json" hidden>集計JSON</a></div></div>
+        <p id="audit-summary" class="audit-summary">センサ・E2E・制御を同じ時間軸で比較します。</p>
+        <div id="audit-empty" class="empty">rosbagを選択 → 解析 → 時系列で確認<br />画像・IMUの間隔、遅延スパイク、制御指令、復帰・診断を並べて表示します。<br />元bagの変更やROS再生は行いません。</div>
+        <iframe id="audit-report" title="走行記録の時系列解析レポート" sandbox="allow-scripts allow-downloads" referrerpolicy="no-referrer" hidden></iframe>
+      </section>
     </main>
     <main id="transfer-page" hidden>
       <div class="transfer-heading">

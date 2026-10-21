@@ -22,7 +22,7 @@ def prepare(learning, action, body):
     target=learning.target(kind,key)
     plan=dict(key=target.relative_to(learning.root/kind).as_posix(),kind=kind,target=target,python=python,env=env,
               module='section_workflow',args=['--request','@REQUEST@','--output','@OUTPUT@'],
-              resources=['e2e-compute'],provenance={})
+              resources=[],provenance={})
     if action=='section-routing':
         from kart_hdmap.document import load as load_map, select, read_document
         from kart_e2e.section_dataset import bind_map_sections
@@ -48,11 +48,11 @@ def prepare(learning, action, body):
         Router(routing)
         plan['request']=dict(action='routing',routing=routing)
         plan['provenance']=dict(map=body['map'],routing=routing,routing_sha256=digest(routing))
-        plan['resources']+=['map:'+body['map']]
+        plan['resources']+=['read:map:'+body['map']]
         return plan
     source=learning.folder('routings',body.get('routing'))
     route_file=within(source,'routing.json');routing=read_json(route_file);Router(routing)
-    plan['resources']+=['e2e:routings:'+body['routing']]
+    plan['resources']+=['read:e2e:routings:'+body['routing']]
     plan['provenance'].update(routing_id=body['routing'],routing_sha256=digest(routing),routing=routing)
     if action=='section-offline':
         if not shutil.which('ros2'):raise ValueError('offline VSLAMはROS/CUDAコンテナ内で実行してください')
@@ -64,7 +64,7 @@ def prepare(learning, action, body):
         plan['request']=dict(action='offline',bag=str(bag),map_file=str(map_file),map_dir=str(folder),
                              routing_file=str(route_file),tracking_mode=mode)
         plan['provenance'].update(bag=str(bag),map=map_id)
-        plan['resources']+=['record:'+str(bag.relative_to(learning.records.resolve())),'map:'+map_id,'ros:'+os_domain()]
+        plan['resources']+=['read:record:'+str(bag.relative_to(learning.records.resolve())),'read:map:'+map_id,'ros:'+os_domain()]
         return plan
     dataset=learning.folder('datasets',body.get('dataset'));meta=read_json(within(dataset,'metadata.json'))
     within(dataset,'samples.jsonl')
@@ -87,13 +87,13 @@ def prepare(learning, action, body):
         origin=meta.get('bag')
         if not origin or Path(origin).resolve()!=Path(info.get('bag','')).resolve():raise ValueError('datasetとposeは同じbagから作成してください')
         args+=['--trajectory',str(within(trajectory,'poses.jsonl'))]
-        plan['resources']+=['e2e:trajectories:'+body['trajectory']]
+        plan['resources']+=['read:e2e:trajectories:'+body['trajectory']]
     if operation=='extract' and meta.get('routing_sha256')!=digest(routing):raise ValueError('元datasetの割当が一致しません')
     plan['args']=args
     plan['provenance'].update(source_dataset=body['dataset'],bag=meta.get('bag',''),modality=meta.get('modality','rgb'),operation=operation)
     # Bag already passed immutable teacher extraction: guard the dataset, not an optional bag path.
     if not plan['provenance']['bag']:plan['provenance'].pop('bag')
-    plan['resources']+=['e2e:datasets:'+body['dataset']]
+    plan['resources']+=['read:e2e:datasets:'+body['dataset']]
     return plan
 
 

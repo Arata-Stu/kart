@@ -269,8 +269,8 @@ class LearningTests(unittest.TestCase):
             self.assertEqual(plan['module'],'int8_benchmark')
             self.assertEqual(plan['kind'],'models')
             self.assertEqual(plan['args'][plan['args'].index('--calibration-samples')+1],'256')
-            self.assertIn('e2e:models:policy',plan['resources'])
-            self.assertIn('e2e:datasets:'+data,plan['resources'])
+            self.assertIn('read:e2e:models:policy',plan['resources'])
+            self.assertIn('read:e2e:datasets:'+data,plan['resources'])
             for field in ('calibration_samples','evaluation_samples','warmup','repeats'):
                 with self.assertRaises(ValueError): self.service.prepare('quantize',{**body,field:0})
             atomic_json(model/'metadata.json',dict(modality='evs'))
@@ -316,7 +316,7 @@ class LearningTests(unittest.TestCase):
         self.assertEqual(self.service.loss(result['id'], 'encoders')['metric'], 'distillation_loss')
         train=self.service.prepare("train", dict(name="tiny-control", architecture="dinov3_vitt16",
                                                 encoder=result['id'],train=[data],validation=[data]))
-        self.assertIn("e2e:encoders:"+result['id'],train['resources'])
+        self.assertIn("read:e2e:encoders:"+result['id'],train['resources'])
         self.assertIn(str(plan['target']/'encoder.pt'),train['args'])
         self.assertEqual(train['provenance']['architecture'],'dinov3_vitt16')
         from kart_studio import e2e_trash
@@ -350,7 +350,7 @@ class LearningTests(unittest.TestCase):
                 "evaluate", dict(name="check-v1", model="example", bag="bag")
             )
         self.assertIn("--clock", plan["args"])
-        self.assertIn("e2e:models:example", plan["resources"])
+        self.assertIn("read:e2e:models:example", plan["resources"])
         report = dict(
             samples=3, mode="steer_only", metrics={"steering_command": {"mae": 0.1}}
         )
@@ -506,8 +506,8 @@ class LearningTests(unittest.TestCase):
                 engine = self.service.prepare('build-engine', dict(name='benchmark', model=export['key']))
             self.assertEqual(evaluation['key'], '2026-10-19/12-34-56/check')
             self.assertEqual(evaluation['provenance']['model'], export['key'])
-            self.assertIn('e2e:models:'+export['key'], evaluation['resources'])
-            self.assertIn('e2e:models:'+export['key'], engine['resources'])
+            self.assertIn('read:e2e:models:'+export['key'], evaluation['resources'])
+            self.assertIn('read:e2e:models:'+export['key'], engine['resources'])
             self.assertEqual(self.service.catalog()['models'][0]['id'], export['key'])
             self.assertEqual(self.service.folder('models', export['key']), export['target'])
 
@@ -540,7 +540,7 @@ class LearningTests(unittest.TestCase):
         path = self.dataset()
         key = path.relative_to(self.service.root/'datasets').as_posix()
         studio = SimpleNamespace(learning=self.service, jobs=Jobs(self.base/'jobs'))
-        for resource in ('e2e-compute', 'e2e:datasets:'+key):
+        for resource in ('e2e-trash', 'read:e2e:datasets:'+key):
             with studio.jobs.guard(resource), self.assertRaises(ValueError):
                 Studio.post(studio, '/api/e2e/trash', dict(kind='datasets', id=key))
             self.assertTrue(path.exists())

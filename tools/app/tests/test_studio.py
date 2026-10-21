@@ -1,6 +1,7 @@
 import json
 import math
 import tempfile
+import sys
 import threading
 import time
 import unittest
@@ -8,7 +9,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from kart_studio.geometry import Corridor, centerline
-from kart_studio.jobs import Jobs
+from kart_studio.jobs import Jobs, Job, Task
+from kart_studio.job_worker import perform
 from kart_studio.lines import DEFAULTS, generate, profile
 from kart_studio.maps import Maps
 from kart_studio.remote_agent import execute as remote_execute
@@ -162,7 +164,11 @@ class StorageTests(unittest.TestCase):
             job.cancel.set()  # Stop arrived after the commit point.
             return {"published": True}
 
-        value = jobs.start("commit", ["map:course"], work)
+        local = Job(jobs.root, 'commit', ['map:course'])
+        local.persist_enabled = True
+        perform(local, lambda: work(local))
+        value = {'id':local.id}
+        jobs.list()
         deadline = time.monotonic() + 3
         while (
             jobs.jobs[value["id"]].status == "running" and time.monotonic() < deadline
@@ -173,7 +179,7 @@ class StorageTests(unittest.TestCase):
     def test_job_resource_lock_and_completion(self):
         jobs = Jobs(self.root / "jobs")
         gate = threading.Event()
-        j = jobs.start("test", ["map:course"], lambda _: gate.wait(2))
+        j = jobs.start("test", ["map:course"], Task("command", [[sys.executable, "-c", "import time; time.sleep(.2)"]]))
         with self.assertRaises(ValueError):
             with jobs.guard("map:course"):
                 pass

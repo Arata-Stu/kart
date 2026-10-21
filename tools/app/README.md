@@ -956,3 +956,33 @@ Tinyの特徴蒸留epochは独立して指定し、既定10のまま。
 復帰パネルは`post_reverse_braking`を「後退後の制動・停車確認」と表示する。制動要求段階であり実ESCの制動成立を示すものではない。
 
 復帰状態post_reverse_pulseを「後退後の制動準備（正パルス）」として表示する。復帰のpost_reverse_pulse_throttle / post_reverse_pulse_sもSTOP時の動的調整対象。
+
+## 走行記録の時系列解析
+
+上部の「解析」タブで、Notebookのrecordからrosbagを選び「選択したbagを解析」を押す。
+Jetsonにあるbagは、既存の「転送」画面で取得してから選ぶ。RGB・左IR・EVS metadata・任意の入力topicを指定できる。
+通常はbag選択だけで実行でき、検出設定を開くと遅延スパイクの閾値（既定100 ms）を変更できる。
+
+処理は既存の中止可能なジョブで動き、下部の処理一覧でログを確認できる。
+完了後は画面内に共通時間軸の折れ線レポートを表示する。ドラッグで拡大し、イベント行から前後1秒へ移動できる。
+「大きく開く」で別タブ表示、「イベントCSV」「集計JSON」で保存できる。
+結果は`analysis/pipeline/YYYY-MM-DD/HH-MM-SS/audit_<id>/`へ保存し、解析履歴から再表示する。
+元bagの書換え、ROS再生、走行指令publishは行わない。GPUも不要。
+
+解析workerのPythonは`KART_AUDIT_PYTHON`、未指定時はStudioと同じPythonを使う。
+DockerにはrosbagsとPlotlyを同梱する。既存イメージは再buildし、アプリを再起動する。
+Docker外の環境では、StudioのPythonまたは専用venvへ次を導入する。
+
+```bash
+python3 -m venv /tmp/kart-audit-env
+/tmp/kart-audit-env/bin/pip install -r tools/pipeline_audit/requirements.txt
+KART_AUDIT_PYTHON=/tmp/kart-audit-env/bin/python bash tools/app/start.sh
+```
+
+既存のrecord root／`--data-root`を共用し、任意のshell command・実行環境・出力パスをHTTPから受け付けない。
+途中・失敗・中止した結果は履歴へ公開せず、過去の結果を維持する。
+レポートはsandbox化したiframe／CSPで実行し、アプリ本体のAPIと分離する。ダウンロードは固定の成果物名だけを許可する。
+
+計測値はbag記録時刻ベースで、callback・GPU単独時間・実PWMの計測ではない。
+再送・MANUAL・復帰・状態未確認のサンプルを分離し、未記録topicを0msや正常と扱わない。
+詳しい指標と制約は[pipeline_audit](../pipeline_audit/README.md)。

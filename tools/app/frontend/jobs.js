@@ -1,27 +1,30 @@
 import { $, state, api, action, item, toast, on, emit } from "./api.js";
 import { duration } from "./job_time.js";
 import { compactLog } from "./job_log.js";
-let selected = null,
+let selected = globalThis.localStorage?.getItem("kart.job.selected") || null,
   busy = false;
+const activeJob = job => ["running", "orphaned"].includes(job.status);
+const pidLabel = job => job.process_pid ? `実行PID ${job.process_pid} · 管理PID ${job.worker_pid || "—"}` :
+  job.status === "running" ? `管理PID ${job.worker_pid || "起動中"}` : `最終実行PID ${job.last_process_pid || job.worker_pid || "—"}`;
 const known = new Map();
 const stopping = new Set();
-const timeLabel = (job) => `${job.status === "running" ? "経過" : "所要"} ${duration(job.elapsed_s)}`;
+const timeLabel = (job) => `${activeJob(job) ? "経過" : "所要"} ${duration(job.elapsed_s)}`;
 const isStopping = (job) => job.cancel_requested || stopping.has(job.id);
-const statusLabel = (job) => job.status === "running" && isStopping(job) ? "停止要求中" : labels[job.status];
+const statusLabel = (job) => activeJob(job) && isStopping(job) ? "停止要求中" : labels[job.status];
 function stopButtons() {
-  const active = state.jobs.find((job) => job.status === "running");
+  const active = state.jobs.find(activeJob);
   for (const [element, job] of [
     [$("job-stop-active"), active],
     [$("job-stop-selected"), state.jobs.find((job) => job.id === selected)],
   ]) {
-    element.hidden = !job || job.status !== "running";
+    element.hidden = !job || !activeJob(job);
     element.disabled = !!job && isStopping(job);
     element.textContent = job && isStopping(job) ? "停止要求中…" : "処理を停止";
     element.title = job?.title || "";
     element.dataset.job = job?.id || "";
   }
   const job = state.jobs.find((j) => j.id === selected);
-  $("job-log-status").textContent = job ? `${statusLabel(job)} · ${timeLabel(job)}` : "";
+  $("job-log-status").textContent = job ? `${statusLabel(job)} · ${timeLabel(job)} · ${pidLabel(job)}` : "";
 }
 async function stopJob(id) {
   if (!id || stopping.has(id)) return;
@@ -44,6 +47,7 @@ for (const id of ["job-stop-active", "job-stop-selected"])
   action(id, () => stopJob($(id).dataset.job));
 const labels = {
   running: "実行中",
+  orphaned: "管理喪失・プロセス稼働",
   succeeded: "完了",
   failed: "失敗",
   cancelled: "中止",
@@ -52,6 +56,7 @@ const labels = {
 async function showLog(id) {
   const switching = selected !== id;
   selected = id;
+  globalThis.localStorage?.setItem("kart.job.selected", id);
   stopButtons();
   const result = await api("log?id=" + id);
   if (selected !== id) return;
@@ -97,17 +102,18 @@ export async function poll() {
   try {
     state.jobs = await api("jobs");
     for (const job of state.jobs) {
-      if (known.get(job.id) === "running" && job.status !== "running") {
+      if (["running", "orphaned"].includes(known.get(job.id)) && !activeJob(job)) {
         emit("job-finished", job);
         toast(`${job.title}: ${job.message}`, job.status === "failed");
       }
       known.set(job.id, job.status);
     }
-    const running = state.jobs.filter((j) => j.status === "running");
+    const running = state.jobs.filter(activeJob);
+    if (!state.jobs.some(j => j.id === selected)) selected = running[0]?.id || state.jobs[0]?.id || null;
     stopButtons();
     $("job-dot").classList.toggle("running", !!running.length);
     $("job-summary").textContent = running.length
-      ? `${running.length}件の処理中 · ${running[0].title} · ${statusLabel(running[0])} · ${timeLabel(running[0])}`
+      ? `${running.length}件の処理中 · ${running[0].title} · ${statusLabel(running[0])} · ${timeLabel(running[0])} · ${pidLabel(running[0])}`
       : state.jobs.length
         ? `${state.jobs[0].title} · ${statusLabel(state.jobs[0])} · ${timeLabel(state.jobs[0])}`
         : "処理は実行されていません";
@@ -119,12 +125,12 @@ export async function poll() {
         row.className = "job-row";
         const button = item(
           job.title,
-          `${statusLabel(job)} · ${timeLabel(job)}${job.status === "running" && !isStopping(job) && !job.message?.startsWith("実行: ") ? " · " + job.message : ""}`,
+          `${statusLabel(job)} · ${timeLabel(job)} · ${pidLabel(job)}${activeJob(job) && !isStopping(job) && !job.message?.startsWith("実行: ") ? " · " + job.message : ""}`,
           () => showLog(job.id),
         );
         button.className = "job-select";
         row.append(button);
-        if (job.status === "running") {
+        if (activeJob(job)) {
           const stop = document.createElement("button");
           stop.textContent = isStopping(job) ? "停止要求中…" : "停止";
           stop.disabled = isStopping(job);
@@ -144,14 +150,18 @@ export async function poll() {
 }
 action("jobs-toggle", async () => {
   $("jobs-drawer").hidden = !$("jobs-drawer").hidden;
+  globalThis.localStorage?.setItem("kart.job.drawer", String(!$("jobs-drawer").hidden));
   await poll();
 });
+if (globalThis.localStorage?.getItem("kart.job.drawer") === "true") $("jobs-drawer").hidden = false;
 action("jobs-close", () => {
+  globalThis.localStorage?.setItem("kart.job.drawer", "false");
   $("jobs-drawer").hidden = true;
 });
 on("job-started", (e) => {
   known.set(e.detail.id, "running");
   selected = e.detail.id;
+  globalThis.localStorage?.setItem("kart.job.selected", selected);
   poll();
 });
 setInterval(poll, 1500);

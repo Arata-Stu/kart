@@ -2,6 +2,7 @@ import { $, state, api, action, emit, toast } from "./api.js";
 import { refreshMaps } from "./maps.js";
 import { refreshRecords } from "./transfers.js";
 import { refreshLearning } from "./learning.js";
+import { refreshAudit } from "./audit.js";
 import { poll } from "./jobs.js";
 import "./dialogs.js";
 import "./line_tools.js";
@@ -15,19 +16,22 @@ import "./capture.js";
 import "./vgl.js";
 import "./mesh_view.js";
 function page(name) {
-  for (const p of ["map", "transfer", "learning"]) {
+  for (const p of ["map", "transfer", "learning", "audit"]) {
     $(p + "-page").hidden = p !== name;
     $("nav-" + p).classList.toggle("active", p === name);
   }
   $("jobs-drawer").hidden = true;
   if (name === "learning")
     refreshLearning().catch((e) => toast(e.message, true));
+  if (name === "audit")
+    refreshAudit().catch((e) => toast(e.message, true));
   if (name === "transfer")
     refreshRecords().catch((e) => toast(e.message, true));
 }
 action("nav-map", () => page("map"));
 action("nav-transfer", () => page("transfer"));
 action("nav-learning", () => page("learning"));
+action("nav-audit", () => page("audit"));
 try {
   state.config = await api("config");
   emit("ready");

@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "topics": {
+    "source": "/realsense/color/image_raw",
+    "tensor_input": "/e2e/tensor_input",
+    "tensor_output": "/e2e/tensor_output",
+    "decoder": "/recovery/input_cmd",
+    "auto": "/auto/control_cmd",
+    "final": "/vehicle/control_cmd",
+    "mode": "/operation_mode/state",
+    "e2e_status": "/e2e/status",
+    "recovery_active": "/recovery/active",
+    "recovery_status": "/recovery/status",
+    "active_path": "/vehicle/active_path",
+    "output_channels": "/vehicle/output_channels",
+    "evs_timing": "/event_camera/tensor_timing",
+    "logs": "/rosout"
+  },
+  "sync_topics": ["/realsense/infra1/image_rect_raw", "/realsense/infra2/image_rect_raw", "/realsense/imu"],
+  "state_timeout_s": 0.5,
+  "mode_timeout_s": 0.3,
+  "match_window_s": 2.0,
+  "future_tolerance_ms": 5.0,
+  "age_spike_ms": 100.0,
+  "gap_factor": 3.0,
+  "gap_floor_ms": 20.0,
+  "plot_max_points": 6000
+}
