@@ -48,6 +48,14 @@ buildはALIKED入力`[1,3,240,424]`を検査してからLightGlueを生成し、
 既存export/buildは上書きしない。再試験は`--name 424x240-v2`など別名を使う。
 失敗した生成フォルダは診断用に残す。LightGlue失敗後に再buildする場合も別の名前でexportする。
 
+## source_modelsとruntime_models
+
+`source_models/`はTensorRT engine生成用の入力。`aliked_lightglue/`へ公式ONNX群をコピーし、
+ALIKEDのONNXを指定解像度でexportしたものへ差し替える。他の公式モデル資産は参照リンクを含む。
+`runtime_models/`は対象GPU上でbuildした実行用出力。ALIKED・LightGlueの`.engine`と
+モデル照合用`aliked.onnx`を含む。UIのモデル選択ではこちらを指定する。
+`source_models/`の準備とengine生成は`vgl_build.sh`が行うため、手動で選ぶ必要はない。
+
 ## NotebookとJetson
 
 ONNXは転送できるがengineは実行するGPU側でbuildする。

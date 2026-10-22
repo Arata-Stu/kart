@@ -870,7 +870,7 @@
       </form>
     </dialog>
     <dialog id="vgl-dialog">
-      <div class="dialog-head">
+      <div class="dialog-title">
         <h2>VGL地図を追加生成</h2>
         <button type="button" data-close="vgl-dialog">×</button>
       </div>
@@ -880,28 +880,26 @@
       </p>
       <p id="vgl-info" class="help"></p>
       <label>保存名<input id="vgl-name" /></label>
-      <label
-        >ALIKED / LightGlueモデル（このGPU用engine）<input
-          id="vgl-model"
-          list="vgl-models"
-          placeholder="/workspaces/models/…"
-      /></label>
-      <datalist id="vgl-models"></datalist>
-      <div class="row">
+      <label>モデル候補（このGPU用engine）<select id="vgl-model-choice"></select></label>
+      <label>選択したモデルのフルパス<input id="vgl-model" readonly
+        placeholder="対応するモデルがありません" /></label>
+      <div class="form-grid">
         <label
           >画像幅<input
             id="vgl-width"
+            readonly
             type="number"
             min="16"
             max="8192" /></label
         ><label
-          >画像高さ<input id="vgl-height" type="number" min="16" max="8192"
+          >画像高さ<input id="vgl-height" readonly type="number" min="16" max="8192"
         /></label>
       </div>
       <p class="help">
-        モデルと保存画像の解像度を合わせてください。モデルのdownload・engine
-        buildはこの処理には含みません。
+        画像サイズは選択モデルから自動設定します（解像度不明の旧モデルのみ手動指定）。
+        モデルのdownload・engine buildはこの処理には含みません。
       </p>
+      <p id="vgl-selection" class="help" style="overflow-wrap: anywhere; white-space: pre-line"></p>
       <button id="vgl-start" class="primary full">VGL生成を開始</button>
     </dialog>
     <dialog id="build-dialog">

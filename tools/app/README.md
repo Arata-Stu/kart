@@ -496,7 +496,14 @@ cuVSLAM/cuVGL地図・VGL設定・profileのみを同梱し、GPU固有のTensor
 転送後はHDMapとVGLをまとめてサイズ・件数照合してから公開する。モデルとのONNX照合は既存のbringup検証で行う。
 反映にはNotebook側のコード更新とUIサーバー再起動が必要。既存の送信済み地図は変更せず、UIから再送信する。
 
-既存地図を開き「VGL地図を追加生成」を選択する。ALIKED/LightGlueモデルはmodelsとmap以下の候補から選ぶかパスを入力し、画像サイズ（既定424×240）と保存名（地図名-vgl-vN）を指定する。実行GPUでbuild済みのengineが必要で、download/buildは自動実行しない。公式offline処理の保存画像・posesがない場合は生成できない理由を表示する。
+既存地図を開き「VGL地図を追加生成」を選択する。モデル候補は入力解像度とフルパスで選択する。
+424×240・640×480・848×480・1280×720などのモデルを選ぶと、幅・高さが自動確定し、確認専用になる。
+モデルはmodelsとmap以下を探索し、manifestの入力shapeとONNXハッシュを照合する。
+既定424×240の候補がない場合は未選択とし、他サイズを暗黙に選択しない。
+生成ボタン直前にモデルのフルパスと画像幅・高さを表示する。
+既知サイズはUIから独立指定せず、サーバーもモデルmetadataから決定する。不一致を明示送信した要求は拒否する。
+「その他・パスを手動指定」とmanifestなしの旧モデルのみ手動サイズ指定を残す。
+保存名は地図名-vgl-vNを既定とする。実行GPUでbuild済みのengineが必要で、download/buildは自動実行しない。公式offline処理の保存画像・posesがない場合は生成できない理由を表示する。
 
 `POST /api/vgl`はinstalled `ros2 run kart_bringup prepare_vgl_map`をジョブ実行し、検証済みbundleを`map/vgl/<保存名>`へ公開する。既存VSLAM地図・HDMapは変更しない。ログ・中止は既存ジョブ画面を使い、失敗・中止時の一時成果物は公開しない。成功後はbringupで「VSLAM＋VGL」を選び生成bundleを指定する。実走行GPUがNotebookと異なる場合は実走行GPU用モデルengineを別途準備する。UIサーバー再起動とkart_bringupのbuild/sourceが必要。
 
