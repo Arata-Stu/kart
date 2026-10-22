@@ -535,13 +535,13 @@ missionのcollect/drive/e2eはいずれもvehicleを経由する。bag評価laun
 | 設定 / ノード名 | parent → child | xyz / rpy既定 |
 |---|---|---|
 | rear_axle / kart_tf_rear_axle | base_link → rear_axle | 両方[0,0,0]。後輪軸中央という定義上同一 |
-| camera_mount / kart_tf_camera_mount | base_link → camera_link | xyz=[0.23385,0.04750,0.10000] m、rpy=[0,0,0] rad。ユーザー指定の暫定値 |
+| camera_mount / kart_tf_camera_mount | base_link → camera_link | xyz=[0.200,0,0.067] m、rpy=[0,0,0] rad。ユーザー指定の暫定値 |
 | evs_mount / kart_tf_evs_mount | base_link → event_camera | xyz=[0.2045,0,0.0705] m、rpy=[0,0,0] rad。ユーザー指定の暫定値 |
 
 base_linkは後輪軸の高さの中央で、x前方・y左・z上。xyzは親座標系における子原点、
 event_cameraの仮原点はEVS本体前面のレンズ軸中心で、x前方・y左・z上。校正済み光学中心とは区別する。
 rpyは子座標系の取付姿勢。光学座標への回転をcamera_mountへ重ねない。
-CADの穴座標をcamera_link座標として使わない。D455は2026-10-10のユーザー指定値を暫定採用し、水平・前向きを仮定する。実測校正済みではない。取付値をnullへ戻すとdriveは起動前にエラーになる。
+CADの穴座標をcamera_link座標として使わない。D455は2026-10-22の申告値（camera_linkが約200mm前方、横ずれなし、床上100mm）と採用後輪軸高さ33mmからz=67mmを暫定採用する。正面向き、roll/pitchはゼロを仮定する。測定点とドライバ原点の一致・姿勢は未検証で、実測校正済みではない。取付値をnullへ戻すとdriveは起動前にエラーになる。
 collect/e2eは未設定mountをログ表示して省略する。設定済みmountは録画時にも配信する。
 
 使用実行ファイルは`tf2_ros/static_transform_publisher`（依存`ros-lyrical-tf2-ros`、Docker導入済み）。

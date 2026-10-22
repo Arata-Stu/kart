@@ -41,8 +41,9 @@ base_linkはkartの後輪軸中心。rc-simのchassis中心をそのままROS原
 位置とtwistの原点を変換し、rear_axleはbase_linkにidentityで接続する。
 カメラmountはkart_bringup/config/vehicle/transforms.yamlの暫定値を反映するが実測校正ではない。
 仮想カメラは理想pinhole。実機D455/EVSの内部処理・ノイズ・露出特性は再現していない。
-カメラ光学中心は床から133mmの仮値をユーザーが承認した。
-後輪軸高さ33mmを仮定し、base_link→camera_linkのzを30mmから100mmへ更新。
+2026-10-22のユーザー申告でcamera_linkは床上100mm、約200mm前方、横ずれなし。
+採用後輪軸高さ33mmを引き、base_link→camera_linkはxyz=[0.200,0,0.067] mへ更新。
+roll/pitchと測定点の原点一致は未検証。
 画像だけ車体を隠す方法ではなく、描画とTFを同じ取り付け位置へ修正した。
 フレーム前端のメッシュはYMax=112.5mmの旧版から85.5mm版へ再export。
 フレーム上面は床から70mmへ近似（ユーザー情報60〜70mm）、
@@ -79,7 +80,7 @@ MuJoCo **3.3.7**（Docker固定版）/ NumPy 2.4.6の一時venvでsimの20件と
 - 仮想左右mono8/RGBの424×240実描画、左右の視差、バッファの独立性を確認。
 - 中心からずらした主点と非等方fx/fyの既知点投影を検査し、CameraInfoと描画の一致を確認。
 - camera/IMUのTFと描画/サイト位置・光学座標が一致すること。
-- 静止後のレンズ高さ約133mm・印刷フレーム上面約70mm、実機/仮想mount設定の一致。
+- 静止後のcamera_link高さ約100mm・印刷フレーム上面約70mm、実機/仮想mount設定の一致。
 - 車体描画を有効にしたまま、左右/RGBのsegmentation画像に車体pixelがないことを確認。
 - 静止IMUの加速度約9.81m/s²、自由落下約0、回転時の光学座標角速度を検査。
 - MuJoCo全景PNGと左右/RGB画像を描画・目視確認（overviewだけ天井/照明器具を非表示）。

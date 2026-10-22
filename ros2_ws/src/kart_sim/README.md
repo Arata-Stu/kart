@@ -43,13 +43,14 @@ VSLAM評価では`publish_truth_tf=false`にし、map/odom/base_linkの動的TF�
 odometryのtwistは後輪軸原点のbase_link座標。COM速度へ角速度×原点差を加えて変換する。
 
 仮想D455は`assets/d455.json`で定義。`base_link -> camera_link`はkartの暫定mount値
-[0.23385, 0.04750, 0.10000] m、rpy=[0,0,0]、camera_linkは左IR原点。
+[0.200, 0.0, 0.067] m、rpy=[0,0,0]、camera_linkは左IR原点。
 左/右IR間隔95 mm（右はcamera_linkの-Y）、公称画角はIR水平87°/垂直58°、RGB90°/65°。
 [公式D400 datasheet](https://www.realsenseai.com/download/21345/)を参考にした理想pinholeで、
 424×240の実機profileの校正を再現した値ではない。
 RGB位置[0,-0.060,0] m、IMU位置[0,0,0] mは**仮値**。実機SDKのextrinsicsで差し替える。
 `camera_link -> camera_{infra1,infra2,color,gyro,accel}_frame`から各optical frameへ接続する。
-カメラの床からの高さはユーザー承認の仮値133mm。後輪軸高さ33mmを引いて取付z=100mm。
+2026-10-22の申告でcamera_linkは約200mm前方・横ずれなし・床上100mm。
+採用後輪軸高さ33mmを引いて取付z=67mm。roll/pitchと測定点の原点一致は未検証。
 カメラの高さは車体に固定され、走行中の車体の上下・姿勢に従う。
 光学座標は+X右/+Y下/+Z前、IMUもcamera_gyro_optical_frameへ統一。
 描画姿勢とROS TFは同じrigを参照し、CameraInfoのK/Pも描画と同じ内部値を使う。
