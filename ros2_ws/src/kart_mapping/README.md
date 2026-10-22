@@ -23,6 +23,7 @@ bag検査はrosbag readerで行い、ROSトピック再生はしない。Collect
 
 | 設定 | 既定値・意味 |
 |---|---|
+| denoising | true。公式offline cuVSLAMのcfg_denoisingへ渡す画像ノイズ除去。falseでOFF比較 |
 | slam_max_map_size | 0（無制限）。公式offlineのcfg_slam_max_map_sizeへ渡す。300で公式既定上限との比較が可能。処理量・メモリ増加に注意 |
 | ground_constraint | true。公式offline cuVSLAMのcfg_planarへ渡す平面制約。falseで明示解除 |
 | dense_reconstruction | false。trueでFoundationStereo深度＋nvblox占有地図・メッシュを生成 |

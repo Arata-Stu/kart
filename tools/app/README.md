@@ -1012,3 +1012,8 @@ KART_AUDIT_PYTHON=/tmp/kart-audit-env/bin/python bash tools/app/start.sh
 （kart_bringup）の`slam_max_map_size=0`（無制限）を使用する。
 300へ戻すと公式既定上限で比較できる。既存地図は変更せず、別名で再生成する。
 ROS側cuVSLAM YAMLの`slam_max_map_size`とは別設定。実bag/GPUでの効果は未検証。
+
+公式offline生成のノイズ除去は`kart_bringup/config/mapping/workflow.json`の
+`denoising=true`で有効にし、`--override cuvslam.cfg_denoising=true`を渡す。
+falseでOFF比較できる。UI再起動後の新規生成に適用し、同じbagから別名で比較する。
+ROS側のenable_image_denoisingとは別設定。実bag/GPUでの改善効果は未検証。

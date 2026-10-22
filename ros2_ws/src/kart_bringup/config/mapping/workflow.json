@@ -16,5 +16,6 @@
   "dense_reconstruction": false,
   "fs_model_res": "low_res",
   "ground_constraint": true,
-  "slam_max_map_size": 0
+  "slam_max_map_size": 0,
+  "denoising": true
 }

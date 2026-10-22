@@ -16,6 +16,9 @@ def run(job):
     planar = workflow.get("ground_constraint", True)
     if not isinstance(planar, bool):
         raise ValueError("ground_constraint must be a boolean")
+    denoising = workflow.get("denoising", True)
+    if not isinstance(denoising, bool):
+        raise ValueError("denoising must be a boolean")
     map_size = workflow.get("slam_max_map_size", 0)
     if type(map_size) is not int or map_size < 0:
         raise ValueError("slam_max_map_size must be a non-negative integer")
@@ -72,6 +75,8 @@ def run(job):
         f"cuvslam.cfg_planar={str(planar).lower()}",
         "--override",
         f"cuvslam.cfg_slam_max_map_size={map_size}",
+        "--override",
+        f"cuvslam.cfg_denoising={str(denoising).lower()}",
         *(["--depth_model=foundationstereo", f"--fs_model_res={resolution}"] if dense else []),
         "--steps_to_run",
         *steps,

@@ -43,6 +43,8 @@ class OfficialMappingTests(unittest.TestCase):
                 planar = self.job["workflow"].get("ground_constraint", True)
                 index = command.index("--override")
                 self.assertEqual(command[index + 1], f"cuvslam.cfg_planar={str(planar).lower()}")
+                denoising = self.job["workflow"].get("denoising", True)
+                self.assertIn(f"cuvslam.cfg_denoising={str(denoising).lower()}", command)
                 expected_size = self.job["workflow"].get("slam_max_map_size", 0)
                 self.assertIn(f"cuvslam.cfg_slam_max_map_size={expected_size}", command)
                 artifact = self.output / "official/run/cuvslam_map"
@@ -75,6 +77,18 @@ class OfficialMappingTests(unittest.TestCase):
         renamed = self.root / "published"
         self.output.rename(renamed)
         self.assertTrue((renamed / "official/latest").is_dir())
+
+    def test_denoising_can_be_disabled(self):
+        self.job["workflow"]["denoising"] = False
+        self.test_official_cli_and_artifact()
+
+    def test_invalid_denoising_rejected_before_execution(self):
+        for value in (1, "true", None):
+            with self.subTest(value=value), patch("kart_mapping.build_map.subprocess.run") as execute:
+                self.job["workflow"]["denoising"] = value
+                with self.assertRaisesRegex(ValueError, "denoising"):
+                    run(self.job)
+                execute.assert_not_called()
 
     def test_finite_map_size(self):
         self.job["workflow"]["slam_max_map_size"] = 300

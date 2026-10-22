@@ -45,6 +45,8 @@ class Mapping:
         workflow.update(raw)
         from kart_mapping.dense_outputs import options
         options(workflow)
+        if not isinstance(workflow["denoising"], bool):
+            raise ValueError("denoisingはboolで指定してください")
         if not isinstance(workflow["ground_constraint"], bool):
             raise ValueError("ground_constraintはboolで指定してください")
         if type(workflow["slam_max_map_size"]) is not int or workflow["slam_max_map_size"] < 0:
