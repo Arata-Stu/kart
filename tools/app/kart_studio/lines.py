@@ -104,7 +104,12 @@ def generate(document, kind, raw, check=lambda: None):
     p = settings(raw)
     closed = document["closed"]
     region_info = None
-    if kind == "centerline" and p["centerline_method"] == "region":
+    reference_info = None
+    if kind == "raceline":
+        from .raceline_reference import build
+
+        center, corridor, reference_info = build(document, p["spacing"])
+    elif kind == "centerline" and p["centerline_method"] == "region":
         from .region_centerline import extract
 
         center, widths, corridor, region_info = extract(
@@ -137,13 +142,14 @@ def generate(document, kind, raw, check=lambda: None):
     elif kind == "raceline" and p["optimizer"] != "local":
         from .optimizer import optimize
 
-        corridor.validate(center, clearance)
         optimized = optimize(document, p, check)
         line = optimized["points"]
         optimizer_info = optimized["optimizer_info"]
         method = "tph_" + p["optimizer"]
     elif kind == "raceline":
-        corridor.validate(center, clearance)
+        from .raceline_reference import validate
+
+        validate(center, corridor, clearance, reference_info)
         line = [p[:] for p in center]
         n = len(line)
         normals = []
@@ -218,4 +224,5 @@ def generate(document, kind, raw, check=lambda: None):
         method=method,
         speed_sections=limits,
         optimizer_info=optimizer_info,
+        reference_info=reference_info,
     )

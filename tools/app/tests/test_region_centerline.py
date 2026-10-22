@@ -3,6 +3,7 @@
 import copy
 import math
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -90,6 +91,22 @@ class RegionCenterlineTests(unittest.TestCase):
         self.assertEqual(result['points'], expected['points'])
         self.assertEqual(result['method'], expected['method'])
 
+    def test_raceline_uses_published_region_center_instead_of_invalid_midpoints(self):
+        doc = traced_course()
+        for side in ('left', 'right'):
+            doc[side] = [[x * .8, y * .8] for x, y in doc[side]]
+        # The old midpoint route is too close to a sharp inner corner. A green
+        # region Center was displayed, but Raceline silently started elsewhere.
+        with self.assertRaisesRegex(ValueError, 'Raceline初期経路.*境界中点'):
+            generate(doc, 'raceline', {})
+        doc['lines'] = {'centerline': generate(doc, 'centerline', dict(centerline_method='region'))}
+        original = copy.deepcopy(doc)
+        with patch('kart_studio.raceline_reference.centerline', side_effect=AssertionError('unexpected pairing')):
+            result = generate(doc, 'raceline', {})
+        self.assertEqual(result['reference_info']['method'], 'region_equal_distance_v1')
+        self.assertEqual(result['settings']['margin'], .05)
+        self.assertEqual(doc, original)
+
     def test_ambiguous_and_multiple_grid_contours_are_rejected(self):
         import numpy as np
         from kart_studio.region_centerline import _trace
@@ -126,7 +143,15 @@ class RegionCenterlineTests(unittest.TestCase):
             self.assertIn('region_info', line)
             self.assertEqual(saved['lanes'][0]['left'], lane['left'])
             self.assertEqual(saved['lanes'][0]['right'], lane['right'])
-            self.assertTrue((maps.export('course') / 'centerline.csv').is_file())
+            maps.generate('course', 'raceline', {}, saved['revision'], lambda: None)
+            saved = maps.load('course')
+            self.assertEqual(saved['lanes'][0]['lines']['centerline'], line)
+            exported = maps.export('course')
+            self.assertTrue((exported / 'centerline.csv').is_file())
+            metadata = json.loads((exported / 'metadata.json').read_text())
+            reference = metadata['lanes'][saved['lanes'][0]['id']]['lines']['raceline']['reference_info']
+            self.assertEqual(reference['source'], 'saved_centerline')
+            self.assertEqual(reference['method'], 'region_equal_distance_v1')
             maps.generate('course', 'centerline', dict(centerline_method='paired'), saved['revision'], lambda: None)
             self.assertEqual(maps.load('course')['lanes'][0]['lines']['centerline']['method'], 'paired_boundary_midpoints')
 

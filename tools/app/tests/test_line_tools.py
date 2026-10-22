@@ -176,18 +176,23 @@ class OptimizerTests(unittest.TestCase):
         import json
         from kart_studio.optimizer import optimize
 
-        diagnostic = dict(segment=153, reason="clearance", distance_m=0.144)
+        for diagnostic in (dict(segment=153, reason="clearance", distance_m=0.144), None):
+            with self.subTest(diagnostic=diagnostic):
+                def launch(command, **kwargs):
+                    Path(command[-1]).write_text(json.dumps(dict(error="距離が不足", diagnostic=diagnostic)))
+                    process = Mock(returncode=1)
+                    process.poll.return_value = 1
+                    return process
 
-        def launch(command, **kwargs):
-            Path(command[-1]).write_text(json.dumps(dict(error="距離が不足", diagnostic=diagnostic)))
-            process = Mock(returncode=1)
-            process.poll.return_value = 1
-            return process
-
-        with patch("kart_studio.optimizer.subprocess.Popen", side_effect=launch):
-            with self.assertRaisesRegex(ValueError, "距離が不足") as caught:
-                optimize(track(), {}, lambda: None)
-        self.assertEqual(caught.exception.diagnostic, diagnostic)
+                with patch("kart_studio.optimizer.subprocess.Popen", side_effect=launch):
+                    with self.assertRaisesRegex(ValueError, "距離が不足") as caught:
+                        optimize(track(), {}, lambda: None)
+                if diagnostic is None:
+                    # Maps.generate enriches diagnostics when the attribute
+                    # exists; a None attribute would mask the original error.
+                    self.assertFalse(hasattr(caught.exception, "diagnostic"))
+                else:
+                    self.assertEqual(caught.exception.diagnostic, diagnostic)
 
     def test_constraint_error_reports_settings_without_dependency_advice(self):
         from kart_studio.optimizer_worker import run

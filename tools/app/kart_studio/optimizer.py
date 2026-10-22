@@ -55,7 +55,8 @@ def optimize(document, parameters, check):
                         failure = json.loads(output.read_text())
                         if failure.get("error"):
                             error = ValueError(failure["error"])
-                            error.diagnostic = failure.get("diagnostic")
+                            if failure.get("diagnostic") is not None:
+                                error.diagnostic = failure["diagnostic"]
                             raise error
                     detail = (root / "log.txt").read_text()[-2400:]
                     raise ValueError(

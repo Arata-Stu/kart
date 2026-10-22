@@ -31,6 +31,7 @@ def _validated_solution(solve, corridor, p):
         except PathValidationError as exc:
             last_error = exc
             detail = exc.diagnostic
+            detail["stage"] = "raceline_optimized_output"
             attempts.append(dict(reserve_m=reserve, diagnostic=detail))
             gap = detail.get("distance_m", clearance)
             missing = clearance - gap
@@ -72,11 +73,9 @@ def _run(document, p):
     import trajectory_planning_helpers as tph
     from scipy.interpolate import splev, splprep
 
-    from .geometry import centerline
+    from .raceline_reference import build, validate
 
-    center, _, corridor = centerline(
-        document["left"], document["right"], True, p["spacing"]
-    )
+    center, corridor, reference_info = build(document, p["spacing"])
     ref = np.asarray(center)
     closed_ref = np.vstack((ref, ref[0]))
     spline, _ = splprep(closed_ref.T, s=len(ref) * 0.05**2, per=True)
@@ -86,7 +85,7 @@ def _run(document, p):
     ref = np.column_stack(
         [np.interp(target, stations, dense[:, axis]) for axis in range(2)]
     )
-    corridor.validate(ref.tolist())
+    validate(ref.tolist(), corridor, 0, reference_info)
     cx, cy, matrix, normals = tph.calc_splines.calc_splines(
         path=np.vstack((ref, ref[0])), use_dist_scaling=False
     )
@@ -125,7 +124,8 @@ def _run(document, p):
             "必要幅は車幅＋両側余裕です。"
             "境界と車両寸法・余裕を確認してください。"
         )
-    corridor.validate(ref.tolist(), p["vehicle_width"] / 2 + p["margin"])
+    # A reference point may start inside the requested clearance: the QP can
+    # move it to the other side. Only the optimized result must meet it.
     track = np.column_stack((ref, widths))
     if p["optimizer"] != "mincurv":
         lengths = tph.calc_spline_lengths.calc_spline_lengths(coeffs_x=cx, coeffs_y=cy)
@@ -186,6 +186,7 @@ def _run(document, p):
             smoothing_rms_m=0.05,
             interpolation_reserve_m=reserve,
             clearance_refinements=attempts,
+            reference_info=reference_info,
             verification_spacing_m=min(p["spacing"], 0.05),
         ),
     )
