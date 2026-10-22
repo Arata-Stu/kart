@@ -54,7 +54,9 @@ def optimize(document, parameters, check):
                     if output.is_file():
                         failure = json.loads(output.read_text())
                         if failure.get("error"):
-                            raise ValueError(failure["error"])
+                            error = ValueError(failure["error"])
+                            error.diagnostic = failure.get("diagnostic")
+                            raise error
                     detail = (root / "log.txt").read_text()[-2400:]
                     raise ValueError(
                         "helper実行プロセスが異常終了しました。"

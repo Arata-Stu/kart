@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from kart_studio import registration
 from kart_studio.lines import DEFAULTS, generate
@@ -150,6 +150,45 @@ class RegistrationTests(unittest.TestCase):
 
 
 class OptimizerTests(unittest.TestCase):
+    def test_clearance_refinement_stops_without_returning_invalid_candidate(self):
+        from kart_studio.geometry import PathValidationError
+        from kart_studio.optimizer_worker import _validated_solution
+
+        failure = PathValidationError(
+            "距離が不足", [0, 0], [1, 0], 0,
+            reason="clearance", distance_m=0.144, required_clearance_m=0.145,
+        )
+        for exhausted in (True, False):
+            with self.subTest(exhausted=exhausted):
+                corridor = Mock()
+                corridor.validate.side_effect = failure
+                solve = Mock(return_value=[[0, 0], [1, 0], [0, 1]])
+                if not exhausted:
+                    solve.side_effect = [solve.return_value, ValueError("constraints are inconsistent, no solution")]
+                with self.assertRaises(ValueError) as caught:
+                    _validated_solution(solve, corridor, DEFAULTS)
+                self.assertIs(caught.exception, failure)
+                self.assertEqual(solve.call_count, 8 if exhausted else 2)
+                self.assertEqual(solve.call_args_list[0].args, (0.0,))
+                self.assertGreater(solve.call_args_list[1].args[0], 0)
+
+    def test_worker_failure_preserves_ui_diagnostic(self):
+        import json
+        from kart_studio.optimizer import optimize
+
+        diagnostic = dict(segment=153, reason="clearance", distance_m=0.144)
+
+        def launch(command, **kwargs):
+            Path(command[-1]).write_text(json.dumps(dict(error="距離が不足", diagnostic=diagnostic)))
+            process = Mock(returncode=1)
+            process.poll.return_value = 1
+            return process
+
+        with patch("kart_studio.optimizer.subprocess.Popen", side_effect=launch):
+            with self.assertRaisesRegex(ValueError, "距離が不足") as caught:
+                optimize(track(), {}, lambda: None)
+        self.assertEqual(caught.exception.diagnostic, diagnostic)
+
     def test_constraint_error_reports_settings_without_dependency_advice(self):
         from kart_studio.optimizer_worker import run
 
@@ -211,19 +250,14 @@ class OptimizerTests(unittest.TestCase):
         "Set KART_TEST_HELPER=1 and KART_RACELINE_PYTHON to test installed helper",
     )
     def test_real_helper_both_methods(self):
-        from kart_studio.optimizer import optimize
-        from kart_studio.lines import profile, settings
-
         doc = track()
         for method in ("mincurv", "mincurv_iqp"):
             with self.subTest(method=method):
-                # Test the numerical adapter separately from publication checks:
-                # active width bounds can fail the final corridor validation.
-                p = settings(dict(optimizer=method, spacing=0.5))
-                result = optimize(doc, p, lambda: None)
+                result = generate(doc, "raceline", dict(optimizer=method, spacing=0.5))
+                self.assertEqual(result["method"], "tph_" + method)
                 self.assertGreater(len(result["points"]), 30)
-                self.assertEqual(result["optimizer_info"]["interpolation_reserve_m"], 0.0)
-                rows = profile(result["points"], True, p)
+                self.assertEqual(result["settings"]["margin"], 0.05)
+                rows = result["profile"]
                 self.assertLessEqual(max(abs(r[4]) for r in rows), 2.02)
                 self.assertTrue(
                     all(
@@ -233,13 +267,20 @@ class OptimizerTests(unittest.TestCase):
                 )
 
     @unittest.skipUnless(os.environ.get("KART_TEST_HELPER"), "Requires installed helper")
-    def test_real_helper_rejects_interpolated_clearance_violation(self):
-        # Without an extra optimizer reserve, a feasible QP can interpolate
-        # slightly inside the requested 5 cm margin. Never publish that result.
+    def test_real_helper_refines_interpolated_clearance_violation(self):
+        # Both methods used to fail at 0.144 m against a 0.145 m requirement.
+        from kart_studio.geometry import Corridor
+
         for method in ("mincurv", "mincurv_iqp"):
             with self.subTest(method=method):
-                with self.assertRaisesRegex(ValueError, "距離が不足|長方形車体"):
-                    generate(track(), "raceline", dict(optimizer=method, spacing=0.5))
+                doc = track()
+                result = generate(doc, "raceline", dict(optimizer=method, spacing=0.5))
+                info = result["optimizer_info"]
+                self.assertGreater(info["interpolation_reserve_m"], 0)
+                self.assertLess(info["interpolation_reserve_m"], 0.05)
+                self.assertEqual(info["clearance_refinements"][0]["reserve_m"], 0)
+                self.assertLess(info["clearance_refinements"][0]["diagnostic"]["distance_m"], 0.145)
+                Corridor(doc["left"], doc["right"], True).validate(result["points"], 0.145)
 
     @unittest.skipUnless(os.environ.get("KART_TEST_HELPER"), "Requires installed helper")
     def test_real_helper_infeasible_curvature_is_reported_through_subprocess(self):

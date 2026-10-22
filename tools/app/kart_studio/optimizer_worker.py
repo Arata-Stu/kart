@@ -5,6 +5,48 @@ import sys
 from pathlib import Path
 
 
+def _validated_solution(solve, corridor, p):
+    """Tighten QP bounds only after measuring a rejected interpolated result."""
+    from . import footprint
+    from .geometry import PathValidationError, distance
+
+    clearance = p["vehicle_width"] / 2 + p["margin"]
+    reserve = 0.0
+    last_error = None
+    attempts = []
+    for _ in range(8):
+        try:
+            line = solve(reserve)
+        except (ValueError, RuntimeError) as exc:
+            if last_error is not None and (
+                "constraints are inconsistent" in str(exc) or "track might be too small" in str(exc)
+            ):
+                # Preserve the concrete failing location if tighter bounds have
+                # no QP solution. Never return the preceding invalid candidate.
+                raise last_error from exc
+            raise
+        try:
+            corridor.validate(line, clearance)
+            footprint.validate_line(line, True, p, corridor=corridor)
+        except PathValidationError as exc:
+            last_error = exc
+            detail = exc.diagnostic
+            attempts.append(dict(reserve_m=reserve, diagnostic=detail))
+            gap = detail.get("distance_m", clearance)
+            missing = clearance - gap
+            if detail["reason"] == "outside":
+                missing = clearance + gap
+            for point in detail.get("footprint", []):
+                if not corridor.contains(point):
+                    missing = max(missing, min(distance(point, a, b) for a, b in corridor.boundaries))
+            # A 1 mm numerical buffer avoids repeatedly touching an active
+            # bound. Repeated violations increase it, within a bounded retry.
+            reserve = max(reserve * 2, reserve + max(0, missing) + 0.001)
+            continue
+        return line, reserve, attempts
+    raise last_error
+
+
 def run(document, p):
     try:
         return _run(document, p)
@@ -70,8 +112,8 @@ def _run(document, p):
     widths = np.asarray(
         [[width(pt, normal), width(pt, -normal)] for pt, normal in zip(ref, normals)]
     )
-    # The configured margin is the total per-side allowance. Interpolation
-    # is checked against the original corridor after optimization.
+    # Start with exactly the requested allowance. Any correction is measured
+    # on the interpolated output, rather than adding a fixed 5 cm everywhere.
     required_width = p["vehicle_width"] + 2 * p["margin"]
     total_widths = widths.sum(axis=1)
     narrowest = int(np.argmin(total_widths))
@@ -85,18 +127,7 @@ def _run(document, p):
         )
     corridor.validate(ref.tolist(), p["vehicle_width"] / 2 + p["margin"])
     track = np.column_stack((ref, widths))
-    args = dict(
-        reftrack=track,
-        normvectors=normals,
-        A=matrix,
-        kappa_bound=p["curvature_limit"],
-        w_veh=required_width,
-        print_debug=False,
-        plot_debug=False,
-    )
-    if p["optimizer"] == "mincurv":
-        alpha = tph.opt_min_curv.opt_min_curv(**args)[0]
-    else:
+    if p["optimizer"] != "mincurv":
         lengths = tph.calc_spline_lengths.calc_spline_lengths(coeffs_x=cx, coeffs_y=cy)
         psi, kappa = tph.calc_head_curv_an.calc_head_curv_an(
             coeffs_x=cx,
@@ -107,35 +138,54 @@ def _run(document, p):
         dkappa = (np.roll(kappa, -1) - np.roll(kappa, 1)) / (
             lengths + np.roll(lengths, 1)
         )
-        result = tph.iqp_handler.iqp_handler(
-            **args,
-            spline_len=lengths,
-            psi=psi,
-            kappa=kappa,
-            dkappa=dkappa,
-            stepsize_interp=p["spacing"],
-            iters_min=3,
-            curv_error_allowed=0.01,
+
+    def solve(reserve):
+        # IQP mutates its input widths. Every retry starts from the same track.
+        current_track, current_normals = track.copy(), normals.copy()
+        args = dict(
+            reftrack=current_track,
+            normvectors=current_normals,
+            A=matrix,
+            kappa_bound=p["curvature_limit"],
+            w_veh=required_width + 2 * reserve,
+            print_debug=False,
+            plot_debug=False,
         )
-        alpha, track, normals = result[:3]
-    # A small interpolation interval also supports corridor checks on the output.
-    result = tph.create_raceline.create_raceline(
-        refline=track[:, :2],
-        normvectors=normals,
-        alpha=alpha,
-        stepsize_interp=min(p["spacing"], 0.05),
-    )[0]
-    if not np.isfinite(result).all():
-        raise ValueError("最適化結果に非有限値があります")
+        if p["optimizer"] == "mincurv":
+            alpha = tph.opt_min_curv.opt_min_curv(**args)[0]
+        else:
+            optimized = tph.iqp_handler.iqp_handler(
+                **args,
+                spline_len=lengths,
+                psi=psi,
+                kappa=kappa,
+                dkappa=dkappa,
+                stepsize_interp=p["spacing"],
+                iters_min=3,
+                curv_error_allowed=0.01,
+            )
+            alpha, current_track, current_normals = optimized[:3]
+        result = tph.create_raceline.create_raceline(
+            refline=current_track[:, :2],
+            normvectors=current_normals,
+            alpha=alpha,
+            stepsize_interp=min(p["spacing"], 0.05),
+        )[0]
+        if not np.isfinite(result).all():
+            raise ValueError("最適化結果に非有限値があります")
+        return result.tolist()
+
+    result, reserve, attempts = _validated_solution(solve, corridor, p)
     package = distribution("trajectory-planning-helpers")
     return dict(
-        points=result.tolist(),
+        points=result,
         optimizer_info=dict(
             package="trajectory-planning-helpers",
             version=package.version,
             source=json.loads(package.read_text("direct_url.json") or "{}"),
             smoothing_rms_m=0.05,
-            interpolation_reserve_m=0.0,
+            interpolation_reserve_m=reserve,
+            clearance_refinements=attempts,
             verification_spacing_m=min(p["spacing"], 0.05),
         ),
     )
@@ -148,7 +198,9 @@ if __name__ == "__main__":
     except ValueError as exc:
         import traceback
 
-        Path(sys.argv[2]).write_text(json.dumps(dict(error=str(exc))))
+        Path(sys.argv[2]).write_text(json.dumps(dict(
+            error=str(exc), diagnostic=getattr(exc, "diagnostic", None)
+        )))
         traceback.print_exc()
         sys.exit(1)
     Path(sys.argv[2]).write_text(json.dumps(result, allow_nan=False))

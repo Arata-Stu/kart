@@ -1,5 +1,5 @@
 import { $, state, api, action, toast, emit, on } from "./api.js";
-import { refreshMaps, loadMap } from "./maps.js";
+import { refreshMaps, loadMap, generateLine } from "./maps.js";
 const open = (id) => $(id).showModal();
 for (const button of document.querySelectorAll("[data-close]"))
   button.addEventListener("click", () => $(button.dataset.close).close());
@@ -14,14 +14,15 @@ function field(parent, labelText, name, value, type = "text", extra = {}) {
 function form(id, submit) {
   $(id).addEventListener("submit", async (event) => {
     event.preventDefault();
-    const button = $(id).querySelector("button.primary");
-    button.disabled = true;
+    const buttons = [...$(id).querySelectorAll("button")].filter((button) => button.type === "submit");
+    const disabled = buttons.map((button) => button.disabled);
+    buttons.forEach((button) => { button.disabled = true; });
     try {
-      await submit(Object.fromEntries(new FormData($(id))));
+      await submit(Object.fromEntries(new FormData($(id))), event.submitter);
     } catch (e) {
       toast(e.message, true);
     } finally {
-      button.disabled = false;
+      buttons.forEach((button, i) => { button.disabled = disabled[i]; });
     }
   });
 }
@@ -133,33 +134,59 @@ form("build-form", async (data) => {
   $("build-dialog").close();
   emit("job-started", job);
 });
-action("line-settings-open", () => {
+let lineSettingsTarget = null;
+function lineSettingSummary() {
+  const form = $("line-settings-form");
+  const value = (key) => form.elements[key].valueAsNumber;
+  const rear = form.elements.rear_axle_to_rear;
+  rear.setCustomValidity(value("rear_axle_to_rear") >= value("vehicle_length")
+    ? "後輪軸から後端までの距離は全長未満にしてください" : "");
+  const width = value("vehicle_width") + 2 * value("margin");
+  const length = value("vehicle_length") + 2 * value("margin");
+  const method = $("raceline-method").selectedOptions[0].textContent.trim();
+  $("line-setting-summary").textContent = Number.isFinite(width + length)
+    ? `余裕込み：幅 ${(width * 100).toFixed(1)} × 全長 ${(length * 100).toFixed(1)} cm。方式：${method}`
+    : "車体寸法と余裕を入力してください。";
+}
+function openLineSettings(details = false) {
+  lineSettingsTarget = { map: state.id, lane: state.laneId };
   $("line-setting-fields").replaceChildren();
-  const labels = {
-    curvature_limit: "最適化の曲率上限 (1/m)",
-    spacing: "点間隔 (m)",
-    region_resolution: "領域方式の格子解像度 (m)",
-    vehicle_width: "車幅 (m)",
-    vehicle_length: "車体全長 (m)",
-    rear_axle_to_rear: "後輪軸から後端 (m)",
-    margin: "片側の余裕 (m)",
-    max_speed: "速度上限 (m/s)",
-    lateral_accel: "横加速度上限 (m/s²)",
-    accel: "加速上限 (m/s²)",
-    decel: "減速上限 (m/s²)",
+  $("line-setting-extra-fields").replaceChildren();
+  const fields = {
+    vehicle_width: ["車幅 (m)", 0.05, 2, 0.001],
+    vehicle_length: ["車体全長 (m)", 0.1, 5, 0.001],
+    rear_axle_to_rear: ["後輪軸から後端 (m)", 0, 2, 0.0001],
+    margin: ["前後左右の余裕 (m)", 0, 1, 0.001],
+    curvature_limit: ["最適化の曲率上限 (1/m)", 0.01, 20, 0.01],
+    spacing: ["点間隔 (m)", 0.05, 1, 0.01],
+    region_resolution: ["領域方式の格子解像度 (m)", 0.005, 0.25, 0.005, true],
+    max_speed: ["速度上限 (m/s)", 0.1, 20, 0.01, true],
+    lateral_accel: ["横加速度上限 (m/s²)", 0.1, 15, 0.01, true],
+    accel: ["加速上限 (m/s²)", 0.1, 15, 0.01, true],
+    decel: ["減速上限 (m/s²)", 0.1, 15, 0.01, true],
   };
-  for (const [k, label] of Object.entries(labels))
-    field($("line-setting-fields"), label, k, state.settings[k], "number", {
-      min: k === "margin" ? 0 : k === "region_resolution" ? 0.005 : 0.01,
-      step: k === "rear_axle_to_rear" ? 0.0001 : k === "region_resolution" ? 0.005 : 0.01,
-      required: true,
-    });
+  for (const [key, [label, min, max, step, extra]] of Object.entries(fields))
+    field($(extra ? "line-setting-extra-fields" : "line-setting-fields"), label, key,
+      state.settings[key], "number", { min, max, step, required: true });
+  $("line-setting-details").open = details;
+  $("line-settings-generate").disabled = $("generate-raceline").disabled;
+  lineSettingSummary();
   open("line-settings-dialog");
-});
-form("line-settings-form", async (data) => {
+}
+action("line-settings-open", () => openLineSettings(true));
+action("raceline-settings-open", () => openLineSettings());
+$("line-settings-form").addEventListener("input", lineSettingSummary);
+form("line-settings-form", async (data, submitter) => {
+  const generate = submitter?.value === "raceline";
+  if (generate && (state.id !== lineSettingsTarget.map || state.laneId !== lineSettingsTarget.lane))
+    throw Error("地図またはlaneが切り替わりました。設定を開き直してください");
+  if (generate && $("generate-raceline").disabled)
+    throw Error("生成処理の完了を待ってから実行してください");
   for (const [k, v] of Object.entries(data)) state.settings[k] = Number(v);
+  emit("status");
+  if (generate) await generateLine("raceline");
   $("line-settings-dialog").close();
-  toast("次回の生成に設定を適用します");
+  if (!generate) toast("次回の生成に設定を適用します");
 });
 
 let denseStages = null;

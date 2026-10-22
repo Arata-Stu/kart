@@ -717,6 +717,8 @@ dialog::backdrop {
   margin-top: 22px;
   padding-top: 15px;
 }
+#line-settings-form .dialog-actions { gap: 8px; flex-wrap: wrap; }
+#raceline-settings-open { font-size: 11px; padding: 6px 4px; }
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

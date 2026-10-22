@@ -169,6 +169,10 @@ function status() {
     ? `格子 ${regionInfo.resolution_m} m · 最大左右距離差 ${regionInfo.max_distance_imbalance_m.toFixed(4)} m`
     : "従来の境界対応点の中点方式";
   $("centerline-method").disabled = !d || busy;
+  const cm = (value) => (value * 100).toLocaleString("ja-JP", { maximumFractionDigits: 2 });
+  $("raceline-settings-open").textContent =
+    `幅 ${cm(state.settings.vehicle_width)} · 全長 ${cm(state.settings.vehicle_length)} · 余裕 ${cm(state.settings.margin)} cm / 調整`;
+  $("raceline-settings-open").disabled = !d || busy;
   $("edit-pair").classList.toggle("active", state.target === "pair");
   $("edit-left").classList.toggle("active", state.target === "left");
   $("edit-right").classList.toggle("active", state.target === "right");
@@ -299,26 +303,29 @@ $("show-path").addEventListener("change", () => {
   state.showPath = $("show-path").checked;
   draw();
 });
-for (const kind of ["centerline", "raceline", "customline"])
-  action("generate-" + kind, async () => {
-    const laneId = state.laneId,
-      mapId = state.id,
-      settings = structuredClone(state.settings);
-    await save();
-    if (state.id !== mapId)
-      throw Error("地図が切り替わりました。生成し直してください");
-    state.diagnostic = null;
-    emit("view");
-    const job = await api("generate", {
-      id: state.id,
-      kind,
-      revision: state.doc.revision,
-      settings,
-      lane_id: laneId,
-    });
-    emit("job-started", job);
-    toast(kind + "の生成を開始しました");
+export async function generateLine(kind) {
+  if (!state.lane || state.doc.snapshot_status === "pending")
+    throw Error("生成する地図とlaneを選択してください");
+  const laneId = state.laneId,
+    mapId = state.id,
+    settings = structuredClone(state.settings);
+  await save();
+  if (state.id !== mapId || state.laneId !== laneId)
+    throw Error("地図またはlaneが切り替わりました。生成し直してください");
+  state.diagnostic = null;
+  emit("view");
+  const job = await api("generate", {
+    id: state.id,
+    kind,
+    revision: state.doc.revision,
+    settings,
+    lane_id: laneId,
   });
+  emit("job-started", job);
+  toast(kind + "の生成を開始しました");
+}
+for (const kind of ["centerline", "raceline", "customline"])
+  action("generate-" + kind, () => generateLine(kind));
 action("export", async () => {
   await save();
   const r = await api("export", { id: state.id });

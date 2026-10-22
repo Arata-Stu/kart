@@ -273,6 +273,9 @@
                   反復最小曲率（helper・閉路）
                 </option>
               </select>
+              <button id="raceline-settings-open" class="quiet full" title="車幅・全長・余裕を調整してRacelineを生成" aria-label="Racelineの車幅・全長・余裕を調整">
+                寸法・余裕を調整
+              </button>
               <button id="generate-raceline" class="full">
                 Racelineを生成
               </button>
@@ -1017,11 +1020,17 @@
           <button type="button" data-close="line-settings-dialog">×</button>
         </div>
         <div class="form-grid" id="line-setting-fields"></div>
+        <p id="line-setting-summary" class="help" aria-live="polite"></p>
+        <details id="line-setting-details">
+          <summary>速度・領域方式などの詳細</summary>
+          <div class="form-grid" id="line-setting-extra-fields"></div>
+        </details>
         <p class="help">
-          開路の始終点は速度0。曲率・加速・減速の上限から速度を計算します。
+          余裕は車体の前後左右へ加えます。適用後の設定で再生成するとラインを更新します。
         </p>
         <div class="dialog-actions">
-          <button class="primary">設定を適用</button>
+          <button type="submit" value="apply">設定のみ適用</button>
+          <button type="submit" value="raceline" id="line-settings-generate" class="primary">適用してRaceline生成</button>
         </div>
       </form>
     </dialog>
