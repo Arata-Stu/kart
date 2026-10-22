@@ -209,9 +209,9 @@ def _run(document, p):
         if p["optimizer"] == "mincurv":
             alpha = tph.opt_min_curv.opt_min_curv(**args)[0]
         else:
-            from .iqp import bounded_iqp
+            from .iqp import monitored_iqp
 
-            optimized = bounded_iqp(tph, dict(
+            optimized = monitored_iqp(tph, dict(
                 **args,
                 spline_len=lengths,
                 psi=psi,
