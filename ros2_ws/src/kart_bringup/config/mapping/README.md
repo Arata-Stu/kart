@@ -121,3 +121,8 @@ PLYは外部のPLY対応3Dビューアで確認する。ブラウザ内3D回転�
 mesh.plyは地面合わせ後、mesh_before_adjustment.plyは地面合わせ前。HDMapへ自動重ね合わせしない。
 実体はmap/<地図名>/official/<run>/。頂点・面が空のmeshは生成成功にしない。
 反映にはkart_mappingのbuild/sourceとUI再起動。nvblox_rosを含まない既存イメージはDocker再buildが必要。
+
+公式offline地図生成の姿勢グラフ上限は`config/mapping/workflow.json`
+（kart_bringup）の`slam_max_map_size=0`（無制限）を使用する。
+300へ戻すと公式既定上限で比較できる。既存地図は変更せず、別名で再生成する。
+ROS側cuVSLAM YAMLの`slam_max_map_size`とは別設定。実bag/GPUでの効果は未検証。

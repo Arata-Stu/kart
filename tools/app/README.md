@@ -1007,3 +1007,8 @@ KART_AUDIT_PYTHON=/tmp/kart-audit-env/bin/python bash tools/app/start.sh
 計測値はbag記録時刻ベースで、callback・GPU単独時間・実PWMの計測ではない。
 再送・MANUAL・復帰・状態未確認のサンプルを分離し、未記録topicを0msや正常と扱わない。
 詳しい指標と制約は[pipeline_audit](../pipeline_audit/README.md)。
+
+公式offline地図生成の姿勢グラフ上限は`config/mapping/workflow.json`
+（kart_bringup）の`slam_max_map_size=0`（無制限）を使用する。
+300へ戻すと公式既定上限で比較できる。既存地図は変更せず、別名で再生成する。
+ROS側cuVSLAM YAMLの`slam_max_map_size`とは別設定。実bag/GPUでの効果は未検証。

@@ -23,6 +23,7 @@ bag検査はrosbag readerで行い、ROSトピック再生はしない。Collect
 
 | 設定 | 既定値・意味 |
 |---|---|
+| slam_max_map_size | 0（無制限）。公式offlineのcfg_slam_max_map_sizeへ渡す。300で公式既定上限との比較が可能。処理量・メモリ増加に注意 |
 | ground_constraint | true。公式offline cuVSLAMのcfg_planarへ渡す平面制約。falseで明示解除 |
 | dense_reconstruction | false。trueでFoundationStereo深度＋nvblox占有地図・メッシュを生成 |
 | fs_model_res | low_res。low_res / high_res。公式FoundationStereoモデル解像度 |
@@ -37,6 +38,8 @@ bag検査はrosbag readerで行い、ROSトピック再生はしない。Collect
 起動後の設定変更なし。再生速度・固定drain秒数・save_map待機設定は公式経路では使用しないため削除。
 カメラ設定はジョブごとに`camera_topics.yaml`として保存し、公式CLIへ渡す。
 cuVSLAMは`--override cuvslam.cfg_planar=true`を既定で渡し、平坦路向けの平面制約を有効にする。
+`--override cuvslam.cfg_slam_max_map_size=0`も既定で渡し、地図サイズ上限の影響を比較する。
+値の正本は`kart_bringup/config/mapping/workflow.json`。
 その他の内部設定はインストールされた公式map_creation_configの既定値を利用する。
 既存地図は変更されない。新しい設定を反映するにはposesとoccupancy・meshを再生成する。
 
