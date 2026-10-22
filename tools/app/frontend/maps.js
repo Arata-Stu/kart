@@ -235,7 +235,7 @@ for (const t of ["left", "right", "custom", "pair"])
   });
 action("undo", () => undo());
 action("redo", () => undo(true));
-action("fit", fit);
+action("fit", () => fit(true));
 action("save", save);
 action("refresh-maps", refreshMaps);
 action("delete-point", () => {

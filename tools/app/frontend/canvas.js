@@ -1,4 +1,5 @@
 import { paintTuning } from "./tuning.js";
+import { viewBounds } from "./view_bounds.js";
 import { placementPreview } from "./placement.js";
 import { paintOccupancy } from "./occupancy.js";
 import { centers, compatible, movePair, appendPair } from "./paired.js";
@@ -160,23 +161,14 @@ function invalidate() {
   cloudDirty = true;
   draw();
 }
-export function fit() {
-  const values = state.cloud?.points || [];
-  if (!values.length) return;
-  let x0 = Infinity,
-    x1 = -Infinity,
-    y0 = Infinity,
-    y1 = -Infinity;
-  for (const p of values) {
-    x0 = Math.min(x0, p[0]);
-    x1 = Math.max(x1, p[0]);
-    y0 = Math.min(y0, p[1]);
-    y1 = Math.max(y1, p[1]);
-  }
+export function fit(all = false) {
+  const bounds = viewBounds(state.doc, state.cloud?.points, all);
+  if (!bounds) return;
+  const [x0, y0, x1, y1] = bounds;
   origin = [(x0 + x1) / 2, (y0 + y1) / 2];
   scale = Math.min(
-    (width - 100) / Math.max(1, x1 - x0),
-    (height - 100) / Math.max(1, y1 - y0),
+    Math.max(1, width - 100) / Math.max(1, x1 - x0),
+    Math.max(1, height - 100) / Math.max(1, y1 - y0),
   );
   invalidate();
 }
