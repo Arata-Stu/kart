@@ -65,7 +65,7 @@ class FreshDiagnosticTests(unittest.TestCase):
             def choose(title, values, *args, **kwargs):
                 titles.append(title)
                 if title == "用途": return "eval"
-                if title == "評価するlocalization":
+                if title == "オフライン解析":
                     self.assertIn("fresh_vio",values)
                     return "fresh_vo"
                 if title == "追跡方式": return "0"
@@ -85,7 +85,7 @@ class FreshDiagnosticTests(unittest.TestCase):
             self.assertIn("rviz:=true", text)
             self.assertIn("tracking_mode:=0", text)
             self.assertNotIn("map_dir:=", text)
-            self.assertEqual(titles, ["用途", "評価するlocalization", "VSLAM速度・精度", "再生rosbag"])
+            self.assertEqual(titles, ["用途", "オフライン解析", "VSLAM速度・精度", "再生rosbag"])
             self.assertIn('multicam_mode:=2',text)
             with patch.object(sys, "argv", ["bringup.py", "--mode", "eval", "--eval-localization", "fresh", "--bag", str(bag), "--tracking-mode", "1", "--dry-run"]):
                 with self.assertRaisesRegex(ValueError, "/realsense/imu"):
@@ -100,7 +100,7 @@ class FreshDiagnosticTests(unittest.TestCase):
             (bag/'metadata.yaml').write_text(yaml.safe_dump({'rosbag2_bagfile_information':{'topics_with_message_count':rows}}))
             def choose(title,values,*args,**kwargs):
                 if title=='用途':return 'eval'
-                if title=='評価するlocalization':
+                if title=='オフライン解析':
                     self.assertIn('fresh_vio',values)
                     return 'fresh_vio'
                 if title=='VSLAM速度・精度':return '1'
@@ -119,6 +119,44 @@ class FreshDiagnosticTests(unittest.TestCase):
             self.assertNotIn('map_dir:=',text)
             self.assertNotIn('enable_vgl:=true',text)
 
+    def test_vgl_tracking_selection_and_explicit_override(self):
+        from kart_bringup import mission, localization
+        for mode, explicit, has_imu in [('0', False, False), ('1', False, True),
+                                        ('1', True, True), ('1', False, False)]:
+            with self.subTest(mode=mode, explicit=explicit, has_imu=has_imu), tempfile.TemporaryDirectory() as folder:
+                bag = Path(folder) / 'bag'
+                bag.mkdir()
+                topics = ['/realsense/infra1/image_rect_raw', '/realsense/infra2/image_rect_raw',
+                          '/realsense/infra1/camera_info', '/realsense/infra2/camera_info', '/tf_static']
+                if has_imu:
+                    topics.append('/realsense/imu')
+                (bag / 'metadata.yaml').write_text(yaml.safe_dump({'rosbag2_bagfile_information': {
+                    'topics_with_message_count': [{'topic_metadata': {'name': t}, 'message_count': 10} for t in topics]}}))
+                titles = []
+                def choose(title, values, *args, **kwargs):
+                    titles.append(title)
+                    if title == '用途': return 'eval'
+                    if title == 'オフライン解析': return 'vgl'
+                    if title == '追跡方式': return mode
+                    return values[0]
+                def discover(root, kind):
+                    return [bag] if kind == 'bag' else [Path('/map/hdmap.yaml')] if kind == 'hdmap' else [Path('/map/course')]
+                argv = ['bringup.py', '--dry-run', '--record-dir', folder]
+                if explicit:
+                    argv += ['--tracking-mode', mode]
+                output = io.StringIO()
+                with patch.object(sys, 'argv', argv), patch.object(sys.stdin, 'isatty', return_value=True), patch.object(module, 'choose', side_effect=choose), patch.object(mission, 'discover', side_effect=discover), patch.object(mission, 'hdmap_choices', return_value=[('lane_001', 'centerline')]), patch.object(localization, 'resolve', return_value=({'cuvslam': {'tracking_mode': int(mode)}}, None, None, {'input_shape': [1, 3, 240, 424]})) as resolve, redirect_stdout(output):
+                    if mode == '1' and not has_imu:
+                        with self.assertRaisesRegex(ValueError, '/realsense/imu'):
+                            module.main()
+                        continue
+                    module.main()
+                self.assertEqual('追跡方式' in titles, not explicit)
+                self.assertEqual(resolve.call_args.kwargs['overrides']['tracking_mode'], mode)
+                self.assertTrue(resolve.call_args.kwargs['enable_vgl'])
+                self.assertIn('enable_vgl:=true', output.getvalue())
+                self.assertIn(f'tracking_mode:={mode}', output.getvalue())
+
     def test_saved_map_vio_selects_map_and_replays_imu(self):
         with tempfile.TemporaryDirectory() as folder:
             bag=Path(folder)/'bag';bag.mkdir()
@@ -126,7 +164,7 @@ class FreshDiagnosticTests(unittest.TestCase):
             (bag/'metadata.yaml').write_text(yaml.safe_dump({'rosbag2_bagfile_information':{'topics_with_message_count':[{'topic_metadata':{'name':t},'message_count':10} for t in topics]}}))
             def choose(title,values,*args,**kwargs):
                 if title=='用途':return 'eval'
-                if title=='評価するlocalization':
+                if title=='オフライン解析':
                     self.assertIn('vslam_vio',values);return 'vslam_vio'
                 return values[0]
             def discover(root,kind):

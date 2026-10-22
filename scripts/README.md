@@ -412,3 +412,13 @@ CLIでは通常のdrive引数へ`--tuning`を追加（`--no-tuning`で無効化�
 モデルごとにheadを別々に読み込まず、共有encoder＋全headの一つのTensorRT engineを使用する。
 詳しいoffline pose生成→section dataset→混合バッチ学習の手順は
 [kart_e2e README](../ros2_ws/src/kart_e2e/README.md#section別head共有backbone同時学習)を参照。
+
+### VGL併用のoffline VO/VIO選択
+
+`bash scripts/bringup.sh` → offline bag評価 → VSLAM＋VGL → 追跡方式で
+VO（左右画像のみ）／VIO（左右画像＋IMU）を選択できる。既定候補はVO。
+`--tracking-mode 0|1`を明示した場合は追跡方式の選択を省略する。
+非対話は`--mode eval --eval-localization vgl --tracking-mode 0|1`を使用する。
+VIOではbag内の`/realsense/imu`が必須で、不足時は起動前に停止する。
+地図・モデル・HDMap等の選択と平面制約の既定ONは既存設定に従う。
+TUIからlaunchへの引数とIMU不足の拒否をportable testで確認。ROS/GPU・実bagの推定精度は未検証。

@@ -209,7 +209,7 @@ def main():
                 args.eval_localization = "fresh"
         if args.mode == "eval" and args.eval_localization == "e2e_latency":
             args.mode = "e2e-latency"
-        if args.mode == "eval" and args.eval_localization == "fresh" and not args.tracking_mode:
+        if args.mode == "eval" and args.eval_localization in ("fresh", "vgl") and not args.tracking_mode:
             args.tracking_mode = choose("追跡方式", ["0", "1"], lambda v: "stereo VO（IMUなし）" if v == "0" else "VIO（IMUあり）")
         if args.mode in ("drive","eval") and not args.multicam_mode:
             import yaml

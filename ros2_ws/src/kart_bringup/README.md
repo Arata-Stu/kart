@@ -1172,3 +1172,13 @@ latencyは①relay受信→デコード通知受信、②relay受信→最初の
 
 検証: portable計画・TUI/CLI dry-run・launch接続・集計／自己完結HTML、C++時刻対応付けをテスト。
 ROS/Isaac ROS/CUDA componentのbuild・実bagを使うJetson再生・実走行との差は未検証。
+
+### VGL併用のoffline VO/VIO選択
+
+`bash scripts/bringup.sh` → offline bag評価 → VSLAM＋VGL → 追跡方式で
+VO（左右画像のみ）／VIO（左右画像＋IMU）を選択できる。既定候補はVO。
+`--tracking-mode 0|1`を明示した場合は追跡方式の選択を省略する。
+非対話は`--mode eval --eval-localization vgl --tracking-mode 0|1`を使用する。
+VIOではbag内の`/realsense/imu`が必須で、不足時は起動前に停止する。
+地図・モデル・HDMap等の選択と平面制約の既定ONは既存設定に従う。
+TUIからlaunchへの引数とIMU不足の拒否をportable testで確認。ROS/GPU・実bagの推定精度は未検証。
