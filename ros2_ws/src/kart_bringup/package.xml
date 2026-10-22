@@ -16,6 +16,8 @@
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>diagnostic_msgs</exec_depend>
   <exec_depend>kart_interfaces</exec_depend>
+  <exec_depend>rosbag2_py</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>rosbag2_interfaces</exec_depend>
   <exec_depend>rosbag2_transport</exec_depend>
   <exec_depend>rviz2</exec_depend>

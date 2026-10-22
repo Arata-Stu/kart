@@ -350,7 +350,7 @@ def main():
             raise ValueError('Section E2E needs stereo Infra for localization')
         resolve(config / 'localization', args.map_dir, '', enable_vgl=False)
     if args.mode in ("drive", "eval") and not fresh:
-        if not sensors["enable_infra1"]:
+        if args.mode == "drive" and not sensors["enable_infra1"]:
             raise ValueError("VSLAM/VGLにはInfraが必要です（なしは選択できません）")
         vslam_only = args.mode == "eval" and args.eval_localization != "vgl"
         if not args.map_file or not args.map_dir or (not vslam_only and not args.model_dir):
@@ -371,9 +371,15 @@ def main():
             config / "localization", args.map_dir, args.model_dir, overrides=overrides, enable_vgl=not vslam_only
         )
         if args.mode=="eval":args.tracking_mode=str(parameters['cuvslam']['tracking_mode'])
-        width, height, _ = sensors["depth_module.infra_profile"].split("x")
-        if not vslam_only and profile["input_shape"][2:] != [int(height), int(width)]:
-            raise ValueError("VGLモデルとInfra解像度が一致しません")
+        if not vslam_only:
+            if args.mode == "eval":
+                from kart_bringup.replay import validate_bag_shape
+                sizes = validate_bag_shape(config, args.bag, profile["input_shape"])
+                print(f"VGL bag入力解像度確認（先頭左右画像・CameraInfo）: {sizes}")
+            else:
+                width, height, _ = sensors["depth_module.infra_profile"].split("x")
+                if profile["input_shape"][2:] != [int(height), int(width)]:
+                    raise ValueError("VGLモデルとInfra解像度が一致しません")
     if args.mode != "eval":
         from kart_bringup.configuration import load
 

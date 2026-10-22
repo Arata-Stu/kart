@@ -5,7 +5,7 @@ import isaac_ros_launch_utils.all_types as lut
 import yaml
 from kart_bringup.localization import resolve
 from kart_bringup.mission import boolean, hdmap_choices
-from kart_bringup.replay import playback, imu_topics
+from kart_bringup.replay import playback, imu_topics, validate_bag_shape
 
 
 def add_evaluation(args):
@@ -14,7 +14,7 @@ def add_evaluation(args):
     base_frame = args.base_frame if args.base_frame != "" else settings["base_frame"]
     overrides={"use_sim_time": "true", "base_frame": base_frame}
     overrides.update({k:getattr(args,k) for k in ('tracking_mode','imu_frame','multicam_mode') if getattr(args,k)!=""})
-    parameters,_,_,_=resolve(
+    parameters,_,_,profile=resolve(
         root / "localization",
         args.map_dir,
         args.model_dir,
@@ -23,6 +23,8 @@ def add_evaluation(args):
     )
     mode=parameters['cuvslam']['tracking_mode']
     playback(root,args.bag,args.rate,extra_topics=imu_topics(root,mode))
+    if boolean(args.enable_vgl):
+        validate_bag_shape(root, args.bag, profile["input_shape"])
     if (args.lane_id, args.line_type) not in hdmap_choices(args.map_file):
         raise ValueError("Select a generated HDMap line")
 

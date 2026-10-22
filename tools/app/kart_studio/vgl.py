@@ -16,6 +16,7 @@ def model_option(model_dir):
     try:
         root, onnx, _ = model_files(model_dir)
         option["path"] = str(root)
+        option["onnx_sha256"] = digest(onnx)
         candidates = [root / "manifest.json"]
         if root.name == "runtime_models":
             candidates.append(root.parent / "manifest.json")
@@ -26,12 +27,47 @@ def model_option(model_dir):
             if (not isinstance(shape, list) or len(shape) != 4 or shape[:2] != [1, 3]
                     or any(type(v) is not int or not 16 <= v <= 8192 for v in shape[2:])):
                 raise ValueError("manifestの入力shapeが不正です")
-            if digest(onnx) != data["onnx_sha256"]:
+            if option["onnx_sha256"] != data["onnx_sha256"]:
                 raise ValueError("manifestとONNXのハッシュが一致しません")
             option.update(width=shape[3], height=shape[2])
     except (ValueError, KeyError, TypeError, OSError) as exc:
         option["error"] = str(exc)
     return option
+
+
+def capture_option(source, bundle, models):
+    """Find compatible local engines by content, independent of original PC paths."""
+    from kart_bringup.vgl_assets import map_files, validate_bundle
+
+    result = dict(path=str(bundle), input_shape=None, models=[], default_model="", error="")
+    try:
+        profile = read_json(bundle / "vgl_profile.json")
+        shape = profile["input_shape"]
+        if (profile.get("schema") != "kart.vgl.v1" or profile.get("status") != "complete"
+                or not isinstance(shape, list) or len(shape) != 4 or shape[:2] != [1, 3]
+                or any(type(v) is not int or v <= 0 for v in shape)):
+            raise ValueError("VGL地図の入力shape・完成状態を確認できません")
+        result["input_shape"] = shape
+        if map_files(source) != profile["cuvslam_sha256"]:
+            raise ValueError("VGL地図の元VSLAM地図が一致しません")
+        for model in models:
+            if model["error"] or model.get("onnx_sha256") != profile["onnx_sha256"]:
+                continue
+            if model["width"] is not None and [model["height"], model["width"]] != shape[2:]:
+                continue
+            try:
+                validate_bundle(bundle, model["path"])
+            except (ValueError, KeyError, TypeError, OSError):
+                continue
+            result["models"].append(model["path"])
+        result["models"].sort(key=lambda p: (Path(p).name != "runtime_models", p))
+        if result["models"]:
+            result["default_model"] = result["models"][0]
+        else:
+            result["error"] = "対応する実行用モデルがありません。同じONNXのモデルをこのGPUでbuildしてください。"
+    except (ValueError, KeyError, TypeError, OSError) as exc:
+        result["error"] = str(exc)
+    return result
 
 
 def catalog(app, key):
@@ -54,17 +90,16 @@ def catalog(app, key):
     index = 1
     while (root / f"{key}-vgl-v{index}").exists():
         index += 1
+    bundles = sorted(p for p in root.glob(f"{key}-vgl-v*") if (p / "vgl_profile.json").is_file())
+    options = [model_option(p) for p in models]
     return dict(
         models=[str(p) for p in models],
-        model_options=[model_option(p) for p in models],
+        model_options=options,
         defaults=defaults,
         error=error,
         name=f"{key}-vgl-v{index}",
-        bundles=[
-            str(p)
-            for p in root.glob(f"{key}-vgl-v*")
-            if (p / "vgl_profile.json").is_file()
-        ],
+        bundles=[str(p) for p in bundles],
+        bundle_options=[capture_option(source, p, options) for p in bundles],
     )
 
 

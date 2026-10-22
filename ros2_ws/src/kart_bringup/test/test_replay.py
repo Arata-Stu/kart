@@ -212,5 +212,53 @@ class ReplayTests(unittest.TestCase):
                 validate_runtime(bad)
 
 
+class BagShapeTests(unittest.TestCase):
+    def validate(self, changes=None, missing=None, wrong_type=None):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from kart_bringup.replay import validate_bag_shape
+        workflow = json.loads((CONFIG / 'localization/workflow.json').read_text())
+        topics = [workflow[k] for k in ('left_image', 'right_image', 'left_info', 'right_info')]
+        rows = [(t, SimpleNamespace(width=640, height=360), 0) for t in topics if t != missing]
+        for topic, msg, _ in rows:
+            if changes and topic in changes:
+                msg.width, msg.height = changes[topic]
+        class Reader:
+            def __init__(self): self.index = 0
+            def open(self, *_): pass
+            def get_all_topics_and_types(self):
+                return [SimpleNamespace(name=t, type='wrong' if t == wrong_type else
+                    ('sensor_msgs/msg/Image' if i < 2 else 'sensor_msgs/msg/CameraInfo')) for i, t in enumerate(topics)]
+            def set_filter(self, *_): pass
+            def has_next(self): return self.index < len(rows)
+            def read_next(self):
+                row = rows[self.index]; self.index += 1; return row
+        with tempfile.TemporaryDirectory() as bag, patch.dict('sys.modules', {
+            'rosbag2_py': SimpleNamespace(SequentialReader=Reader, StorageOptions=lambda **kw: kw,
+                ConverterOptions=lambda *args: args, StorageFilter=lambda **kw: kw),
+            'rclpy.serialization': SimpleNamespace(deserialize_message=lambda raw, _: raw),
+            'sensor_msgs.msg': SimpleNamespace(Image=object, CameraInfo=object),
+        }):
+            return validate_bag_shape(CONFIG, bag, [1, 3, 360, 640])
+
+    def test_recorded_size_matches_model_despite_live_yaml_424x240(self):
+        sizes = self.validate()
+        self.assertEqual(len(sizes), 4)
+        self.assertTrue(all(size == [640, 360] for size in sizes.values()))
+
+    def test_each_image_and_camera_info_mismatch_is_reported_with_sizes(self):
+        workflow = json.loads((CONFIG / 'localization/workflow.json').read_text())
+        for key in ('left_image', 'right_image', 'left_info', 'right_info'):
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, 'bag=424x240, model=640x360'):
+                self.validate(changes={workflow[key]: [424, 240]})
+
+    def test_missing_message_and_wrong_type_rejected(self):
+        workflow = json.loads((CONFIG / 'localization/workflow.json').read_text())
+        with self.assertRaisesRegex(ValueError, 'メッセージ'):
+            self.validate(missing=workflow['right_info'])
+        with self.assertRaisesRegex(ValueError, 'wrong type'):
+            self.validate(wrong_type=workflow['left_image'])
+
+
 if __name__ == "__main__":
     unittest.main()

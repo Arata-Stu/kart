@@ -271,6 +271,8 @@ missionはsensor containerのみを所有し、sensor moduleはloadのみ。
 driveのVSLAM、RGB e2eのimage encoder/TensorRTは実センサと同じcontainerへloadする。
 VGL/vehicle/trackingは各top-level launch所有。下位moduleはloadのみ。
 evalは実センサなしのbag再生なのでlocalization自身がcontainerを所有する。
+VGL併用のoffline評価は実カメラ設定ではなく、bagの先頭の左右画像・CameraInfoとモデル入力shapeを照合する。
+不一致時は記録側とモデル側のサイズを表示する。先頭検査と全区間の整合性検証は区別する。
 
 E2Eはlocalizationを起動せず、実行時throttleと前処理の正本はモデルmetadata。
 evalは再生・localization・HDMap・RVizに限定し、古い動的TFや制御指令を再生しない。

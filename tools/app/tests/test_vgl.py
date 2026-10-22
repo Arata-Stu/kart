@@ -69,6 +69,50 @@ class ModelOptionTests(unittest.TestCase):
                          onnx_sha256=digest(files / 'aliked.onnx'))
         atomic_json(self.manifest, self.data)
 
+    def bundle_fixture(self):
+        from kart_bringup.vgl_assets import CONFIG_FILES, digest, map_files
+        source = self.root / 'source'
+        bundle = self.root / 'bundle'
+        for root in (source, bundle):
+            (root / 'cuvslam_map').mkdir(parents=True)
+            (root / 'cuvslam_map/map.mdb').write_bytes(b'map')
+        config = bundle / 'vgl_runtime_config'
+        config.mkdir()
+        for filename in CONFIG_FILES:
+            (config / filename).write_text('setting: true')
+        (config / CONFIG_FILES[0]).write_text('aliked_detector { tensorrt_config { input_dimension {' +
+            ' '.join(f'{key}: {v}' for key in ('min', 'opt', 'max') for v in (1, 3, 480, 640)) + '} } }')
+        for filename in ('keyframes/frames_meta.json', 'bow_index.pb', 'vocabulary/vocab.pb'):
+            path = bundle / 'cuvgl_map' / filename
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('data')
+        atomic_json(bundle / 'vgl_profile.json', dict(schema='kart.vgl.v1', status='complete',
+            input_shape=[1, 3, 480, 640], onnx_sha256=self.data['onnx_sha256'],
+            cuvslam_sha256=map_files(source), config_sha256={f: digest(config / f) for f in CONFIG_FILES},
+            source_map='/another-PC/original-map'))
+        return source, bundle
+
+    def test_capture_default_matches_hash_and_shape_not_pc_path(self):
+        source, bundle = self.bundle_fixture()
+        correct = vgl.model_option(self.models)
+        wrong_hash = {**correct, 'path': '/models/wrong-weights', 'onnx_sha256': 'different'}
+        wrong_size = {**correct, 'path': '/models/wrong-size', 'width': 424, 'height': 240}
+        result = vgl.capture_option(source, bundle, [wrong_hash, wrong_size, correct])
+        self.assertEqual(result['models'], [str(self.models)])
+        self.assertEqual(result['default_model'], str(self.models))
+        self.assertFalse(result['error'])
+        missing = vgl.capture_option(source, bundle, [wrong_hash, wrong_size])
+        self.assertFalse(missing['default_model'])
+        self.assertTrue(missing['error'])
+
+    def test_capture_default_rejects_wrong_source_and_corrupted_bundle(self):
+        source, bundle = self.bundle_fixture()
+        model = vgl.model_option(self.models)
+        (bundle / 'vgl_runtime_config/matching_config.pb.txt').write_text('modified')
+        self.assertTrue(vgl.capture_option(source, bundle, [model])['error'])
+        (source / 'cuvslam_map/map.mdb').write_bytes(b'other map')
+        self.assertIn('VSLAM', vgl.capture_option(source, bundle, [model])['error'])
+
     def test_size_from_hash_matched_manifest_not_folder_name(self):
         option = vgl.model_option(self.models)
         self.assertEqual((option['width'], option['height']), (640, 480))

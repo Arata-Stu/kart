@@ -19,6 +19,30 @@ spec.loader.exec_module(module)
 
 
 class FzfTests(unittest.TestCase):
+    def test_additional_camera_profiles_reach_tui_and_launch_arguments(self):
+        expected = {f"{size}x{fps}" for size in ("480x270", "640x360") for fps in (30, 60, 90)}
+        for mode in ("collect", "environment"):
+            for profile in sorted(expected):
+                with self.subTest(mode=mode, profile=profile):
+                    selected = []
+                    def choose(title, values, *args, **kwargs):
+                        if title == "用途":
+                            return mode
+                        if "解像度 × FPS" in title:
+                            self.assertTrue(expected.issubset(set(values)))
+                            selected.append(title)
+                            return profile
+                        return values[0]
+                    output = io.StringIO()
+                    with (patch.object(sys, "argv", ["bringup.py", "--dry-run", "--no-bridge", "--no-evs",
+                                                     "--run-name", "profile_check", "--auto-fixed-throttle=-1"]),
+                          patch.object(sys.stdin, "isatty", return_value=True),
+                          patch.object(module, "choose", side_effect=choose), redirect_stdout(output)):
+                        module.main()
+                    self.assertEqual(len(selected), 2)
+                    for key in ("rgb_profile", "infra_profile"):
+                        self.assertIn(f"{key}:={profile}", output.getvalue())
+
     def test_default_duplicate_labels_and_original_path(self):
         values = [Path("/maps/a b"), Path("/maps/a\nb")]
         def run(command, **kwargs):
@@ -145,7 +169,7 @@ class FreshDiagnosticTests(unittest.TestCase):
                 if explicit:
                     argv += ['--tracking-mode', mode]
                 output = io.StringIO()
-                with patch.object(sys, 'argv', argv), patch.object(sys.stdin, 'isatty', return_value=True), patch.object(module, 'choose', side_effect=choose), patch.object(mission, 'discover', side_effect=discover), patch.object(mission, 'hdmap_choices', return_value=[('lane_001', 'centerline')]), patch.object(localization, 'resolve', return_value=({'cuvslam': {'tracking_mode': int(mode)}}, None, None, {'input_shape': [1, 3, 240, 424]})) as resolve, redirect_stdout(output):
+                with patch.object(sys, 'argv', argv), patch.object(sys.stdin, 'isatty', return_value=True), patch.object(module, 'choose', side_effect=choose), patch.object(mission, 'discover', side_effect=discover), patch.object(mission, 'hdmap_choices', return_value=[('lane_001', 'centerline')]), patch.object(localization, 'resolve', return_value=({'cuvslam': {'tracking_mode': int(mode)}}, None, None, {'input_shape': [1, 3, 360, 640]})) as resolve, patch('kart_bringup.replay.validate_bag_shape', return_value={}) as shape_check, redirect_stdout(output):
                     if mode == '1' and not has_imu:
                         with self.assertRaisesRegex(ValueError, '/realsense/imu'):
                             module.main()
@@ -154,6 +178,7 @@ class FreshDiagnosticTests(unittest.TestCase):
                 self.assertEqual('追跡方式' in titles, not explicit)
                 self.assertEqual(resolve.call_args.kwargs['overrides']['tracking_mode'], mode)
                 self.assertTrue(resolve.call_args.kwargs['enable_vgl'])
+                shape_check.assert_called_once_with(module.ROOT / 'ros2_ws/src/kart_bringup/config', str(bag), [1, 3, 360, 640])
                 self.assertIn('enable_vgl:=true', output.getvalue())
                 self.assertIn(f'tracking_mode:={mode}', output.getvalue())
 

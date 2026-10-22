@@ -14,6 +14,44 @@ def imu_topics(config, mode):
     return [json.loads((Path(config)/'localization/workflow.json').read_text())['imu']]
 
 
+def validate_bag_shape(config, bag, shape):
+    """Check the first recorded stereo Image and CameraInfo sizes, not live YAML."""
+    try:
+        import rosbag2_py
+        from rclpy.serialization import deserialize_message
+        from sensor_msgs.msg import Image, CameraInfo
+    except ImportError as error:
+        raise ValueError("VGLのbag解像度検査にはROS環境（rosbag2_py・sensor_msgs）が必要です") from error
+    if (not isinstance(shape, list) or len(shape) != 4 or shape[:2] != [1, 3]
+            or any(type(v) is not int or v <= 0 for v in shape)):
+        raise ValueError("VGLモデルの入力shapeが不正です")
+    workflow = json.loads((Path(config) / "localization/workflow.json").read_text())
+    topics = {workflow[k]: (Image, "sensor_msgs/msg/Image") for k in ("left_image", "right_image")}
+    topics.update({workflow[k]: (CameraInfo, "sensor_msgs/msg/CameraInfo") for k in ("left_info", "right_info")})
+    reader = rosbag2_py.SequentialReader()
+    reader.open(rosbag2_py.StorageOptions(uri=str(Path(bag).expanduser().resolve(strict=True))),
+                rosbag2_py.ConverterOptions("", ""))
+    available = {t.name: t.type for t in reader.get_all_topics_and_types()}
+    for topic, (_, kind) in topics.items():
+        if available.get(topic) != kind:
+            raise ValueError(f"Bag input missing or wrong type: {topic} (expected {kind})")
+    reader.set_filter(rosbag2_py.StorageFilter(topics=list(topics)))
+    sizes = {}
+    while reader.has_next() and len(sizes) < len(topics):
+        topic, raw, _ = reader.read_next()
+        if topic in sizes:
+            continue
+        msg = deserialize_message(raw, topics[topic][0])
+        actual = [msg.height, msg.width]
+        if actual != shape[2:]:
+            raise ValueError(f"VGLモデルとbagの解像度が一致しません: {topic}: "
+                             f"bag={msg.width}x{msg.height}, model={shape[3]}x{shape[2]}")
+        sizes[topic] = [msg.width, msg.height]
+    if len(sizes) != len(topics):
+        raise ValueError("Bagに左右画像・CameraInfoの有効なメッセージがありません")
+    return sizes
+
+
 def playback(config, bag, rate="", extra_topics=None):
     config, bag = Path(config), Path(bag).expanduser().resolve(strict=True)
     try:

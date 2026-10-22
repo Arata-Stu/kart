@@ -144,6 +144,13 @@ bringup.shのevalでは「VSLAMのみ」（既定）と「VSLAM＋VGL」を選�
 
 evaluation.launch.pyの`enable_vgl`既定はfalse、localization.launch.pyでは互換性のためtrue。false時は`model_dir`不要、VGL node/専用containerを起動せず、VSLAMのみ`localize_on_startup=true`・`enable_request_hint=false`で起動する。map_dirは地図ルートまたはcuvslam_map自体。TFのpublisherはVSLAMのみ、bagの古いTFは再生しない。HDMapと同じ地図座標系を選ぶ。初期探索範囲内に位置がない場合はlocalizationが成立しないことがあり、実際の一致をRVizで確認する。
 
+
+VGL併用のoffline評価では、実カメラ用YAMLのInfra解像度を比較対象にしない。
+選択bagの先頭の左右`Image`と左右`CameraInfo`を読み、VGL bundleの入力shapeと照合する。
+`bringup.sh`と`evaluation.launch.py`の直接起動の両方で検査し、実不一致時はtopic名・bagサイズ・モデルサイズを表示する。
+この検査は先頭の各1メッセージが対象で、途中の解像度変化や全画像処理の完了を保証しない。
+解像度の自動変更・resizeは行わない。走行時の実カメラ設定との照合は維持する。
+
 ## VGLモデルをkartで生成
 
 `scripts/vgl_model.sh`は424×240 ALIKEDのソース取得・ONNX再export・公式TensorRT engine生成の入口。
@@ -371,6 +378,14 @@ bash scripts/bringup.sh --mode collect --rgb-profile 1280x720x30 --infra-profile
 ```
 
 RGBだけ高解像度でbagへ記録する例。Infraも必要なら`--infra-profile 424x240x60`などを指定する。
+640×360・480×270もRGB / Infraの対話候補から選択できる。CLI例（640×360・60 FPS）:
+
+```bash
+bash scripts/bringup.sh --mode collect --rgb-profile 640x360x60 --infra-profile 640x360x60
+```
+
+起動せず採用設定とlaunch引数だけ確認する場合は`--dry-run --no-bridge`を追加する。
+
 候補は424×240・480×270・640×360（各30/60/90）、640×480（30/60）、848×480（30/60/90）、
 1280×720（15/30）、1280×800（30）とOFF（`0`）。
 USB3 D455向けの候補であり、全stream・機種・firmwareでの対応保証ではない。

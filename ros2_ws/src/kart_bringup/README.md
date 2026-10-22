@@ -508,6 +508,14 @@ bagは左右のrectified画像・CameraInfo・/tf_staticが必要。VIOでは/re
 
 evaluation.launch.pyの`enable_vgl`既定はfalse、localization.launch.pyでは互換性のためtrue。false時は`model_dir`不要、VGL node/専用containerを起動せず、VSLAMのみ`localize_on_startup=true`・`enable_request_hint=false`で起動する。map_dirは地図ルートまたはcuvslam_map自体。TFのpublisherはVSLAMのみ、bagの古いTFは再生しない。HDMapと同じ地図座標系を選ぶ。初期探索範囲内に位置がない場合はlocalizationが成立しないことがあり、実際の一致をRVizで確認する。
 
+
+VGL併用のoffline評価では、実カメラ用YAMLのInfra解像度を比較対象にしない。
+選択bagの先頭の左右`Image`と左右`CameraInfo`を読み、VGL bundleの入力shapeと照合する。
+`bringup.sh`と`evaluation.launch.py`の直接起動の両方で検査し、実不一致時はtopic名・bagサイズ・モデルサイズを表示する。
+この検査は先頭の各1メッセージが対象で、途中の解像度変化や全画像処理の完了を保証しない。
+解像度の自動変更・resizeは行わない。走行時の実カメラ設定との照合は維持する。
+追加ノード／topic／parameterはなし。ROS bag reader依存はrosbag2_py・sensor_msgs（Dockerに導入済み）。
+
 ## Web UIからVGL地図を追加生成
 
 既存地図を開き「VGL地図を追加生成」を選択する。ALIKED/LightGlueモデルはmodelsとmap以下の候補から選ぶかパスを入力し、画像サイズ（既定424×240）と保存名（地図名-vgl-vN）を指定する。実行GPUでbuild済みのengineが必要で、download/buildは自動実行しない。公式offline処理の保存画像・posesがない場合は生成できない理由を表示する。
@@ -956,6 +964,14 @@ collect/evalでは復帰選択を受け付けない。起動による録画/AUTO
 `mission.launch.py`と`modules/sensors/realsense.launch.py`の`rgb_profile` / `infra_profile`
 （文字列、既定は空）は`WIDTHxHEIGHTxFPS`で該当streamの解像度・FPSを一括指定する。
 `0`は無効化、空はYAML保持。旧`rgb_fps` / `infra_fps`と同一streamで併用するとエラー。
+640×360・480×270もRGB / Infraの対話候補から選択できる。CLI例（640×360・60 FPS）:
+
+```bash
+bash scripts/bringup.sh --mode collect --rgb-profile 640x360x60 --infra-profile 640x360x60
+```
+
+起動せず採用設定とlaunch引数だけ確認する場合は`--dry-run --no-bridge`を追加する。
+
 候補は424×240・480×270・640×360（各30/60/90）、640×480（30/60）、848×480（30/60/90）、
 1280×720（15/30）、1280×800（30）。USB3 D455向けの候補で、実機対応は起動ログで確認する。
 元のノード名・topic名・型は変更しない。記録画像の寸法とcamera_infoが選択に従って変わる。
