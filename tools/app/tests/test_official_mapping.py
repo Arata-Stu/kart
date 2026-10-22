@@ -40,6 +40,9 @@ class OfficialMappingTests(unittest.TestCase):
                     command[-3:], ["--steps_to_run", "edex", "compute_poses"]
                 )
                 self.assertIn("--use_raw_image=False", command)
+                planar = self.job["workflow"].get("ground_constraint", True)
+                index = command.index("--override")
+                self.assertEqual(command[index + 1], f"cuvslam.cfg_planar={str(planar).lower()}")
                 artifact = self.output / "official/run/cuvslam_map"
                 artifact.mkdir(parents=True)
                 (artifact / "map.mdb").write_bytes(b"test map")
@@ -70,6 +73,10 @@ class OfficialMappingTests(unittest.TestCase):
         renamed = self.root / "published"
         self.output.rename(renamed)
         self.assertTrue((renamed / "official/latest").is_dir())
+
+    def test_ground_constraint_can_be_disabled(self):
+        self.job["workflow"]["ground_constraint"] = False
+        self.test_official_cli_and_artifact()
 
     def test_missing_official_map_is_failure(self):
         with (

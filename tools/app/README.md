@@ -278,6 +278,8 @@ python3 tools/app/make_demo.py --data-root /tmp/kart-studio-demo
 複製は中止可能なファイルコピーのみで、ROS・GPU処理やbag再生は行わない。コピー分のディスク容量は必要。
 
 既定の地図生成は公式 `create_map_offline.py --steps_to_run edex compute_poses`。
+平坦路向けにworkflowの`ground_constraint=true`を既定とし、`--override cuvslam.cfg_planar=true`を渡す。
+保存済み地図には遡及適用されないため、poses・occupancy・meshは再生成する。
 任意でdepth・occupancyを追加し、占有地図と3Dメッシュを生成できる（末尾の説明を参照）。
 VSLAMバイナリ・軌跡・ログを保存し、「VSLAM作成済み・点群未取得」と表示する。
 HDMap用点群は作成しない。点群未取得の地図は複製・削除可能だが、HDMap編集・生成・export・送信は不可。

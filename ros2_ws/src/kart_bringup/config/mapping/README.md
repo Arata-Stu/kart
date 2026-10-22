@@ -60,7 +60,7 @@ SENSOR_DATAはbest effort / volatile / depth 5、DEFAULTはreliable / volatile /
 | img_mask_top / bottom / left / right | 各0 | 入力画像の周辺マスクpixel数 |
 | enable_image_denoising | false | ノイズ除去 |
 | rectified_images | true | 歪み補正済み画像 |
-| enable_ground_constraint_in_odometry / in_slam | false / false | 平面拘束 |
+| enable_ground_constraint_in_odometry / in_slam | true / true | 平坦路向けの平面拘束 |
 | enable_localization_n_mapping | true | SLAM有効 |
 | tracking_mode | 0 | Stereo VO。明示指定1でVIO |
 | debug_imu_mode | false | IMU debug |

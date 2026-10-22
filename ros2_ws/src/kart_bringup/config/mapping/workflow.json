@@ -14,5 +14,6 @@
     ]
   },
   "dense_reconstruction": false,
-  "fs_model_res": "low_res"
+  "fs_model_res": "low_res",
+  "ground_constraint": true
 }

@@ -15,6 +15,13 @@
 - 実運用値はkart_bringup/config/localizationへ集約し、launchは明示引数だけ上書きする。
   [実行契約・検証範囲](../../ros2_ws/src/kart_bringup/config/localization/README.md)を参照。
 
+## 平坦路の平面制約
+
+RCカーの平坦路走行を標準とし、地図生成・capture・localization・tuning・simの
+VSLAMはodometry/SLAM双方の平面制約を既定ONにする。
+公式offline工程はworkflowのground_constraint=trueをcfg_planarへ明示的に渡す。
+これは推定中の制約であり、生成後の地面合わせとは別。既存地図は自動変更しない。
+
 ## launchの記述規約
 
 localizationはIsaac ROS 5.0のmapping/localization系に合わせ、

@@ -1,5 +1,8 @@
 # 走行時VSLAM + VGL
 
+平坦路を走行するRCカー向けに、`enable_ground_constraint_in_odometry`と
+`enable_ground_constraint_in_slam`はともに既定`true`（平面制約ON）。
+
 Isaac ROS release-5.0を対象に、既存地図への再局在と追跡だけを起動する。
 自身のROSノードはなし。カメラ、取付TF、車両、Foxglove bridgeは別起動。
 静的設定はこのディレクトリが正本。引数で明示された値だけを上書きする。

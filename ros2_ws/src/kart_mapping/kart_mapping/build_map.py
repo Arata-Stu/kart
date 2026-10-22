@@ -13,6 +13,9 @@ def run(job):
     from .dense_outputs import options, collect, require_engine
 
     workflow = job["workflow"]
+    planar = workflow.get("ground_constraint", True)
+    if not isinstance(planar, bool):
+        raise ValueError("ground_constraint must be a boolean")
     dense, resolution = options(workflow)
     if dense:
         require_engine(resolution)
@@ -62,6 +65,8 @@ def run(job):
         f"--base_link_name={parameters['base_frame']}",
         "--use_raw_image=False",
         "--print_mode=all",
+        "--override",
+        f"cuvslam.cfg_planar={str(planar).lower()}",
         *(["--depth_model=foundationstereo", f"--fs_model_res={resolution}"] if dense else []),
         "--steps_to_run",
         *steps,

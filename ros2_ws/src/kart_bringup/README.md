@@ -1,5 +1,8 @@
 # kart_bringup
 
+平坦路を走行するRCカー向けに、`enable_ground_constraint_in_odometry`と
+`enable_ground_constraint_in_slam`はともに既定`true`（平面制約ON）。
+
 ## 車両特性の手動記録
 
 `fixed_command:=true throttle:=0.10 steering:=0.0`を追加すると、

@@ -23,6 +23,7 @@ bag検査はrosbag readerで行い、ROSトピック再生はしない。Collect
 
 | 設定 | 既定値・意味 |
 |---|---|
+| ground_constraint | true。公式offline cuVSLAMのcfg_planarへ渡す平面制約。falseで明示解除 |
 | dense_reconstruction | false。trueでFoundationStereo深度＋nvblox占有地図・メッシュを生成 |
 | fs_model_res | low_res。low_res / high_res。公式FoundationStereoモデル解像度 |
 | ros_domain_id | 92。環境変数と一致させる。UI内で排他 |
@@ -35,7 +36,9 @@ bag検査はrosbag readerで行い、ROSトピック再生はしない。Collect
 
 起動後の設定変更なし。再生速度・固定drain秒数・save_map待機設定は公式経路では使用しないため削除。
 カメラ設定はジョブごとに`camera_topics.yaml`として保存し、公式CLIへ渡す。
-cuVSLAM内部の設定はインストールされた公式map_creation_configの既定値を利用する。
+cuVSLAMは`--override cuvslam.cfg_planar=true`を既定で渡し、平坦路向けの平面制約を有効にする。
+その他の内部設定はインストールされた公式map_creation_configの既定値を利用する。
+既存地図は変更されない。新しい設定を反映するにはposesとoccupancy・meshを再生成する。
 
 ## 成果物・成功条件
 

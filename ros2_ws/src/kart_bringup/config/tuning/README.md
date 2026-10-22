@@ -1,5 +1,8 @@
 # 手動の車両特性記録
 
+平坦路を走行するRCカー向けに、`enable_ground_constraint_in_odometry`と
+`enable_ground_constraint_in_slam`はともに既定`true`（平面制約ON）。
+
 `launch.json`の`fixed_command`は既定false。明示`fixed_command:=true`で固定AUTO指令を追加する。
 値の正本は`fixed_command.yaml`。全parameterの既定値・意味は
 [kart_control](../../../kart_control/README.md#固定指令による車両特性試験)参照。

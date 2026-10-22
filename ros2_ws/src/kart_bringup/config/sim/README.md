@@ -1,5 +1,8 @@
 # Simulation configuration
 
+平坦路を走行するRCカー向けに、`enable_ground_constraint_in_odometry`と
+`enable_ground_constraint_in_slam`はともに既定`true`（平面制約ON）。
+
 `sim.yaml`がkart_simの運用parameter正本。全parameter・topic・TF・センサ校正条件は
 [kart_sim README](../../../kart_sim/README.md)を参照。
 `sim.launch.py`はmap/map_dirからmap_fileを解決し、明示指定された
