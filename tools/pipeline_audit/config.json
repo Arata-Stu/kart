@@ -16,7 +16,7 @@
     "evs_timing": "/event_camera/tensor_timing",
     "logs": "/rosout"
   },
-  "sync_topics": ["/realsense/infra1/image_rect_raw", "/realsense/infra2/image_rect_raw", "/realsense/imu"],
+  "sync_topics": ["/realsense/infra1/image_rect_raw", "/realsense/infra2/image_rect_raw", "/realsense/imu", "/event_camera/event_image"],
   "state_timeout_s": 0.5,
   "mode_timeout_s": 0.3,
   "match_window_s": 2.0,

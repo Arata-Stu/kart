@@ -5,6 +5,7 @@ import math
 from statistics import median
 
 from .bag import COMMAND, SENSORS
+from .evs_clock import progress as evs_clock_progress
 
 
 def validate(config):
@@ -232,6 +233,13 @@ def analyze(data, config):
                     point('sync', topic + ' nearest header - source', source, delta)
         sync.append(dict(topic=topic, **stats(distances)))
 
+    clock_segments, clock_series = evs_clock_progress(records, topics['evs_timing'])
+    for sample in clock_series:
+        reference = dict(bag_ns=sample['bag_ns'])
+        point('evs_clock', f"EVS segment {sample['segment']} recorder minus sensor elapsed", reference,
+              sample['recorded_minus_sensor_elapsed_ms'])
+        point('evs_clock', f"EVS segment {sample['segment']} sensor-to-ROS offset change", reference,
+              sample['offset_change_ms'])
     last_states = {}
     last_evs = None
     for row in records:
@@ -327,6 +335,7 @@ def analyze(data, config):
                    duration_s=(records[-1]['bag_ns'] - origin) / 1e9,
                    config=config, inventory=data.get('inventory', {}), missing_topics=missing,
                    streams=streams, coverage=coverage, synchronization=sync,
+                   evs_clock_segments=clock_segments,
                    observed_latency_ms={role: stats([m['source_to_stage_recorded_ms'] for m in matches
                                                     if m['stage'] == role and m['reason'] == 'matched' and not m['repeated']])
                                         for role in ('tensor_input', 'tensor_output', 'decoder', 'auto', 'final')},

@@ -924,6 +924,14 @@ launch配線はtest_e2e_composition.pyと既存EVS/mission testで検証する�
 
 E2E decoderの画像時刻未来ずれは`config/e2e/control_decoder.yaml`の
 `image_future_tolerance_s: 0.005`（5ms、起動時固定）まで許容する。
+
+同じYAMLの`prediction_order_policy: observe`（既定・起動時固定）は、
+decoder入力の元画像stampの逆順・同一・非正値を観測する。既定では破棄せず従来の検査へ渡す。
+`drop`へ変更して再起動すると、それらをCUDA readback前に破棄する。
+比較基準はepoch内の最大stamp。mode変更／ROS時計巻戻りでresetする。
+`E2E prediction order:`警告にreason・policy・action・現在と最大のstamp ns・異常種別ごとの累積件数が出る。
+ログはsteady clockで1秒間隔に抑制。ログ行数と発生件数は異なる。
+正常結果への追加payloadコピー・topic・QoS変更はない。詳細は[kart_e2e README](../kart_e2e/README.md#control-decoderの入出力)。
 小さなセンサ時刻ずれで停止させないための許容で、150msの期限切れ監視は変更しない。
 
 

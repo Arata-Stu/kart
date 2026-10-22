@@ -9,6 +9,7 @@ PANELS = {
     'response_steering': '操舵指令 ↔ IMU角速度',
     'response_drive': '駆動・制動指令 ↔ IMU加速度',
     'age': 'Header → bag recorder age [ms] (clock offset / queueing included)',
+    'evs_clock': 'EVS clock progress / offset change [ms] relative to segment start (not absolute physical lag)',
     'matched': 'Exact same frame: first recorded observation gaps [ms]',
     'cadence': 'Sensor / command intervals [ms]',
     'sync': 'Nearest sensor header − source header [ms] (not clock calibration)',

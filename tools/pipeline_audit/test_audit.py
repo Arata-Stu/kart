@@ -136,6 +136,24 @@ def test_event_context_and_nearest_sensor_difference():
     assert summary['synchronization'][0]['mean'] == 2
 
 
+def test_event_image_recording_age_is_separate_from_header_matching():
+    data = fixture()
+    topic = '/event_camera/event_image'
+    assert topic in CONFIG['sync_topics']
+    # Same header as an RGB frame, but received 300 ms after that header.
+    # Header matching alone must not be called physical synchronization.
+    for t in range(20, 900, 40):
+        data['records'].append(sample(topic, t + 300, t, kind='sensor_msgs/msg/Image'))
+    summary, _, _, _ = analyze(data, CONFIG)
+    stream = next(s for s in summary['streams'] if s['topic'] == topic)
+    assert stream['age_mean'] == 300
+    sync = next(s for s in summary['synchronization'] if s['topic'] == topic)
+    assert sync['mean'] == 0
+    missing, _, _, _ = analyze(fixture(), CONFIG)
+    sync = next(s for s in missing['synchronization'] if s['topic'] == topic)
+    assert sync['mean'] is None
+
+
 def test_spike_preserving_downsampling_and_chronological_order():
     points = [(i / 100, 500. if i == 54321 else -200. if i == 54322 else 1.) for i in range(100000)]
     out = downsample(points, 1000)

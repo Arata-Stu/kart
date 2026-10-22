@@ -2,6 +2,7 @@
 #include "isaac_ros_common/cuda_stream.hpp"
 #include "isaac_ros_tensor_msgs/msg/tensor_list.hpp"
 #include "kart_e2e/control_gate.hpp"
+#include "kart_e2e/prediction_order.hpp"
 #include "kart_interfaces/msg/control_command.hpp"
 #include "kart_interfaces/msg/e2_e_head_selection.hpp"
 #include "kart_e2e/head_routing.hpp"
@@ -54,6 +55,8 @@ public:
     timeout_ = setting<double>("input_timeout_s", .15);
     mode_timeout_ = setting<double>("mode_timeout_s", .3);
     future_tolerance_ = setting<double>("image_future_tolerance_s", .005);
+    order_policy_ = setting<std::string>("prediction_order_policy", "observe");
+    order_ = std::make_unique<PredictionOrder>(order_policy_);
     const auto fixed = setting<double>("fixed_throttle", 0.0);
     const auto use_fixed = setting<bool>("use_fixed_throttle", false);
     const auto maximum = setting<double>("max_throttle", .2);
@@ -76,6 +79,7 @@ public:
           std::lock_guard<std::mutex> lock(mutex_);
           if (msg->mode != mode_.mode) {
             ++generation_;
+            order_->reset();
             prediction_.clear();
             pending_.clear();
             gate_->transition();
@@ -117,6 +121,23 @@ private:
     {
       std::lock_guard<std::mutex> lock(mutex_);
       generation = generation_;
+      const int64_t stamp = int64_t(msg->header.stamp.sec) * 1000000000LL +
+                            msg->header.stamp.nanosec;
+      const auto order = order_->inspect(stamp);
+      if (order.reason) {
+        RCLCPP_WARN_THROTTLE(get_logger(), order_log_clock_, 1000,
+            "E2E prediction order: %s; policy=%s; action=%s; "
+            "stamp_ns=%lld; highest_previous_stamp_ns=%lld; "
+            "out_of_order_total=%llu; duplicate_total=%llu; invalid_stamp_total=%llu",
+            order.reason, order_policy_.c_str(), order.keep ? "use_existing_checks" : "drop",
+            static_cast<long long>(stamp), static_cast<long long>(order.previous),
+            static_cast<unsigned long long>(order_->backwards()),
+            static_cast<unsigned long long>(order_->duplicates()),
+            static_cast<unsigned long long>(order_->invalid()));
+      }
+      // No tensor access, vector allocation or CUDA readback for dropped data.
+      // Do not refresh the previous prediction's header or receipt watchdog.
+      if (!order.keep) return;
     }
     std::vector<float> values;
     try {
@@ -171,6 +192,7 @@ private:
     if (last_time_ >= 0 && sec < last_time_) {
       gate_->fault();
       ++generation_;
+      order_->reset();
       prediction_.clear();
       pending_.clear();
       if (head_routing_) head_routing_->reset();
@@ -262,6 +284,9 @@ private:
   Clock::time_point received_{}, mode_received_{}, reported_{};
   std::vector<float> prediction_;
   std::unique_ptr<ControlGate> gate_;
+  std::string order_policy_;
+  std::unique_ptr<PredictionOrder> order_;
+  rclcpp::Clock order_log_clock_{RCL_STEADY_TIME};
   nvidia::isaac_ros::common::CudaStreamPtr stream_;
   rclcpp::CallbackGroup::SharedPtr tensor_group_;
   rclcpp::Subscription<TensorList>::SharedPtr tensor_sub_;

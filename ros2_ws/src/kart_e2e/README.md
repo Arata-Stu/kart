@@ -109,6 +109,22 @@ AUTO進入100msは中立。その後の期限切れ・不正値・mode途絶・�
 競合検出は起動順の競合を完全に防ぐarbiterではない。複数AUTO producerを起動しない。
 中立指令は物理停止を保証しない。MANUAL/STOP中は確認用topicも中立。
 
+decoderはTensorListの元画像stampだけをCUDA readback前に検査する。
+`prediction_order_policy: observe`が既定で、逆順・同一stamp・非正stampを警告し、
+従来どおりのdecode／鮮度／値検査へ進む。観測だけで新たな破棄やSTOPは行わない。
+`drop`にすると、それらをvector確保・GPUハンドル取得・GPU→CPUコピー前に破棄する。
+正常結果のコピー回数や画像/Tensorのコピーは増やさず、整数の時刻・件数だけを保持する。
+比較対象は同じmode／時計epochで観測した最大stamp（直前到着stampではない）。
+mode変更・ROS時計巻戻りで比較基準をresetし、処理中の旧世代結果は従来のgeneration検査で除外する。
+破棄時は保持中の予測・元画像stamp・受信時刻を更新せず、既存の期限切れ判定を維持する。
+同じ画像による50Hzの指令再出版はこの検査の対象外。RGB・EVS・single/multi-head共通。
+
+警告は`E2E prediction order:`で検索できる。`out_of_order`／`duplicate_stamp`／`invalid_stamp`、
+policy、action、incoming stamp ns、直前の最大stamp ns、各異常のノード起動後累積件数を出す。
+steady clockで最大1秒に1回に抑制し、異常ごとの件数は抑制中も加算する。
+従って警告行数は発生件数ではなく、次に出た警告のtotalで確認する。実機で発生済みという意味ではない。
+独自topic・QoS・serviceの追加はなし。通常ROSログ／`/rosout`を使う。
+
 ### 全decoder parameter
 
 全独自parameterは起動時固定。ROS共通`use_sim_time`以外の動的変更は不可。
@@ -124,6 +140,7 @@ pkg基準値は`config/control_decoder.yaml`、実運用はbringupの同名YAML�
 |max_throttle|0.2|スロットル上限[0,1]|
 |input_timeout_s|0.15|撮影から出力までの期限秒。decoder受信wall鮮度も確認|
 |image_future_tolerance_s|0.005|画像stampがROS現在時刻より先になる許容秒。起動時固定、0..0.05、0で厳密判定|
+|prediction_order_policy|observe|起動時固定。observeは順序違反を警告して従来処理を継続、dropは逆順・同一・非正stampのTensorをコピー前に破棄|
 |mode_timeout_s|0.3|modeのstamp・受信wall鮮度上限秒|
 |control_rate_hz|50.0|watchdog/指令周期[1,100]Hz|
 |drive_enabled|false|AUTO muxへの接続|

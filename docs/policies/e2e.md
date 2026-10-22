@@ -144,6 +144,14 @@ E2E画像stampの未来ずれは、明示したimage_future_tolerance_s（既定
 小さな時刻差だけを許容する。画像stampの上書きや過去期限の延長は行わない。
 期限切れ・AUTO前の画像・非有限値・受信途絶・異常ラッチは従来どおり拒否する。
 
+decoderは元画像stampの順序をpayloadに触れる前に監視する。
+prediction_order_policyは起動時固定のobserve（既定）／dropとし、observeは異常をログに残すだけで従来の採用条件を変えない。
+dropは同じepochで観測した最大stamp以下、または非正stampの入力をCUDA readback前に破棄する。
+mode変更・ROS時計巻戻りで比較基準をresetする。処理中の旧epoch結果はgeneration検査で除外する。
+破棄で既存予測のstamp・受信鮮度を更新しない。制御timerによる同一frame再出版とは分ける。
+ログはsteady clockで抑制し、reason・policy・action・stamp・異常ごとの累積件数を示す。
+正常経路に画像・Tensorの追加コピーを入れず、実機での順序乱れの有無は観測結果で判断する。
+
 ## RGBデータセットの保存形式
 
 容量より抽出・読み込み速度を優先し、既定は圧縮なしuint8 HWC RGBのNumPy形式とする。

@@ -59,6 +59,17 @@ tensor_timingが未記録ならsource照合はできず、不足を報告する�
 | Motion | IMU角速度[rad/s]・加速度[m/s²]とodomの前進速度proxy。VSLAM速度は校正済みground truthではない |
 | Diagnostic | CPU・温度・電力等、記録された診断の数値。必要な線を凡例で有効化 |
 
+RGBと`/event_camera/event_image`の表示ずれも、両topicのHeader age・Cadenceと
+Synchronization（最近傍header差）で比較できる。画像payloadは展開しない。
+event imageは実運用YAMLで40ms窓・40ms stride（25Hz）。これを固定40msの配送遅延と扱わない。
+header差は同じ出来事の映像差や物理同期を示さない。EVSの受信由来offsetやpublish時刻に近いheaderは、
+内容の古さを隠す場合がある。同じ動きを映した場面の目視・RAW時刻等と照合して判断する。
+bag記録時点のずれと、player・表示subscriberによって再生時に加わるずれを分ける。
+EVS clockパネルは、同じstream/epoch内の「記録経過時間−EVSセンサ経過時間」と
+sensor-to-ROS offsetの変化を表示する。受信由来offsetの更新でheader ageが小さく保たれても、
+センサ時刻の進みの不足を別に確認できる。segment開始時点ですでに存在する遅れは分からず、
+物理的な映像遅延やハードウェア時計の校正値とは扱わない。epoch間を結合せず、欠測は0としない。
+
 画像header間隔も同時に開くならセンサ生成／記録欠落を候補とする。
 header間隔は一定でbag側だけ固まるなら転送・callback・recorder負荷等が候補となる。
 同一stampの指令再配信が増えた場合は新しい推論が届いていない可能性がある。
