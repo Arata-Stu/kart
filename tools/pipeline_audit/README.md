@@ -7,6 +7,13 @@ UIの導入・実行環境は[アプリREADME](../app/README.md#走行記録の�
 bagのパスは実行時に指定する。MCAP／SQLite3に対応し、ROS環境・GPU・車両接続は不要。
 ROS再生、SSH、制御topicのpublish、車両設定の変更は行わない。
 
+起動中のROS metadata・QoS・DDS/UDP設定は別入口の
+`python3 -m tools.pipeline_audit.ros_snapshot --output <new.json>`で取得できる（標準ライブラリのみ）。
+これはライブROSのgraph探索／parameter読取を行うが、画像・Tensorの追加購読は行わない。
+既定UDP観測時間5秒、`--sample-seconds`は0..60秒。`--topic`／`--node`の反復で対象を上書きする。
+既存outputは拒否、全ROS metadata取得成功はexit 0、未起動node等の部分取得はexit 2。
+測定手順・制約は[RC走行用QoS・DDS監査](../../docs/ros_transport_audit.md)を参照。
+
 ```bash
 # kartのproject rootで実行
 python3 -m venv /tmp/kart-audit-env

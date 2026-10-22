@@ -12,6 +12,9 @@
 - 相関と因果を分ける。VSLAM速度・基板出力設定・ESC指令モデルを物理計測と扱わない。
 - 画像・Tensorを解析目的でCPUへ展開しない。途中Tensorの記録には追加負荷があることを明示する。
 - 合成データ・実形式の合成bagによる検証と、実走行bag・ROS/GPU・実機の検証を区別する。
+- DDS/QoSの判断は起動中endpointと実効parameterを確認し、DDS history・内部処理queue・OS socket bufferを分ける。
+  profile名だけからdepthを決めつけない。監査手順は[RC走行用transport監査](../ros_transport_audit.md)。
+  metadata取得は画像/Tensorの追加購読・制御publish・parameter変更を行わず、欠測を正常と扱わない。
 
 ## 再生によるE2E latency試験
 
