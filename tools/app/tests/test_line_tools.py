@@ -150,6 +150,27 @@ class RegistrationTests(unittest.TestCase):
 
 
 class OptimizerTests(unittest.TestCase):
+    def test_constraint_error_reports_settings_without_dependency_advice(self):
+        from kart_studio.optimizer_worker import run
+
+        for message in (
+            "constraints are inconsistent, no solution",
+            "Problem not solvable, track might be too small",
+        ):
+            with self.subTest(message=message), patch(
+                "kart_studio.optimizer_worker._run", side_effect=ValueError(message)
+            ):
+                with self.assertRaisesRegex(ValueError, "曲率上限=1.*最小旋回半径=1") as caught:
+                    run({}, dict(DEFAULTS, optimizer="mincurv_iqp"))
+                self.assertNotIn("KART_RACELINE_PYTHON", str(caught.exception))
+
+    def test_unrelated_solver_error_is_preserved(self):
+        from kart_studio.optimizer_worker import run
+
+        with patch("kart_studio.optimizer_worker._run", side_effect=ValueError("matrix not positive definite")):
+            with self.assertRaisesRegex(ValueError, "^matrix not positive definite$"):
+                run({}, {})
+
     def test_unknown_and_open_methods_rejected(self):
         with self.assertRaises(ValueError):
             generate(track(), "raceline", dict(optimizer="unknown"))
@@ -190,16 +211,50 @@ class OptimizerTests(unittest.TestCase):
         "Set KART_TEST_HELPER=1 and KART_RACELINE_PYTHON to test installed helper",
     )
     def test_real_helper_both_methods(self):
+        from kart_studio.optimizer import optimize
+        from kart_studio.lines import profile, settings
+
         doc = track()
         for method in ("mincurv", "mincurv_iqp"):
             with self.subTest(method=method):
-                result = generate(doc, "raceline", dict(optimizer=method, spacing=0.5))
-                self.assertEqual(result["method"], "tph_" + method)
+                # Test the numerical adapter separately from publication checks:
+                # active width bounds can fail the final corridor validation.
+                p = settings(dict(optimizer=method, spacing=0.5))
+                result = optimize(doc, p, lambda: None)
                 self.assertGreater(len(result["points"]), 30)
-                self.assertLessEqual(max(abs(r[4]) for r in result["profile"]), 2.02)
+                self.assertEqual(result["optimizer_info"]["interpolation_reserve_m"], 0.0)
+                rows = profile(result["points"], True, p)
+                self.assertLessEqual(max(abs(r[4]) for r in rows), 2.02)
                 self.assertTrue(
                     all(
                         r[5] ** 2 * abs(r[4]) <= DEFAULTS["lateral_accel"] + 1e-6
-                        for r in result["profile"]
+                        for r in rows
                     )
                 )
+
+    @unittest.skipUnless(os.environ.get("KART_TEST_HELPER"), "Requires installed helper")
+    def test_real_helper_rejects_interpolated_clearance_violation(self):
+        # Without an extra optimizer reserve, a feasible QP can interpolate
+        # slightly inside the requested 5 cm margin. Never publish that result.
+        for method in ("mincurv", "mincurv_iqp"):
+            with self.subTest(method=method):
+                with self.assertRaisesRegex(ValueError, "距離が不足|長方形車体"):
+                    generate(track(), "raceline", dict(optimizer=method, spacing=0.5))
+
+    @unittest.skipUnless(os.environ.get("KART_TEST_HELPER"), "Requires installed helper")
+    def test_real_helper_infeasible_curvature_is_reported_through_subprocess(self):
+        for method in ("mincurv", "mincurv_iqp"):
+            with self.subTest(method=method):
+                with self.assertRaisesRegex(ValueError, "最適化制約.*曲率上限=0.01"):
+                    generate(track(), "raceline", dict(optimizer=method, spacing=0.5, curvature_limit=0.01))
+
+    @unittest.skipUnless(os.environ.get("KART_TEST_HELPER"), "Requires installed helper")
+    def test_real_helper_reports_insufficient_width(self):
+        from kart_studio.optimizer import optimize
+        from kart_studio.lines import settings
+
+        doc = track()
+        for side, radius in (("left", 3.87), ("right", 4.13)):
+            doc[side] = [[radius * math.cos(i * math.tau / 80), radius * math.sin(i * math.tau / 80)] for i in range(80)]
+        with self.assertRaisesRegex(ValueError, "法線方向幅=.*必要幅=0.290"):
+            optimize(doc, settings(dict(optimizer="mincurv_iqp", spacing=0.2)), lambda: None)

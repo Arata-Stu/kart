@@ -138,6 +138,7 @@ action("line-settings-open", () => {
   const labels = {
     curvature_limit: "最適化の曲率上限 (1/m)",
     spacing: "点間隔 (m)",
+    region_resolution: "領域方式の格子解像度 (m)",
     vehicle_width: "車幅 (m)",
     vehicle_length: "車体全長 (m)",
     rear_axle_to_rear: "後輪軸から後端 (m)",
@@ -149,8 +150,8 @@ action("line-settings-open", () => {
   };
   for (const [k, label] of Object.entries(labels))
     field($("line-setting-fields"), label, k, state.settings[k], "number", {
-      min: k === "margin" ? 0 : 0.01,
-      step: k === "rear_axle_to_rear" ? 0.0001 : 0.01,
+      min: k === "margin" ? 0 : k === "region_resolution" ? 0.005 : 0.01,
+      step: k === "rear_axle_to_rear" ? 0.0001 : k === "region_resolution" ? 0.005 : 0.01,
       required: true,
     });
   open("line-settings-dialog");

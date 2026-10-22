@@ -27,6 +27,9 @@ $("lane-select").addEventListener("change", () => {
   state.selected = -1;
   Object.assign(state.settings, state.lane.lines.raceline?.settings || {});
   $("raceline-method").value = state.settings.optimizer;
+  state.settings.centerline_method = state.lane.lines.centerline?.settings?.centerline_method || "paired";
+  state.settings.region_resolution = state.lane.lines.centerline?.settings?.region_resolution ?? 0.02;
+  $("centerline-method").value = state.settings.centerline_method;
   emit("document");
 });
 action("lane-add", () => {

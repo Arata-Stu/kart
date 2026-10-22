@@ -8,8 +8,9 @@ from .speed_sections import sample, sections, speed_cap
 
 DEFAULTS = dict(
     spacing=0.10,
+    region_resolution=0.02,
     vehicle_width=0.19,
-    vehicle_length=0.47,
+    vehicle_length=0.35,
     rear_axle_to_rear=0.1065,
     margin=0.05,
     max_speed=3.0,
@@ -23,6 +24,7 @@ DEFAULTS = dict(
 def settings(raw):
     ranges = dict(
         spacing=(0.05, 1),
+        region_resolution=(0.005, 0.25),
         vehicle_width=(0.05, 2),
         vehicle_length=(0.1, 5),
         rear_axle_to_rear=(0, 2),
@@ -37,6 +39,9 @@ def settings(raw):
     if p["rear_axle_to_rear"] >= p["vehicle_length"]:
         raise ValueError("後輪軸から後端までの距離は全長未満にしてください")
     p["collision_model"] = footprint.MODEL
+    p["centerline_method"] = raw.get("centerline_method", "paired")
+    if p["centerline_method"] not in ("paired", "region"):
+        raise ValueError("未知のCenterline生成方式です")
     p["optimizer"] = raw.get("optimizer", "local")
     if p["optimizer"] not in ("local", "mincurv", "mincurv_iqp"):
         raise ValueError("未知の最適化方式です")
@@ -98,9 +103,17 @@ def profile(line, closed, p, limits=()):
 def generate(document, kind, raw, check=lambda: None):
     p = settings(raw)
     closed = document["closed"]
-    center, widths, corridor = centerline(
-        document["left"], document["right"], closed, p["spacing"]
-    )
+    region_info = None
+    if kind == "centerline" and p["centerline_method"] == "region":
+        from .region_centerline import extract
+
+        center, widths, corridor, region_info = extract(
+            document["left"], document["right"], closed, p["spacing"], p["region_resolution"], check
+        )
+    else:
+        center, widths, corridor = centerline(
+            document["left"], document["right"], closed, p["spacing"]
+        )
     clearance = p["vehicle_width"] / 2 + p["margin"]
     footprint_corridor = footprint.corridor_for(
         document["left"], document["right"], closed, p
@@ -109,9 +122,11 @@ def generate(document, kind, raw, check=lambda: None):
         footprint.validate_line(
             center, closed, p, corridor=footprint_corridor, check=check
         )
-        return dict(
-            points=center, widths=widths, settings=p, method="paired_boundary_midpoints"
-        )
+        result = dict(points=center, widths=widths, settings=p,
+                      method="region_equal_distance_v1" if region_info else "paired_boundary_midpoints")
+        if region_info:
+            result["region_info"] = region_info
+        return result
     limits = []
     optimizer_info = None
     if kind == "customline":

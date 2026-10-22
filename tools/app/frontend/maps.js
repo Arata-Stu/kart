@@ -62,6 +62,9 @@ export async function loadMap(id, preserve = false) {
     : doc.lanes[0].id;
   Object.assign(state.settings, state.lane.lines.raceline?.settings || {});
   $("raceline-method").value = state.settings.optimizer;
+  state.settings.centerline_method = state.lane.lines.centerline?.settings?.centerline_method || "paired";
+  state.settings.region_resolution = state.lane.lines.centerline?.settings?.region_resolution ?? 0.02;
+  $("centerline-method").value = state.settings.centerline_method;
   let min = Infinity,
     max = -Infinity;
   for (const p of cloud.points) {
@@ -156,10 +159,16 @@ function status() {
     `左 ${d?.left.length || 0} / 右 ${d?.right.length || 0}`;
   for (const k of ["centerline", "raceline", "customline"]) {
     $(k + "-status").textContent = d?.lines[k]
-      ? `${d.lines[k].points.length} 点`
+      ? `${d.lines[k].points.length} 点` + (k === "centerline"
+        ? ` · ${d.lines[k].method === "region_equal_distance_v1" ? "領域" : "中点"}` : "")
       : "未生成";
     $("generate-" + k).disabled = !d || busy;
   }
+  const regionInfo = d?.lines.centerline?.region_info;
+  $("centerline-status").title = regionInfo
+    ? `格子 ${regionInfo.resolution_m} m · 最大左右距離差 ${regionInfo.max_distance_imbalance_m.toFixed(4)} m`
+    : "従来の境界対応点の中点方式";
+  $("centerline-method").disabled = !d || busy;
   $("edit-pair").classList.toggle("active", state.target === "pair");
   $("edit-left").classList.toggle("active", state.target === "left");
   $("edit-right").classList.toggle("active", state.target === "right");
@@ -279,6 +288,9 @@ action("z-reset", () => {
   $("z-max").value = state.zmax;
   status();
   emit("view");
+});
+$("centerline-method").addEventListener("change", () => {
+  state.settings.centerline_method = $("centerline-method").value;
 });
 $("raceline-method").addEventListener("change", () => {
   state.settings.optimizer = $("raceline-method").value;

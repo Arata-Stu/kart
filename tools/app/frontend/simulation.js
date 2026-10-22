@@ -32,7 +32,7 @@ function draw() {
   path(snapshot.left,"#328ccb",snapshot.closed);path(snapshot.right,"#e78f64",snapshot.closed);
   for(const o of snapshot.obstacles)path(o.polygon,"#ce4141",true,true);
   path(line.points,"#339675",snapshot.closed);path(trail,"#9763bb");
-  const c=sim.car, p=line.settings||{}, length=p.vehicle_length||.47,width=p.vehicle_width||.19,rear=p.rear_axle_to_rear??.1065;
+  const c=sim.car, p=line.settings||{}, length=p.vehicle_length||.35,width=p.vehicle_width||.19,rear=p.rear_axle_to_rear??.1065;
   const [x,y]=project([c.x,c.y]);ctx.save();ctx.translate(x,y);ctx.rotate(-c.yaw);ctx.fillStyle="#263e57";
   ctx.fillRect(-rear*scale,-width/2*scale,length*scale,width*scale);
   ctx.strokeStyle="#f09e38";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.max(14,(length-rear)*scale),0);ctx.stroke();ctx.restore();

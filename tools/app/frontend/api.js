@@ -27,8 +27,10 @@ export const state = {
   jobs: [],
   settings: {
     spacing: 0.10,
+    centerline_method: "paired",
+    region_resolution: 0.02,
     vehicle_width: 0.19,
-    vehicle_length: 0.47,
+    vehicle_length: 0.35,
     rear_axle_to_rear: 0.1065,
     margin: 0.05,
     max_speed: 3,

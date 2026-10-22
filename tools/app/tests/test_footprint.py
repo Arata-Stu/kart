@@ -25,12 +25,12 @@ class FootprintTest(unittest.TestCase):
     def test_rear_axle_reference_and_rotation(self):
         rect = footprint.rectangle([0, 0], 0, self.p)
         self.assertAlmostEqual(min(p[0] for p in rect), -0.1065)
-        self.assertAlmostEqual(max(p[0] for p in rect), 0.3635)
+        self.assertAlmostEqual(max(p[0] for p in rect), 0.2435)
         rect = footprint.rectangle([0, 0], math.pi / 2, self.p)
-        self.assertAlmostEqual(max(p[1] for p in rect), 0.3635)
+        self.assertAlmostEqual(max(p[1] for p in rect), 0.2435)
 
     def test_front_and_rear_overhang(self):
-        for x in (-0.09, 1.35):
+        for x in (-0.09, 1.22):
             with self.assertRaises(ValueError):
                 footprint.validate_line(
                     [[0, 0], [1, 0]], False, self.p, obstacles=self.region(x, 0)
@@ -47,7 +47,7 @@ class FootprintTest(unittest.TestCase):
 
     def test_rotating_corner_sweep(self):
         # Obstacle lies near a front corner halfway through a 90 degree turn.
-        x, y = 0.01 + 0.3635 / math.sqrt(2), 0.3635 / math.sqrt(2)
+        x, y = 0.01 + 0.2435 / math.sqrt(2), 0.2435 / math.sqrt(2)
         with self.assertRaises(ValueError):
             footprint.validate_line(
                 [[0, 0], [0.02, 0]],

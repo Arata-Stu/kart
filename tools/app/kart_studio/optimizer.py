@@ -51,9 +51,15 @@ def optimize(document, parameters, check):
                     time.sleep(0.1)
                 check()
                 if process.returncode:
+                    if output.is_file():
+                        failure = json.loads(output.read_text())
+                        if failure.get("error"):
+                            raise ValueError(failure["error"])
                     detail = (root / "log.txt").read_text()[-2400:]
                     raise ValueError(
-                        "helper最適化に失敗しました。KART_RACELINE_PYTHONと依存を確認してください。\n"
+                        "helper実行プロセスが異常終了しました。"
+                        "以下の詳細を確認してください。"
+                        "依存の読み込みエラーの場合はKART_RACELINE_PYTHONと依存を確認してください。\n"
                         + detail
                     )
                 return json.loads(output.read_text())

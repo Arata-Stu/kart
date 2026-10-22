@@ -6,6 +6,24 @@ from pathlib import Path
 
 
 def run(document, p):
+    try:
+        return _run(document, p)
+    except (ValueError, RuntimeError) as exc:
+        if "constraints are inconsistent" not in str(exc) and "track might be too small" not in str(exc):
+            raise
+        raise ValueError(
+            "Racelineの最適化制約を同時に満たせませんでした。"
+            f"方式={p['optimizer']}、曲率上限={p['curvature_limit']:.3g} 1/m"
+            f"（最小旋回半径={1 / p['curvature_limit']:.3g} m）、"
+            f"車幅={p['vehicle_width']:.3g} m、片側余裕={p['margin']:.3g} m。"
+            "境界の急な折れ・狭い区間・左右境界の対応を確認してください。"
+            "曲率上限や点間隔の見直しで改善する場合もありますが、"
+            "この失敗だけでは実際の走行経路が存在しないとは断定できません。"
+            "依存の読み込みには成功しています。"
+        ) from exc
+
+
+def _run(document, p):
     from importlib.metadata import distribution
 
     import numpy as np
@@ -26,7 +44,7 @@ def run(document, p):
     ref = np.column_stack(
         [np.interp(target, stations, dense[:, axis]) for axis in range(2)]
     )
-    corridor.validate(ref.tolist(), p["vehicle_width"] / 2 + p["margin"])
+    corridor.validate(ref.tolist())
     cx, cy, matrix, normals = tph.calc_splines.calc_splines(
         path=np.vstack((ref, ref[0])), use_dist_scaling=False
     )
@@ -52,13 +70,27 @@ def run(document, p):
     widths = np.asarray(
         [[width(pt, normal), width(pt, -normal)] for pt, normal in zip(ref, normals)]
     )
+    # The configured margin is the total per-side allowance. Interpolation
+    # is checked against the original corridor after optimization.
+    required_width = p["vehicle_width"] + 2 * p["margin"]
+    total_widths = widths.sum(axis=1)
+    narrowest = int(np.argmin(total_widths))
+    if total_widths[narrowest] < required_width:
+        raise ValueError(
+            f"Racelineの幅制約を満たせません。参照点{narrowest}"
+            f"（x={ref[narrowest, 0]:.3f}, y={ref[narrowest, 1]:.3f} m）の"
+            f"法線方向幅={total_widths[narrowest]:.3f} m、必要幅={required_width:.3f} m。"
+            "必要幅は車幅＋両側余裕です。"
+            "境界と車両寸法・余裕を確認してください。"
+        )
+    corridor.validate(ref.tolist(), p["vehicle_width"] / 2 + p["margin"])
     track = np.column_stack((ref, widths))
     args = dict(
         reftrack=track,
         normvectors=normals,
         A=matrix,
         kappa_bound=p["curvature_limit"],
-        w_veh=p["vehicle_width"] + 2 * (p["margin"] + 0.05),
+        w_veh=required_width,
         print_debug=False,
         plot_debug=False,
     )
@@ -103,7 +135,7 @@ def run(document, p):
             version=package.version,
             source=json.loads(package.read_text("direct_url.json") or "{}"),
             smoothing_rms_m=0.05,
-            interpolation_reserve_m=0.05,
+            interpolation_reserve_m=0.0,
             verification_spacing_m=min(p["spacing"], 0.05),
         ),
     )
@@ -111,6 +143,12 @@ def run(document, p):
 
 if __name__ == "__main__":
     data = json.loads(Path(sys.argv[1]).read_text())
-    Path(sys.argv[2]).write_text(
-        json.dumps(run(data["document"], data["parameters"]), allow_nan=False)
-    )
+    try:
+        result = run(data["document"], data["parameters"])
+    except ValueError as exc:
+        import traceback
+
+        Path(sys.argv[2]).write_text(json.dumps(dict(error=str(exc))))
+        traceback.print_exc()
+        sys.exit(1)
+    Path(sys.argv[2]).write_text(json.dumps(result, allow_nan=False))

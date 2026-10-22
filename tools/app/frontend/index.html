@@ -252,7 +252,11 @@
                 <strong>Centerline</strong
                 ><span id="centerline-status">未生成</span>
               </div>
-              <p>左右境界の中間から生成</p>
+              <select id="centerline-method" aria-label="Centerline生成方式">
+                <option value="paired">従来・境界中点</option>
+                <option value="region">領域・等距離線（実験／閉路）</option>
+              </select>
+              <p class="help">生成すると現在のCenterを更新します。方式を比較する場合は地図を複製してください。</p>
               <button id="generate-centerline" class="full">
                 Centerlineを生成
               </button>
