@@ -5,6 +5,28 @@ import sys
 from pathlib import Path
 
 
+def _noncrossing_output(create):
+    """Backtrack the final lateral step; never remove or reorder route points."""
+    from .geometry import PathValidationError, simple
+
+    failures = []
+    for exponent in range(9):
+        scale = 0.5 ** exponent
+        line = create(scale)
+        try:
+            simple(line, True)
+        except PathValidationError as exc:
+            if exc.diagnostic["reason"] != "self_intersection":
+                raise
+            exc.diagnostic.update(stage="raceline_optimized_output", lateral_step_scale=scale)
+            exc.args = (f"Raceline最適化後の検査: {exc}",)
+            failures.append(dict(scale=scale, diagnostic=exc.diagnostic))
+            last_error = exc
+            continue
+        return line, scale, failures
+    raise last_error
+
+
 def _validated_solution(solve, corridor, p):
     """Tighten QP bounds only after measuring a rejected interpolated result."""
     from . import footprint
@@ -85,7 +107,7 @@ def _run(document, p):
     ref = np.column_stack(
         [np.interp(target, stations, dense[:, axis]) for axis in range(2)]
     )
-    validate(ref.tolist(), corridor, 0, reference_info)
+    validate(ref.tolist(), corridor, 0, reference_info, stage="raceline_smoothed_reference")
     cx, cy, matrix, normals = tph.calc_splines.calc_splines(
         path=np.vstack((ref, ref[0])), use_dist_scaling=False
     )
@@ -139,7 +161,11 @@ def _run(document, p):
             lengths + np.roll(lengths, 1)
         )
 
+    step_scale = 1.0
+    topology_refinements = []
+
     def solve(reserve):
+        nonlocal step_scale
         # IQP mutates its input widths. Every retry starts from the same track.
         current_track, current_normals = track.copy(), normals.copy()
         args = dict(
@@ -165,15 +191,21 @@ def _run(document, p):
                 curv_error_allowed=0.01,
             )
             alpha, current_track, current_normals = optimized[:3]
-        result = tph.create_raceline.create_raceline(
-            refline=current_track[:, :2],
-            normvectors=current_normals,
-            alpha=alpha,
-            stepsize_interp=min(p["spacing"], 0.05),
-        )[0]
-        if not np.isfinite(result).all():
-            raise ValueError("最適化結果に非有限値があります")
-        return result.tolist()
+
+        def create(scale):
+            result = tph.create_raceline.create_raceline(
+                refline=current_track[:, :2],
+                normvectors=current_normals,
+                alpha=alpha * scale,
+                stepsize_interp=min(p["spacing"], 0.05),
+            )[0]
+            if not np.isfinite(result).all():
+                raise ValueError("最適化結果に非有限値があります")
+            return result.tolist()
+
+        result, step_scale, failures = _noncrossing_output(create)
+        topology_refinements.extend(dict(reserve_m=reserve, **failure) for failure in failures)
+        return result
 
     result, reserve, attempts = _validated_solution(solve, corridor, p)
     package = distribution("trajectory-planning-helpers")
@@ -187,6 +219,8 @@ def _run(document, p):
             interpolation_reserve_m=reserve,
             clearance_refinements=attempts,
             reference_info=reference_info,
+            lateral_step_scale=step_scale,
+            topology_refinements=topology_refinements,
             verification_spacing_m=min(p["spacing"], 0.05),
         ),
     )

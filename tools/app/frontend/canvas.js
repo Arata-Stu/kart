@@ -322,10 +322,12 @@ export function draw() {
       if (failure?.lane_id === d.id && failure.map_id === state.id) {
         if (failure.boundary) line(failure.boundary, "#f3b52e", false, false, 5);
         if (failure.footprint) line(failure.footprint, "#ce4141", true, false, 2);
+        if (failure.other_points) line(failure.other_points, "#ce4141", false, true, 7);
         line(failure.points, "#ce4141", false, true, 7);
         const point = project(failure.points[0]);
         ctx.fillStyle = "#ce4141";
-        ctx.fillText(`生成失敗: 区間${failure.segment}`, point[0]+12, point[1]-12);
+        ctx.fillText(`生成失敗: 区間${failure.segment}` +
+          (failure.other_segment ? ` ↔ ${failure.other_segment}` : ""), point[0]+12, point[1]-12);
       }
       if (!Object.keys(d.lines).length)
         directionArrows(d.left, colors.left, d.closed);

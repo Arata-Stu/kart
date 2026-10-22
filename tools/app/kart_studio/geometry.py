@@ -68,7 +68,11 @@ def simple(line, closed):
             if closed and i == 0 and j == len(es) - 1:
                 continue
             if intersects(a, b, *es[j]):
-                raise ValueError("ラインが自己交差しています")
+                raise PathValidationError(
+                    f"ラインが自己交差しています（区間{i + 1}と区間{j + 1}）",
+                    a, b, i, reason="self_intersection", other_segment=j + 1,
+                    other_points=[list(p) for p in es[j]],
+                )
 
 
 def inside(p, polygon):

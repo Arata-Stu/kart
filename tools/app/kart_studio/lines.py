@@ -3,7 +3,7 @@
 import math
 
 from . import footprint
-from .geometry import centerline, edges, number, points
+from .geometry import PathValidationError, centerline, edges, number, points
 from .speed_sections import sample, sections, speed_cap
 
 DEFAULTS = dict(
@@ -214,8 +214,13 @@ def generate(document, kind, raw, check=lambda: None):
         and p["optimizer"] != "local"
         and max(abs(row[4]) for row in rows) > p["curvature_limit"] * 1.01
     ):
-        raise ValueError(
-            "補間後のラインが曲率上限を超えています。設定または境界を調整してください"
+        index = max(range(len(rows)), key=lambda i: abs(rows[i][4]))
+        raise PathValidationError(
+            f"補間後の曲率が上限を超えています: 最大{abs(rows[index][4]):.3f} 1/m / "
+            f"上限{p['curvature_limit']:.3f} 1/m。設定または境界を確認してください",
+            line[index], line[(index + 1) % len(line)], index,
+            stage="raceline_optimized_output", reason="curvature",
+            curvature_abs=abs(rows[index][4]), curvature_limit=p["curvature_limit"],
         )
     return dict(
         points=line,

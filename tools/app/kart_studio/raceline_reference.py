@@ -6,13 +6,14 @@ from .geometry import Corridor, PathValidationError, centerline, edges, points, 
 from .storage import fingerprint
 
 
-def validate(line, corridor, clearance, info):
+def validate(line, corridor, clearance, info, stage="raceline_reference"):
     try:
         corridor.validate(line, clearance)
     except PathValidationError as exc:
         label = "保存済みCenterline" if info["source"] == "saved_centerline" else "境界中点"
-        exc.diagnostic.update(stage="raceline_reference", reference_source=info["source"])
-        exc.args = (f"Raceline初期経路（{label}）の検査: {exc}",)
+        exc.diagnostic.update(stage=stage, reference_source=info["source"])
+        phase = "平滑化後の初期経路" if stage == "raceline_smoothed_reference" else "初期経路"
+        exc.args = (f"Raceline{phase}（{label}）の検査: {exc}",)
         raise
 
 
