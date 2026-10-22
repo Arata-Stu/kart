@@ -76,6 +76,19 @@ class MissionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 sensor_parameters(path, **kwargs)
 
+    def test_d455_additional_widescreen_profiles(self):
+        from kart_bringup.mission import CAMERA_PROFILES
+
+        path = CONFIG / "sensors/realsense.yaml"
+        for resolution in ("480x270", "640x360"):
+            for fps in (30, 60, 90):
+                profile = f"{resolution}x{fps}"
+                with self.subTest(profile=profile):
+                    self.assertIn(profile, CAMERA_PROFILES)
+                    params = sensor_parameters(path, rgb_profile=profile, infra_profile=profile)
+                    self.assertEqual(params["rgb_camera.color_profile"], profile)
+                    self.assertEqual(params["depth_module.infra_profile"], profile)
+
     def test_environment_depth_imu_and_recording_contract(self):
         import yaml
         cfg = composition(CONFIG / "mission.yaml", "environment")

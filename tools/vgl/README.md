@@ -23,10 +23,22 @@ ONNX/NumPy/Pillowが必要。doctorは不足依存を表示し、PyTorchを自�
 buildはROS環境とisaac_ros_visual_mappingの公式exporter、TensorRT Pythonが必要。
 
 exportの幅/高さは既定424/240。`--width`/`--height`で変更できる。
-640×480、848×480、1280×720も同じ入口で指定できる（各サイズでのGPU生成・推論は未検証）。
+480×270、640×360、640×480、848×480、1280×720も同じ入口で指定できる（各サイズでのGPU生成・推論は未検証）。
 例: `bash scripts/vgl_model.sh export --name 640x480 --width 640 --height 480`、
 続いて`bash scripts/vgl_build.sh 640x480`。解像度ごとに別名へ生成する。
 VGL地図も同じサイズ・同じONNXで生成し、実行時の左右画像サイズを一致させる。
+追加の16:9モデルを生成する例（Notebookのkart Docker内）:
+
+```bash
+bash scripts/vgl_model.sh export --name 480x270 --width 480 --height 270 &&
+bash scripts/vgl_build.sh 480x270
+bash scripts/vgl_model.sh export --name 640x360 --width 640 --height 360 &&
+bash scripts/vgl_build.sh 640x360
+```
+
+UIは完成済みruntime_modelsとmanifestを探索するため、これらもモデル候補へ自動追加される。
+Jetsonには各aliked.onnxとmanifest.jsonだけを転送し、Jetson側で同名のvgl_build.shを実行する。
+
 `--image /path/to/frame.png`があればRGB bilinear resizeを使用し、省略時は固定seedの合成入力で変換する。
 合成入力でのexport成功は数値精度や実際のcuVGL動作の検証ではない。
 配布ONNXの入力名・shapeだけを書き換えず、サイズに依存する内部計算をソースから再出力する。

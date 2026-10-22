@@ -956,7 +956,7 @@ collect/evalでは復帰選択を受け付けない。起動による録画/AUTO
 `mission.launch.py`と`modules/sensors/realsense.launch.py`の`rgb_profile` / `infra_profile`
 （文字列、既定は空）は`WIDTHxHEIGHTxFPS`で該当streamの解像度・FPSを一括指定する。
 `0`は無効化、空はYAML保持。旧`rgb_fps` / `infra_fps`と同一streamで併用するとエラー。
-候補は424×240（30/60/90）、640×480（30/60）、848×480（30/60/90）、
+候補は424×240・480×270・640×360（各30/60/90）、640×480（30/60）、848×480（30/60/90）、
 1280×720（15/30）、1280×800（30）。USB3 D455向けの候補で、実機対応は起動ログで確認する。
 元のノード名・topic名・型は変更しない。記録画像の寸法とcamera_infoが選択に従って変わる。
 

@@ -14,7 +14,7 @@ globalThis.document = {getElementById: el, createElement: () => ({})};
 globalThis.CustomEvent = class extends Event {
   constructor(name, {detail}) { super(name); this.detail = detail; }
 };
-const paths = ['1280x720', '424x240', '640x480', '848x480'].map(s => `/models/${s}/runtime_models`);
+const paths = ['1280x720', '424x240', '640x480', '848x480', '640x360', '480x270'].map(s => `/models/${s}/runtime_models`);
 const models = paths.map(path => {
   const [width, height] = path.split('/')[2].split('x').map(Number);
   return {path, width, height, error: ''};
@@ -35,7 +35,7 @@ await import('../frontend/vgl.js');
 await el('vgl-open').click();
 assert.equal(el('vgl-model').value, paths[1], 'Default must follow 424×240, not alphabetic first model');
 assert.equal(el('vgl-model').readOnly, true);
-for (const resolution of ['424x240', '640x480', '848x480', '1280x720']) {
+for (const resolution of ['424x240', '480x270', '640x360', '640x480', '848x480', '1280x720']) {
   el('vgl-model-choice').value = `/models/${resolution}/runtime_models`;
   el('vgl-model-choice').change();
   const [width, height] = resolution.split('x').map(Number);

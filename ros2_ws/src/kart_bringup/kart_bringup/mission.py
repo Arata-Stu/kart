@@ -18,9 +18,13 @@ def boolean(value):
 
 # Curated USB3 D455 candidates; actual availability depends on device/firmware.
 # Source: Intel D400 Series Datasheet (October 2024), D450/D455 USB3 formats.
+# 480x270 / 640x360: also confirmed in user-supplied D455 enumeration
+# (firmware 5.16.0.1, USB3.2; both IR Y8 and RGB RGB8).
 # https://www.intelrealsense.com/wp-content/uploads/2024/10/Intel-RealSense-D400-Series-Datasheet-October-2024.pdf
 CAMERA_PROFILES = (
     "424x240x30", "424x240x60", "424x240x90",
+    "480x270x30", "480x270x60", "480x270x90",
+    "640x360x30", "640x360x60", "640x360x90",
     "640x480x30", "640x480x60", "848x480x30", "848x480x60",
     "848x480x90", "1280x720x15", "1280x720x30", "1280x800x30",
 )
