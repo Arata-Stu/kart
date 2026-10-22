@@ -23,7 +23,7 @@ def stop(process):
                 process.wait()
 
 
-def last_stereo_stamp(bag, workflow):
+def last_stereo_stamp(bag, workflow, shape=None):
     import rosbag2_py
     from rclpy.serialization import deserialize_message
     from sensor_msgs.msg import Image
@@ -39,9 +39,10 @@ def last_stereo_stamp(bag, workflow):
     last = {}
     while reader.has_next():
         topic, raw, _ = reader.read_next()
-        last[topic] = max(
-            last.get(topic, -1), stamp_ns(deserialize_message(raw, Image).header.stamp)
-        )
+        image = deserialize_message(raw, Image)
+        if shape and [image.height, image.width] != shape[2:]:
+            raise ValueError(f"VGLモデルとbag画像の解像度が一致しません: {topic}")
+        last[topic] = max(last.get(topic, -1), stamp_ns(image.header.stamp))
     if len(last) != 2 or min(last.values()) <= 0:
         raise ValueError("左右画像の有効な末尾stampがありません")
     return min(last.values())
@@ -49,7 +50,6 @@ def last_stereo_stamp(bag, workflow):
 
 def run(job_file):
     import rclpy
-    import yaml
     from ament_index_python.packages import get_package_share_directory
     from isaac_ros_visual_slam_interfaces.srv import LocalizeInMap
 
@@ -62,15 +62,16 @@ def run(job_file):
     if int(os.environ.get("ROS_DOMAIN_ID", "0")) != workflow["ros_domain_id"]:
         raise ValueError("ROS domain mismatch")
     config = Path(get_package_share_directory("kart_bringup")) / "config/mapping"
-    parameters = yaml.safe_load((config / "capture_cuvslam.yaml").read_text())[
-        "/**/visual_slam"
-    ]["ros__parameters"]
-    parameters.update(workflow["overrides"])
-    parameters["load_map_folder_path"] = job["map_dir"]
+    from kart_bringup.capture_localization import resolve_capture
+
+    params, remaps, shape = resolve_capture(config.parent, job)
+    parameters = params["cuvslam"]
+    use_vgl = shape is not None
     inputs, metadata = inspect_bag(bag, workflow, parameters)
-    expected = last_stereo_stamp(bag, workflow)
+    expected = last_stereo_stamp(bag, workflow, shape)
     rclpy.init()
-    node = CaptureCollector()
+    hint_topic = dict(remaps["vgl"])["visual_localization/pose"] if use_vgl else None
+    node = CaptureCollector(hint_topic=hint_topic)
     launch = player = None
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     try:
@@ -92,8 +93,13 @@ def run(job_file):
         deadline = time.monotonic() + options["ready_timeout_s"]
         while not (
             client.service_is_ready()
+            and (not use_vgl or (
+                "visual_global_localization" in node.get_node_names()
+                and node.count_subscribers(hint_topic) >= 2
+                and node.count_publishers(hint_topic) >= 1
+            ))
             and all(
-                node.count_subscribers(workflow[k])
+                node.count_subscribers(workflow[k]) >= (2 if use_vgl else 1)
                 for k in ("left_image", "right_image", "left_info", "right_info")
             )
         ):
@@ -127,7 +133,7 @@ def run(job_file):
             if launch.poll() is not None or time.monotonic() > deadline:
                 raise ValueError("再生中にVSLAM終了またはタイムアウト")
             rclpy.spin_once(node, timeout_sec=0.1)
-            if future is None and node.gate.stamp >= 0:
+            if not use_vgl and future is None and node.gate.stamp >= 0:
                 request = LocalizeInMap.Request()
                 request.map_folder_path = job["map_dir"]
                 request.pose_hint.orientation.w = 1.0
@@ -149,13 +155,15 @@ def run(job_file):
                 break
         if time.monotonic() - node.last_update < options["settle_s"]:
             raise ValueError("点群・TFの更新が制限時間内に落ち着きませんでした")
-        if future is None or not future.done() or not future.result().success:
+        if not use_vgl and (future is None or not future.done() or not future.result().success):
             raise ValueError("localize要求の受理を確認できませんでした")
         snapshot = node.final_snapshot(
             expected,
             tolerance,
             {
                 "source": "saved_cuvslam_map_replay",
+                "initial_localization": "vgl_pose_hint" if use_vgl else "origin_pose_hint",
+                "vgl_input_shape": shape,
                 "bag": str(bag),
                 "map_id": job["map_id"],
                 "workflow": workflow,

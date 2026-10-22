@@ -213,6 +213,11 @@ launch引数map_file/lane_id/use_sim_timeは空ならYAMLを保持し、明示�
 `config/mapping/capture.json`はreplay_rate=1.0、ready_timeout_s=120、drain_timeout_s=30、
 settle_s=3、tail_tolerance_s=0.5。詳細は[kart_mapping README](../kart_mapping/README.md)。
 起動順・bag再生・localize成功検査は`kart_mapping/capture_snapshot`が管理する。
+UIは対応するVGL bundleと実行GPU用モデルを要求する。`mapping.launch.py`は
+`visual_global_localization`も起動し、VGL成功姿勢を`/localization/pose_hint`へ接続する。
+VGLの静的設定はconfig/localization/vgl.yaml。bag clockと元frameを適用し、
+VSLAMのhint失敗時は既存triggerで再探索する。VSLAMだけがTFを配信する。
+元VSLAM地図とVGL bundleの内容hash、bag画像と入力shapeの一致を検査する。
 
 ### 走行時VSLAM + VGL
 

@@ -103,7 +103,9 @@ SENSOR_DATAはbest effort / volatile / depth 5、DEFAULTはreliable / volatile /
 
 `capture_cuvslam.yaml`はIsaac ROS 5.0 cuVSLAMの全parameterを列挙した点群取得用設定。
 `mapping.launch.py`はoperation=captureのjob専用。`load_map_folder_path`を作業コピーへ明示上書きし、
-`localize_on_startup=false`、`enable_request_hint=false`のままworkerがLocalizeInMapを要求する。
+`localize_on_startup=false`、`enable_request_hint=true`でVGLの初期姿勢hint・再要求を使用する。
+VGLは`config/localization/vgl.yaml`の全parameterを使用し、bag clockと元frameへ明示上書きする。
+bundleと実行GPU用モデルはUI選択のcapture.vglで指定する。旧ジョブのみ原点hint互換経路を残す。
 `save_map_folder_path`は空で元地図を保存し直さない。可視化・landmarks表示を有効にする。
 元の`cuvslam.yaml`は旧設定で、この起動では使用しない。
 出典はYAML冒頭に記載。診断成功判定は公式5.0実装のhardware_id=visual_slam、

@@ -110,10 +110,11 @@ marker更新は専用topic内で古い表示を削除し、未選択／未生成
 ## 点群取得の成功条件
 
 公式offline地図作成後、元bagを保存地図の作業コピーへ再生し、VSLAM可視化点群を取得する。
-LocalizeInMapのservice受理だけでは成功扱いにしない。診断のsaved-map localizedと追跡OKを確認する。
+対応VGL bundleと実行GPU用モデルを明示選択し、VGLで初期姿勢を求めVSLAMへhintを渡す。
+元地図hashとモデル・bag画像shapeを検査し、VGLの探索成功だけでは点群取得の成功扱いにしない。診断のsaved-map localizedと追跡OKを確認する。
 成功前／追跡喪失区間のデータを捨て、診断・軌跡・TFの末尾stamp確認と最新TF適用後にpendingからreadyへ移行する。可視化点群は更新駆動のため末尾stamp一致を要求せず、最終成功区間の最新非空点群を使う。点群と入力末尾の時間差を記録・警告し、全地図の網羅性は保証しない。
 取得済みsnapshotの再生成はHDMap座標を変える危険があるため初版では提供しない。
-VGLは今後の位置推定機能として対応予定。FoundationStereo low_res（深度）と
+点群取得ではVGLのbootstrap・hint失敗時の再探索を使う。FoundationStereo low_res（深度）と
 ALIKED 424×240（VGL特徴抽出）の軽量化を区別する。地図とONNX・入力shapeを対応付け、
 対象GPUで生成したTensorRTを使用する。軽量モデル不在時に標準大型モデルへ自動fallbackしない。
 
@@ -125,7 +126,7 @@ ALIKED 424×240（VGL特徴抽出）の軽量化を区別する。地図とONNX�
 位置合わせは全laneと禁止領域へ同じSE(2)を適用する。領域変更は全生成ラインを無効化する。
 生成・export時は閉路終端を含む全線分について内部・接触・車幅半分＋余裕を検査する。
 これは静的なオフライン判定であり、自動回避・車体矩形の掃引判定・オンラインplannerは後続。
-VGLは後続開発とし、走行時にもJoyからlocalization要求を発行できる設計を目指す。
+走行時にもJoyからlocalization要求を発行できる設計を目指す。
 Joy入力とlocalization実行を別責務にし、要求受付とlocalize成功を区別する。
 
 

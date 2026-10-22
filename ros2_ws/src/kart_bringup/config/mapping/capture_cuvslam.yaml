@@ -65,4 +65,4 @@
     verbosity: 1
     enable_debug_mode: false
     debug_dump_path: /tmp/cuvslam
-    enable_request_hint: false  # capture worker issues LocalizeInMap with origin hint
+    enable_request_hint: true  # VSLAM requests VGL again when a pose hint fails; legacy jobs override false

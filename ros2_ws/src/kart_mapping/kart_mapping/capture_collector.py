@@ -12,7 +12,8 @@ from .frames import FinalFrames, stamp_ns
 
 
 class CaptureCollector(Collector):
-    def __init__(self):
+    def __init__(self, hint_topic=None):
+        self.vgl_hint = None
         self.gate = LocalizationGate()
         self.last_update = time.monotonic()
         super().__init__()
@@ -22,6 +23,15 @@ class CaptureCollector(Collector):
             self.on_diagnostics,
             qos_profile_sensor_data,
         )
+
+        if hint_topic:
+            from geometry_msgs.msg import PoseWithCovarianceStamped
+
+            self.create_subscription(PoseWithCovarianceStamped, hint_topic, self.on_vgl_hint, 10)
+
+    def on_vgl_hint(self, msg):
+        self.vgl_hint = dict(stamp_ns=str(stamp_ns(msg.header.stamp)), frame=msg.header.frame_id)
+        self.get_logger().info("VGL pose hint received; waiting for saved-map localization")
 
     def on_diagnostics(self, msg):
         for status in msg.status:
@@ -77,6 +87,10 @@ class CaptureCollector(Collector):
 
     def final_snapshot(self, expected, tolerance, provenance):
         self.gate.require_final(expected, tolerance)
+        if provenance.get("initial_localization") == "vgl_pose_hint":
+            if self.vgl_hint is None:
+                raise ValueError("VGLの姿勢hint受信を確認できませんでした")
+            provenance["vgl_pose_hint"] = self.vgl_hint
         if self.cloud is None or self.path is None:
             raise ValueError("localize成功後の点群・SLAM軌跡がありません")
         cloud_stamp = stamp_ns(self.cloud.header.stamp)

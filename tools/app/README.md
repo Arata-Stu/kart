@@ -45,6 +45,9 @@ ROS処理は`ros2 run kart_mapping build_map`で別プロセスへ分離する�
 1. 「転送」で録画停止済みbagを受信する。既存の`record/`内のbagも再帰探索する。
 2. 「bagから地図を作成」でbagと地図名を選ぶ。NVIDIA公式offline処理でRealSense左右IR（rectified）からStereo地図を生成する。
    詳細でtopic・frame・隔離ROS domainを指定できる。生成直後は「点群未取得」で、以下の編集手順はsnapshotがある地図のみ対象。
+   点群取得前に「VGL地図生成」で対応bundleを生成する。続いて「保存地図から点群を取得」で
+   元bag、VGL地図、実行GPU用モデルを選ぶ。VGLで初期姿勢を求め、VSLAMのlocalize成功後の点群を保存する。
+   地図内容hash・ONNX hash・bag画像サイズの不一致は拒否する。ROS/GPU/実bagでの結合動作は未確認。
 3. 作成された地図を開き、高さの下限・上限を調整する。高さはmap座標Zで、床からの距離ではない。
 4. 「境界」で左右境界を同じ走行方向に描く。クリック追加、ドラッグ移動、Delete削除。
    右ドラッグ／Alt+ドラッグでパン、ホイールで拡大、全体表示で戻る。Undo/Redoあり。

@@ -6,6 +6,7 @@
   <license>Apache-2.0</license>
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
+  <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>diagnostic_msgs</exec_depend><exec_depend>rclpy</exec_depend><exec_depend>rosbag2_py</exec_depend>
   <exec_depend>ros2bag</exec_depend><exec_depend>sensor_msgs</exec_depend>
   <exec_depend>sensor_msgs_py</exec_depend><exec_depend>nav_msgs</exec_depend>

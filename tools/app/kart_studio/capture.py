@@ -5,6 +5,7 @@ import os
 import shutil
 import time
 import uuid
+from pathlib import Path
 
 from .snapshots import normalize
 from .storage import atomic_json, read_json, within
@@ -33,6 +34,19 @@ def validate(studio, key, body):
     options = read_json(
         studio.repo / "ros2_ws/src/kart_bringup/config/mapping/capture.json"
     )
+    from kart_bringup.vgl_assets import map_files, validate_bundle
+
+    bundle_path = body.get("vgl_bundle", "")
+    if not bundle_path:
+        raise ValueError("対応するVGL地図を先に生成して選択してください")
+    relative = Path(bundle_path)
+    if relative.is_absolute():
+        relative = relative.relative_to(studio.maps.root.absolute())
+    bundle = within(studio.maps.root, relative)
+    bundle, models, profile = validate_bundle(bundle, body.get("model_dir", ""))
+    if map_files(folder) != profile["cuvslam_sha256"]:
+        raise ValueError("選択したVGL地図の元VSLAM地図が一致しません")
+    options["vgl"] = dict(bundle=str(bundle), model_dir=str(models))
     return bag, origin["workflow"], options
 
 
@@ -58,6 +72,20 @@ def capture(studio, job, key, revision, bag, workflow, options):
             return dst
 
         shutil.copytree(source, stage / "cuvslam_map", copy_function=copy_file)
+        if options.get("vgl"):
+            from kart_bringup.vgl_assets import map_files, validate_bundle
+
+            vgl = options["vgl"]
+            bundle, _, profile = validate_bundle(vgl["bundle"], vgl["model_dir"])
+            if map_files(stage) != profile["cuvslam_sha256"]:
+                raise ValueError("VGL地図と作業用VSLAM地図が一致しません")
+            for part in ("cuvgl_map", "vgl_runtime_config"):
+                source_part = within(bundle, part)
+                if any(p.is_symlink() for p in source_part.rglob("*")):
+                    raise ValueError("VGL地図内のリンクは扱いません")
+                shutil.copytree(source_part, stage / part, copy_function=copy_file)
+            shutil.copyfile(bundle / "vgl_profile.json", stage / "vgl_profile.json")
+            job.log("VGLで初期姿勢を推定し、VSLAMのlocalize成功後に点群を取得します")
         job_file = stage / "capture_job.json"
         atomic_json(
             job_file,

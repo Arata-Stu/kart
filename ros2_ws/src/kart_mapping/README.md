@@ -74,11 +74,12 @@ metadata一致はbag全メッセージの同一性の証明ではないため、
 手順:
 
 1. 元の`cuvslam_map`を一時領域へコピー。cuVSLAMにはコピーを渡し、元地図は保存し直さない。
-2. `mapping.launch.py`が可視化ありの`visual_slam`を起動。別プロセスの`kart_map_collector`を先に購読開始。
+2. `mapping.launch.py`が可視化ありの`visual_slam`と`visual_global_localization`を起動。別プロセスの`kart_map_collector`を先に購読開始。
 3. bagの入力型・静的TFを検査し、左右画像の末尾header stampを調べる。
 4. 入力購読とlocalize service準備後、センサー入力だけを再生。記録済み動的TF・自己位置・車両指令は混ぜない。
-5. 最初のVSLAM診断が届いたら原点Poseをhintに`LocalizeInMap`を1回要求。
-   元bagの開始位置付近を想定する。任意地点からの大域自己位置推定ではなく、VGLはまだ使わない。
+5. 対応VGL bundleと実行GPU用モデルをUIで選ぶ。VGLが初期探索し、成功姿勢をVSLAMへ渡す。
+   VSLAMのhint失敗時は既存trigger接続でVGLへ再要求する。原点hintのservice要求は行わない。
+   VGLは連続推定を無効とし、成功後は明示再要求まで停止する。
 6. serviceのsuccessは受理に過ぎない。診断の`localized_in_exist_map=Yes`かつ`vo_status=OK`で成功確認。
    成功前や追跡喪失前の点群・TFを破棄し、新しい成功区間のデータだけ採用。軌跡も成功前のposeを除外する。
 7. 再生終了後、診断・軌跡・map→odomが入力末尾の許容範囲に到達し、更新が静まるのを待つ。
@@ -97,13 +98,20 @@ metadata一致はbag全メッセージの同一性の証明ではないため、
 | `/tf` | `tf2_msgs/msg/TFMessage` | best effort / volatile / depth 5 | 最新map→odom |
 | `/visual_slam/vis/landmarks_cloud` | `sensor_msgs/msg/PointCloud2` | best effort / volatile / depth 5 | 成功区間の最後の非空点群 |
 | `/visual_slam/tracking/slam_path` | `nav_msgs/msg/Path` | best effort / volatile / depth 5 | 成功区間の軌跡 |
+| `/localization/pose_hint`（VGL時のみ） | `geometry_msgs/msg/PoseWithCovarianceStamped` | reliable / volatile / depth10 | VGLの姿勢hint受信確認、stamp/frameをprovenanceへ保存 |
 | `/clock` | `rosgraph_msgs/msg/Clock` | ROS clock既定 | use_sim_time=true |
 
-`/visual_slam/localize_in_map`のclient、型`isaac_ros_visual_slam_interfaces/srv/LocalizeInMap`。
-要求map_folder_pathは作業コピー、pose_hintは原点・単位quaternion。独自publisherなし。
+VGL出力→VSLAM入力は`/localization/pose_hint`（`geometry_msgs/msg/PoseWithCovarianceStamped`、reliable / volatile / depth10）。
+VSLAMからの再要求は`/visual_localization/trigger_localization`（同型、reliable / volatile、VGL入力depth100）。
+VGL診断は`/localization/vgl/diagnostics`（`diagnostic_msgs/msg/DiagnosticArray`）。VGLはTFを配信しない。
+VGLのノード名・全parameterは[localization設定](../kart_bringup/config/localization/README.md)参照。
+VGL用の`use_sim_time=true`、base/camera frameを元ジョブへ一致させる。
+VGL時は姿勢hintの実受信も最終成功条件にする。独自publisherなし。旧capture job（capture.vglなし）との互換経路だけは
+`/visual_slam/localize_in_map` client（`isaac_ros_visual_slam_interfaces/srv/LocalizeInMap`）で原点hintを要求する。
+UI/APIから新しく起動するジョブにはVGL資産が必須。
 ROS標準のrosout／parameter IFは省略。Collector独自ROS parameterなし。
 cuVSLAMの全parameterはbringup `config/mapping/capture_cuvslam.yaml`、
-実行時にload_map_folder_pathと元jobのframe設定のみ上書きする。
+実行時にload_map_folder_pathと元jobのframe設定を上書きする。enable_request_hint=trueでVGLへ再要求する。
 
 ### captureジョブ設定
 
@@ -116,6 +124,11 @@ bringup `config/mapping/capture.json`が正本。ROS parameterではなくworker
 | drain_timeout_s | 30.0 | 再生終了後の最大待機秒数 |
 | settle_s | 3.0 | 点群・軌跡・TFの更新停止確認秒数。同じstamp・内容の再送は更新と数えない |
 | tail_tolerance_s | 0.5 | 左右画像の末尾stampの小さい方に対する許容遅れ秒数 |
+
+`capture.vgl`はUIから渡す起動時指定で、`bundle`（対応地図）と`model_dir`（実行GPU用engine）の絶対パス。
+元地図hash・ONNX/config hashを照合し、VGL地図・設定も作業領域へ複製する。
+起動時にTensorRT engineを検査し、bag左右画像の全サイズがモデル入力shapeに一致しなければ停止する。
+VGL設定の静的正本はbringupの`config/localization/vgl.yaml`。VSLAMの可視化設定はcapture専用YAMLを使用する。
 
 入力末尾確認は途中の全画像処理を保証しない。低速再生でもDDSや追跡の欠落はあり得る。
 可視化topicは全ランドマークの完全exportではなく、最新の非空表示点群を保存する。

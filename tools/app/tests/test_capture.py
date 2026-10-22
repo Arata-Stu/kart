@@ -112,15 +112,52 @@ class CaptureTests(unittest.TestCase):
         )
         self.assertEqual(list(self.maps.root.glob(".capture-*")), [])
 
+    def test_vgl_bundle_staged_and_original_preserved(self):
+        from kart_bringup.vgl_assets import map_files
+        bundle = self.maps.root / "vgl/course-vgl-v1"
+        for part in ("cuvgl_map", "vgl_runtime_config"):
+            (bundle / part).mkdir(parents=True)
+            (bundle / part / "data").write_text("original")
+        atomic_json(bundle / "vgl_profile.json", {})
+        profile = dict(cuvslam_sha256=map_files(self.folder))
+        options = dict(vgl=dict(bundle=str(bundle), model_dir="models"))
+        worker = self.worker()
+        original_run = worker.run
+        def run(args, **kwargs):
+            job_file = Path(args[-1])
+            data = json.loads(job_file.read_text())
+            self.assertEqual(data["capture"], options)
+            self.assertEqual((job_file.parent / "cuvgl_map/data").read_text(), "original")
+            original_run(args, **kwargs)
+        worker.run = run
+        with patch("kart_bringup.vgl_assets.validate_bundle", return_value=(bundle, Path("models"), profile)):
+            capture(self.studio, worker, "course", 1, self.bag, dict(ros_domain_id=92), options)
+        self.assertEqual((bundle / "cuvgl_map/data").read_text(), "original")
+        self.assertEqual((self.folder / "cuvslam_map/map.mdb").read_bytes(), b"original map")
+
     def test_validate_origin_and_revision(self):
-        with patch("kart_studio.capture.shutil.which", return_value="ros2"):
+        from kart_bringup.vgl_assets import map_files
+        profile = {"cuvslam_sha256": map_files(self.folder)}
+        bundle = self.maps.root / "vgl/course-vgl-v1"
+        bundle.mkdir(parents=True)
+        body = dict(revision=1, bag="bag", vgl_bundle=str(bundle), model_dir="models")
+        with patch("kart_studio.capture.shutil.which", return_value="ros2"), patch(
+            "kart_bringup.vgl_assets.validate_bundle", return_value=(bundle, Path("models"), profile)
+        ):
             bag, _workflow, options = validate(
-                self.studio, "course", {"revision": 1, "bag": "bag"}
+                self.studio, "course", body
             )
             self.assertEqual(bag, self.bag.resolve())
             self.assertEqual(options["replay_rate"], 1.0)
+            self.assertEqual(options["vgl"]["bundle"], str(bundle))
+            with self.assertRaisesRegex(ValueError, "先に生成"):
+                validate(self.studio, "course", dict(revision=1, bag="bag"))
+            profile["cuvslam_sha256"] = {}
+            with self.assertRaisesRegex(ValueError, "一致"):
+                validate(self.studio, "course", body)
+            profile["cuvslam_sha256"] = map_files(self.folder)
             with self.assertRaises(ValueError):
                 validate(self.studio, "course", {"revision": 2, "bag": "bag"})
             (self.bag / "metadata.yaml").write_text("different bag")
             with self.assertRaises(ValueError):
-                validate(self.studio, "course", {"revision": 1, "bag": "bag"})
+                validate(self.studio, "course", body)

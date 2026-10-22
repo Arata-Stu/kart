@@ -52,6 +52,16 @@ class CaptureTailTests(unittest.TestCase):
         self.assertFalse(result["cloud_within_tail_tolerance"])
         node.get_logger().warning.assert_called_once()
 
+    def test_vgl_mode_requires_actual_pose_hint(self):
+        node = self.collector()
+        node.vgl_hint = None
+        provenance = dict(initial_localization="vgl_pose_hint")
+        with self.assertRaisesRegex(ValueError, "hint"):
+            node.final_snapshot(24_000_000_000, 500_000_000, provenance)
+        node.vgl_hint = dict(stamp_ns="2000000000", frame="map")
+        result = node.final_snapshot(24_000_000_000, 500_000_000, provenance)
+        self.assertEqual(result["vgl_pose_hint"], node.vgl_hint)
+
     def test_stale_tracking_tf_and_pre_localization_cloud_are_rejected(self):
         for field in ("path", "tf", "cloud", "diagnostic"):
             with self.subTest(field=field):

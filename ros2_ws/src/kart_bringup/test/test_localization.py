@@ -117,6 +117,38 @@ class LocalizationTest(unittest.TestCase):
             (self.output / "vgl_runtime_config/localizer_config.pb.txt").read_text(),
         )
 
+    def test_capture_vgl_bootstrap_uses_original_frames_and_collector_topics(self):
+        from kart_bringup.capture_localization import resolve_capture
+
+        self.prepare()
+        workflow = dict(left_image="/custom/left", right_image="/custom/right",
+                        left_info="/custom/left_info", right_info="/custom/right_info",
+                        overrides=dict(base_frame="camera_link",
+                                       camera_optical_frames=["left_optical", "right_optical"]))
+        job = dict(workflow=workflow, map_dir=str(self.output / "cuvslam_map"),
+                   capture=dict(vgl=dict(model_dir=str(self.models))))
+        params, remaps, shape = resolve_capture(CONFIG.parent, job)
+        self.assertEqual(shape, [1, 3, 240, 424])
+        for values in params.values():
+            self.assertEqual(values["base_frame"], "camera_link")
+            self.assertEqual(values["camera_optical_frames"], ["left_optical", "right_optical"])
+            self.assertTrue(values["use_sim_time"])
+        slam, vgl = params["cuvslam"], params["vgl"]
+        self.assertTrue(slam["enable_slam_visualization"])
+        self.assertTrue(slam["enable_request_hint"])
+        self.assertFalse(slam["localize_on_startup"])
+        self.assertEqual(slam["save_map_folder_path"], "")
+        self.assertFalse(vgl["enable_continuous_localization"])
+        self.assertFalse(vgl["publish_map_to_odom_tf"])
+        self.assertIn(("/diagnostics", "/diagnostics"), remaps["cuvslam"])
+        self.assertIn(("visual_localization/image_0", "/custom/left"), remaps["vgl"])
+        self.assertIn(("visual_slam/initial_pose", "/localization/pose_hint"), remaps["cuvslam"])
+        self.assertIn(("visual_localization/pose", "/localization/pose_hint"), remaps["vgl"])
+        self.assertIn(("visual_slam/trigger_hint", "/visual_localization/trigger_localization"), remaps["cuvslam"])
+        self.write(self.output / "cuvslam_map/map.mdb", "changed")
+        with self.assertRaisesRegex(ValueError, "paired"):
+            resolve_capture(CONFIG.parent, job)
+
     def test_vio_loads_saved_map_and_routes_only_slam_imu(self):
         for mode in ('0','1'):
             params,remaps,_,_=resolve(CONFIG,self.source,'',
