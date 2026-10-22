@@ -281,10 +281,10 @@ class OptimizerTests(unittest.TestCase):
                 doc = track()
                 result = generate(doc, "raceline", dict(optimizer=method, spacing=0.5))
                 info = result["optimizer_info"]
-                self.assertGreater(info["interpolation_reserve_m"], 0)
-                self.assertLess(info["interpolation_reserve_m"], 0.05)
-                self.assertEqual(info["clearance_refinements"][0]["reserve_m"], 0)
-                self.assertLess(info["clearance_refinements"][0]["diagnostic"]["distance_m"], 0.145)
+                self.assertTrue(info["lateral_step_scale"] < 1 or info["interpolation_reserve_m"] > 0)
+                first = info["step_refinements"][0]
+                self.assertEqual(first["reserve_m"], 0)
+                self.assertLess(first["diagnostic"]["distance_m"], 0.145)
                 Corridor(doc["left"], doc["right"], True).validate(result["points"], 0.145)
 
     @unittest.skipUnless(os.environ.get("KART_TEST_HELPER"), "Requires installed helper")

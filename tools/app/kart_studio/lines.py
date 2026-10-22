@@ -100,6 +100,21 @@ def profile(line, closed, p, limits=()):
     return rows
 
 
+def validate_raceline_curvature(line, p, kappa=None):
+    if kappa is None:
+        kappa = [curvature(line[i - 1], line[i], line[(i + 1) % len(line)])
+                 for i in range(len(line))]
+    index = max(range(len(kappa)), key=lambda i: abs(kappa[i]))
+    if abs(kappa[index]) > p["curvature_limit"] * 1.01:
+        raise PathValidationError(
+            f"補間後の曲率が上限を超えています: 最大{abs(kappa[index]):.3f} 1/m / "
+            f"上限{p['curvature_limit']:.3f} 1/m。設定または境界を確認してください",
+            line[index], line[(index + 1) % len(line)], index,
+            stage="raceline_optimized_output", reason="curvature",
+            curvature_abs=abs(kappa[index]), curvature_limit=p["curvature_limit"],
+        )
+
+
 def generate(document, kind, raw, check=lambda: None):
     p = settings(raw)
     closed = document["closed"]
@@ -209,19 +224,8 @@ def generate(document, kind, raw, check=lambda: None):
         yaws=[r[3] for r in rows],
         check=check,
     )
-    if (
-        kind == "raceline"
-        and p["optimizer"] != "local"
-        and max(abs(row[4]) for row in rows) > p["curvature_limit"] * 1.01
-    ):
-        index = max(range(len(rows)), key=lambda i: abs(rows[i][4]))
-        raise PathValidationError(
-            f"補間後の曲率が上限を超えています: 最大{abs(rows[index][4]):.3f} 1/m / "
-            f"上限{p['curvature_limit']:.3f} 1/m。設定または境界を確認してください",
-            line[index], line[(index + 1) % len(line)], index,
-            stage="raceline_optimized_output", reason="curvature",
-            curvature_abs=abs(rows[index][4]), curvature_limit=p["curvature_limit"],
-        )
+    if kind == "raceline" and p["optimizer"] != "local":
+        validate_raceline_curvature(line, p, [row[4] for row in rows])
     return dict(
         points=line,
         profile=rows,

@@ -5,31 +5,57 @@ import sys
 from pathlib import Path
 
 
-def _noncrossing_output(create):
-    """Backtrack the final lateral step; never remove or reorder route points."""
+def _noncrossing_output(create, validate=None, *, refine_on_failure=False):
+    """Backtrack against all supplied checks, preserving point order.
+
+    For refinement only, the caller may request a failed candidate back. Prefer
+    a geometry-valid curvature failure, otherwise the original width failure.
+    The caller must validate again before publishing anything.
+    """
     from .geometry import PathValidationError, simple
 
     failures = []
+    original = None
+    best_curvature_failure = None
     for exponent in range(9):
         scale = 0.5 ** exponent
         line = create(scale)
+        if exponent == 0:
+            original = line
         try:
             simple(line, True)
+            if validate is not None:
+                validate(line)
         except PathValidationError as exc:
-            if exc.diagnostic["reason"] != "self_intersection":
-                raise
+            if exc.diagnostic["reason"] == "curvature":
+                value = exc.diagnostic["curvature_abs"]
+                if best_curvature_failure is None or value < best_curvature_failure[0]:
+                    best_curvature_failure = value, line, scale
             exc.diagnostic.update(stage="raceline_optimized_output", lateral_step_scale=scale)
             exc.args = (f"Raceline最適化後の検査: {exc}",)
             failures.append(dict(scale=scale, diagnostic=exc.diagnostic))
             last_error = exc
             continue
         return line, scale, failures
+    if refine_on_failure:
+        if best_curvature_failure is not None:
+            _, line, scale = best_curvature_failure
+            return line, scale, failures
+        return original, 1.0, failures
     raise last_error
+
+
+def _validate_candidate(line, corridor, p):
+    from . import footprint
+    from .lines import validate_raceline_curvature
+
+    corridor.validate(line, p["vehicle_width"] / 2 + p["margin"])
+    footprint.validate_line(line, True, p, corridor=corridor)
+    validate_raceline_curvature(line, p)
 
 
 def _validated_solution(solve, corridor, p):
     """Tighten QP bounds only after measuring a rejected interpolated result."""
-    from . import footprint
     from .geometry import PathValidationError, distance
 
     clearance = p["vehicle_width"] / 2 + p["margin"]
@@ -48,12 +74,13 @@ def _validated_solution(solve, corridor, p):
                 raise last_error from exc
             raise
         try:
-            corridor.validate(line, clearance)
-            footprint.validate_line(line, True, p, corridor=corridor)
+            _validate_candidate(line, corridor, p)
         except PathValidationError as exc:
             last_error = exc
             detail = exc.diagnostic
             detail["stage"] = "raceline_optimized_output"
+            if detail["reason"] == "curvature":
+                raise
             attempts.append(dict(reserve_m=reserve, diagnostic=detail))
             gap = detail.get("distance_m", clearance)
             missing = clearance - gap
@@ -163,6 +190,7 @@ def _run(document, p):
 
     step_scale = 1.0
     topology_refinements = []
+    step_refinements = []
 
     def solve(reserve):
         nonlocal step_scale
@@ -203,8 +231,12 @@ def _run(document, p):
                 raise ValueError("最適化結果に非有限値があります")
             return result.tolist()
 
-        result, step_scale, failures = _noncrossing_output(create)
-        topology_refinements.extend(dict(reserve_m=reserve, **failure) for failure in failures)
+        result, step_scale, failures = _noncrossing_output(
+            create, lambda line: _validate_candidate(line, corridor, p), refine_on_failure=True
+        )
+        step_refinements.extend(dict(reserve_m=reserve, **failure) for failure in failures)
+        topology_refinements.extend(dict(reserve_m=reserve, **failure) for failure in failures
+                                    if failure["diagnostic"]["reason"] == "self_intersection")
         return result
 
     result, reserve, attempts = _validated_solution(solve, corridor, p)
@@ -221,6 +253,7 @@ def _run(document, p):
             reference_info=reference_info,
             lateral_step_scale=step_scale,
             topology_refinements=topology_refinements,
+            step_refinements=step_refinements,
             verification_spacing_m=min(p["spacing"], 0.05),
         ),
     )
