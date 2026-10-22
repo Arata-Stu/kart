@@ -718,7 +718,25 @@ dialog::backdrop {
   padding-top: 15px;
 }
 #line-settings-form .dialog-actions { gap: 8px; flex-wrap: wrap; }
-#raceline-settings-open { font-size: 11px; padding: 6px 4px; }
+#raceline-settings-open {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  padding: 10px 12px;
+  text-align: left;
+  background: #edf6f3;
+  border: 1px solid #87b9af;
+}
+#raceline-settings-open .settings-label { color: #145f57; font-size: 12px; font-weight: 700; }
+#raceline-dimensions { color: #49675f; font-size: 10px; font-weight: 400; }
+#raceline-settings-open .settings-arrow {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: center;
+  color: #145f57;
+  font-size: 22px;
+}
+#raceline-settings-open:hover:not(:disabled) { background: #daeee7; border-color: #187d75; }
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

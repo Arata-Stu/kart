@@ -170,8 +170,8 @@ function status() {
     : "従来の境界対応点の中点方式";
   $("centerline-method").disabled = !d || busy;
   const cm = (value) => (value * 100).toLocaleString("ja-JP", { maximumFractionDigits: 2 });
-  $("raceline-settings-open").textContent =
-    `幅 ${cm(state.settings.vehicle_width)} · 全長 ${cm(state.settings.vehicle_length)} · 余裕 ${cm(state.settings.margin)} cm / 調整`;
+  $("raceline-dimensions").textContent =
+    `幅 ${cm(state.settings.vehicle_width)} · 全長 ${cm(state.settings.vehicle_length)} · 余裕 ${cm(state.settings.margin)} cm`;
   $("raceline-settings-open").disabled = !d || busy;
   $("edit-pair").classList.toggle("active", state.target === "pair");
   $("edit-left").classList.toggle("active", state.target === "left");

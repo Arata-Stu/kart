@@ -273,8 +273,10 @@
                   反復最小曲率（helper・閉路）
                 </option>
               </select>
-              <button id="raceline-settings-open" class="quiet full" title="車幅・全長・余裕を調整してRacelineを生成" aria-label="Racelineの車幅・全長・余裕を調整">
-                寸法・余裕を調整
+              <button id="raceline-settings-open" class="full" title="車幅・全長・余裕を調整してRacelineを生成">
+                <span class="settings-label">車体・余裕を調整</span>
+                <small id="raceline-dimensions">車幅・全長・余裕</small>
+                <span class="settings-arrow" aria-hidden="true">›</span>
               </button>
               <button id="generate-raceline" class="full">
                 Racelineを生成
@@ -292,7 +294,7 @@
                 ><button id="generate-customline">生成</button>
               </div>
             </div>
-            <button id="line-settings-open" class="quiet full">
+            <button id="line-settings-open" class="full">
               車幅・速度などの生成設定</button
             ><button id="export" class="primary full">
               HDMap・CSVを書き出す
