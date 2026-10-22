@@ -21,8 +21,13 @@ for(const reverse of [false,true]) {
 }
 const points=Array.from({length:41},(_,i)=>[i/10,0]);
 const sim=createSimulation({points,profile:points.map((p,i)=>[i/10,...p,0,0,i===0||i===40?0:.6,0])},false);
+assert.ok(Math.abs(sim.car.target.x - .8) < 1e-9);
+assert.equal(sim.car.target.y, 0);
+sim.step();
+assert.ok(Math.abs(sim.car.target.x - .8) < 1e-9, 'display the actual steering target');
 for(let i=0;i<15000&&!sim.car.done;i++){sim.step();assert.ok(sim.car.speed<=.60001);}
 assert.equal(sim.car.reason,'終点到達');assert.ok(sim.car.maxError<1e-8);
+assert.ok(sim.car.target.x <= 4, 'open-path target clamps to endpoint');
 assert.throws(()=>createSimulation({points},false,{lookahead:0}));
 assert.throws(()=>createSimulation({points:[[0,0],[0,0]]},false));
 console.log('Direction reversal and simulation tests passed');

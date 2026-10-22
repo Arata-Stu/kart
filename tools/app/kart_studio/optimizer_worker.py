@@ -190,6 +190,7 @@ def _run(document, p):
 
     step_scale = 1.0
     topology_refinements = []
+    iqp_history = []
     step_refinements = []
 
     def solve(reserve):
@@ -208,7 +209,9 @@ def _run(document, p):
         if p["optimizer"] == "mincurv":
             alpha = tph.opt_min_curv.opt_min_curv(**args)[0]
         else:
-            optimized = tph.iqp_handler.iqp_handler(
+            from .iqp import bounded_iqp
+
+            optimized = bounded_iqp(tph, dict(
                 **args,
                 spline_len=lengths,
                 psi=psi,
@@ -217,7 +220,7 @@ def _run(document, p):
                 stepsize_interp=p["spacing"],
                 iters_min=3,
                 curv_error_allowed=0.01,
-            )
+            ), history=iqp_history)
             alpha, current_track, current_normals = optimized[:3]
 
         def create(scale):
@@ -254,6 +257,7 @@ def _run(document, p):
             lateral_step_scale=step_scale,
             topology_refinements=topology_refinements,
             step_refinements=step_refinements,
+            iqp_history=iqp_history,
             verification_spacing_m=min(p["spacing"], 0.05),
         ),
     )

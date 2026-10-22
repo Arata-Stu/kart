@@ -47,7 +47,13 @@ def optimize(document, parameters, check):
                 while process.poll() is None:
                     check()
                     if time.monotonic() > deadline:
-                        raise ValueError("最適化が600秒以内に完了しませんでした")
+                        detail = (root / "log.txt").read_text()[-1600:]
+                        raise ValueError(
+                            "最適化が600秒以内に完了しませんでした。"
+                            "反復最小曲率の場合は最小曲率（helper）を試し、"
+                            "点間隔・境界の急な折れ・曲率上限を確認してください。"
+                            + ("\n最終処理:\n" + detail if detail else "")
+                        )
                     time.sleep(0.1)
                 check()
                 if process.returncode:

@@ -20,6 +20,7 @@ export function createSimulation(line, closed, options = {}) {
     return {x: seg.a[0]+t*(seg.b[0]-seg.a[0]), y: seg.a[1]+t*(seg.b[1]-seg.a[1]), speed: Number.isFinite(v0) && Number.isFinite(v1) ? v0+t*(v1-v0) : cfg.speed};
   }
   const first = segments[0], car = {x:first.a[0], y:first.a[1], yaw:Math.atan2(first.b[1]-first.a[1],first.b[0]-first.a[0]), speed:0, steering:0, station:0, error:0, maxError:0, time:0, done:false, reason:""};
+  car.target = sample(cfg.lookahead);
   function step(dt = .02) {
     if (car.done) return car;
     if (!(dt > 0 && dt <= .1)) throw Error("時間刻みが不正です");
@@ -39,6 +40,7 @@ export function createSimulation(line, closed, options = {}) {
     }
     if (car.error > 2 || car.time >= 300) {car.done=true; car.speed=0; car.reason=car.error>2?"追従逸脱（2 m超）":"時間上限（300秒）"; return car;}
     const target=sample(car.station+cfg.lookahead), dx=target.x-car.x, dy=target.y-car.y;
+    car.target = target;
     car.steering=clamp(Math.atan2(2*cfg.wheelbase*(-Math.sin(car.yaw)*dx+Math.cos(car.yaw)*dy),Math.max(dx*dx+dy*dy,1e-8)),-cfg.maxSteer,cfg.maxSteer);
     // Short preview avoids an open path's zero-speed first sample deadlock.
     const reference=sample(Math.min(total,Math.max(car.station,.05))).speed;
