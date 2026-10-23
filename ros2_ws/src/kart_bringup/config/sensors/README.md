@@ -21,8 +21,8 @@ SDKが機種ごとに列挙するセンサ制御、無効なfilter内部の調�
 | `/realsense/color/camera_info` | sensor_msgs/msg/CameraInfo | RGB内部校正 |
 | `/realsense/infra1/image_rect_raw`, `/realsense/infra2/image_rect_raw` | sensor_msgs/msg/Image | 左右Infra、424×240、60Hz |
 | `/realsense/infra1/camera_info`, `/realsense/infra2/camera_info` | sensor_msgs/msg/CameraInfo | ステレオ校正 |
-| `/realsense/imu` | sensor_msgs/msg/Imu | accel補間＋gyro、200Hz |
-| `/realsense/accel/sample`, `/realsense/gyro/sample` | sensor_msgs/msg/Imu | 個別IMU、250/200Hz設定 |
+| `/realsense/imu` | sensor_msgs/msg/Imu | accel補間＋gyro、400Hz設定（実受信Hz未検証） |
+| `/realsense/accel/sample`, `/realsense/gyro/sample` | sensor_msgs/msg/Imu | 個別IMU、accel 200Hz / gyro 400Hz設定 |
 | `/realsense/diagnostics` | diagnostic_msgs/msg/DiagnosticArray | カメラ状態、1秒周期 |
 | `/tf_static` | tf2_msgs/msg/TFMessage | カメラ内部TF、transient local |
 
@@ -53,7 +53,11 @@ collectでもmapping用bagにはInfraを有効にする。driveではInfra OFF�
   `exposure.1=7500`, `gain.1=16`, `exposure.2=1`, `gain.2=16`: 未使用HDR各露光の設定。
 - `enable_sync=false`, `depth_module.inter_cam_sync_mode=0`: wrapper同期なし、機器間同期なし。
 - `enable_gyro/enable_accel=true`, `enable_motion=false`: USB個別IMUを使用、DDS機器のmotionは無効。
-  `gyro_fps=200`, `accel_fps=250`, `unite_imu_method=2`: Hzと線形補間方式。
+  `gyro_fps=400`, `accel_fps=200`, `unite_imu_method=2`: Hzと線形補間方式。
+  通常・環境記録とも、2026-10-23の実機D455（S/N 239222300906、FW 5.16.0.1）の
+  `rs-enumerate-devices -o -c`が報告する高速側を採用（gyro 200/400Hz、accel 100/200Hz）。
+  旧accel 250Hzはこの実機で非対応。設定変更後はbringupを再起動し、
+  ドライバのOpen profileログでGyro 400Hz・Accel 200Hzを確認する。実受信Hzは未検証。
   `hold_back_imu_for_frames=false`: 画像待ちでIMUを保留しない。
 - `angular_velocity_cov=0.01`, `linear_accel_cov=0.01`: IMU共分散設定。
   `clip_distance=-1.0`: 距離クリップ無効。

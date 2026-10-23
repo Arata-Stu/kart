@@ -23,8 +23,9 @@
     # character devices before dropping privileges; never chmod all of /dev.
     # Newer Jetson drivers open igpu0/power and check igpu0/ctrl with
     # faccessat during cuInit (both observed EACCES).
+    # nvmap was also observed root:root 0600: admin cuInit=100, root cuInit=0.
     # Include both naming layouts; symbolic aliases are skipped, real nodes only.
-    for kart_gpu_device in /dev/nvhost-gpu /dev/nvhost-ctrl-gpu \
+    for kart_gpu_device in /dev/nvmap /dev/nvhost-gpu /dev/nvhost-ctrl-gpu \
         /dev/nvhost-power-gpu /dev/nvgpu/igpu0/power \
         /dev/nvgpu/igpu0/ctrl; do
         [[ -c "$kart_gpu_device" && ! -L "$kart_gpu_device" ]] || continue

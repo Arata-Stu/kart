@@ -522,7 +522,23 @@ kart固有の版・マウント・依存は[ルートREADME](../../README.md)、
 Dockerfile.kartはroot用entrypoint extension
 `docker/scripts/kart-device-groups.sh`を導入し、Dockerから渡された非0のGIDを
 adminの所属グループへ登録してからgosuへ進む。グループ名が異なっても数値GIDで対応する。
-rootグループは追加せず、デバイスのchmodも行わない。docker execのadminにも登録が適用される。
+rootグループは追加しない。docker execのadminにも登録が適用される。
+GPUについては、NVIDIA runtimeがroot:root 0600で生成する既知の実体文字デバイス
+（nvmap、nvhost-gpu、nvhost-ctrl-gpu、nvhost-power-gpu、nvgpu/igpu0/{power,ctrl}）だけを
+video 0660へ補正し、adminをvideoへ追加する。シンボリックリンクや他のデバイスは対象外。
+
+`NvRmMemInitNvmap failed: error Permission denied`が出て、`/dev/nvmap`がroot:root 0600、
+adminのcuInitが100、rootが0の場合は、既存コンテナ内で以下を実行する。
+adminが既にvideo所属ならshellの入り直しは不要。
+
+```bash
+sudo chgrp video /dev/nvmap
+sudo chmod 0660 /dev/nvmap
+python3 -c 'import ctypes; print("cuInit =", ctypes.CDLL("libcuda.so.1").cuInit(0))'
+```
+
+0を確認してからengine検証・buildへ進む。TensorRT engine未buildの案内はCUDA初期化失敗でも
+表示されるため、権限エラーだけを根拠にengineを削除・強制再buildしない。
 
 この修正はimage内の変更なので、対象imageの再ビルドとコンテナ再作成が必要。
 現在のコンテナだけを復旧する場合、デバイスGIDが20と確認できたケースでは以下を実行し、

@@ -1215,3 +1215,12 @@ VO（左右画像のみ）／VIO（左右画像＋IMU）を選択できる。既
 VIOではbag内の`/realsense/imu`が必須で、不足時は起動前に停止する。
 地図・モデル・HDMap等の選択と平面制約の既定ONは既存設定に従う。
 TUIからlaunchへの引数とIMU不足の拒否をportable testで確認。ROS/GPU・実bagの推定精度は未検証。
+
+### D455 IMUの取得レート
+
+通常用・環境記録用のRealSense設定は`gyro_fps=400`、`accel_fps=200`（Hz）、
+`unite_imu_method=2`（線形補間）を使用する。2026-10-23の実機D455
+（FW 5.16.0.1）の対応profile一覧に基づく高速側の設定。旧accel 250Hzは非対応。
+変更後はbringupを再起動し、Open profileログでGyro 400Hz・Accel 200Hzを確認する。
+統合出力は`/realsense/imu`（`sensor_msgs/msg/Imu`）。実受信Hz・ROS結合・実機動作は未検証。
+詳細は[センサ設定](config/sensors/README.md)を参照。
