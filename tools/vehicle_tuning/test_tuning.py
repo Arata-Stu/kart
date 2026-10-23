@@ -8,7 +8,7 @@ import unittest
 import numpy as np
 
 sys.path.insert(0,str(Path(__file__).parent))
-from analysis import analyze, simulate, static_transform
+from analysis import analyze, prepare, simulate, static_transform
 from bag import read_bag
 from cli import main
 
@@ -67,6 +67,41 @@ class AnalysisTests(unittest.TestCase):
         self.assertIsNotNone(summary['kff_candidate'])
         self.assertEqual({b['kind'] for b in bins},{'accel','coast','brake'})
         self.assertTrue(all(r['acceleration_mps2'] is None for r in rows if r['reason']))
+
+    def test_small_command_header_backstep_preserves_order_and_raw_stamp(self):
+        cfg = dict(CONFIG, clock='header')
+        for backstep_ns in (2_175_000, 5_000_000):
+            data = {k: copy.deepcopy(v[:5]) for k, v in self.data.items() if isinstance(v, list)}
+            previous_ns = data['command'][1]['header_ns']
+            raw_ns = previous_ns - backstep_ns
+            data['command'][2]['header_ns'] = raw_ns
+            original = copy.deepcopy(data['command'])
+            streams, quality, _ = prepare(data, cfg)
+            times, rows = streams['command']
+            self.assertEqual(times[1], times[2])
+            self.assertEqual(rows[2]['header_ns'], raw_ns)
+            self.assertEqual(data['command'], original)
+            self.assertEqual(quality['command']['clamped_header_count'], 1)
+            self.assertAlmostEqual(quality['command']['max_header_clamp_s'], backstep_ns / 1e9)
+
+    def test_header_backstep_tolerance_does_not_hide_other_clock_failures(self):
+        cfg = dict(CONFIG, clock='header')
+        for key, field, backstep_ns in (
+            ('command', 'header_ns', 5_000_001),
+            ('mode', 'header_ns', 1),
+            ('odom', 'header_ns', 1),
+            ('command', 'bag_ns', 1),
+        ):
+            data = {k: copy.deepcopy(v[:5]) for k, v in self.data.items() if isinstance(v, list)}
+            data[key][2][field] = data[key][1][field] - backstep_ns
+            with self.assertRaisesRegex(ValueError, 'clock goes backwards'):
+                prepare(data, cfg)
+        data = {k: copy.deepcopy(v[:5]) for k, v in self.data.items() if isinstance(v, list)}
+        high_water = data['command'][1]['header_ns']
+        data['command'][2]['header_ns'] = high_water - 3_000_000
+        data['command'][3]['header_ns'] = high_water - 6_000_000
+        with self.assertRaisesRegex(ValueError, 'selected clock goes backwards'):
+            prepare(data, cfg)
 
     def test_static_rotation_and_lever_arm(self):
         # Sensor axes rotated 90 deg, one metre ahead. v_child=(2,1,0) in body;

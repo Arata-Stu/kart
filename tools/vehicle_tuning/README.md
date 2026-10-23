@@ -192,6 +192,10 @@ bash scripts/vehicle_tuning.sh analyze \
   受信時刻を使う。再生wall timeと元header時刻の混在、別bagの自動同期は対応しない。
   bag/header差の絶対値が2秒超なら拒否。source commandの古さも別途確認する。
 - 過去の最新指令／状態のみを鮮度上限付きで対応させる。未来の指令を補間しない。
+- header時計の車両指令に限り、既定5ms以内の時刻逆転は受信順を保って直前の採用時刻へ揃える。
+  元headerは鮮度検査用に保持し、qualityの`clamped_header_count`と`max_header_clamp_s`へ記録する。
+  連続逆転も直前の採用時刻からの差で判定し、許容幅を累積で超えない。
+  5ms超、bag受信時刻の逆転、指令以外の時刻逆転は従来どおり拒否する。
 - `twist`はchild frameの速度として、静的TFで`vehicle_frame`へ回転し、
   `v_vehicle=R*v_child-(R*omega_child)×p`で原点差を補正して前方x成分を使用する。
   **map→odomの動的TFとmap位置の差分は使わない**。固定TFは時刻補間不要。
@@ -261,6 +265,7 @@ wheelbase／舵角などの未校正値を候補生成で埋めない。現在�
 | clock | bag | bag/headerの時刻選択 |
 | vehicle_frame | base_link | 前方x、左y、上zの車体frame |
 | allowed_modes | [2] | 2=MANUAL。AUTO評価は[1]。STOP/PROPOは不可 |
+| command_header_backstep_tolerance_s | 0.005 | header時計の車両指令だけに許容する逆転幅[s]。元headerは保持 |
 | command_max_age_s / mode_max_age_s | 0.15 / 0.3 | 過去指令／modeの鮮度 |
 | diagnostic_max_age_s / path_max_age_s | 2.0 / 0.2 | 診断／HOST経路の鮮度 |
 | odom_max_gap_s | 0.12 | odom連続性、IMU対応の期限 |

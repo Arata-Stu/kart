@@ -18,6 +18,10 @@ ROS_DOMAIN_ID=92 ros2 run kart_mapping build_map --job /absolute/path/job.json
 公式CLIを `--steps_to_run edex compute_poses --use_raw_image=False` で呼び出す。
 既定ではcuSFM・深度・占有地図・cuVGLは実行しない。dense_reconstruction=trueでは公式のdepth・occupancy工程を追加する。kart独自のROSノード／publisher／subscriber／serviceは追加しない。
 bag検査はrosbag readerで行い、ROSトピック再生はしない。Collectorとmapping.launch.pyは後続のcapture専用で、地図生成では使わない。
+`metadata.yaml`は最上位の`rosbag2_bagfile_information`、storage_identifier、topic名・型・件数を検査する。
+形式不正時は読んだファイルの絶対パスと不足・不正項目を表示する。キー欠落時は最上位キーも表示する。
+失敗時は`.failed/<ID>/job.json`の`bag`が意図した録画を指すか、そのパスのmetadataと照合する。
+bag本体やmetadataの自動修復・書き換えは行わない。
 
 ## 設定と入力
 
@@ -60,6 +64,7 @@ UI実行の失敗時は診断用に`map/.failed/<ID>/`へ中間成果物・公�
 ## 検証範囲
 
 公式CLI引数・成果物検査・点群未取得状態はROSなしのテストで検証する。
+`test/test_bag_inputs.py`ではmetadataの正常入力・キー欠落・YAML形式不正・topic項目不正をROSなしで検証する。
 Linuxのcolcon build、インストール済み公式5.0 CLIとの互換性、実bag/GPUでの地図生成は未検証。
 公式仕様: https://nvidia-isaac-ros.github.io/concepts/visual_global_localization/tutorials/tutorial_map_creation.html
 

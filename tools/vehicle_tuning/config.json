@@ -3,6 +3,7 @@
   "vehicle_frame": "base_link",
   "allowed_modes": [2],
   "command_max_age_s": 0.15,
+  "command_header_backstep_tolerance_s": 0.005,
   "mode_max_age_s": 0.3,
   "diagnostic_max_age_s": 2.0,
   "path_max_age_s": 0.2,

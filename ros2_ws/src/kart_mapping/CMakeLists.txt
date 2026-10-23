@@ -8,6 +8,7 @@ install(PROGRAMS scripts/build_map scripts/capture_snapshot DESTINATION lib/${PR
 install(FILES README.md DESTINATION share/${PROJECT_NAME})
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(bag_inputs test/test_bag_inputs.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
   ament_add_pytest_test(capture_state test/test_capture_state.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
   ament_add_pytest_test(frames test/test_frames.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
 endif()

@@ -80,6 +80,7 @@ def prepare(data, cfg):
             raise ValueError(f'No usable {key} messages (check diagnostic hardware_id)')
         out, offsets, last_bag, last_time = [], [], None, None
         repeated_headers = 0
+        clamped_headers, max_clamp_ns = 0, 0
         last_header = None
         for row in rows:
             bag, header = row['bag_ns'], row.get('header_ns')
@@ -95,7 +96,15 @@ def prepare(data, cfg):
             # Headerless board path has reception time only; explicit in the report.
             selected = header if cfg['clock'] == 'header' and header is not None else bag
             if last_time is not None and selected < last_time:
-                raise ValueError(f'{key}: selected clock goes backwards; split recording')
+                correction_ns = last_time - selected
+                tolerance_ns = round(cfg.get('command_header_backstep_tolerance_s', .005) * 1e9)
+                if key != 'command' or cfg['clock'] != 'header' or correction_ns > tolerance_ns:
+                    raise ValueError(f'{key}: selected clock goes backwards; split recording')
+                # Keep reception order and the original header for freshness checks.
+                # Compare against the high-water mark so repeated backsteps cannot drift.
+                selected = last_time
+                clamped_headers += 1
+                max_clamp_ns = max(max_clamp_ns, correction_ns)
             if key == 'odom' and last_time == selected:
                 raise ValueError('odom: duplicate timestamp')
             last_time = selected
@@ -104,6 +113,8 @@ def prepare(data, cfg):
         duration = times[-1]-times[0] if len(times) > 1 else 0
         quality[key] = {'count': len(out), 'rate_hz': (len(out)-1)/duration if duration > 0 else None,
                         'max_gap_s': max(np.diff(times), default=0), 'repeated_headers': repeated_headers,
+                        'clamped_header_count': clamped_headers,
+                        'max_header_clamp_s': max_clamp_ns / 1e9,
                         'bag_minus_header_median_s': float(np.median(offsets)) if offsets else None,
                         'bag_minus_header_p95_s': float(np.percentile(offsets, 95)) if offsets else None}
         if offsets and max(abs(x) for x in offsets) > cfg['max_header_bag_offset_s']:
