@@ -96,6 +96,7 @@ def main():
     parser.add_argument("--rgb-fps", choices=("0", "30", "60", "90"))
     parser.add_argument("--infra-fps", choices=("0", "30", "60", "90"))
     parser.add_argument("--rgb-profile", default="", help="RGB WIDTHxHEIGHTxFPS; 0 disables")
+    parser.add_argument("--imu-profile", choices=("low", "high", "off"), default="", help="IMU: low=accel100/gyro200Hz, high=accel200/gyro400Hz, off=なし; 未指定はYAML")
     parser.add_argument("--infra-profile", default="", help="Infra WIDTHxHEIGHTxFPS; 0 disables")
     for key in ("device", "map-file", "map-dir", "model-dir", "lane-id", "line-type"):
         parser.add_argument("--" + key, default="")
@@ -175,6 +176,15 @@ def main():
                         label=lambda v: "なし" if v == "0" else v.replace("x", " × "),
                         default=profiles.index(sensor[key] if enabled else "0"),
                     ))
+            if not args.imu_profile:
+                current = ("off" if not sensor["enable_accel"] and not sensor["enable_gyro"] else
+                           "low" if (sensor["accel_fps"], sensor["gyro_fps"]) == (100, 200) else
+                           "high" if (sensor["accel_fps"], sensor["gyro_fps"]) == (200, 400) else "")
+                choices = ["", "low", "high", "off"]
+                args.imu_profile = choose("IMU 取得レート", choices,
+                    label=lambda v: {"": "設定を保持（YAML）", "low": "低Hz（加速度100 / ジャイロ200Hz）",
+                                     "high": "高Hz（加速度200 / ジャイロ400Hz）", "off": "なし"}[v],
+                    default=choices.index(current))
             if args.mode == "drive" and (args.infra_fps == "0" or args.infra_profile == "0"):
                 raise ValueError("VSLAM/VGLにはInfraが必要です（なしは選択できません）")
             args.evs = not args.no_evs and (args.evs or choose(
@@ -333,6 +343,8 @@ def main():
         raise ValueError("mapなし診断では地図・モデル・ラインを指定しないでください")
     if args.mode == "eval" and args.evs:
         raise ValueError("evalでは実EVSを起動しません")
+    if args.imu_profile and args.mode in ("eval", "e2e-latency"):
+        raise ValueError("--imu-profileは実機のcollect/environment/drive/e2eで使用してください")
     if args.evs:
         paths, overrides = pipeline_configuration(config / "sensors", args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config)
         if args.evs_bias_file and args.evs_bias_file != DEFAULT_BIAS:
@@ -340,7 +352,7 @@ def main():
         print(f"EVS: {overrides}; packet topic OFF; configs={paths}")
     sensors = sensor_parameters(
         camera_config(config, args.mode), args.rgb_fps or "", args.infra_fps or "",
-        args.rgb_profile, args.infra_profile
+        args.rgb_profile, args.infra_profile, args.imu_profile
     )
     if section_routing:
         from kart_bringup.localization import resolve
@@ -348,7 +360,10 @@ def main():
         load_transforms(config / 'vehicle/transforms.yaml', require_camera=True)
         if not sensors['enable_infra1'] or not sensors['enable_infra2']:
             raise ValueError('Section E2E needs stereo Infra for localization')
-        resolve(config / 'localization', args.map_dir, '', enable_vgl=False)
+        localization_params, _, _, _ = resolve(config / 'localization', args.map_dir, '',
+                                                  {'base_frame': section_routing['base_frame']}, enable_vgl=False)
+        from kart_bringup.mission import validate_localization_imu
+        validate_localization_imu(localization_params, sensors)
     if args.mode in ("drive", "eval") and not fresh:
         if args.mode == "drive" and not sensors["enable_infra1"]:
             raise ValueError("VSLAM/VGLにはInfraが必要です（なしは選択できません）")
@@ -370,6 +385,9 @@ def main():
         parameters, _, _, profile = resolve(
             config / "localization", args.map_dir, args.model_dir, overrides=overrides, enable_vgl=not vslam_only
         )
+        if args.mode == "drive":
+            from kart_bringup.mission import validate_localization_imu
+            validate_localization_imu(parameters, sensors)
         if args.mode=="eval":args.tracking_mode=str(parameters['cuvslam']['tracking_mode'])
         if not vslam_only:
             if args.mode == "eval":
@@ -434,6 +452,7 @@ def main():
         "e2e_fixed_throttle": None if args.e2e_fixed_throttle is None else str(args.e2e_fixed_throttle),
         "rgb_profile": args.rgb_profile,
         "infra_profile": args.infra_profile,
+        "imu_profile": args.imu_profile,
         "rgb_fps": args.rgb_fps,
         "infra_fps": args.infra_fps,
         "enable_bridge": str(not args.no_bridge).lower(),
@@ -502,6 +521,9 @@ def main():
             if sensors["enable_infra1"]
             else "OFF",
         )
+    if args.mode != "eval":
+        print("IMU:", f"加速度{sensors['accel_fps']} / ジャイロ{sensors['gyro_fps']}Hz"
+              if sensors["enable_accel"] and sensors["enable_gyro"] else "OFF")
     if args.mode == "environment":
         print("環境記録: Depth Z16:", sensors["depth_module.depth_profile"],
               "IMU: accel=", sensors["enable_accel"], "gyro=", sensors["enable_gyro"],

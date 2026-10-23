@@ -43,7 +43,7 @@ def recording_config(root, mode, evs=False):
     return Path(root) / "recording" / f"bag_manager{suffix}.yaml"
 
 
-def sensor_parameters(path, rgb_fps="", infra_fps="", rgb_profile="", infra_profile=""):
+def sensor_parameters(path, rgb_fps="", infra_fps="", rgb_profile="", infra_profile="", imu_profile=""):
     params = yaml.safe_load(Path(path).read_text())["/**/realsense"]["ros__parameters"]
     params = dict(params)
     for stream, value, key, flags in (
@@ -78,6 +78,13 @@ def sensor_parameters(path, rgb_fps="", infra_fps="", rgb_profile="", infra_prof
             params[key] = value
         for flag in flags:
             params[flag] = value != "0"
+    if imu_profile:
+        if imu_profile not in ("low", "high", "off"):
+            raise ValueError("IMU profile must be low, high, or off")
+        params["enable_accel"] = params["enable_gyro"] = imu_profile != "off"
+        if imu_profile != "off":
+            params["accel_fps"], params["gyro_fps"] = (100, 200) if imu_profile == "low" else (200, 400)
+            params["unite_imu_method"] = 2
     # Depth and Infra share the D455 stereo sensor. Keep one capture profile.
     if params["enable_depth"] and (params["enable_infra1"] or params["enable_infra2"]):
         params["depth_module.depth_profile"] = params["depth_module.infra_profile"]
@@ -220,3 +227,11 @@ def hdmap_choices(path):
         for kind in KINDS
         if lane["lines"].get(kind)
     ]
+
+
+def validate_localization_imu(parameters, sensors):
+    """Reject VIO without a unified IMU before starting any nodes."""
+    if parameters["cuvslam"].get("tracking_mode", 0) == 1 and not (
+        sensors["enable_accel"] and sensors["enable_gyro"] and sensors["unite_imu_method"] == 2
+    ):
+        raise ValueError("VIO requires IMU: choose low or high (imu_profile)")

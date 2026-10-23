@@ -135,3 +135,23 @@ Bias配置先はproject rootの`bias/evs/`。運用YAMLのbias_file既定は空�
 加速度250Hz・gyro200Hz・線形補間統合IMUを有効にする。
 DepthはZ16、未整列、点群なし、emitter無効。Infra profileの変更はDepthにも適用する。
 通常の`realsense.yaml`はDepth無効のまま。
+
+### bringupのIMU選択
+
+対話bringupではRGB/Infraの後にIMU取得レートを選択する。
+低Hzは加速度100Hz・ジャイロ200Hz、高Hzは加速度200Hz・ジャイロ400Hz、
+なしは`enable_accel=false`・`enable_gyro=false`。有効時の`unite_imu_method=2`は線形補間。
+現在のYAMLに対応する候補を既定とし、「設定を保持（YAML）」でも起動できる。
+CLIは`--imu-profile low|high|off`、missionとRealSense moduleのlaunch引数は
+`imu_profile:=low|high|off`（既定空文字でYAML保持）。collect/environment/drive/e2eで使用する。
+低・高のレートはD455（FW 5.16.0.1）の実機列挙結果に基づく。
+VIOまたはIMUを必要とする自動復帰と「なし」の組み合わせは起動前に拒否する。
+変更は起動時のみ。既存topic名・型は変更しない。offline評価のIMUは記録bagを使用する。
+
+```bash
+bash scripts/bringup.sh --mode collect --imu-profile low
+bash scripts/bringup.sh --mode environment --imu-profile high
+bash scripts/bringup.sh --mode collect --imu-profile off
+```
+
+設定変換と対話選択のportable testを用意。ROS結合・実機の取得Hzは未検証。

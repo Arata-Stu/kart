@@ -15,6 +15,26 @@ CONFIG = PACKAGE / "config"
 
 
 class MissionTests(unittest.TestCase):
+    def test_imu_profiles_and_vio_requirement(self):
+        from kart_bringup.mission import validate_localization_imu
+        for mode in ("collect", "environment"):
+            path = camera_config(CONFIG, mode)
+            original = sensor_parameters(path)
+            for profile, rates in (("low", (100, 200)), ("high", (200, 400))):
+                params = sensor_parameters(path, imu_profile=profile)
+                self.assertEqual((params["accel_fps"], params["gyro_fps"]), rates)
+                self.assertTrue(params["enable_accel"] and params["enable_gyro"])
+                self.assertEqual(params["rgb_camera.color_profile"], original["rgb_camera.color_profile"])
+                validate_localization_imu({"cuvslam": {"tracking_mode": 1}}, params)
+            off = sensor_parameters(path, imu_profile="off")
+            self.assertFalse(off["enable_accel"] or off["enable_gyro"])
+            validate_localization_imu({"cuvslam": {"tracking_mode": 0}}, off)
+            with self.assertRaisesRegex(ValueError, "VIO requires IMU"):
+                validate_localization_imu({"cuvslam": {"tracking_mode": 1}}, off)
+            self.assertEqual(sensor_parameters(path, imu_profile=""), original)
+            with self.assertRaises(ValueError):
+                sensor_parameters(path, imu_profile="invalid")
+
     def test_collect_is_light_and_external_sensor_container(self):
         cfg = composition(
             CONFIG / "mission.yaml",
@@ -292,9 +312,11 @@ class MissionCompositionTests(unittest.TestCase):
             lu.include.reset_mock()
             lu.include.reset_mock()
             args.mode = "environment"
+            args.imu_profile = "low"
             module.add_mission(args)
             camera_args = lu.include.call_args_list[0].kwargs["launch_arguments"]
             self.assertTrue(camera_args["camera_config"].endswith("realsense_environment.yaml"))
+            self.assertEqual(camera_args["imu_profile"], "low")
             vehicle_args = lu.include.call_args_list[1].kwargs["launch_arguments"]
             self.assertTrue(vehicle_args["bag_config"].endswith("bag_manager_environment.yaml"))
             self.assertEqual(len(lu.include.call_args_list), 2)
@@ -307,7 +329,7 @@ class MissionCompositionTests(unittest.TestCase):
                 patch.object(
                     module,
                     "resolve",
-                    return_value=({}, {}, {}, {"input_shape": [1, 3, 240, 424]}),
+                    return_value=({"cuvslam": {"tracking_mode": 0}}, {}, {}, {"input_shape": [1, 3, 240, 424]}),
                 ),
                 patch.object(
                     module, "hdmap_choices", return_value=[("lane_001", "centerline")]

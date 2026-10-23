@@ -43,6 +43,24 @@ class FzfTests(unittest.TestCase):
                     for key in ("rgb_profile", "infra_profile"):
                         self.assertIn(f"{key}:={profile}", output.getvalue())
 
+    def test_imu_selection_reaches_mission_command(self):
+        for mode in ("collect", "environment"):
+            for profile in ("low", "high", "off"):
+                def choose(title, values, *args, **kwargs):
+                    if title == "用途":
+                        return mode
+                    if title == "IMU 取得レート":
+                        self.assertEqual(values[kwargs["default"]], "high")
+                        return profile
+                    return values[0]
+                output = io.StringIO()
+                with (patch.object(sys, "argv", ["bringup.py", "--dry-run", "--no-bridge", "--no-evs",
+                                                 "--run-name", "imu_check", "--auto-fixed-throttle=-1"]),
+                      patch.object(sys.stdin, "isatty", return_value=True),
+                      patch.object(module, "choose", side_effect=choose), redirect_stdout(output)):
+                    module.main()
+                self.assertIn(f"imu_profile:={profile}", output.getvalue())
+
     def test_default_duplicate_labels_and_original_path(self):
         values = [Path("/maps/a b"), Path("/maps/a\nb")]
         def run(command, **kwargs):

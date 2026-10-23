@@ -5,7 +5,7 @@ import isaac_ros_launch_utils.all_types as lut
 from ament_index_python.packages import get_package_share_directory
 from kart_bringup.configuration import load
 from kart_bringup.localization import resolve
-from kart_bringup.mission import composition, hdmap_choices, sensor_parameters, camera_config, recording_config
+from kart_bringup.mission import composition, hdmap_choices, sensor_parameters, camera_config, recording_config, validate_localization_imu
 from kart_bringup.vehicle_tf import load_transforms
 
 OVERRIDES = (
@@ -24,7 +24,7 @@ def add_mission(args):
     )
     params = sensor_parameters(
         camera_config(root, args.mode), args.rgb_fps, args.infra_fps,
-        getattr(args, "rgb_profile", ""), getattr(args, "infra_profile", "")
+        getattr(args, "rgb_profile", ""), getattr(args, "infra_profile", ""), getattr(args, "imu_profile", "")
     )
     section_routing = None
     if cfg['e2e']:
@@ -74,7 +74,8 @@ def add_mission(args):
             raise ValueError("Drive localization requires stereo infra (infra_fps > 0)")
         overrides={'multicam_mode':args.multicam_mode} if args.multicam_mode!="" else {}
         if section_routing: overrides['base_frame'] = section_routing['base_frame']
-        _, _, _, profile = resolve(root / "localization", args.map_dir, args.model_dir,overrides, enable_vgl=not bool(section_routing))
+        localization_params, _, _, profile = resolve(root / "localization", args.map_dir, args.model_dir,overrides, enable_vgl=not bool(section_routing))
+        validate_localization_imu(localization_params, params)
         width, height, _ = params["depth_module.infra_profile"].split("x")
         if not section_routing and profile["input_shape"][2:] != [int(height), int(width)]:
             raise ValueError("RealSense resolution differs from VGL map/model shape")
@@ -135,6 +136,7 @@ def add_mission(args):
                     "camera_config": str(camera_config(root, args.mode)),
                     "rgb_profile": getattr(args, "rgb_profile", ""),
                     "infra_profile": getattr(args, "infra_profile", ""),
+                    "imu_profile": getattr(args, "imu_profile", ""),
                     "rgb_fps": args.rgb_fps,
                     "infra_fps": args.infra_fps,
                 },
@@ -218,6 +220,7 @@ def generate_launch_description():
         "evs_tensor_config",
         "rgb_profile",
         "infra_profile",
+        "imu_profile",
         "rgb_fps",
         "infra_fps",
         "map_dir",
