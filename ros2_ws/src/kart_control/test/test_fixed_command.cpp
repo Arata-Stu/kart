@@ -4,7 +4,9 @@
 using namespace kart_control;
 
 int main() {
-  FixedSettings s; s.throttle=.12; s.steering=-.05;
+  FixedSettings full; full.throttle=1.0;
+  validate_fixed(full); // Full normalized throttle is accepted by default.
+  FixedSettings s; s.max_throttle=.2; s.throttle=.12; s.steering=-.05;
   auto tick=[](FixedCommandGate &g,int mode,double t,bool competing=false) {
     g.observe(mode,100+t,100+t,t); return g.step(100+t,t,competing);
   };

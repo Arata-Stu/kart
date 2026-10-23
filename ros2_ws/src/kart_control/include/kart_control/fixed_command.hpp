@@ -9,7 +9,7 @@ namespace kart_control {
 struct FixedSettings {
   std::string fixed_axes{"both"};
   double teleop_timeout_s{0.15};
-  double steering{0}, throttle{0}, brake{0}, max_throttle{0.2};
+  double steering{0}, throttle{0}, brake{0}, max_throttle{1.0};
   double mode_timeout_s{0.3}, entry_neutral_s{0.3}, duration_s{0};
 };
 inline void validate_fixed(const FixedSettings &s) {

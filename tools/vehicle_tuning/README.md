@@ -97,7 +97,7 @@ bash scripts/vehicle_tuning.sh collect fixed_command:=true \
   数値を入力すると一括送信する。空入力は現在値維持、q/Ctrl-Cは画面だけ終了する。
   AUTOへはJoyで入り直す。走行中やSTOP通信途絶時の変更は拒否する。
   起動時の選択例は`fixed_axes:=throttle throttle:=0.1`。既定は`both`。
-  片軸固定はteleop途絶で中立＋STOP要求。手動前進・後退にもmax_throttle（既定0.2）を適用。
+  片軸固定はteleop途絶で中立＋STOP要求。手動前進・後退にもmax_throttle（既定1.0）を適用。
   duration_s=0はモード変更まで保持、正値は各AUTO試験の保持秒数。
   設定変更はメモリ上のみ。起動時に既にAUTOでも出力を開始しない。
 - 固定指令の状態`/control/fixed_status`と条件JSON`/control/fixed_config`も標準録画へ含む。

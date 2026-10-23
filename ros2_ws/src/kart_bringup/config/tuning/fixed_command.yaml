@@ -6,7 +6,7 @@
     steering: 0.0  # Normalized, positive left, [-1,1]
     throttle: 0.0  # Normalized forward effort, not target speed
     brake: 0.0  # Mutually exclusive with throttle; reverse is manual only in steering mode
-    max_throttle: 0.2
+    max_throttle: 1.0
     control_rate_hz: 50.0
     mode_timeout_s: 0.3
     entry_neutral_s: 0.3  # Neutral during AUTO/mux/bridge transition

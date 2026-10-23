@@ -47,7 +47,7 @@ pkg一覧は`config/fixed_command.yaml`、実運用正本は`kart_bringup/config
 |steering|0.0|左正[-1,1]の正規化要求|
 |throttle|0.0|前進[0,max_throttle]。brakeとの同時指定不可|
 |brake|0.0|制動要求[0,1]。実際の適用はbridgeのESC状態に従う|
-|max_throttle|0.2|throttle指定の上限。固定値の超過は拒否、手動前進・後退はclip|
+|max_throttle|1.0|throttle指定の上限。固定値の超過は拒否、手動前進・後退はclip|
 |control_rate_hz|50.0|指令／gateのwall timer Hz、10..100|
 |mode_timeout_s|0.3|modeのROS stamp・steady受信鮮度と制御tick間隔の期限秒|
 |entry_neutral_s|0.3|AUTO移行後の中立秒数、0.1以上|

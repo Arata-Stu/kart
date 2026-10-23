@@ -9,6 +9,7 @@
 STOP→AUTOで指定した固定操作を保持する`kart_control/fixed_command`を単独processで起動する。
 `fixed_command`未指定は`tuning/launch.json`のfalse。`steering/throttle/brake/duration_s`の既定は
 空文字で`tuning/fixed_command.yaml`を保持する。duration_s=0は無制限、正値は保持秒数。
+固定指令の`max_throttle`既定は1.0（正規化指令の上限）。起動時固定で、実際のthrottle既定は0.0。
 `/control/fixed_status`（std_msgs/msg/String）を最大10Hzで出版し、標準bagへ含める。
 固定nodeの終了はlaunch全体を終了させる。走行値の動的変更・自動AUTO要求は行わない。
 MANUALは手動のまま。解析は`--mode auto`を指定する。

@@ -27,7 +27,7 @@ public:
     s.steering=parameter("steering",0.0);
     s.throttle=parameter("throttle",0.0);
     s.brake=parameter("brake",0.0);
-    s.max_throttle=parameter("max_throttle",0.2);
+    s.max_throttle=parameter("max_throttle",1.0);
     s.mode_timeout_s=parameter("mode_timeout_s",0.3);
     s.entry_neutral_s=parameter("entry_neutral_s",0.3);
     s.duration_s=parameter("duration_s",0.0);
