@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 import torch
 
 from .evs_policy import load_checkpoint
+from .contract import evs_spec
 from .features import sha256, sample_rows, pca_colors
 
 
@@ -44,7 +45,7 @@ def visualize(checkpoint, dataset, repo, output, *, device='cpu', max_frames=12)
     meta = json.loads(metadata.read_text())
     checkpoint_sha, manifest_sha, metadata_sha = sha256(checkpoint), sha256(dataset/'samples.jsonl'), sha256(metadata)
     model = load_checkpoint(checkpoint, repo, device)
-    if meta.get('modality') != 'evs' or meta.get('model_spec') != model.spec:
+    if meta.get('modality') != 'evs' or meta.get('model_spec') != evs_spec(model.evs_metadata):
         raise ValueError('EVS dataset and checkpoint spec mismatch')
     model.requires_grad_(False)
     selected = sample_rows(dataset, max_frames, modality='evs')
@@ -52,6 +53,14 @@ def visualize(checkpoint, dataset, repo, output, *, device='cpu', max_frames=12)
     ph,pw = model.spec['padded_shape'][2:]
     top,left = (ph-h)//2,(pw-w)//2
     grid = (ph//16,pw//16)
+    cnn = model.spec['encoder'] == 'simple_cnn'
+    if cnn:
+        # Conv4 downsamples again; final overlapping receptive fields are a
+        # coarse feature grid, not ViT patches aligned to the input pixels.
+        gh, gw = h, w
+        for kernel, stride in ((5,2),(5,2),(5,2),(3,2),(3,1)):
+            gh, gw = (gh-kernel)//stride+1, (gw-kernel)//stride+1
+        grid = (gh,gw)
     frames, patches, inputs, gradients = [],[],[],[]
     for index,row in selected:
         source = (dataset/row['counts']).resolve(strict=True)
@@ -64,7 +73,7 @@ def visualize(checkpoint, dataset, repo, output, *, device='cpu', max_frames=12)
         value = torch.from_numpy(counts).unsqueeze(0).to(device)
         with torch.no_grad():
             tokens = model.encoder(model.encoder.prepare_content(value))[0]
-        if tokens.shape != (grid[0]*grid[1],384) or not torch.isfinite(tokens).all():
+        if tokens.shape != (grid[0]*grid[1],64 if cnn else 384) or not torch.isfinite(tokens).all():
             raise ValueError('Unexpected EVS patch-token layout')
         patches.append(tokens.detach().float().cpu().numpy())
         value.requires_grad_(True)
@@ -107,6 +116,7 @@ def visualize(checkpoint, dataset, repo, output, *, device='cpu', max_frames=12)
                     checkpoint=str(checkpoint.resolve()),checkpoint_sha256=checkpoint_sha,
                     dataset=str(dataset),dataset_manifest_sha256=manifest_sha,dataset_metadata_sha256=metadata_sha,
                     frames=frames,frame_count=len(frames),patch_grid=list(grid),
+                    spatial_layout=('overlapping_conv_features_resized_for_display_not_pixel_aligned' if cnn else 'stride16_input_aligned'),
                     pca_explained_variance=explained,sensitivity_scale_p99=gradient_scale,
                     input_log1p_scale_p99=scale,
                     input_display='log1p raw counts; positive red / negative blue; sum over 10 bins; shared p99 scale',

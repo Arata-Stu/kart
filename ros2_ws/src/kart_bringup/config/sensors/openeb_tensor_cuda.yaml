@@ -1,9 +1,9 @@
 # Source: openeb_ros2 f89015ba1f05d2fe432b270e73e132351c1a9377, tensor_cuda.yaml; 2026-10-10.
-# Full parameters; values unchanged. Direct pipeline forces packet subscriptions off.
+# Full parameters; kart default width changed to 160 (2026-10-23). Direct pipeline forces packet subscriptions off.
 /**/event_tensor:
   ros__parameters:
     bins: 10
-    width: 212
+    width: 160
     height: 120
     window_ms: 40.0
     stride_ms: 4.0

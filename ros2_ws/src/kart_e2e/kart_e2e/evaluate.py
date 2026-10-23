@@ -71,7 +71,8 @@ def evaluate(model_dir, dataset, output):
     if modality == 'evs':
         model_meta = json.loads((Path(model_dir) / 'metadata.json').read_text())
         dataset_meta = json.loads((dataset / 'metadata.json').read_text())
-        if dataset_meta.get('model_spec') != model_meta['model_spec']:
+        from .contract import evs_spec
+        if dataset_meta.get('model_spec') != evs_spec(model_meta['evs_metadata']):
             raise ValueError('EVS evaluation dataset/model mismatch')
     else:
         from .model import preprocess

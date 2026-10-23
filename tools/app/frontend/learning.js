@@ -85,6 +85,7 @@ async function switchPipeline(next) {
   updateInitialization({preserveSettings:true});updateRamPreload();syncTrainingHelp();
   $('e2e-evs-options').hidden=$('e2e-modality').value!=='evs';
   $('e2e-rgb-model').hidden=$('e2e-train-modality').value==='evs';
+  $('e2e-evs-model').hidden=$('e2e-train-modality').value!=='evs';
   $('e2e-plateau-options').hidden=$('e2e-lr-scheduler').value!=='plateau';
   $('e2e-loss-beta').disabled=$('e2e-loss-kind').value!=='smooth_l1';
   updateEvalInput();updateFeatureDatasets();updateInt8Inputs();updateHeadCoverage();
@@ -127,7 +128,7 @@ function suggestNames() {
     input.value = suggestion;
     input.dataset.suggestion = suggestion;
   }
-  const base = (pipeline==="multi" ? "multi-" : "") + ($("e2e-train-modality").value === "evs" ? "evs20" : ({dinov3_vitt16:"dinov3-tiny",dinov3_vits16:"dinov3",dinov3_vitb16:"dinov3-base",simple_cnn:"cnn"}[$("e2e-architecture").value]) + ($("e2e-initialization").value === "scratch" ? "-scratch" : "")) + ($("e2e-mode").value === "steer_only" ? "-steer" : "-control");
+  const base = (pipeline==="multi" ? "multi-" : "") + ($("e2e-train-modality").value === "evs" ? ($("e2e-evs-architecture").value === "simple_cnn" ? "evs20-cnn-scratch" : "evs20") : ({dinov3_vitt16:"dinov3-tiny",dinov3_vits16:"dinov3",dinov3_vitb16:"dinov3-base",simple_cnn:"cnn"}[$("e2e-architecture").value]) + ($("e2e-initialization").value === "scratch" ? "-scratch" : "")) + ($("e2e-mode").value === "steer_only" ? "-steer" : "-control");
   for (const [id, prefix, kind] of [
     ["e2e-distill-name", "dinov3-tiny-encoder", "encoders"],
     ["e2e-run-name", base + ($("e2e-finetune").checked && $("e2e-initialization").value !== "scratch" ? "-finetune" : ""), "runs"],
@@ -332,8 +333,8 @@ action("e2e-start-train", () =>
     lr_scheduler: $("e2e-lr-scheduler").value, lr_factor: Number($("e2e-lr-factor").value),
     lr_patience: Number($("e2e-lr-patience").value), min_lr: Number($("e2e-min-lr").value),
     modality: $("e2e-train-modality").value,
-    architecture: $("e2e-train-modality").value === "evs" ? "dinov3_vits16" : $("e2e-architecture").value,
-    initialization: $("e2e-train-modality").value === "evs" ? "pretrained" : $("e2e-initialization").value,
+    architecture: $("e2e-train-modality").value === "evs" ? $("e2e-evs-architecture").value : $("e2e-architecture").value,
+    initialization: $("e2e-initialization").value,
     seed: Number($("e2e-seed").value),
     precision: $("e2e-precision").value,
     profile_batches: Number($("e2e-profile-batches").value),
@@ -474,6 +475,10 @@ $("e2e-architecture").addEventListener("change", () => {
   updateInitialization();
   suggestNames();
 });
+$("e2e-evs-architecture").addEventListener("change", () => {
+  updateInitialization();
+  suggestNames();
+});
 action('e2e-start-distill', () => start('distill', {
   name: $('e2e-distill-name').value, architecture:'dinov3_vitt16',
   train:selected('e2e-train-data'), validation:selected('e2e-validation-data'),
@@ -494,6 +499,7 @@ $("e2e-modality").addEventListener("change", () => {
 $("e2e-train-modality").addEventListener("change", () => {
   const evs = $("e2e-train-modality").value === "evs";
   $("e2e-rgb-model").hidden = evs;
+  $("e2e-evs-model").hidden = !evs;
   updateInitialization();
   $("e2e-tiny-options").hidden = evs || $("e2e-initialization").value === "scratch" || $("e2e-architecture").value !== "dinov3_vitt16";
   for (const id of ["e2e-train-data", "e2e-validation-data"])
@@ -510,7 +516,7 @@ $("e2e-loss-kind").addEventListener("change", () => {
 
 function updateInitialization({preserveSettings=false}={}) {
   const evs = $("e2e-train-modality").value === "evs";
-  const cnn = !evs && $("e2e-architecture").value === "simple_cnn";
+  const cnn = (evs ? $("e2e-evs-architecture").value : $("e2e-architecture").value) === "simple_cnn";
   const initialization = $("e2e-initialization");
   $("e2e-init-options").hidden = evs;
   if (evs) initialization.value = "pretrained";

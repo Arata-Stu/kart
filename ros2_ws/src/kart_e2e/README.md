@@ -863,7 +863,7 @@ GUIは損失関数・βとschedulerを選択でき、Plateau選択時に詳細�
 ### RGBのscratch / CNN比較
 
 RGBの`--architecture`は`dinov3_vits16`（384次元）、`dinov3_vitt16`（192）、
-`dinov3_vitb16`（768）、`simple_cnn`（192）を選択できる。
+`dinov3_vitb16`（768）、`simple_cnn`（PilotNet風・1,728次元）を選択できる。
 ViT-Bは同じ固定公式DINOv3ソースの`dinov3_vitb16(pretrained=False)`で構築し、
 事前学習済みを選んだ場合だけローカル重みをstrict loadする。重みは自動取得しない。
 ViT-BにViT-S重みを暗黙流用しない。
@@ -876,11 +876,36 @@ scratch中は特徴量キャッシュを無効化する。凍結したランダ�
 事前学習済み全体fine-tuningの既定学習率1e-5は維持する。
 `--seed`は既定42（0..2147483647）、GUIでも指定可能。
 
-CNNは3→24→48→96→192の4段Conv3x3/stride2/pad1＋GroupNorm8＋GELU、
-空間平均で192次元とする。scratch専用でDINOソースも重みも不要。
-RGB resize/正規化/padding、headの隠れ次元128・GELU・Dropout0.1と出力制約は全モデル共通。
-CNN仕様は`encoder=simple_cnn`、`encoder_commit=kart.simple_cnn.v1`で区別する。
-CNNの前処理は比較のためImageNet正規化を維持し、モデルに合わせて暗黙変更しない。
+CNNは[NVIDIAのPilotNet原論文・図4](https://images.nvidia.com/content/tegra/automotive/images/2016/solutions/pdf/end-to-end-dl-using-px.pdf)
+の5段Conv＋Flatten＋全結合層を参考にしたkart独自構成。scratch専用でDINOソースも重みも不要。
+入力の内容解像度は幅212×高さ120を維持し、66×200へ縮小しない。
+共通前処理のRGB resize・ImageNet正規化・paddingは維持し、CNN内部でpaddingだけを除去する。
+ONNX外部入力もFP32 `[1,3,120,212]` のまま。原典のYUV入力や旋回曲率の出力は採用しない。
+
+| 層 | 出力（チャネル×高さ×幅） | kernel / stride / padding |
+| --- | --- | --- |
+| Conv1＋ReLU | 24×58×104 | 5 / 2 / 0 |
+| Conv2＋ReLU | 36×27×50 | 5 / 2 / 0 |
+| Conv3＋ReLU | 48×12×23 | 5 / 2 / 0 |
+| Conv4＋ReLU | 64×5×11 | 3 / 2 / 0 |
+| Conv5＋ReLU | 64×3×9 | 3 / 1 / 0 |
+| Flatten（チャネル・高さ・幅の順） | 1,728 | — |
+| 全結合＋ReLU ×3 | 100 → 50 → 10 | — |
+| 全結合＋既存の出力制約 | 操舵1値、または操舵＋throttle | — |
+
+原典からの主な変更は入力解像度とConv4のstride=2。headを小さく保ちつつ位置ごとの特徴を渡す。
+GroupNorm・GELU・Dropoutは新CNNには使わない。操舵tanh／throttle sigmoidは従来どおり。
+単一headのparameter数はsteer-onlyで309,819、steer-throttleで309,830（bias込み）。
+Multi-headではencoderを共有し、各headに同じ100→50→10の構成を持つ。
+ViTと旧CNNのheadは従来の128・GELU・Dropout0.1を維持する。
+
+CNN仕様は`encoder=simple_cnn`、`encoder_commit=kart.simple_cnn.v3`で区別する。
+新規学習はPilotNet風のv3を使う。旧`kart.simple_cnn.v1`（空間平均192次元）と
+`kart.simple_cnn.v2`（4段Conv＋Flatten 21,504次元）はそれぞれ旧構成で復元し、
+評価・可視化・ONNX再exportを継続できる。旧ONNX bundleも契約検証を維持する。
+旧重みやmetadataを書き換えてv3へ移行せず、新方式は再学習する。
+100 epoch学習・復元・ORT比較・評価・可視化・Multi-head・CPU INT8変換を合成データで確認する。
+GPU学習時間・実データ精度・TensorRT・ROS結合・車両走行は別途検証が必要で、1分での学習完了を保証しない。
 
 ```bash
 # 事前学習済みViT-B: 重みは利用者が配置
@@ -904,8 +929,50 @@ ViT-B事前学習済み重みは「学習環境」の専用欄で設定する。
 同じbag分割・テストbag・損失・seed条件を使い、既存のONNX export→bag評価で比較する。
 同一epoch比較と収束後比較は別に扱い、50 epochでの収束を保証しない。
 RGB Small/Tiny/Base/CNNの復元・export・評価・オフライン特徴量可視化を共通経路で扱う。
-CNNのPCAは16画素strideの畳み込み空間特徴でありViTのpatch tokenとは構造が異なる。
-EVSのモデル/初期化契約は変更しない。ROSノード・topic・parameter追加なし。
+新CNNのPCAは最終Convの3×9の空間特徴を表示用に拡大する。受容野が重なるため、
+画素位置と一致するマップとして解釈しない。report.jsonのspatial_layoutへその制約を記録する。
+入力感度は従来どおり212×120のRGBに対する操舵勾配を表示する。
+RGBの変更ではEVSの既存DINOモデル/初期化契約を維持する。追加のEVS CNNは次節を参照。
+ROSノード・topic・parameter追加なし。
+
+### EVS 20ch PilotNet風CNN
+
+`--modality evs --architecture simple_cnn --initialization scratch`で選択する。
+OpenEBの新しい既定値と同じ幅160×高さ120、raw FP32 counts `[B,20,120,160]` を入力する。
+CPU/CUDA/cuda_asyncのOpenEB本体とbringup運用YAMLの既定幅は160へ揃えた。
+40ms `[start,end)`、10bin、positive→negative、時間補間なしの規約は従来どおり。
+既存EVS datasetのmetadata.jsonにあるevs_metadata（160×120用の固定mean/std）を読み込み、
+20ch正規化をモデル内に含める。学習時も推論時もresize・RGB変換・bin集約・ViT用paddingは行わない。
+RAW抽出は従来の`preprocess_evs --model-json`で160×120用JSONから行う。
+別解像度の統計をmetadataだけ書き換えて流用しない。
+
+構成は20→24→36→48→64→64の5段Conv＋ReLU。
+kernel/stride/paddingは上のRGB CNNと同じ5/5/5/3/3、2/2/2/2/1、全て0。
+最終特徴64×3×6をFlattenし、1152→100→50→10→出力とする。
+parameter数は単一headのsteer-onlyで262,419、steer-throttleで262,430（mean/stdは非学習buffer）。
+操舵tanh・throttle sigmoid、区間別Multi-head、AMP、損失、schedulerは既存経路を使う。
+scratchは既定100 epoch・LR1e-4・encoder/head全体学習・特徴量キャッシュ無効。
+DINO checkoutやencoder重みファイルは不要。共通CLIの`--repo`はCNNでは参照しない。
+
+```bash
+python -m kart_e2e.train --modality evs --architecture simple_cnn --initialization scratch \
+  --train /workspaces/datasets/evs_train --validation /workspaces/datasets/evs_validation \
+  --repo /workspaces/python_ws/dinov3 --output /workspaces/runs/evs_cnn --device cuda
+python -m kart_e2e.export_onnx /workspaces/runs/evs_cnn/best.pt /workspaces/models/evs_cnn \
+  --repo /workspaces/python_ws/dinov3
+python -m kart_e2e.evs_contract --model-json /workspaces/models/evs_cnn/metadata.json \
+  --base-config /workspaces/ros2_ws/src/kart_bringup/config/sensors/openeb_tensor_cuda_async.yaml \
+  --output /workspaces/models/evs_cnn/openeb_tensor.yaml
+```
+
+ONNXは`input_tensor=[1,20,120,160]`、出力`control=[1,1|2]`（Multi-headはhead数倍）。
+model_specは`encoder=simple_cnn`、`encoder_commit=kart.evs_pilotnet.v1`で識別し、
+dataset比較は既存のraw counts入力契約と行う。既存のViT-S EVSモデル・checkpointも引き続き使用可能。
+GUIの入力種別EVS→EVSモデル「軽量CNN（PilotNet風）」でscratchを自動選択する。
+既存のexport・ONNX評価・特徴可視化・INT8校正・TensorRT build・転送経路を共用する。
+特徴可視化の3×6 Conv PCAは表示用に拡大し、画素位置と一致するマップとして扱わない。
+合成データの100 epoch学習・復元・ORT一致・評価・可視化・CPU INT8変換・Multi-headをportable testで確認する。
+ROS/GPU/OpenEBライブtensor/TensorRT/実RAW・実車の精度・速度は未検証。
 
 ### AMP（混合精度）学習
 

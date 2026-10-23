@@ -65,8 +65,11 @@ def pca_colors(features):
     return colors, dict(mean=mean, components=basis, low=low, high=high), explained
 
 
-def feature_image(colors, grid):
+def feature_image(colors, grid, *, patch_aligned=True):
     h,w = grid
+    if not patch_aligned:
+        # Display a coarse convolution grid, not a pixel-aligned attention map.
+        return Image.fromarray(colors.reshape(h,w,3)).resize((212,120), Image.Resampling.BILINEAR)
     canvas = Image.fromarray(colors.reshape(h,w,3)).resize((w*16,h*16), Image.Resampling.BILINEAR)
     # Identical padded input coordinates to Policy/preprocess; exclude padding.
     return canvas.crop((6,4,6+212,4+120))
@@ -96,9 +99,12 @@ def visualize(checkpoint, dataset, repo, output, *, device='cpu', max_frames=12)
         h,w = value.shape[-2:]
         grid = (h//16,w//16)
         with torch.no_grad():
-            features = model.encoder.forward_features(value)['x_norm_patchtokens'][0]
+            encoded = model.encoder.forward_features(value)
+            features = encoded['x_norm_patchtokens'][0]
+        grid = tuple(encoded.get('spatial_shape', grid))
+        patch_aligned = grid == (h//16, w//16)
         if features.ndim != 2 or features.shape[0] != grid[0]*grid[1]:
-            raise ValueError('Unexpected DINO patch-token layout')
+            raise ValueError('Unexpected encoder spatial-feature layout')
         patches.append(features.detach().float().cpu().numpy())
         value.requires_grad_(True)
         prediction = model(value)
@@ -130,7 +136,7 @@ def visualize(checkpoint, dataset, repo, output, *, device='cpu', max_frames=12)
             folder = stage/'frames'/f'{i:04d}'
             folder.mkdir(parents=True)
             Image.fromarray(rgb).save(folder/'rgb.png')
-            feature_image(colors[offset:offset+len(patch)],grid).save(folder/'pca.png')
+            feature_image(colors[offset:offset+len(patch)],grid,patch_aligned=patch_aligned).save(folder/'pca.png')
             offset += len(patch)
             strength = np.clip(gradient/gradient_scale,0,1) if gradient_scale>0 else np.zeros_like(gradient)
             alpha = .7*strength[...,None]
@@ -144,6 +150,8 @@ def visualize(checkpoint, dataset, repo, output, *, device='cpu', max_frames=12)
                       checkpoint=str(checkpoint.resolve()), checkpoint_sha256=checkpoint_sha,
                       dataset=str(dataset), dataset_manifest_sha256=manifest_sha,
                       frames=frames, frame_count=len(frames), patch_grid=list(grid),
+                      spatial_layout=('stride16_input_aligned' if patch_aligned else
+                                      'overlapping_conv_features_resized_for_display_not_pixel_aligned'),
                       pca_explained_variance=explained, sensitivity_scale_p99=gradient_scale,
                       pca_scope='shared_basis_and_2_98_percentile_colors_within_report',
                       sensitivity='absolute_mean_input_gradient_of_steering; red_overlay; shared_p99_scale',

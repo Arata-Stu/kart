@@ -106,7 +106,7 @@ OpenEB sourceはpackages.reposのf89015ba1f05d2fe432b270e73e132351c1a9377。
 
 | 出力topic | 型 | QoS | 内容 |
 |---|---|---|---|
-| /event_camera/tensor | isaac_ros_tensor_msgs/msg/TensorList | reliable/volatile/depth 8（cpu,cudaは4） | FP32 NCHW [1,20,120,212]、250 Hz |
+| /event_camera/tensor | isaac_ros_tensor_msgs/msg/TensorList | reliable/volatile/depth 8（cpu,cudaは4） | FP32 NCHW [1,20,120,160]、250 Hz |
 | /event_camera/event_image | sensor_msgs/msg/Image | best effort/volatile/depth 2 | ON赤/OFF青/背景白、25 Hz |
 | /event_camera/events_raw | event_camera_msgs/msg/EventPacket | best effort/volatile/depth 8 | 既定OFF、動的ON可 |
 | /event_camera/diagnostics | diagnostic_msgs/msg/DiagnosticArray | reliable/volatile/depth 1 | driver/画像診断、1 Hz |

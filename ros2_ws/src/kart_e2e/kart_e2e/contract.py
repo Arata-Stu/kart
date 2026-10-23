@@ -5,6 +5,10 @@ import json
 from pathlib import Path
 
 DINOV3_COMMIT = "adc254450203739c8149213a7a69d8d905b4fcfa"
+SIMPLE_CNN_COMMIT = "kart.simple_cnn.v3"
+FLATTEN_SIMPLE_CNN_COMMIT = "kart.simple_cnn.v2"
+LEGACY_SIMPLE_CNN_COMMIT = "kart.simple_cnn.v1"
+EVS_CNN_COMMIT = "kart.evs_pilotnet.v1"
 SPEC = {
     "schema": 2,
     "encoder": "dinov3_vits16",
@@ -21,10 +25,14 @@ RGB_ENCODERS = ("dinov3_vits16", "dinov3_vitt16", "dinov3_vitb16", "simple_cnn")
 def rgb_spec(encoder="dinov3_vits16"):
     if encoder not in RGB_ENCODERS:
         raise ValueError("Unsupported RGB encoder")
-    return dict(SPEC, encoder=encoder, encoder_commit="kart.simple_cnn.v1" if encoder == "simple_cnn" else DINOV3_COMMIT)
+    return dict(SPEC, encoder=encoder, encoder_commit=SIMPLE_CNN_COMMIT if encoder == "simple_cnn" else DINOV3_COMMIT)
 
 
 def validate_rgb_spec(spec):
+    # Preserve the exact architecture of older checkpoints and ONNX bundles.
+    for version in (LEGACY_SIMPLE_CNN_COMMIT, FLATTEN_SIMPLE_CNN_COMMIT):
+        if spec == dict(SPEC, encoder="simple_cnn", encoder_commit=version):
+            return spec
     if not isinstance(spec, dict) or spec != rgb_spec(spec.get("encoder")):
         raise ValueError("Unsupported RGB model contract")
     return spec
@@ -83,6 +91,18 @@ def evs_spec(meta):
                 padded_shape=meta['input_shape'], mean=mean, std=std)
 
 
+def evs_policy_spec(meta, encoder='dinov3_vits16'):
+    """Separate policy architecture from the unchanged raw-count dataset spec."""
+    spec = evs_spec(meta)
+    if encoder == 'dinov3_vits16':
+        return spec
+    if encoder != 'simple_cnn' or (spec['height'], spec['width']) != (120, 160):
+        raise ValueError('EVS PilotNet requires simple_cnn and 160x120 input metadata')
+    return dict(spec, encoder=encoder, encoder_commit=EVS_CNN_COMMIT,
+                preprocess='raw_counts_fixed_normalization_then_pilotnet_v1',
+                padded_shape=[1, 20, 120, 160])
+
+
 def routing_settings(directory):
     metadata = json.loads((Path(directory) / 'metadata.json').read_text())
     routing = metadata.get('routing')
@@ -115,7 +135,10 @@ def model_contract(directory):
     routing = routing_settings(directory)
     modality = metadata.get('modality', 'rgb')
     if modality == 'evs':
-        spec = evs_spec(metadata.get('evs_metadata', {}))
+        model_spec = metadata.get('model_spec')
+        if not isinstance(model_spec, dict):
+            raise ValueError('Missing EVS model spec')
+        spec = evs_policy_spec(metadata.get('evs_metadata', {}), model_spec.get('encoder'))
         name, shape = 'input_tensor', [1, 20, spec['height'], spec['width']]
     elif modality == 'rgb':
         spec, name, shape = validate_rgb_spec(metadata.get('model_spec')), 'image', [1, 3, 120, 212]

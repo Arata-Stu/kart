@@ -23,7 +23,7 @@ class EvsE2ETests(unittest.TestCase):
             path = Path(tmp) / 'tensor.yaml'
             config = yaml.safe_load(base.read_text())
             params = config['/**/event_tensor']['ros__parameters']
-            params.update(width=160, height=120)
+            self.assertEqual((params['width'],params['height']), (160,120))
             with patch('kart_e2e.contract.input_contract', return_value=('evs', 'input_tensor', [1,20,120,160])):
                 path.write_text(yaml.safe_dump(config))
                 self.assertEqual(validate_evs_tensor(path, 'model')['width'], 160)

@@ -23,4 +23,7 @@ RAW dataset作成だけはOpenEB/Metavisionの`metavision_core.event_io`とROS P
 EVS Dockerで取得・構築したSDKをsystem-site-packages venvからimportできることを確認する。
 PyYAMLはOpenEB全設定の生成用（ROS側python3-yamlも利用可）。
 入力重みはEventStateのv2 histogram encoder bundle。RGB公式重みを直接指定しない。
+EVS PilotNet風CNNは`--modality evs --architecture simple_cnn --initialization scratch`を使い、
+重み・DINOソースは不要。dataset内の160×120用固定正規化metadataを使用する。
+OpenEBの既定tensorとCNN入力はともに`[1,20,120,160]`。RGB版CNNは212×120を維持する。
 [EVS実行手順](../../ros2_ws/src/kart_e2e/README.md#evs-rawから制御policyまで2026-10-18)。

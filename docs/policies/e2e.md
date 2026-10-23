@@ -197,9 +197,35 @@ EVS特徴量可視化は学習済みcheckpointの実encoder/headから生成し�
 RGB baseline比較は事前学習済みとscratchを初期化方法で明示する。
 scratchはencoderも更新し、既定100 epoch・LR1e-4、重み読込と特徴量キャッシュを禁止する。
 事前学習済みも既定100 epochとする。ViT-Bの公式factory・専用重みパスを使用し、
-CNNは4段stride2 Conv/GroupNorm/GELU＋global meanと既存headを使う。
+CNNの新規学習はPilotNet風のkart.simple_cnn.v3を使う。
+RGB内容解像度212×120と共通のImageNet正規化・外部ONNX入力を維持し、
+CNN内部でViT用paddingのみ除去する。原典の66×200への縮小やYUV化は行わない。
+Convは3→24→36→48→64→64、kernel=5/5/5/3/3、stride=2/2/2/2/1、padding=0、活性化ReLU。
+64×3×9をFlattenし、全結合1728→100→50→10→controlで位置ごとの特徴を扱う。
+隠れ全結合はReLU、出力の操舵tanh／throttle sigmoidは既存契約を守る。
+原典からConv4のstrideを増やし、入力解像度を保ちつつ約31万parameterに抑える。
+旧kart.simple_cnn.v1（空間平均192次元）とv2（4段Conv＋Flatten 21,504次元）は
+各構成で復元・export・評価を維持し、metadataだけを書き換えてv3へ移行しない。
+新方式は再学習で比較する。PCAの3×9 Conv特徴は表示用の拡大であり画素と整列した地図ではない。
 前処理・損失・評価契約を共通化し、architecture/初期化/seed/学習parameter数を保存する。
 モデル間の比較はbag分割とテスト条件を揃え、学習途中と収束後の比較を区別する。
+
+## EVS PilotNetとOpenEBの既定解像度（2026-10-23）
+
+OpenEBのCPU/CUDA/cuda_asyncのノード既定値・config、およびkart_bringupの運用YAMLを
+幅160×高さ120へ揃える。10 bins・極性別20ch・40ms・時間補間なし・raw FP32 countsは維持する。
+RGBの212×120とは分け、既存の明示指定した異なる解像度は自動変換しない。
+
+EVSの`--architecture simple_cnn --initialization scratch`はPilotNet風20ch CNNを全体学習する。
+raw counts `[B,20,120,160]`→既存dataset JSONの20ch固定mean/std→
+Conv 20→24→36→48→64→64（kernel 5/5/5/3/3、stride 2/2/2/2/1、padding 0、ReLU）→
+64×3×6をFlatten→1152→100→50→10→controlとする。RGB変換・resize・ViT padding・空間平均は使わない。
+checkpointとONNXのmodel specは`encoder=simple_cnn, encoder_commit=kart.evs_pilotnet.v1`とし、
+datasetの入力契約は既存の`evs_spec(evs_metadata)`と比較する。異なる解像度・正規化を黙って流用しない。
+既存DINOv3 EVSの事前学習・fine-tuning・320×240対応は維持する。
+CNNにDINOソースや重みは不要。データ抽出に使ったJSONの正規化情報はdatasetから読み込む。
+CLI・GUIとも100 epoch・LR1e-4・全体学習・特徴キャッシュ無効がscratchの既定。
+ONNXは`input_tensor=[1,20,120,160]`から既存TensorRT/C++ decoderへ接続し、走行制御・記録操作は追加しない。
 
 制御学習のAMPは要求精度と実効精度を分けて記録する。
 autoはCUDA native BF16を優先、非対応時FP16＋GradScaler、CPUではFP32。

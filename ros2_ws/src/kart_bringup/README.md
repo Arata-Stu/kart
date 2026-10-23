@@ -779,7 +779,10 @@ EVS encoder専用設定: `modules/sensors/openeb.launch.py`に`evs_tensor_config
 既定空文字は従来YAML、指定時は生成済みfull tensor YAMLへ置換。時間補間はnoneのみ。
 これはセンサmoduleの明示指定であり、missionへの引数転送は未追加。
 `/event_camera/tensor` (isaac_ros_tensor_msgs/msg/TensorList)のcontent解像度をモデルに合わせる。
-CPU/CUDA/cuda_asyncそれぞれの既存full YAMLをbaseに生成すること。driverコード/既定設定は変更しない。
+CPU/CUDA/cuda_asyncそれぞれの既存full YAMLをbaseに生成すること。
+OpenEB本体とkart運用YAMLのtensor既定値は幅160×高さ120、FP32 `[1,20,120,160]`。
+明示指定した別サイズは起動時にモデルの入力形状と照合する。
+EVS PilotNet風CNNも同じ20ch TensorListを受け、追加の画像encoderやROSノードは使わない。
 
 ### 固定軸の対話切替
 

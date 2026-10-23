@@ -42,7 +42,7 @@ def test_real_qdq_preserves_fp32_contract_and_source(inputs,tmp_path):
     assert model_contract(output)[1]=='steer_only'
     assert runtime_settings(output)==runtime_settings(model)
     q=meta['quantization'];assert q['format']=='QDQ' and q['calibration']['samples']==2
-    assert q['calibration']['input_sha256'] and len(q['quantized_nodes'])==4
+    assert q['calibration']['input_sha256'] and len(q['quantized_nodes'])==5
     assert all('head' not in node for node in q['quantized_nodes'])
     graph=onnx.load(output/'model.onnx')
     validate_trt_qdq(graph,onnx.load(model/'model.onnx'))

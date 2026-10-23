@@ -33,8 +33,8 @@ def export(policy, output):
     output.mkdir(parents=True, exist_ok=False)
     is_evs = getattr(policy, 'modality', 'rgb') == 'evs'
     if is_evs:
-        from .contract import evs_spec
-        spec = evs_spec(policy.evs_metadata)
+        from .contract import evs_policy_spec
+        spec = evs_policy_spec(policy.evs_metadata, policy.spec['encoder'])
         shape = (1, 20, spec['height'], spec['width'])
         input_name = 'input_tensor'
         model = policy.cpu().eval()

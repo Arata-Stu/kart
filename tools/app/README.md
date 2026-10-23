@@ -872,7 +872,9 @@ EVS特徴量可視化は「特徴量を確認」でEVS実験を選び、同じ�
 
 ### RGB baseline比較
 
-RGBモデルにViT-B（768次元）と小規模CNN（192次元）を追加。
+RGBモデルにViT-B（768次元）と軽量CNN（PilotNet風・1,728次元・約31万parameter）を追加。
+CNNの新規学習は5段Conv＋Flatten＋全結合100→50→10を使う。RGB内容解像度は212×120。
+旧CNNのv1/v2はcheckpointの契約に従って旧構成で復元する。新構成には再学習が必要。
 「初期化」でscratchを選ぶと既定100 epoch、全体学習、特徴量キャッシュ無効。
 CNNはscratch固定。制御学習は初期化方式にかかわらず既定100 epoch。
 ViT-B重みは「学習環境」の専用欄（既定repo内`weights/dinov3/dinov3_vitb16.pth`）へ設定する。
@@ -880,6 +882,12 @@ scratchは重み不要。CNNはDINOソースも不要。同じデータ分割・
 seedの既定42、scratch学習率の既定1e-4。epochとLRは上書き可能。
 実験一覧にarchitectureと初期化を表示し、損失表示・export・評価・可視化・整理は共通操作。
 入力前処理は既存RGBと共通。CNNの構成はkart_e2e READMEを参照。
+
+EVSのモデル選択は20ch ViT-SとPilotNet風CNNに対応する。
+EVS CNNはOpenEBの既定と同じ160×120、20ch countsを直接入力し、約26万parameter。
+scratch固定でDINOソース・重みは不要。固定正規化情報は抽出済みdatasetから読む。
+100 epoch・LR1e-4・全体学習・特徴キャッシュ無効が既定。
+異なる解像度・正規化のdatasetは拒否する。export/評価/可視化/INT8校正/転送は共通操作。
 
 制御学習の「学習精度」は既定AMP自動。CUDAではnative BF16優先、非対応ならFP16＋GradScaler、
 CPUはFP32になる。FP32/BF16/FP16の明示指定も可能で、非対応モードはエラーにする。

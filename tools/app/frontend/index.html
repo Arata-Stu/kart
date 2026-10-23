@@ -512,15 +512,19 @@
         </section>
         <section id="e2e-pane-train" class="learning-form" hidden>
           <h2>学習・検証データと条件を選択</h2>
-          <label>入力種別<select id="e2e-train-modality"><option value="rgb">RGB</option><option value="evs">EVS · 20ch EventState encoder</option></select></label>
+          <label>入力種別<select id="e2e-train-modality"><option value="rgb">RGB</option><option value="evs">EVS · 20ch tensor</option></select></label>
           <label id="e2e-rgb-model">RGBモデル<select id="e2e-architecture">
             <option value="dinov3_vits16">DINOv3 ViT-S/16 · 384次元</option>
             <option value="dinov3_vitt16">DINOv3 ViT-Tiny/16 · 192次元（独自構成）</option>
             <option value="dinov3_vitb16">DINOv3 ViT-B/16 · 768次元</option>
-            <option value="simple_cnn">小規模CNN · 192次元（scratch）</option>
+            <option value="simple_cnn">軽量CNN（PilotNet風）· 約31万パラメータ（scratch）</option>
+          </select></label>
+          <label id="e2e-evs-model" hidden>EVSモデル<select id="e2e-evs-architecture">
+            <option value="dinov3_vits16">DINOv3 ViT-S · 20ch EventState encoder</option>
+            <option value="simple_cnn">軽量CNN（PilotNet風）· 20ch · 160×120（scratch）</option>
           </select></label>
           <label id="e2e-init-options">初期化<select id="e2e-initialization"><option value="pretrained">事前学習済みencoder</option><option value="scratch">scratch · ランダム初期化から全体学習</option></select></label>
-          <p id="e2e-scratch-help" class="help" hidden>scratchは既定50 epoch、全体学習、特徴量キャッシュなし。重みファイルは読み込みません。学習用と検証・テスト用はbag単位で分けて比較してください。</p>
+          <p id="e2e-scratch-help" class="help" hidden>scratchは既定100 epoch、全体学習、特徴量キャッシュなし。重みファイルは読み込みません。学習用と検証・テスト用はbag単位で分けて比較してください。</p>
           <div class="form-grid">
             <label
               >学習用<select

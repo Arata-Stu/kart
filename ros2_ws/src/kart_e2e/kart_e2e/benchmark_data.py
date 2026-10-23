@@ -27,8 +27,10 @@ class DatasetInputs:
         model_meta=json.loads((Path(model)/'metadata.json').read_text())
         if metadata.get('modality','rgb') != self.modality:
             raise ValueError('Dataset/model modality mismatch')
-        if self.modality=='evs' and metadata.get('model_spec') != model_meta['model_spec']:
-            raise ValueError('EVS dataset/model spec mismatch')
+        if self.modality=='evs':
+            from .contract import evs_spec
+            if metadata.get('model_spec') != evs_spec(model_meta['evs_metadata']):
+                raise ValueError('EVS dataset/model spec mismatch')
         manifest=self.root/'samples.jsonl'
         self.manifest_hash=digest(manifest);self.metadata_hash=digest(self.root/'metadata.json')
         rows=[json.loads(line) for line in manifest.read_text().splitlines() if line.strip()]

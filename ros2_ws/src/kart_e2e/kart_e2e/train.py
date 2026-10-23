@@ -150,8 +150,9 @@ def main():
         from .sections import load as load_routing
         routing = load_routing(a.section_routing)
     scratch = a.initialization == "scratch"
-    if scratch and a.modality != "rgb":
-        p.error("Scratch baselines currently support RGB only")
+    if a.modality == 'evs' and (a.architecture not in ('dinov3_vits16', 'simple_cnn')
+                               or (scratch and a.architecture != 'simple_cnn')):
+        p.error('EVS supports pretrained ViT-S or scratch simple_cnn')
     if a.architecture == "simple_cnn" and not scratch:
         p.error("simple_cnn requires --initialization scratch")
     if scratch and a.weights is not None:
@@ -197,11 +198,16 @@ def main():
     from .feature_cache import cached_samples, digest
     weights_sha = None if scratch else digest(a.weights)
     if a.modality == 'evs':
-        if a.architecture != 'dinov3_vits16':
-            p.error('ViT-Tiny distillation currently supports RGB only')
-        from .evs_policy import pretrained_policy
-        model = pretrained_policy(a.weights, a.repo, a.mode, frozen=not a.finetune).to(a.device)
-        datasets = [Samples(r, a.mode, model.spec, routing) for r in (a.train, a.validation)]
+        from .contract import evs_spec
+        from .evs_policy import pretrained_policy, EVSPilotNetPolicy
+        if scratch:
+            meta = json.loads((a.train[0] / 'metadata.json').read_text())
+            if meta.get('modality') != 'evs':
+                raise ValueError('EVS CNN requires an EVS dataset')
+            model = EVSPilotNetPolicy(meta['evs_metadata'], a.mode).to(a.device)
+        else:
+            model = pretrained_policy(a.weights, a.repo, a.mode, frozen=not a.finetune).to(a.device)
+        datasets = [Samples(r, a.mode, evs_spec(model.evs_metadata), routing) for r in (a.train, a.validation)]
     else:
         datasets = [Samples(a.train, a.mode, routing=routing), Samples(a.validation, a.mode, routing=routing)]
         if scratch:

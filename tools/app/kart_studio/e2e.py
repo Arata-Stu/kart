@@ -36,6 +36,8 @@ class Learning:
         contract = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(contract)
         self.contract = contract.model_contract
+        self.evs_spec = contract.evs_spec
+        self.evs_policy_spec = contract.evs_policy_spec
 
     def settings(self):
         result = dict(
@@ -313,19 +315,27 @@ class Learning:
             repo = Path(cfg["encoder_repo"]).expanduser()
             architecture = body.get("architecture", "dinov3_vits16")
             if architecture not in ("dinov3_vits16", "dinov3_vitt16", "dinov3_vitb16", "simple_cnn"):
-                raise ValueError("不明なRGBモデルです")
+                raise ValueError("不明なモデルです")
             initialization = body.get("initialization", "pretrained")
             if initialization not in ("pretrained", "scratch"):
                 raise ValueError("初期化方法が不正です")
             scratch = initialization == "scratch"
-            if scratch and (action != "train" or modality != "rgb"):
-                raise ValueError("scratch比較はRGBの制御学習のみ対応しています")
+            if scratch and (action != "train" or (modality == "evs" and architecture != "simple_cnn")):
+                raise ValueError("scratchはRGBまたはEVS CNNの制御学習に対応しています")
             if architecture == "simple_cnn" and not scratch:
                 raise ValueError("CNNはscratchを選択してください")
             source_resources = []
             weights = Path(cfg["evs_weights"] if modality == "evs" else cfg["base_weights"] if architecture == "dinov3_vitb16" else cfg["weights"]).expanduser()
-            if modality == "evs" and architecture != "dinov3_vits16":
-                raise ValueError("EVSは20ch ViT-S encoderを使用します")
+            if modality == "evs" and architecture not in ("dinov3_vits16", "simple_cnn"):
+                raise ValueError("EVSは20ch ViT-SまたはPilotNet風CNNを選択してください")
+            if modality == "evs" and architecture == "simple_cnn":
+                for group in groups:
+                    for dataset in group:
+                        data_meta = read_json(dataset / "metadata.json")
+                        input_spec = self.evs_spec(data_meta['evs_metadata'])
+                        self.evs_policy_spec(data_meta['evs_metadata'], 'simple_cnn')
+                        if data_meta.get('model_spec') != input_spec:
+                            raise ValueError("EVS datasetの入力契約が一致しません")
             if action == "distill" and body.get("teacher_run"):
                 teacher = self.folder("runs", body["teacher_run"])
                 weights = within(teacher, "best.pt")
@@ -474,8 +484,9 @@ class Learning:
                 dataset_meta = read_json(within(dataset, "metadata.json"))
                 if dataset_meta.get("modality", "rgb") != meta.get("modality", "rgb"):
                     raise ValueError("モデルと校正・評価データセットの入力種別が一致しません")
-                if meta.get("modality") == "evs" and dataset_meta.get("model_spec") != meta["model_spec"]:
-                    raise ValueError("EVS校正・評価データのSPECが一致しません")
+                if meta.get("modality") == "evs":
+                    if dataset_meta.get("model_spec") != self.evs_spec(meta["evs_metadata"]):
+                        raise ValueError("EVS校正・評価データのSPECが一致しません")
                 datasets.append(dataset)
             target = self.target("models", key)
             calibration_samples = self.integer(body.get("calibration_samples", 256), 1, 100000)
