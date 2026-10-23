@@ -36,7 +36,7 @@ public:
       throw std::invalid_argument("wall_timeout_s must be finite and nonnegative");
     timeout_ = fixed("input_timeout_s", 0.15);
     mode_timeout_ = fixed("mode_timeout_s", 0.3);
-    max_speed_ = fixed("max_target_speed_mps", 1.0);
+    max_speed_ = fixed("max_target_speed_mps", 10.0);
     rate_ = fixed("control_rate_hz", 50.0);
     for (double v : {timeout_, mode_timeout_, max_speed_, rate_})
       if (!std::isfinite(v) || v <= 0)
@@ -54,6 +54,10 @@ public:
                                                      {"throttle_limit", 0.2},
                                                      {"brake_limit", 0}})
       declare_parameter(item.first, item.second);
+    fixed<std::vector<double>>("ff_speed_mps", {});
+    fixed<std::vector<double>>("ff_throttle", {});
+    fixed("throttle_rise_rate", 0.0);
+    fixed("throttle_fall_rate", 0.0);
     settings_ = read_settings();
     validate(settings_);
     parameter_callback_ = add_on_set_parameters_callback(
@@ -161,7 +165,11 @@ private:
             get_parameter("integral_limit").as_double(),
             get_parameter("derivative_tau_s").as_double(),
             get_parameter("throttle_limit").as_double(),
-            get_parameter("brake_limit").as_double()};
+            get_parameter("brake_limit").as_double(),
+            get_parameter("ff_speed_mps").as_double_array(),
+            get_parameter("ff_throttle").as_double_array(),
+            get_parameter("throttle_rise_rate").as_double(),
+            get_parameter("throttle_fall_rate").as_double()};
   }
   bool fresh(const builtin_interfaces::msg::Time &stamp, double received,
              double limit) {
@@ -236,6 +244,7 @@ private:
              {"i", result.i},
              {"d", result.d},
              {"ff", result.ff},
+             {"requested_throttle", result.requested_throttle},
              {"throttle", result.throttle},
              {"brake", result.brake}}) {
       diagnostic_msgs::msg::KeyValue v;

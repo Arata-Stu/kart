@@ -8,7 +8,7 @@ import unittest
 import numpy as np
 
 sys.path.insert(0,str(Path(__file__).parent))
-from analysis import analyze, prepare, simulate, static_transform
+from analysis import analyze, prepare, simulate, static_transform, feedforward, validate_feedforward
 from bag import read_bag
 from cli import main
 
@@ -39,6 +39,35 @@ def synthetic():
 
 
 class AnalysisTests(unittest.TestCase):
+    def test_feedforward_table_and_slew_in_offline_preview(self):
+        settings=dict(kp=0.,ki=0.,kd=0.,kff=10.,integral_limit=.2,
+                      derivative_tau_s=.1,throttle_limit=.4,brake_limit=0.,
+                      ff_speed_mps=[1.41,3.05,4.74],ff_throttle=[.1,.2,.375],
+                      throttle_rise_rate=.1,throttle_fall_rate=.2)
+        validate_feedforward(settings)
+        self.assertAlmostEqual(feedforward(.705,settings),.05)
+        self.assertAlmostEqual(feedforward(3.05,settings),.2)
+        self.assertAlmostEqual(feedforward(10.,settings),.375)
+        model=analyze(self.data,CONFIG)[0]['model']
+        rows=simulate(model,settings,[3.05,0.,3.05],1.,0.)
+        self.assertAlmostEqual(rows[0]['throttle'],.002)
+        self.assertAlmostEqual(rows[49]['throttle'],.1)
+        self.assertEqual(rows[50]['throttle'],0.)
+        self.assertAlmostEqual(rows[100]['throttle'],.002)
+        for before,after in zip(rows,rows[1:]):
+            if after['target_mps']>0:
+                self.assertLessEqual(after['throttle']-before['throttle'],.002+1e-12)
+
+    def test_invalid_lookup_rejected_in_offline_preview(self):
+        for settings in (
+            dict(ff_speed_mps=[1.,2.],ff_throttle=[]),
+            dict(ff_speed_mps=[1.,1.],ff_throttle=[.1,.2]),
+            dict(ff_speed_mps=[1.,2.],ff_throttle=[.2,.1]),
+            dict(ff_speed_mps=[1.,2.],ff_throttle=[.1,float('nan')]),
+            dict(throttle_rise_rate=-.1),
+        ):
+            with self.assertRaises(ValueError):validate_feedforward(settings)
+
     def test_explicit_neutral_subtypes_and_legacy_bag_compatibility(self):
         for subtype in ('neutral','neutral_initial','neutral_after_forward','neutral_after_brake'):
             data=synthetic()

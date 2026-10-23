@@ -31,14 +31,19 @@ class OperatorTests(unittest.TestCase):
                 with self.assertRaises(ValueError):validate_selection(invalid,assets)
             selection.update(enable_vgl='true',map_dir='/maps/vgl',model_dir='/models/gpu')
             self.assertEqual(validate_selection(selection,assets),selection)
-    def test_sim_configs_are_complete_and_leave_real_gains_zero(self):
+    def test_sim_configs_are_complete_and_keep_physical_lookup_separate(self):
         for name,folder in [('pure_pursuit','control'),('speed_controller','control'),('hdmap','hdmap'),('operation_mode_manager','system'),('command_mux','system')]:
             original=yaml.safe_load((PACKAGE/f'config/{folder}/{name}.yaml').read_text())
             sim=yaml.safe_load((PACKAGE/f'config/sim/drive_{name}.yaml').read_text())
             old=next(iter(original.values()))['ros__parameters'];new=next(iter(sim.values()))['ros__parameters']
             self.assertEqual(set(old),set(new));self.assertTrue(new['use_sim_time'])
         old=yaml.safe_load((PACKAGE/'config/control/speed_controller.yaml').read_text())['/**/speed_controller']['ros__parameters']
-        self.assertEqual(old['kp'],0.)
+        self.assertEqual(old['kp'],0.02)
+        self.assertEqual(len(old['ff_speed_mps']),12)
+        sim=yaml.safe_load((PACKAGE/'config/sim/drive_speed_controller.yaml').read_text())['/**/speed_controller']['ros__parameters']
+        self.assertEqual(sim['ff_speed_mps'],[])
+        self.assertEqual(sim['ff_throttle'],[])
+        self.assertEqual(sim['throttle_rise_rate'],0.)
     def test_drive_launch_owns_only_sim_controller_and_saved_localization(self):
         names=('launch','launch.actions','launch.launch_description_sources','launch.substitutions','launch_ros','launch_ros.actions','launch_ros.descriptions','ament_index_python','ament_index_python.packages')
         modules={name:ModuleType(name) for name in names}

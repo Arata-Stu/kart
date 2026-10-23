@@ -253,7 +253,17 @@ module `modules/control/pure_pursuit.launch.py`は既存containerへloadする�
 
 tracking.launch.pyは同じcontainerへ`kart_control::SpeedControllerNode`もloadする。
 設定は`config/control/speed_controller.yaml`、moduleは`modules/control/speed_controller.launch.py`。
-速度PIDが`/auto/control_cmd`へ出力する。既定gain=0/舵角未校正、AUTO要求は行わない。
+速度PIDが`/auto/control_cmd`へ出力する。実機YAMLはthrottle_test由来の定常速度→スロットル表と暫定P補正を使う。
+`ff_speed_mps=[1.41,1.90,2.27,2.67,3.05,3.35,3.69,3.83,4.14,4.34,4.63,4.74]`、
+`ff_throttle=[0.100,0.125,0.150,0.175,0.200,0.225,0.250,0.275,0.300,0.325,0.350,0.375]`。
+ユーザーが定常速度として採用したcamera pose水平速度の中央値であり、実測校正済み値ではない。
+表は起動時固定、低速側は仮定の(0,0)から補間、高速側は末尾値を保持する。
+`throttle_rise_rate=0.10` / `throttle_fall_rate=0.20`（正規化出力/s、起動時固定、暫定）、
+`kp=0.02`、`ki=kd=kff=0`、`throttle_limit=0.4`、`max_target_speed_mps=10.0`。
+表使用中はkffを使わない。目標0・異常・brake時は増減制限を迂回してthrottle=0。
+詳細とノード単独既定値は[kart_control](../kart_control/README.md#速度pid-component)を参照。
+最大舵角は引き続き未校正0。Pure Pursuitの実機目標速度上限も10.0m/s。参照ライン速度は別設定。
+4.74m/s超はFF末尾0.375を保持し、throttle_limit=0.4は維持する。AUTO要求は行わない。
 PID係数はROS parameterで動的調整でき、全値とtopic型はkart_control README参照。
 
 ### Jetsonハードウェア監視と録画
@@ -387,7 +397,7 @@ image encoder・TensorRT・decoderを同じcontainerへloadする。VGL、vehicl
 `openeb_ros2`は任意機能であり、kart branchを別途導入・ビルドしてからEVSを有効にする。
 
 現時点で車体→カメラの取付TFは仮候補のため未配信。後輪軸TF、舵角校正・PID調整は別途必要。
-地図走行の起動構成が揃っても、既定の舵角0・PID gain 0のままで走行可能とは扱わない。
+地図走行の起動構成が揃っても、既定の舵角0と未検証のFF表・P補正のままで実車走行可能とは扱わない。
 VGL engineは実行GPU上で既存localization launchが検査する。
 検証: portable選択・引数・探索テスト、shell構文、dry-run。
 ROS/GPU/componentロード、RealSense実機Hz、車両・RAW記録連携は未確認。

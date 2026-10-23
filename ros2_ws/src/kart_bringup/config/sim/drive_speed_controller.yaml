@@ -10,6 +10,11 @@
     max_target_speed_mps: 1.5  # Trial ceiling; nominal target remains 0.35 m/s
     wall_timeout_s: 5.0  # Wall receive watchdog; 0 follows each data timeout
     control_rate_hz: 50.0
+    # Retain nominal simulator proportional FF; physical vehicle table is separate.
+    ff_speed_mps: []
+    ff_throttle: []
+    throttle_rise_rate: 0.0
+    throttle_fall_rate: 0.0
     kp: 0.8
     ki: 0.05
     kd: 0.0

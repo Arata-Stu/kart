@@ -84,7 +84,7 @@ ROS Component/単独実行のビルド・実機mux/bridge結合・実走行は�
 
 `speed_controller`が速度PIDと舵角の正規化を行い、`/auto/control_cmd`へ接続する。
 AUTO/MANUALの指令選択は既存muxが担当し、このpackageからAUTOへの変更を要求しない。
-車体寸法・舵角の校正値とPID係数は実車に合わせる。既定は未校正・全gain=0で駆動しない。
+車体寸法・舵角の校正値とPID係数は実車に合わせる。最大舵角の既定は未校正0。速度制御YAMLは試験由来のFF表と暫定P補正を持つ。
 無効時の速度0は目標値であり、物理的な停止・ブレーキ作動を示すものではない。
 
 ## TopicとTF
@@ -140,7 +140,7 @@ package configは単独起動用。use_sim_timeのみROS共通。
 | wheelbase_m | 0.257 | YAML既定。TT-02標準仕様の暫定値、実車の設定を確認。node単独でYAMLなしは0 |
 | max_steering_rad | 0.0 | 要校正。0は計算無効、0以上1.57未満 |
 | lookahead_m | 0.8 | 正値、弧長先読み距離 |
-| max_speed_mps | 1.0 | 正値、目標速度上限 |
+| max_speed_mps | 10.0 | 正値、目標速度上限 |
 | max_cross_track_m | 1.0 | 正値、ラインからの距離上限 |
 | goal_tolerance_m | 0.1 | 正値、開路終端の停止距離 |
 | deceleration_mps2 | 1.0 | 正値、目標速度減速計算。実減速度保証ではない |
@@ -214,7 +214,35 @@ odometryのtwistは`child_frame_id`座標/原点の速度として扱う。
 `v_axle = R v_child - (R omega_child) × p`の前進成分を使用する。
 TF欠落・空child frame・非有限速度は拒否する。VSLAM速度が実車速度として十分な精度/遅延かは未確認。
 
-`u = kp*(target-measured) + integral + kd*filtered(-d(measured)/dt) + kff*target`。
+`u = FF(target) + kp*(target-measured) + integral + kd*filtered(-d(measured)/dt)`。
+`ff_speed_mps`と`ff_throttle`が非空なら速度→定常スロットル表を線形補間し、
+`kff`は使わない。両方空なら従来の`kff*target`。長さ一致・2点以上・速度は正かつ
+厳密増加・スロットルは0..1で非減少を要求する。最小速度未満は仮定の(0,0)から補間し、
+最大速度超は末尾スロットルを保持する。目標上限の判定は別途維持する。
+両YAMLの初期表は、2026-10-23のthrottle_testで記録したAUTO要求値と、ユーザーが
+定常速度として採用したcamera poseの水平速度中央値12点（下表）。
+後輪軸の符号付き前進速度として実測校正された値ではない。路面・電池・旋回による差はP/Iで補正する。
+
+| speed [m/s] | throttle |
+|---|---|
+| 1.41 | 0.100 |
+| 1.90 | 0.125 |
+| 2.27 | 0.150 |
+| 2.67 | 0.175 |
+| 3.05 | 0.200 |
+| 3.35 | 0.225 |
+| 3.69 | 0.250 |
+| 3.83 | 0.275 |
+| 4.14 | 0.300 |
+| 4.34 | 0.325 |
+| 4.63 | 0.350 |
+| 4.74 | 0.375 |
+
+`throttle_rise_rate` / `throttle_fall_rate`で正規化出力/sの増減を制限する（0は無効）。
+起動／reset後は出力0から再開し、変化率制限を深める方向でも積分を止める。
+目標0・brake出力・異常・非AUTO・復帰中はthrottleを直ちに0へ落とす。
+診断の`ff`が定常基準、`requested_throttle`がPIDと上限適用後・変化率制限前、
+`throttle`が最終出力。reverseは追加しない。
 積分はki込みの寄与を±integral_limitに制限し、飽和を深める方向では積分しない。
 D項は実測速度の微分へ一次フィルタをかけ、目標値の段差によるderivative kickを避ける。
 正出力をthrottle、負出力をbrakeへ分離し、同時には出さない。brake_limit=0なら負出力は中立。
@@ -224,12 +252,23 @@ D項は実測速度の微分へ一次フィルタをかけ、目標値の段差�
 
 ### パラメータ
 
+表はノード単独の既定値。pkg/bringupの実機YAMLはkp=0.02（暫定）、ki=kd=kff=0、
+throttle_limit=0.4、max_target_speed_mps=10.0を指定する。操舵未校正の拒否は維持。
+Pure Pursuit側も目標速度上限は10.0m/s。参照ラインの要求速度は別に設定する。
+4.74m/s超ではFF表の末尾値0.375を保持し、P/I補正後のthrottle上限0.4は維持する。
+上限10.0m/sは、その速度への到達や速度推定精度を保証するものではない。
+simは表なし・変化率制限なしで従来のgainを使う。
+
 | 名前 | 既定値 | 動的変更 | 意味 |
 |---|---|---|---|
 | kp | 0.0 | 可 | 比例gain、出力/(m/s) |
 | ki | 0.0 | 可 | 積分gain、出力/m |
 | kd | 0.0 | 可 | 微分gain、出力/(m/s²) |
-| kff | 0.0 | 可 | 速度比例フィードフォワード、出力/(m/s) |
+| kff | 0.0 | 可 | 表が空の場合の速度比例FF、出力/(m/s) |
+| ff_speed_mps | [] | 不可 | FF表の速度[m/s]。YAMLは上記12点 |
+| ff_throttle | [] | 不可 | 各速度の定常要求値[0,1]。YAMLは上記12点 |
+| throttle_rise_rate | 0.0 | 不可 | 増加上限[正規化出力/s]、0で無効。YAMLは0.10（暫定） |
+| throttle_fall_rate | 0.0 | 不可 | 減少上限[正規化出力/s]、0で無効。YAMLは0.20（暫定） |
 | integral_limit | 0.2 | 可 | I項の出力上限、0..1 |
 | derivative_tau_s | 0.1 | 可 | D項一次フィルタ時定数、非負。0でフィルタなし |
 | throttle_limit | 0.2 | 可 | 前進出力上限、0..1 |
@@ -238,13 +277,13 @@ D項は実測速度の微分へ一次フィルタをかけ、目標値の段差�
 | max_steering_rad | 0.0 | 不可 | 0は未校正、正値かつ1.57未満。Pure Pursuitと一致 |
 | input_timeout_s | 0.15 | 不可 | ROS時刻での目標/速度stamp期限。wall_timeout_s=0なら受信とtracking_status期限にも使用 |
 | mode_timeout_s | 0.3 | 不可 | ROS時刻でのmode stamp期限。wall_timeout_s=0なら受信期限にも使用 |
-| max_target_speed_mps | 1.0 | 不可 | 超過目標は異常としてSTOP要求 |
+| max_target_speed_mps | 10.0 | 不可 | 超過目標は異常としてSTOP要求 |
 | wall_timeout_s | 0.0 | 不可 | 受信の実時間監視。0はinput/modeの期限、正値は独立したsteady秒の期限 |
 | control_rate_hz | 50.0 | 不可 | sim time有効時はROS timer、無効時はwall timer周波数 |
 | use_sim_time | false | ROS共通 | bag時true。実車bridgeはfalse |
 
 gainは有限・非負のみ受理する。不正変更は拒否。
-変更が確定した次の制御周期でI/D状態をリセットする（無衝撃切替を保証するものではない）。
+変更が確定した次の制御周期でI/D状態と変化率制限の前回出力をリセットする（無衝撃切替を保証するものではない）。
 use_sim_timeは起動時に選択する。trueではPure Pursuit/速度制御の周期とPIDのdt、
 AUTO開始の100ms中立待ちをROS時刻に合わせる。falseの周期・PID dtは従来のsteady時刻。
 同じsim時刻を繰り返しても積分しない。時刻巻戻しではPID/入力有効状態を破棄し、
@@ -264,7 +303,8 @@ AUTO中に入力期限切れ/不正値/TF不足/追従無効が起きると中�
 ### 調整手順
 
 1. STOP中に後輪軸TF、両nodeの最大舵角、Pure Pursuitのwheelbaseを実値へ設定する。
-2. Kpから低速で調整し、必要ならKi、最後にKdを加える。全gainの初期値は0。
+2. 表のFFと暫定kp=0.02から低速で確認し、必要ならKi、最後にKdを加える。
+   1.41m/s未満は未計測域の補間であり、発進・低速性能を検証した値ではない。
 3. Foxgloveで`/control/speed_diagnostics`の目標/実測速度、誤差、I項と飽和を確認する。
 4. 使用する値をbringup YAMLへ記録する。`ros2 param set`の変更は再起動で消える。
 
@@ -283,7 +323,8 @@ ros2 topic echo /control/speed_diagnostics
 （rcl_interfaces/srv/SetParametersAtomically）を使用する。
 実行中変更は可能だが、I/Dリセットで出力段差が生じ得るため、初期調整はSTOP中の変更と低速試験を分ける。
 
-Portable testはPI計算、reset、飽和時anti-windup、brake分離、D kick防止、FF、不正gain/dtを確認。
+Portable testはPI計算、reset、飽和・変化率制限時anti-windup、brake分離、D kick防止、
+FF表の全点・補間・端点保持・従来FF、停止時の即時中立、増減制限、不正表/gain/dtを確認。
 ROS parameter serviceによる実変更、Component build/load、モード遷移/TF結合、実車応答は未確認。
 
 

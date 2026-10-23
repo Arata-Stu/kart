@@ -372,6 +372,27 @@ def fit_model(rows, segments, cfg):
             'max_brake_observed': max(r['brake'] for r in fit_rows)}
 
 
+def validate_feedforward(settings):
+    speeds, throttles = settings.get('ff_speed_mps', []), settings.get('ff_throttle', [])
+    if len(speeds) != len(throttles) or (speeds and len(speeds) < 2):
+        raise ValueError('Feedforward arrays must have equal length >= 2, or both be empty')
+    if (any(not math.isfinite(v) or v <= 0 for v in speeds) or
+        any(not math.isfinite(u) or not 0 <= u <= 1 for u in throttles) or
+        any(b <= a for a, b in zip(speeds, speeds[1:])) or
+        any(b < a for a, b in zip(throttles, throttles[1:]))):
+        raise ValueError('Invalid feedforward table')
+    for key in ('throttle_rise_rate', 'throttle_fall_rate'):
+        if not math.isfinite(settings.get(key, 0)) or settings.get(key, 0) < 0:
+            raise ValueError(f'Invalid {key}')
+
+
+def feedforward(target, settings):
+    speeds, throttles = settings.get('ff_speed_mps', []), settings.get('ff_throttle', [])
+    if not speeds:
+        return settings['kff'] * target
+    return float(np.interp(target, [0., *speeds], [0., *throttles]))
+
+
 def simulate(model, settings, targets, stage_s, delay_s):
     """Illustrative scalar model only; mirrors SpeedPid equations, not ROS gates."""
     if not model.get('usable'): raise ValueError('Model has not passed held-out checks')
@@ -379,6 +400,7 @@ def simulate(model, settings, targets, stage_s, delay_s):
         if not math.isfinite(settings[key]) or settings[key]<0: raise ValueError(f'Invalid {key}')
     if any(settings[k]>1 for k in ('integral_limit','throttle_limit','brake_limit')):
         raise ValueError('Normalized limits must be <=1')
+    validate_feedforward(settings)
     if settings['brake_limit']>0 and not model['braking_identified']:
         raise ValueError('Braking model unavailable; use brake_limit=0 or record braking trials')
     if not math.isfinite(stage_s) or stage_s<=0 or not math.isfinite(delay_s) or delay_s<0:
@@ -386,6 +408,7 @@ def simulate(model, settings, targets, stage_s, delay_s):
     if not targets or any(not math.isfinite(v) or v<0 for v in targets): raise ValueError('Invalid targets')
     dt=.02; speed=targets[0]; integral=derivative=0.; previous_speed=speed
     history, result = [], []
+    previous_throttle = 0.
     # Begin at the first requested speed to avoid claiming a launch-from-rest model.
     for index in range(math.ceil(stage_s*len(targets)/dt)):
         t=index*dt; target=targets[min(int(t/stage_s),len(targets)-1)]
@@ -393,13 +416,18 @@ def simulate(model, settings, targets, stage_s, delay_s):
         if target==0: integral=derivative=0.; previous_speed=speed
         derivative += dt/(settings['derivative_tau_s']+dt)*(-(speed-previous_speed)/dt-derivative)
         previous_speed=speed
-        p=settings['kp']*error; d=settings['kd']*derivative; ff=settings['kff']*target
+        p=settings['kp']*error; d=settings['kd']*derivative; ff=feedforward(target, settings)
         candidate=float(np.clip(integral+settings['ki']*error*dt,-settings['integral_limit'],settings['integral_limit']))
         trial=p+candidate+d+ff
-        if not ((trial>settings['throttle_limit'] and error>0) or (trial < -settings['brake_limit'] and error<0)):
+        rise, fall = settings.get('throttle_rise_rate', 0), settings.get('throttle_fall_rate', 0)
+        ceiling = min(settings['throttle_limit'], previous_throttle + rise * dt) if rise else settings['throttle_limit']
+        floor = min(ceiling, max(0., previous_throttle - fall * dt)) if fall else 0.
+        if not ((trial>ceiling and error>0) or (trial < (floor if floor > 0 else -settings['brake_limit']) and error<0)):
             integral=candidate
         u=float(np.clip(p+integral+d+ff,-settings['brake_limit'],settings['throttle_limit']))
-        throttle=max(0.,u) if target>0 else 0.; brake=max(0.,-u)
+        throttle=float(np.clip(max(0.,u),floor,ceiling)) if target>0 and u>=0 else 0.
+        brake=max(0.,-u)
+        previous_throttle=throttle
         if target==0: integral=derivative=0.
         history.append((t,throttle,brake))
         delayed = math.floor((t-delay_s)/dt+1e-9)

@@ -29,7 +29,7 @@ public:
     frame_ = param<std::string>("tracking_frame", "rear_axle");
     map_ = param<std::string>("map_frame", "map");
     c_ = {param("wheelbase_m", 0.0),       param("max_steering_rad", 0.0),
-          param("lookahead_m", 0.8),       param("max_speed_mps", 1.0),
+          param("lookahead_m", 0.8),       param("max_speed_mps", 10.0),
           param("max_cross_track_m", 1.0), param("goal_tolerance_m", 0.1),
           param("deceleration_mps2", 1.0)};
     wall_timeout_ = param("wall_timeout_s", 0.0);
