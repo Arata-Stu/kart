@@ -168,7 +168,7 @@ def main():
             ):
                 if getattr(args, kind + "_fps") is None and not getattr(args, kind + "_profile"):
                     from kart_bringup.mission import CAMERA_PROFILES
-                    profiles = list(dict.fromkeys([sensor[key], *CAMERA_PROFILES, "0"]))
+                    profiles = list(dict.fromkeys([sensor[key], *CAMERA_PROFILES["RGB" if kind == "rgb" else "Infra"], "0"]))
                     enabled = sensor["enable_color" if kind == "rgb" else "enable_infra1"]
                     setattr(args, kind + "_profile", choose(
                         ("Infra（有効時はDepthも同じprofile）" if kind == "infra" and args.mode == "environment" else kind.upper()) + " 解像度 × FPS（USB3 D455候補）",

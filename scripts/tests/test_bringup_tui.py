@@ -30,6 +30,10 @@ class FzfTests(unittest.TestCase):
                             return mode
                         if "解像度 × FPS" in title:
                             self.assertTrue(expected.issubset(set(values)))
+                            if title.startswith("RGB"):
+                                self.assertNotIn("848x480x90", values)
+                            else:
+                                self.assertIn("848x480x90", values)
                             selected.append(title)
                             return profile
                         return values[0]

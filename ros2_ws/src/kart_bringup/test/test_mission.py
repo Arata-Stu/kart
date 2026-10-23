@@ -104,10 +104,35 @@ class MissionTests(unittest.TestCase):
             for fps in (30, 60, 90):
                 profile = f"{resolution}x{fps}"
                 with self.subTest(profile=profile):
-                    self.assertIn(profile, CAMERA_PROFILES)
+                    self.assertIn(profile, CAMERA_PROFILES["RGB"])
+                    self.assertIn(profile, CAMERA_PROFILES["Infra"])
                     params = sensor_parameters(path, rgb_profile=profile, infra_profile=profile)
                     self.assertEqual(params["rgb_camera.color_profile"], profile)
                     self.assertEqual(params["depth_module.infra_profile"], profile)
+
+    def test_stream_specific_enumerated_profiles(self):
+        from kart_bringup.mission import CAMERA_PROFILES, validate_camera_profile
+        path = CONFIG / "sensors/realsense.yaml"
+        self.assertNotIn("848x480x90", CAMERA_PROFILES["RGB"])
+        self.assertIn("848x480x90", CAMERA_PROFILES["Infra"])
+        for stream, profiles in CAMERA_PROFILES.items():
+            for profile in profiles:
+                validate_camera_profile(stream, profile)
+        params = sensor_parameters(path, rgb_profile="848x480x60", infra_profile="848x480x90")
+        self.assertEqual(params["rgb_camera.color_profile"], "848x480x60")
+        self.assertEqual(params["depth_module.infra_profile"], "848x480x90")
+        with self.assertRaisesRegex(ValueError, "RGB"):
+            sensor_parameters(path, rgb_profile="848x480x90")
+        with self.assertRaisesRegex(ValueError, "RGB"):
+            sensor_parameters(camera_config(CONFIG, "environment"), rgb_fps="90")
+        with tempfile.TemporaryDirectory() as folder:
+            import yaml
+            config = yaml.safe_load(path.read_text())
+            config["/**/realsense"]["ros__parameters"]["rgb_camera.color_profile"] = "848x480x90"
+            invalid = Path(folder) / "camera.yaml"
+            invalid.write_text(yaml.safe_dump(config))
+            with self.assertRaisesRegex(ValueError, "RGB"):
+                sensor_parameters(invalid)
 
     def test_environment_depth_imu_and_recording_contract(self):
         import yaml

@@ -155,3 +155,13 @@ bash scripts/bringup.sh --mode collect --imu-profile off
 ```
 
 設定変換と対話選択のportable testを用意。ROS結合・実機の取得Hzは未検証。
+
+### D455のstream別profile候補
+
+2026-10-23の`rs-enumerate-devices -o -c`（D455 S/N 239222300906、FW 5.16.0.1、USB3.2）
+に基づき、RGB8と左右Infra Y8のTUI候補を分離した。RGB 848×480は最大60Hz、
+Infra 848×480は90Hzまで対応するため、RGBの848×480×90は候補から除外する。
+RGB 640×480も最大60Hz。RGBの90Hz候補は424×240、480×270、640×360。
+collect/environment/drive/e2eで同じ検証を使用する。profile引数だけでなく旧FPS引数と
+有効なstreamのYAMLも検査し、非対応値はドライバ起動前に拒否する。
+これらは個々のprofileの対応確認であり、複数stream同時配信の安定性は実機で別途確認する。
