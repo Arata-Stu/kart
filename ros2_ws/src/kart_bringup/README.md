@@ -1282,3 +1282,67 @@ GPUでTensor構成・正規化を行う。既定eventsとCPU版evt3_runsは維�
 全設定入りconfig/sensors/openeb_tensor_cuda_async_runs_gpu.yamlをevs_tensor_config
 （CLIでは--evs-tensor-config）に指定し、backend=cuda_asyncで再起動する。
 診断tensor_upload=dirty_cpu_binsを確認する。MacでCPU模擬の一致は確認、CUDA/Orinは未検証。
+
+### EVS集計方式をCLI/TUIで切り替える
+
+`--evs-aggregation`（既定空＝Tensor YAMLを保持）を追加。起動時のみ指定でき、切替は再起動する。
+未指定の既存backend/profileは変更しない。backend cpu/cuda/cuda_asyncも引き続き選択可能。
+
+| --evs-aggregation | 処理 |
+|---|---|
+| events | 既存。CPU decode→全イベントGPU転送→GPU histogram |
+| evt3_runs | CPU直接histogram→CPU Tensor生成→全Tensor GPU転送 |
+| evt3_runs_gpu | CPU直接histogram→中間vector経由で変更bin転送→GPU Tensor生成 |
+| evt3_runs_gpu_direct | CPU直接histogram→中間コピーを省いて変更bin転送→GPU Tensor生成 |
+| evt3_runs_grouped_gpu | CPU状態復元/run生成→圧縮RAW＋run転送→GPU histogram/Tensor生成 |
+
+```bash
+# kart root / ROS development container。変更を同期して停止・rebuild/source後に起動。
+bash scripts/build.sh --packages-up-to kart_bringup openeb_ros2
+source ros2_ws/install/setup.bash
+bash scripts/bringup.sh --mode collect --evs \
+  --evs-backend cuda_async --evs-aggregation evt3_runs_grouped_gpu
+```
+
+backend未指定でaggregationを指定するとcuda_asyncを選び、EVSを有効化する。
+明示cpu/cudaや--no-evsとの併用は起動前に拒否する。
+対話起動ではEVS有効→decoder=cuda_async→「EVS 集計方式」で選ぶ。
+`--dry-run`を追加すれば起動せず設定とlaunchコマンドを確認できる。
+
+モデル由来`--evs-tensor-config /path/model/openeb_tensor.yaml`を併用できる。
+modeだけをselectorのevent_aggregationへoverrideし、モデルのshape/mean/stdは変更しない。
+launch直接指定はmission.launch.py/modules/sensors/openeb.launch.pyの`evs_aggregation`（既定空）。
+バックエンドとaggregationは独立した選択で、aggregationはcuda_async専用。
+
+運用の全設定profileをconfig/sensors/openeb_tensor_cuda_async_runs_gpu_direct.yaml、
+openeb_tensor_cuda_async_grouped_gpu.yamlに追加。従来の3 async profileも残す。
+全async profileにgrouped_max_packet_bytes=1048576、grouped_max_runs=65536を明記。
+この2上限はgrouped方式でのみ使用。古いモデルYAMLに未記載の場合はnode既定値を使用する。
+
+新node/topicは追加しない。Tensorは従来の/event_camera/tensor
+（isaac_ros_tensor_msgs/msg/TensorList、reliable/volatile、既定depth 8）、GPU FP32 NCHW。
+標準profileは[1,20,120,160]、40ms窓、4ms stride、250Hz。
+記録開始とAUTO操作は従来どおり独立で、bringupは自動開始しない。
+
+診断/event_camera/tensor_diagnosticsでevent_aggregation=evt3_runs_grouped_gpu、
+tensor_upload=compressed_raw_and_runsを確認する。直接コピー版はtensor_upload=direct_dirty_cpu_bins。
+上限/queue/stale/sequence/geometry/error後はGPU履歴とparser/scheduleを破棄して再取得する。
+4ms以下のイベント時刻逆転はevent dropで継続する。
+RAW所有権と2つのpinned/device stagingを使い、通常callbackでdecodeやGPU待ちを行わない。
+groupedは専用worker 1本＋非同期CUDA streamを使い、他方式は既存worker構成を維持する。
+
+MacでCLI/TUI/launch引数、全mode保持、custom Tensor設定保持、packet-stream coreのportable検証を実施。
+実RAW1000窓のCPU 20ch一致、ユーザー報告のLinux独立GPU benchmark一致と、今回のROS統合は区別する。
+ROS/SDK/CUDA一体のbuild・USB live・推論併走・Orinでの速度は未確認。
+
+
+### 実行中のRGB/EVS decoder遅延CSV
+
+`config/e2e/control_decoder.yaml`の起動時固定`latency_csv_path`（既定空で無効）に
+新規CSV絶対path、`latency_queue_capacity`（既定8192、1〜1000000）にログ待ち行数を設定する。
+通常のE2E decoder内で記録するため、新たな観測ノード・topicは不要。親directoryを先に作成し再起動する。
+`source_age_ms`は入力header→decoder出力のROS時刻差、`prediction_to_output_ms`は
+推論結果の受信→出力のsteady時間差。前者はセンサ時計対応の正しさに依存し、
+EVS packet受信からの時間や車両bridge/PWMまでの時間ではない。
+`ros2 run kart_e2e e2e_live_latency_report /absolute/new-run.csv`でactive初回出力のみの
+p50/p95/p99/maxを集計する。詳細と計測限界は[kart_e2e README](../kart_e2e/README.md#live-decoder-latencyrgb--evs共通)参照。

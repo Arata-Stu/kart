@@ -11,6 +11,8 @@
     prediction_order_policy: observe # observe: log and keep existing behavior; drop: reject non-increasing/invalid stamps before CUDA readback
     mode_timeout_s: 0.3
     control_rate_hz: 50.0
+    latency_csv_path: '' # Optional new CSV path; empty disables live metadata logging
+    latency_queue_capacity: 8192 # Bounded async log queue; excess records counted and dropped
     publish_decoded_frames: false # Optional lightweight per-tensor completion header; no tensor payload
     drive_enabled: false
     head_count: 1 # resolved from export routing metadata

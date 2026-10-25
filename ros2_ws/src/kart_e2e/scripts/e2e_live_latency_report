@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""Summarize opt-in decoder CSV. Source age is not USB ingress latency."""
+import argparse
+import csv
+import json
+import math
+
+
+def summarize(path):
+    values = {'source_age_ms': [], 'prediction_to_output_ms': []}
+    total = active = first = dropped = 0
+    with open(path, newline='') as stream:
+        for row in csv.DictReader(stream):
+            total += 1
+            dropped = max(dropped, int(row['log_dropped_total']))
+            if row['active'] != '1':
+                continue
+            active += 1
+            if row['first_output'] != '1':
+                continue
+            first += 1
+            for key in values:
+                if row[key]:
+                    number = float(row[key])
+                    if math.isfinite(number) and number >= 0:
+                        values[key].append(number)
+    def stats(items):
+        items = sorted(items)
+        if not items:
+            return {'count': 0, 'mean': None, 'p50': None, 'p95': None, 'p99': None, 'max': None}
+        # Nearest rank, preserving observed values for small sample counts.
+        return dict(count=len(items), mean=sum(items)/len(items),
+                    **{f'p{p}': items[max(0, math.ceil(p/100*len(items))-1)] for p in (50, 95, 99)},
+                    max=items[-1])
+    return dict(scope='decoder publish return; source age uses ROS clock, prediction duration uses steady clock',
+                output_rows=total, active_rows=active, first_output_rows=first,
+                repeated_active_rows=active-first, log_dropped_observed=dropped,
+                **{key: stats(items) for key, items in values.items()})
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('csv')
+    args = parser.parse_args()
+    print(json.dumps(summarize(args.csv), indent=2, allow_nan=False))

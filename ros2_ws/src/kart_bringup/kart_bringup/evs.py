@@ -3,6 +3,14 @@ from pathlib import Path
 import yaml
 
 BACKENDS = ("cpu", "cuda", "cuda_async")
+AGGREGATIONS = ("events", "evt3_runs", "evt3_runs_gpu", "evt3_runs_gpu_direct", "evt3_runs_grouped_gpu")
+AGGREGATION_LABELS = {
+    "events": "events: 既存decode → 全イベントをGPU集計",
+    "evt3_runs": "evt3_runs: CPU直接集計 → 全Tensor転送",
+    "evt3_runs_gpu": "evt3_runs_gpu: CPU直接集計 → 変更bin転送",
+    "evt3_runs_gpu_direct": "evt3_runs_gpu_direct: CPU直接集計 → 中間コピー削減",
+    "evt3_runs_grouped_gpu": "evt3_runs_grouped_gpu: 圧縮RAW＋run → GPU集計",
+}
 DEFAULT_BIAS = "@default"
 
 
@@ -26,11 +34,15 @@ def bias_files(root):
                   if p.is_file() and not any(x.startswith(".") for x in p.relative_to(root).parts))
 
 
-def pipeline_configuration(root, backend="", serial="", bias_file="", tensor_config=""):
+def pipeline_configuration(root, backend="", serial="", bias_file="", tensor_config="", aggregation=""):
     root = Path(root)
     selector = root / "openeb_tensor_pipeline.yaml"
     configured = yaml.safe_load(selector.read_text())["/**/tensor_pipeline"]["ros__parameters"]["tensor_backend"]
-    backend = backend or configured
+    if aggregation and aggregation not in AGGREGATIONS:
+        raise ValueError(f"Invalid EVS aggregation: {aggregation}")
+    backend = backend or ("cuda_async" if aggregation else configured)
+    if aggregation and backend != "cuda_async":
+        raise ValueError("EVS aggregation selection requires cuda_async")
     if backend not in BACKENDS:
         raise ValueError(f"Invalid EVS backend: {backend}")
     paths = [root / "openeb.yaml", root / f"openeb_tensor_{backend}.yaml",
@@ -44,6 +56,8 @@ def pipeline_configuration(root, backend="", serial="", bias_file="", tensor_con
         if not path.is_file():
             raise ValueError(f"Missing EVS config: {path}")
     overrides = {"tensor_backend": backend}
+    if aggregation:
+        overrides["event_aggregation"] = aggregation
     if serial:
         overrides["serial"] = serial
     bias = bias_selection(bias_file)

@@ -1455,3 +1455,48 @@ modeはあくまでこの計測専用の合成入力で、車両状態の再現�
 単体起動にはcsv_pathと全graphのready指定が必要なため、通常はbringup.shのoffline入口を使う。
 対応はsingle-head RGB。ROS/Isaac ROS componentのbuild・Jetson/GPUでの実bag再生は未検証。
 portable検証は`test_latency_tracker.cpp`、bringupの`test_e2e_latency.py`と既存compositionテスト。
+
+
+## Live decoder latency（RGB / EVS共通）
+
+既存`e2e_control_decoder` / `kart_e2e::ControlDecoderNode`に追加した任意のCSV記録。
+新しいtopicやノードは追加しない。既存の制御出力topic・制御周期・headerは変更しない。
+RGB画像またはEVS Tensorのheaderが推論結果まで保持されることが前提。
+
+起動時固定parameter:
+
+| parameter | default | 内容 |
+| --- | --- | --- |
+| `latency_csv_path` | `''` | 空なら無効。親directoryが存在する、新規CSVの絶対pathを指定。既存fileは上書きせず起動失敗 |
+| `latency_queue_capacity` | `8192` | 1〜1000000。非同期ログの最大待ち行数。超過はログだけをdrop |
+
+運用時は`kart_bringup/config/e2e/control_decoder.yaml`の`latency_csv_path`を、
+例えば`/workspaces/analysis/live_latency/rgb_01.csv`に設定して通常のE2E pipelineを再起動する。
+親directoryを先に作成する。RGB/EVSの比較ではそれぞれ別fileにする。
+
+```bash
+mkdir -p /workspaces/analysis/live_latency
+# 設定変更後、通常のE2E pipelineで計測し、終了後:
+ros2 run kart_e2e e2e_live_latency_report /workspaces/analysis/live_latency/rgb_01.csv
+```
+
+CSVはdecoderの各`publish()`復帰直後の観測。実際のsubscriber受信・車両入力・PWMは含まない。
+`source_age_ms`は入力header時刻から出力観測ROS時刻までの経過時間で、時計対応の正しさに依存する。
+EVSでは対応付けられたイベント時刻の鮮度であり、USB/driverの入口受信時間ではない。
+RGBでも撮像時刻の定義・camera clock対応は別途確認する。bag再生やsim timeで物理latencyとは解釈しない。
+`prediction_to_output_ms`はdecoderの推論結果Tensor受信から出力までをsteady clockで測る。
+CUDA readback、head選択待ち、control timer待ちを含むが、推論前の処理は含まない。
+GPUのproducer完了待ちがある場合はreadbackに含まれる。
+
+`active=1`だけが推論に基づく出力。STOP等ではlatency欄を空にする。
+`first_output=1`は当該推論結果が初めてactive出力になったことを表す。headerの一致だけでなく、
+受信steady時刻とmode generationで繰り返しを判定する。中間で上書きされ一度も出力されない推論は記録されない。
+reportはactiveかつ初回の行だけのp50/p95/p99/maxを計算し、繰り返し行数も別表示する。
+source時刻が未来・無効ならsource ageは空欄。時計の飛びによる正の異常値は自動補正しない。
+空欄やサンプルなしを0msとして扱わない。
+
+ファイルI/Oは専用thread、制御callbackは固定項目のキュー投入のみ。ログ有効化自体の負荷は残る。
+`log_dropped_total`は書き出したbatch時点のdrop累計であり、最終drop数の下限。
+正常終了時には残りをdrainし、dropがあればstderrにも累計を出す。disk障害はstderrへ通知して記録を停止する。
+強制終了時には未書き出し行を失う可能性がある。portable C++ testはCSV内容・drain・既存file拒否を確認する。
+ROS/CUDA結合・header伝搬・RGB/EVS実機の時刻精度と負荷はターゲットで確認が必要。

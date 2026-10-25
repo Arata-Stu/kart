@@ -48,7 +48,7 @@ def add_mission(args):
     if cfg['e2e']:
         # Collection's Joy throttle must never take ownership of E2E steering.
         vehicle['auto_fixed_throttle'] = '-1'
-    evs_values = {key: getattr(args, key, "") for key in ("evs_backend", "evs_serial", "evs_bias_file", "evs_tensor_config")}
+    evs_values = {key: getattr(args, key, "") for key in ("evs_backend", "evs_serial", "evs_bias_file", "evs_tensor_config", "evs_aggregation")}
     if any(evs_values.values()) and not cfg["enable_evs"]:
         raise ValueError("EVS startup overrides require enable_evs:=true")
     if cfg["enable_evs"]:
@@ -218,6 +218,7 @@ def generate_launch_description():
         "evs_serial",
         "evs_bias_file",
         "evs_tensor_config",
+        "evs_aggregation",
         "rgb_profile",
         "infra_profile",
         "imu_profile",

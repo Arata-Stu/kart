@@ -401,6 +401,7 @@ class MissionCompositionTests(unittest.TestCase):
             lu.include.reset_mock()
             args.enable_evs = 'true'
             args.evs_tensor_config = '/model/openeb.yaml'
+            args.evs_aggregation = 'evt3_runs_grouped_gpu'
             args.rgb_profile = ''
             args.rgb_fps = '0'
             with (
@@ -419,6 +420,9 @@ class MissionCompositionTests(unittest.TestCase):
             self.assertNotIn('launch/e2e.launch.py', paths)
             evs = lu.include.call_args_list[-1].kwargs['launch_arguments']
             self.assertEqual(evs['evs_tensor_config'], '/model/openeb.yaml')
+            sensors = [c.kwargs['launch_arguments'] for c in lu.include.call_args_list
+                       if c.args[1] == 'launch/modules/sensors/openeb.launch.py']
+            self.assertEqual(sensors[0]['evs_aggregation'], 'evt3_runs_grouped_gpu')
             self.assertNotIn('container_name', evs)
             self.assertNotIn('launch/localization.launch.py', paths)
             self.assertNotIn('launch/tracking.launch.py', paths)

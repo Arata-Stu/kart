@@ -110,6 +110,7 @@ def main():
     )
     parser.add_argument("--no-evs", action="store_true", help="EVSを無効にする")
     parser.add_argument("--evs-backend", choices=("cpu", "cuda", "cuda_async"), default="")
+    parser.add_argument("--evs-aggregation", choices=("events", "evt3_runs", "evt3_runs_gpu", "evt3_runs_gpu_direct", "evt3_runs_grouped_gpu"), default="", help="cuda_asyncの集計方式。指定時は未指定backendをcuda_asyncにする")
     parser.add_argument("--evs-serial", default="")
     parser.add_argument("--evs-tensor-config", default="", help="Model-derived full OpenEB tensor YAML")
     parser.add_argument("--evs-bias-file", default="", help=".bias path; @defaultでカメラ既定")
@@ -137,11 +138,15 @@ def main():
     parser.add_argument("--bag", default="")
     parser.add_argument("--rate", default="")
     args = parser.parse_args()
-    from kart_bringup.evs import BACKENDS, DEFAULT_BIAS, bias_files, bias_selection, pipeline_configuration
-    selected_evs = args.evs or any((args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config))
+    from kart_bringup.evs import BACKENDS, AGGREGATIONS, AGGREGATION_LABELS, DEFAULT_BIAS, bias_files, bias_selection, pipeline_configuration
+    selected_evs = args.evs or any((args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config, args.evs_aggregation))
     if args.no_evs and selected_evs:
         raise ValueError("--no-evsとEVS指定は併用できません")
     args.evs = selected_evs
+    if args.evs_aggregation:
+        if args.evs_backend and args.evs_backend != "cuda_async":
+            raise ValueError("--evs-aggregationは--evs-backend cuda_asyncと組み合わせてください")
+        args.evs_backend = "cuda_async"
     from kart_bringup.mission import discover, hdmap_choices, sensor_parameters, camera_config, recording_config
 
     interactive = args.mode is None
@@ -197,6 +202,12 @@ def main():
                     import yaml
                     default_backend = yaml.safe_load((config / "sensors/openeb_tensor_pipeline.yaml").read_text())["/**/tensor_pipeline"]["ros__parameters"]["tensor_backend"]
                     args.evs_backend = choose("EVS decoder", list(BACKENDS), default=BACKENDS.index(default_backend))
+                if args.evs_backend == "cuda_async" and not args.evs_aggregation:
+                    import yaml
+                    source = Path(args.evs_tensor_config).expanduser() if args.evs_tensor_config else config / "sensors/openeb_tensor_cuda_async.yaml"
+                    current = yaml.safe_load(source.read_text())["/**/event_tensor"]["ros__parameters"].get("event_aggregation", "events")
+                    args.evs_aggregation = choose("EVS 集計方式", list(AGGREGATIONS),
+                        label=lambda v: AGGREGATION_LABELS[v], default=AGGREGATIONS.index(current))
                 if not args.evs_bias_file:
                     args.evs_bias_file = str(choose("EVS bias file", [DEFAULT_BIAS] + bias_files(args.bias_root), lambda p: "カメラ既定" if p == DEFAULT_BIAS else str(p)))
             args.foxglove = args.foxglove or choose(
@@ -346,7 +357,7 @@ def main():
     if args.imu_profile and args.mode in ("eval", "e2e-latency"):
         raise ValueError("--imu-profileは実機のcollect/environment/drive/e2eで使用してください")
     if args.evs:
-        paths, overrides = pipeline_configuration(config / "sensors", args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config)
+        paths, overrides = pipeline_configuration(config / "sensors", args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config, args.evs_aggregation)
         if args.evs_bias_file and args.evs_bias_file != DEFAULT_BIAS:
             args.evs_bias_file = bias_selection(args.evs_bias_file)
         print(f"EVS: {overrides}; packet topic OFF; configs={paths}")
@@ -462,6 +473,7 @@ def main():
         "evs_serial": args.evs_serial,
         "evs_bias_file": args.evs_bias_file,
         "evs_tensor_config": args.evs_tensor_config,
+        "evs_aggregation": args.evs_aggregation,
         "enable_foxglove": str(args.foxglove).lower(),
         "record_dir": args.record_dir,
         "run_name": args.run_name or "run",

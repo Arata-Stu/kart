@@ -419,3 +419,13 @@ JoyのMANUAL○だけは操作側の明示的な試験・制動動作として�
 ESCの中立出力と指令履歴は別管理する。前進後の初回負入力は中立時間にかかわらず制動となり、
 制動後の中立→次の負入力で後退となる。中立は初期・前進後・制動後・後退後を区別し、
 制御権喪失等で履歴をunknownへ破棄する。中立時間から停止や前進履歴の解除を仮定しない。
+
+## EVS集計方式の起動時選択
+
+openeb_ros2の既存cuda_async backend内でevent_aggregationを選択し、既定eventsと全既存方式を維持する。
+bringupのevs_aggregationは起動時の明示overrideだけをchild event_tensorへ渡す。
+モデル由来Tensor YAMLのshape・窓・正規化を、方式変更のために別profileへ暗黙置換しない。
+grouped GPUは受信callbackを有界RAW queueへの所有権移譲に限定し、専用workerでscan/CUDA/snapshotを所有する。
+RAWサイズとrun数の上限を事前確保し、欠落・逆順・queue/stale/上限/error時は履歴を破棄して再取得する。
+イベント内の小逆転許容と圧縮packetの連続性を区別し、入力欠落をhistogramへ黙って混在させない。
+独立benchmarkのTensor一致・速度と、ROS/USB/推論併走/Orinでの検証を別々に記録する。

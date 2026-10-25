@@ -2,6 +2,7 @@
 #include "isaac_ros_common/cuda_stream.hpp"
 #include "isaac_ros_tensor_msgs/msg/tensor_list.hpp"
 #include "kart_e2e/control_gate.hpp"
+#include "kart_e2e/live_latency.hpp"
 #include "kart_e2e/prediction_order.hpp"
 #include "kart_interfaces/msg/control_command.hpp"
 #include "kart_interfaces/msg/e2_e_head_selection.hpp"
@@ -66,6 +67,11 @@ public:
       throw std::invalid_argument("Invalid control rate/tensor name");
     gate_ = std::make_unique<ControlGate>(count_ == 1, fixed, maximum, timeout_,
                                           mode_timeout_, use_fixed, future_tolerance_);
+    const auto latency_path = setting<std::string>("latency_csv_path", "");
+    const auto latency_capacity = setting<int>("latency_queue_capacity", 8192);
+    if (latency_capacity < 1 || latency_capacity > 1000000)
+      throw std::invalid_argument("Invalid latency queue capacity");
+    if (!latency_path.empty()) latency_csv_ = std::make_unique<LiveLatencyCsv>(latency_path, latency_capacity);
     stream_ = nvidia::isaac_ros::common::createCudaStream("E2EControlDecoder");
     output_ = create_publisher<kart_interfaces::msg::ControlCommand>(
         drive_ ? "auto/control_cmd" : "e2e/control_cmd", 1);
@@ -230,6 +236,16 @@ private:
     command.steering = result.steering;
     command.throttle = result.throttle;
     output_->publish(command);
+    if (latency_csv_) {
+      const auto completed = Clock::now();
+      const bool active = std::string(result.status) == "active";
+      const bool first = active && (received_ != last_logged_prediction_ || generation_ != last_logged_generation_);
+      const auto as_ns = [](Clock::time_point t) {return std::chrono::duration_cast<std::chrono::nanoseconds>(t.time_since_epoch()).count();};
+      latency_csv_->push({int64_t(header_.stamp.sec)*1000000000LL + header_.stamp.nanosec,
+        now().nanoseconds(), as_ns(received_), as_ns(completed), active, first,
+        command.steering, command.throttle});
+      if (active) {last_logged_prediction_ = received_; last_logged_generation_ = generation_;}
+    }
     const bool periodic = age(reported_) >= .1;
     if (drive_ && result.stop && !last_stop_result_) {
       const auto image_stamp = seconds(header_.stamp);
@@ -264,6 +280,9 @@ private:
       reported_ = Clock::now();
     }
   }
+  std::unique_ptr<LiveLatencyCsv> latency_csv_;
+  Clock::time_point last_logged_prediction_{};
+  uint64_t last_logged_generation_{};
   std::string tensor_name_, last_status_, routing_sha_;
   int head_count_{1};
   double head_timeout_{.3};

@@ -117,7 +117,7 @@ class CompositionTests(unittest.TestCase):
               patch('kart_e2e.contract.input_contract',return_value=('rgb','image',[1,3,120,212])),
               patch('kart_e2e.sections.validate_maps'),patch('kart_e2e.contract.model_contract'),
               patch('kart_e2e.contract.runtime_settings'),patch('kart_e2e.engine_cache.require_engine'),
-              patch.object(module,'load_transforms'),patch.object(module,'resolve',return_value=({}, {}, {}, {'input_shape':None}))):
+              patch.object(module,'load_transforms'),patch.object(module,'resolve',return_value=({'cuvslam':{'tracking_mode':0}}, {}, {}, {'input_shape':None}))):
             module.add_mission(args)
         calls={call.args[1]:call.kwargs['launch_arguments'] for call in lu.include.call_args_list}
         self.assertIn('launch/localization.launch.py',calls)
