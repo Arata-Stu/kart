@@ -3,8 +3,12 @@ import { tuning, parameterConnectionReady, parameterRequest } from './tuning.js'
 
 let snapshot=null, busy=false, serial=0, epoch=tuning.epoch;
 const inputs=new Map();
+function parameterIssue() {
+  const stopped = ['vehicle','recovery'].includes($('tuning-parameters-target').value);
+  return (stopped ? tuning.status?.stop_issue : tuning.status?.apply_issue) || tuning.status?.apply_issue || '';
+}
 function canApply() {
-  return parameterConnectionReady() && !tuning.busy && !busy && snapshot?.available && !tuning.status?.apply_issue;
+  return parameterConnectionReady() && !tuning.busy && !busy && snapshot?.available && !parameterIssue();
 }
 function controls() {
   $('tuning-parameters-apply').disabled=!canApply();
@@ -75,7 +79,7 @@ action('tuning-parameters-refresh',read);
 $('tuning-parameters-target').addEventListener('change',()=>read().catch(error=>toast(error.message,true)));
 $('tuning-parameters-form').addEventListener('submit',async event=> {
   event.preventDefault();
-  if(!canApply())return toast(tuning.status?.apply_issue || '接続と現在値を確認してください',true);
+  if(!canApply())return toast(parameterIssue() || '接続と現在値を確認してください',true);
   const changes={};
   for(const [name,{input,field}] of inputs) {
     const value=field.type===4?input.value:Number(input.value);

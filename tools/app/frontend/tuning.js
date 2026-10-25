@@ -109,7 +109,7 @@ for(const [id, actionName] of [['tuning-apply','apply'],['tuning-rollback','roll
     try {
       const result=await request(actionName,{snapshot:tuning.preview,expected_revision:tuning.status.revision});
       if(epoch!==tuning.epoch)return;
-      update(result); toast('Jetsonの適用版を確認しました。再開は既存の操作系でAUTOへ切り替えてください');
+      update(result); toast('Jetsonの適用版を確認しました。走行中は次の制御周期から反映されます');
     } catch(error) {
       if(epoch===tuning.epoch) {tuning.error=`適用結果を確認してください: ${error.message}`; tuning.received=0; emit('tuning');}
       throw error;

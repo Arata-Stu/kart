@@ -1,4 +1,4 @@
-"""ROS-free tuning protocol and stop gate; shared with the Notebook adapter."""
+"""ROS-free tuning protocol and target-specific mode/speed gate; shared with the Notebook adapter."""
 import hashlib
 import json
 import math
@@ -90,8 +90,14 @@ class StopGate:
         else:
             self.stopped_at = None
 
-    def issue(self):
+    def issue(self, allow_running=False):
         now = self.clock()
+        if allow_running and self.mode in (1, 2):
+            if now - self.mode_at > .3:
+                return '最新の走行モード情報が必要です'
+            if self.speed is None or now - self.speed_at > .5:
+                return '最新の速度情報が必要です'
+            return ''
         if self.mode != 3 or now - self.mode_at > .3:
             return '最新のSTOP状態が必要です'
         if now - self.speed_at > .5 or self.stopped_at is None or now - self.stopped_at < 1:

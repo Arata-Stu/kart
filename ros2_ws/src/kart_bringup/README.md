@@ -1085,8 +1085,10 @@ allowlistはportable testで検証。ROS配信・実際のFoxglove描画・実�
 
 bringupのdriveで「Map Studio 動的調整」を有効にして起動すると、同じUI内の
 「パラメータ調整」からPure Pursuit、参照ライン／Center速度、速度PID、復帰を調整できる。
-現在値と変更可否はJetsonの実ノードから取得する。追従のlookahead等5項目と復帰core Settingsは
-新鮮なSTOP中の動的変更に対応し、UIはさらに1秒以上の停車を要求する。
+現在値と変更可否はJetsonの実ノードから取得する。
+追従のlookahead等5項目・速度PID・参照ラインは新鮮なAUTO/MANUAL中も動的変更可能。
+車両補正・復帰core Settingsは最新STOPと1秒以上の停車を要求する。
+ライン形状・区間速度は生成・保存・プレビュー後、走行中に一括適用・rollbackできる。
 全既定値・config項目は従来どおり。適用はノード単位で、メモリ上のみ。
 復帰はbringupの「壁接触・スタック自動復帰」で事前に有効にする。未起動ならUIに未起動と出る。
 画像センサ設定・topic・処理幅など起動時固定項目の動的変更や、UIからの復帰ノード起動は行わない。
@@ -1264,3 +1266,19 @@ RGB 640×480も最大60Hz。RGBの90Hz候補は424×240、480×270、640×360。
 collect/environment/drive/e2eで同じ検証を使用する。profile引数だけでなく旧FPS引数と
 有効なstreamのYAMLも検査し、非対応値はドライバ起動前に拒否する。
 これらは個々のprofileの対応確認であり、複数stream同時配信の安定性は実機で別途確認する。
+
+### EVS直接bin集計の試験選択
+
+cuda_asyncのevent_aggregationは既定events。evt3_runsはイベント配列を作らず
+CPUへ直接集計する試験方式。全設定入りconfig/sensors/openeb_tensor_cuda_async_runs.yamlを
+既存のevs_tensor_config（CLIでは--evs-tensor-config）へ指定して選択する。
+backendはcuda_asyncを指定する。再起動後、tensor_diagnosticsのevent_aggregationで確認する。
+完成TensorのGPU転送は残る。Macのalgorithm照合済み、ROS/CUDA/Orin実行は未確認。
+
+### 直接集計のGPU併用を選択
+
+cuda_asyncのevent_aggregation=evt3_runs_gpuは、CPUで直接bin集計、変更binのみGPU転送、
+GPUでTensor構成・正規化を行う。既定eventsとCPU版evt3_runsは維持。
+全設定入りconfig/sensors/openeb_tensor_cuda_async_runs_gpu.yamlをevs_tensor_config
+（CLIでは--evs-tensor-config）に指定し、backend=cuda_asyncで再起動する。
+診断tensor_upload=dirty_cpu_binsを確認する。MacでCPU模擬の一致は確認、CUDA/Orinは未検証。

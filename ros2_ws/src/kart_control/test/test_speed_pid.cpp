@@ -89,6 +89,9 @@ int main() {
   table.kp = table.ki = 0;
   for (int n=0; n<40; ++n) r = pid.step(4.74, 4.74, .1, table);
   assert(std::abs(r.throttle-.375) < 1e-12);
+  pid.reset(true); // Live gain changes reset feedback without restarting slew at zero.
+  r = pid.step(4.74, 4.74, .1, table);
+  assert(std::abs(r.throttle-.375) < 1e-12);
   r = pid.step(.705, .705, .1, table);
   assert(std::abs(r.throttle-.355) < 1e-12);
   r = pid.step(0, 2, .1, table);

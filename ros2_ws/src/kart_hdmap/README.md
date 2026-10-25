@@ -179,7 +179,7 @@ ros2 topic pub --once /hdmap/select_line std_msgs/msg/String '{data: centerline}
 
 | 方向 | 既定topic | 型 | QoS・用途 |
 | --- | --- | --- | --- |
-| 入力 | /operation_mode/state | kart_interfaces/msg/OperationModeState | reliable/volatile/depth1、STOP状態とstamp/受信期限0.3秒 |
+| 入力 | /operation_mode/state | kart_interfaces/msg/OperationModeState | reliable/volatile/depth1、走行モードとstamp/受信期限0.3秒 |
 | 入力 | /visual_slam/tracking/odometry | nav_msgs/msg/Odometry | sensor data QoS、速度normとstamp/受信期限0.5秒 |
 | 入力 | /localization/vslam/diagnostics | diagnostic_msgs/msg/DiagnosticArray | reliable/volatile/depth10、表示用の位置確定状態、1.5秒期限 |
 | 入力 | /tf、/tf_static | tf2_msgs/msg/TFMessage | tf2_ros標準QoS、map→tuning_tracking_frameの取得、動的TFは0.5秒期限 |
@@ -189,7 +189,8 @@ HTTP `POST /status`・`/apply`・`/rollback`は127.0.0.1:8782固定、Originな�
 3 MiB＋request envelope上限。Notebookから既存SSH接続設定で呼ぶ。Dockerはhost networkingが必要。
 状態監視は10 Hz、HTTP取得は約1 Hz。状態変更はHTTPスレッドで行わずexecutorで一括処理する。
 
-適用には最新STOP、速度推定の絶対値0.05 m/s未満が1秒以上継続、参照ライン配信元が
+ライン適用・rollbackは最新AUTO/MANUALと有限の速度情報があれば走行中も可能。
+STOPの場合は速度推定の絶対値0.05 m/s未満が1秒以上継続する従来条件を使う。参照ライン配信元が
 このノードだけであること、地図資産hashと適用元revisionの一致が必要。
 速度推定はVSLAM由来であり、物理的な停車の保証ではない。
 有効なStudio v2 geometryを最大20,000生成点で受け、選択lane・lineと速度を一括交換する。
@@ -218,7 +219,8 @@ map_id、target（tracking / speed / map / recovery / vehicle）、変更時はe
 許可した5ノードと項目だけに限定し、クライアントから任意ノード名・service名は受け付けない。
 対象はHDMapノードと同じnamespace内のpure_pursuit、speed_controller、hdmap_server、recovery、kart_bridge。
 現在値とdescriptorのread_only・型・説明を取得して返す。取得は閲覧用でSTOP不要、変更は
-既存の最新STOP・1秒停車・地図一致・参照ライン非競合条件を要求する。
+追従・速度・参照ラインは走行中も変更可能。車両補正・復帰は最新STOP・1秒停車を要求する。
+全変更で地図一致・参照ライン非競合・モード受信0.3秒・速度受信0.5秒の鮮度条件を維持する。
 
 既存ROS標準serviceのクライアント:
 
@@ -229,7 +231,7 @@ map_id、target（tracking / speed / map / recovery / vehicle）、変更時はe
 | 要求 | /node/set_parameters_atomically | rcl_interfaces/srv/SetParametersAtomically | 1ノード内の変更を一括適用 |
 
 ROS executorで同期待機／spinを行わず、futureを次timer周期で回収する。
-get/describe→変更前revision確認→STOP再確認→atomic set→get/describeで適用後の実値を確認する。
+get/describe→変更前revision確認→対象別の適用条件再確認→atomic set→get/describeで適用後の実値を確認する。
 同時に1トランザクションのみ。複数ノードを跨ぐ一括commitはしない。外部ROSクライアントとの
 compare-and-setを保証するAPIではなく、事前読取時の競合と適用後の値を確認する方式。
 通信timeout後に変更を再送しない。適用済みか不明な場合は現在値を再取得する。
@@ -237,7 +239,7 @@ compare-and-setを保証するAPIではなく、事前読取時の競合と適�
 
 実車ライン切替は生成済みの選択laneにあるline_typeに限定する。地図snapshot全体の再転送は不要。
 Center速度は有限・非負のdouble。tuning有効時のline_type／速度変更はネイティブparameter serviceでも
-既存STOP・停車条件を要求する。snapshotの一括適用は検証済みの新地図を同一transactionで選択する。
+AUTO/MANUAL中は走行中に切替可能。STOP中は従来の停車条件を要求する。snapshotの一括適用は検証済みの新地図を同一transactionで選択する。
 
 
 ### 車両状態とステア補正の連携
@@ -255,3 +257,7 @@ Center速度は有限・非負のdouble。tuning有効時のline_type／速度�
 復帰状態の許可リストに`post_reverse_braking`（後退後の制動・停車確認）を含む。topicとJSON schema名は既存のまま。
 
 復帰状態post_reverse_pulseを「後退後の制動準備（正パルス）」として表示する。復帰のpost_reverse_pulse_throttle / post_reverse_pulse_sもSTOP時の動的調整対象。
+
+走行中チューニングの状態応答は`apply_issue`（ライン・追従・速度用）と
+`stop_issue`（車両補正・復帰用）を返す。版競合・timeout拒否・atomic適用・readbackは維持する。
+PROPO・不明mode・古い速度では走行中変更を許可しない。portable testでAUTO中の適用・rollbackを確認し、ROS/実車は未確認。

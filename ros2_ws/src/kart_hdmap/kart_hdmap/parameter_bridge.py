@@ -21,6 +21,16 @@ class ParameterBridge:
                                       for kind, suffix in zip(self.types, ('get_parameters', 'describe_parameters', 'set_parameters_atomically')))
         return self.clients[key]
 
+    def issue(self, key):
+        issue = self.bridge.issue()
+        if issue:
+            return issue
+        # Drive tuning may run in AUTO/MANUAL; actuator calibration and recovery
+        # retain their existing STOP/stationary contract.
+        if key in ('vehicle', 'recovery'):
+            return self.bridge.gate.issue()
+        return ''
+
     def read(self, pending):
         _, names = target(pending['body']['target'])
         clients = self.clients_for(pending['body']['target'])
@@ -46,8 +56,10 @@ class ParameterBridge:
                 reply.put(dict(map_id=self.bridge.identity, target=key, available=False, fields=[],
                                reason='対象ノード未起動・接続待ち', revision=''))
                 return
-            if action == '/parameters_set' and self.bridge.issue():
-                raise ValueError(self.bridge.issue())
+            if action == '/parameters_set':
+                issue = self.issue(key)
+                if issue:
+                    raise ValueError(issue)
             self.pending = dict(action=action, body=body, reply=reply, deadline=deadline, stage='read')
             self.read(self.pending)
         except Exception as error:
@@ -110,7 +122,7 @@ class ParameterBridge:
                                                       for name, value in pending['changes'].items())
                 self.finish(snapshot)
                 return
-            issue = self.bridge.issue()
+            issue = self.issue(pending['body']['target'])
             if issue:
                 raise ValueError(issue)
             changes = changes_for(snapshot, pending['body']['changes'], pending['body']['expected_revision'])

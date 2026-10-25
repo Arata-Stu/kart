@@ -284,7 +284,7 @@ private:
     auto updated = read_settings();
     if (!(updated == settings_)) {
       settings_ = updated;
-      pid_.reset();
+      pid_.reset(true);
       RCLCPP_INFO(get_logger(),
                   "PID parameters changed; integrator and derivative reset");
     }

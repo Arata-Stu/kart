@@ -75,9 +75,11 @@ public:
           result.successful = true;
           try {
             for (const auto &p : values) if (tunable(p.get_name())) {
-              if (mode_ != kart_interfaces::msg::OperationModeState::STOP ||
+              if ((mode_ != kart_interfaces::msg::OperationModeState::STOP &&
+                   mode_ != kart_interfaces::msg::OperationModeState::AUTO &&
+                   mode_ != kart_interfaces::msg::OperationModeState::MANUAL) ||
                   !fresh(mode_stamp_, mode_received_, 0.3))
-                throw std::invalid_argument("Fresh STOP is required for tracking tuning");
+                throw std::invalid_argument("Fresh AUTO/MANUAL/STOP is required for tracking tuning");
               if (!std::isfinite(p.as_double()) || p.as_double() <= 0)
                 throw std::invalid_argument("Tracking parameters must be finite and positive");
             }

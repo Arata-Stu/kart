@@ -24,7 +24,7 @@ const calls=[];
 globalThis.fetch=async(url, options)=> {
   calls.push([url,JSON.parse(options.body)]);
   const result=url.endsWith('/prepare') ? {revision:'preview',document:structuredClone(state.doc),lane_id:'main',line_type:'customline',centerline_speed_mps:0}
-    : {map_id:'map-a',revision:url.endsWith('/apply')?'r2':'r1',mode:3,speed_mps:0,localized:true,pose:{x:1,y:2,yaw:0},active,apply_issue:'',can_rollback:true};
+    : {map_id:'map-a',revision:url.endsWith('/apply')?'r2':'r1',mode:1,speed_mps:2,stop_issue:'STOP required',localized:true,pose:{x:1,y:2,yaw:0},active,apply_issue:'',can_rollback:true};
   return {ok:true,json:async()=>result};
 };
 emit('ready'); await flush();
@@ -63,6 +63,7 @@ state.dirty=false; emit('document'); await flush();
 await element('tuning-preview').click(); await flush();
 await element('tuning-apply').click(); await flush();
 assert.equal(tuning.status.revision,'r2');
+assert.equal(tuning.status.mode,1,'apply does not require stopping or switch mode');
 assert.equal(calls.at(-1)[1].expected_revision,'r1');
 assert.equal(calls.at(-1)[0],'/api/tuning/apply');
 emit('connection'); await flush();

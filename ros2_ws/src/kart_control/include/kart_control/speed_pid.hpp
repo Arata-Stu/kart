@@ -57,12 +57,12 @@ struct PidOutput {
 };
 class SpeedPid {
 public:
-  void reset() {
+  void reset(bool preserve_throttle = false) {
     integral_ = 0;
     derivative_ = 0;
     previous_ = 0;
     initialized_ = false;
-    previous_throttle_ = 0;
+    if (!preserve_throttle) previous_throttle_ = 0;
   }
   PidOutput step(double target, double measured, double dt,
                  const PidSettings &c) {

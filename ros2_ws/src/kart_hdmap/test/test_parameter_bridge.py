@@ -27,6 +27,14 @@ class PolicyTests(unittest.TestCase):
 
 
 class BridgeTests(unittest.TestCase):
+    def test_vehicle_and_recovery_keep_stationary_gate(self):
+        manager = ParameterBridge.__new__(ParameterBridge)
+        manager.bridge = NS(issue=lambda:'', gate=NS(issue=lambda:'STOP required'))
+        for key in ('tracking', 'speed', 'map'):
+            self.assertEqual(manager.issue(key), '')
+        for key in ('vehicle', 'recovery'):
+            self.assertEqual(manager.issue(key), 'STOP required')
+
     def setUp(self):
         self.values={row['name']:row['value'] for row in fields()}
         self.ready=True

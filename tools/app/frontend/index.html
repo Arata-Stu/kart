@@ -72,7 +72,7 @@
             <button id="tuning-offset-open" disabled>ステア補正</button>
             <button id="tuning-parameters-open" disabled>パラメータ調整</button>
             <button id="tuning-preview" disabled>保存済み編集をプレビュー</button>
-            <button id="tuning-apply" disabled>停止中に適用</button>
+            <button id="tuning-apply" disabled>適用（走行中も可）</button>
             <button id="tuning-rollback" disabled>直前の版へ</button>
           </div>
           <section class="vehicle-state" aria-label="車両状態" aria-live="polite">
@@ -84,7 +84,7 @@
           <div class="small" id="tuning-status" role="status">未接続</div>
           <div class="small" id="tuning-revision"></div>
           <div class="small" id="tuning-lookahead" role="status">Pure Pursuit参照点: 未受信</div>
-          <p class="small">既存の編集・区間速度・ライン生成後に保存してプレビュー。白＝実車、青＝候補、橙＝自己位置、黄＝Pure Pursuit参照点。適用はSTOP・1秒以上停車時のみ。画面切断は走行を停止しません。</p>
+          <p class="small">既存の編集・区間速度・ライン生成後に保存してプレビュー。白＝実車、青＝候補、橙＝自己位置、黄＝Pure Pursuit参照点。ライン・速度・追従調整はAUTO/MANUAL走行中も適用可能。画面切断は走行を停止しません。</p>
         </details>
         <div class="canvas-wrap">
           <canvas
@@ -1323,7 +1323,7 @@
 </dialog>
 <dialog id="tuning-parameters-dialog" class="tuning-parameters-dialog">
   <div class="actions"><h2>Jetsonのパラメータ調整</h2><button id="tuning-parameters-close" type="button">閉じる</button></div>
-  <p class="help">Jetsonの現在値を取得します。変更はSTOP・停車中、ノード単位で一括適用。起動時固定の項目は表示のみです。</p>
+  <p class="help">Jetsonの現在値を取得します。ライン・速度・追従の変更は走行中もノード単位で一括適用。車両補正・復帰設定はSTOP・停車中のみ。起動時固定の項目は表示のみです。</p>
   <div class="actions"><label>対象<select id="tuning-parameters-target" aria-label="パラメータの対象ノード"><option value="vehicle">車両・ステア補正</option>
     <option value="tracking">Pure Pursuit</option><option value="map">参照ライン・Center速度</option>
     <option value="speed">速度PID</option><option value="recovery">復帰モジュール</option>
@@ -1331,7 +1331,7 @@
   <p id="tuning-parameters-status" role="status"></p>
   <form id="tuning-parameters-form">
     <div class="tuning-parameter-scroll"><table><thead><tr><th>項目</th><th>現在値</th><th>変更値</th></tr></thead><tbody id="tuning-parameter-rows"></tbody></table></div>
-    <div class="actions"><button id="tuning-parameters-apply" class="primary" type="submit" disabled>停止中に一括適用</button></div>
+    <div class="actions"><button id="tuning-parameters-apply" class="primary" type="submit" disabled>一括適用</button></div>
   </form>
   <p class="help">変更は実行中のノードに保持され、再起動すると起動時設定に戻ります。復帰モジュールの未起動時は、bringupで復帰を有効にして起動してください。</p>
 </dialog>

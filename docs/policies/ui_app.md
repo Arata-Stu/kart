@@ -273,9 +273,10 @@ DataLoader worker数は既定8を表示し、要求値と実効cache設定を実
   点群・画像は常時転送しない。状態取得は約1 Hz、地図は接続時・適用版変更時だけ取得する。
 - Jetsonの既存hdmap_serverに明示的に有効化するloopback HTTP窓口を置く。
   参照ラインpublisherを二重化せず、ROS状態変更は単一executor内で処理する。
-- 地図資産の内容hash、snapshot hash、適用元revisionを確認し、最新STOPと
-  速度推定0.05 m/s未満が1秒以上継続した場合だけ形状・速度・lane・ラインを一括適用する。
-  通信失敗時に適用を自動再送しない。旧版を保持し、同じ停止条件で戻せる。
+- 地図資産の内容hash、snapshot hash、適用元revisionを確認し、最新AUTO/MANUALと
+  有限で新鮮な速度情報があれば走行中も形状・速度・lane・ラインを一括適用する。
+  STOP中は速度推定0.05 m/s未満が1秒以上継続することを要求する。
+  通信失敗時に適用を自動再送しない。旧版を保持し、同じ適用条件で戻せる。
 - UIはAUTO・STOP要求を発行しない。UI接続の有無は走行許可にしない。
   切断時は自己位置を非表示にし、走行の停止・再開は既存操作系が担当する。
 - 編集の正本はNotebookのmap.json。Jetsonへの適用はメモリ上のみで、再起動後は
@@ -295,9 +296,11 @@ DataLoader worker数は既定8を表示し、要求値と実効cache設定を実
 - 地図画面の実車調整へ統合し、接続先は既存SSH設定を共用する。
 - パラメータの現在値・型・read_only属性はJetsonの実ノードから取得する。
   対象はPure Pursuit・HDMap・速度PID・復帰の明示allowlist。任意service／ノード操作UIを作らない。
-- UIはSTOPと停車を確認し、ノードごとにset_parameters_atomicallyで変更して現在値を読み返す。
+- UIは対象別の適用条件を確認し、ノードごとにset_parameters_atomicallyで変更して現在値を読み返す。
+  追従・速度PID・参照ラインは走行中変更に対応し、車両補正・復帰はSTOP・1秒停車に限定する。
   ROS executorをHTTP待機やspinで塞がない。通信失敗時に変更を自動再送しない。
-- lookahead等の追従項目と復帰core Settingsはノード側でも最新STOPを要求する。
+- lookahead等の追従項目はノード側で最新AUTO/MANUAL/STOPを要求する。
+  復帰core Settingsは引き続き最新STOPを要求する。
   センサtopic・画像処理構成等の起動時固定項目は編集不可とし、未起動ノードを勝手に起動しない。
 - パラメータ変更はメモリ上に保持する。地図snapshotの「直前の版へ」とパラメータ変更は別操作。
   起動YAMLへの自動保存や、複数ノードを跨ぐatomic commitは提供しない。

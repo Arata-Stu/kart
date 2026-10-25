@@ -44,3 +44,11 @@ offline入力ではオンラインtracking診断を捏造せず、時刻・欠�
 
 明示opt-inの履歴操舵復帰はrule/E2E共通のmux前段に集約する。
 責務・時刻・ESC・中断・検証範囲は[recovery.md](recovery.md)を正本とする。
+
+## 走行中の現場調整
+
+Map Studioのライン・区間速度・参照ライン・追従5項目・速度PIDは、最新AUTO/MANUALと
+有限で新鮮な速度情報がある場合に走行中も変更できる。STOP時の1秒停車確認は維持する。
+地図hash・revision競合・ノード単位atomic set・適用後readback・timeout時の自動再送禁止を維持する。
+車両補正・復帰と起動時固定項目の制約は変更しない。ライン切替の連続軌道生成は行わない。
+PID動的変更ではI/Dをresetするが、throttle変化率制限の前回出力を保持する。

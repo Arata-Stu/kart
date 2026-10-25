@@ -22,6 +22,27 @@ def resign(value):
 
 
 class TuningTests(unittest.TestCase):
+    def test_running_gate_requires_fresh_mode_and_finite_speed(self):
+        now = [0.]
+        gate = StopGate(lambda: now[0])
+        for mode in (1, 2):
+            gate.update_mode(mode)
+            gate.update_speed(3.)
+            self.assertEqual(gate.issue(allow_running=True), '')
+            self.assertTrue(gate.issue())
+            now[0] += .31
+            self.assertTrue(gate.issue(allow_running=True))
+            gate.update_mode(mode)
+            gate.update_speed(float('nan'))
+            self.assertTrue(gate.issue(allow_running=True))
+            gate.update_speed(3.)
+            now[0] += .51
+            gate.update_mode(mode)
+            self.assertTrue(gate.issue(allow_running=True))
+        gate.update_mode(4)
+        gate.update_speed(3.)
+        self.assertTrue(gate.issue(allow_running=True))
+
     def test_stop_requires_continuous_fresh_samples_and_one_second(self):
         now = [0.]
         gate = StopGate(lambda: now[0])
@@ -110,6 +131,25 @@ class TransactionTests(unittest.TestCase):
     def call(self, action, **body):
         import time
         return self.bridge.handle(action, {'map_id':'map-a', **body}, time.monotonic()+4)
+
+    def test_running_apply_and_rollback_keep_mode_and_revision_checks(self):
+        b = self.bridge
+        del b.issue
+        b.gate.update_mode(1)
+        b.gate.update_speed(2.)
+        old = copy.deepcopy(b.active())
+        candidate = snapshot()
+        candidate['centerline_speed_mps'] = .7
+        resign(candidate)
+        result = self.call('/apply', snapshot=candidate, expected_revision=b.revision())
+        self.assertNotIn('error', result)
+        self.assertEqual(result['mode'], 1)
+        self.assertEqual(result['apply_issue'], '')
+        self.assertTrue(result['stop_issue'])
+        self.assertIn('error', self.call('/rollback', expected_revision='stale'))
+        result = self.call('/rollback', expected_revision=b.revision())
+        self.assertNotIn('error', result)
+        self.assertEqual(b.active(), old)
 
     def test_atomic_apply_and_rollback_keep_complete_old_version(self):
         b=self.bridge

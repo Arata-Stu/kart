@@ -1,4 +1,4 @@
-"""HDMap server with optional stop-gated tuning; no TF or online planner."""
+"""HDMap server with optional live tuning; no TF or online planner."""
 
 import json
 import math

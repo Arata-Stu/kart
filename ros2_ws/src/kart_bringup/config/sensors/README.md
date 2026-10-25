@@ -165,3 +165,20 @@ RGB 640×480も最大60Hz。RGBの90Hz候補は424×240、480×270、640×360。
 collect/environment/drive/e2eで同じ検証を使用する。profile引数だけでなく旧FPS引数と
 有効なstreamのYAMLも検査し、非対応値はドライバ起動前に拒否する。
 これらは個々のprofileの対応確認であり、複数stream同時配信の安定性は実機で別途確認する。
+
+### cuda_async直接集計の選択
+
+openeb_tensor_cuda_async.yamlのevent_aggregation（string、既定events）をevt3_runsへ
+変更するか、全parameter入りopeneb_tensor_cuda_async_runs.yamlをevs_tensor_configへ
+指定する。backendはcuda_asyncのまま。変更は再起動時に反映する。
+受信byte列からCPU binへ直接加算し、完成FP32 TensorをGPUへ転送する。
+イベント配列・イベント単位の転送を省くが、RAW所有bufferと全Tensor H2Dは残る。
+出力shape/topicは同じ。ROS/USB/CUDA/Orinでの速度・結合は未検証。
+
+### 直接集計のGPU併用を選択
+
+cuda_asyncのevent_aggregation=evt3_runs_gpuは、CPUで直接bin集計、変更binのみGPU転送、
+GPUでTensor構成・正規化を行う。既定eventsとCPU版evt3_runsは維持。
+全設定入りconfig/sensors/openeb_tensor_cuda_async_runs_gpu.yamlをevs_tensor_config
+（CLIでは--evs-tensor-config）に指定し、backend=cuda_asyncで再起動する。
+診断tensor_upload=dirty_cpu_binsを確認する。MacでCPU模擬の一致は確認、CUDA/Orinは未検証。

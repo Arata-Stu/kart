@@ -129,7 +129,7 @@ ROS時刻の経過とsteady受信時間の両方でfreshnessを判定し、bag�
 ## 全parameter
 
 lookahead_m・max_speed_mps・max_cross_track_m・goal_tolerance_m・deceleration_mps2は
-新鮮なSTOP中に動的変更可能。それ以外の独自parameterは起動時read_only。
+新鮮なAUTO/MANUAL/STOP中に動的変更可能。それ以外の独自parameterは起動時read_only。
 実運用はkart_bringup/config/control/pure_pursuit.yaml。
 package configは単独起動用。use_sim_timeのみROS共通。
 
@@ -239,7 +239,7 @@ TF欠落・空child frame・非有限速度は拒否する。VSLAM速度が実�
 | 4.74 | 0.375 |
 
 `throttle_rise_rate` / `throttle_fall_rate`で正規化出力/sの増減を制限する（0は無効）。
-起動／reset後は出力0から再開し、変化率制限を深める方向でも積分を止める。
+起動／停止・異常による全reset後は出力0から再開し、変化率制限を深める方向でも積分を止める。
 目標0・brake出力・異常・非AUTO・復帰中はthrottleを直ちに0へ落とす。
 診断の`ff`が定常基準、`requested_throttle`がPIDと上限適用後・変化率制限前、
 `throttle`が最終出力。reverseは追加しない。
@@ -283,7 +283,7 @@ simは表なし・変化率制限なしで従来のgainを使う。
 | use_sim_time | false | ROS共通 | bag時true。実車bridgeはfalse |
 
 gainは有限・非負のみ受理する。不正変更は拒否。
-変更が確定した次の制御周期でI/D状態と変化率制限の前回出力をリセットする（無衝撃切替を保証するものではない）。
+変更が確定した次の制御周期でI/D状態をリセットする。走行中変更では変化率制限の前回出力を保持する（無衝撃切替を保証するものではない）。
 use_sim_timeは起動時に選択する。trueではPure Pursuit/速度制御の周期とPIDのdt、
 AUTO開始の100ms中立待ちをROS時刻に合わせる。falseの周期・PID dtは従来のsteady時刻。
 同じsim時刻を繰り返しても積分しない。時刻巻戻しではPID/入力有効状態を破棄し、
@@ -321,7 +321,8 @@ ros2 topic echo /control/speed_diagnostics
 
 複数係数を同時反映したい場合は標準`/speed_controller/set_parameters_atomically`
 （rcl_interfaces/srv/SetParametersAtomically）を使用する。
-実行中変更は可能だが、I/Dリセットで出力段差が生じ得るため、初期調整はSTOP中の変更と低速試験を分ける。
+実行中変更は可能。I/Dリセット時も変化率制限の前回出力を保持し、0からの再ランプによる急減を避ける。
+停止・異常・非AUTOでの全resetは従来どおり出力履歴も破棄する。
 
 Portable testはPI計算、reset、飽和・変化率制限時anti-windup、brake分離、D kick防止、
 FF表の全点・補間・端点保持・従来FF、停止時の即時中立、増減制限、不正表/gain/dtを確認。

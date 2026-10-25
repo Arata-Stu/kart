@@ -149,7 +149,7 @@ class TuningBridge:
     def issue(self):
         if self.node.count_publishers('planning/reference_line') != 1:
             return '参照ラインの配信元が競合しています'
-        return self.gate.issue()
+        return self.gate.issue(allow_running=True)
 
     def status(self, known):
         now = time.monotonic()
@@ -158,7 +158,8 @@ class TuningBridge:
                       mode=self.gate.mode if now - self.gate.mode_at <= .3 else None,
                       speed_mps=self.gate.speed if now - self.gate.speed_at <= .5 else None,
                       pose=self.pose, tracking_reference=self.tracking_status(), localized=self.localized and now - self.localized_at <= 1.5,
-                      apply_issue=self.issue(), can_rollback=self.previous is not None)
+                      apply_issue=self.issue(), stop_issue=self.gate.issue(),
+                      can_rollback=self.previous is not None)
         if hasattr(self, 'vehicle'):
             result['vehicle'] = self.vehicle.view(self.node.get_clock().now().nanoseconds / 1e9,
                 dict(bridge=int(self.node.count_publishers('diagnostics') > 0),
@@ -239,7 +240,7 @@ class TuningBridge:
                     if self.previous is None:
                         raise ValueError('戻せる版がありません')
                     candidate = self.previous
-                # Recheck after validation; validation must not age the stop gate.
+                # Recheck after validation; mode/speed evidence must remain fresh.
                 issue = self.issue()
                 if issue:
                     raise ValueError(issue)
