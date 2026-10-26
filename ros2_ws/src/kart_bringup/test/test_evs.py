@@ -194,6 +194,17 @@ class EvsTests(unittest.TestCase):
         self.assertNotIn('name', node.call_args.kwargs)
         self.assertEqual(params[1],custom)
         self.assertEqual(params[-1],{'tensor_backend':'cuda_async','event_aggregation':'evt3_runs_grouped_gpu','event_image_enabled':False})
+        with tempfile.TemporaryDirectory() as folder:
+            bias = Path(folder) / 'selected.bias'
+            bias.write_text('178 % bias_diff_off\n')
+            module.setup({'evs_backend':'cuda_async','evs_serial':'E522',
+                          'evs_bias_file':str(bias),'evs_tensor_config':'',
+                          'evs_aggregation':'','evs_image':'false'})
+            kwargs = node.call_args.kwargs
+            self.assertNotIn('name', kwargs)  # Driver must receive the override too.
+            self.assertEqual(kwargs['parameters'][-1], {
+                'tensor_backend':'cuda_async', 'serial':'E522',
+                'bias_file':str(bias.resolve()), 'event_image_enabled':False})
 
     def test_cli_conflict_and_missing_bias_rejected(self):
         result = self.run_cli("--evs", "--no-evs")

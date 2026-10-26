@@ -1000,7 +1000,7 @@ bash scripts/bringup.sh --mode collect --rgb-profile 640x360x60 --infra-profile 
 
 起動せず採用設定とlaunch引数だけ確認する場合は`--dry-run --no-bridge`を追加する。
 
-候補は424×240・480×270・640×360（各30/60/90）、640×480（30/60）、848×480（30/60/90）、
+候補は424×240・480×270・640×360（各30/60/90）、640×480・848×480（Infraは30/60/90、RGBは30/60）、
 1280×720（15/30）、1280×800（30）。USB3 D455向けの候補で、実機対応は起動ログで確認する。
 元のノード名・topic名・型は変更しない。記録画像の寸法とcamera_infoが選択に従って変わる。
 
@@ -1387,6 +1387,9 @@ rosbag等が購読してもOFFを上書きしない。OFF時のpublisher数は0�
 明示overrideを`/**`へ適用する（内部ノード名は実行プログラムが設定する）。
 `tensor_pipeline`だけにoverrideを限定すると画像ノードへOFFが届かないため、
 `test_evs.py`でlaunchのscopeも検証する。
+同じscopeはdriverへの`evs_serial`／`evs_bias_file`にも適用する。
+起動時の`Loaded camera biases from ...`ログと
+`ros2 param get /event_camera/event_camera_driver bias_file`で選択したファイルを確認する。
 Tensor生成、RAW記録機能、Tensor/driver診断は継続する。録画開始の操作は従来どおり別。
 変更は再起動後に反映。確認例:
 

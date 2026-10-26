@@ -137,12 +137,18 @@ class MissionTests(unittest.TestCase):
         path = CONFIG / "sensors/realsense.yaml"
         self.assertNotIn("848x480x90", CAMERA_PROFILES["RGB"])
         self.assertIn("848x480x90", CAMERA_PROFILES["Infra"])
+        self.assertNotIn("640x480x90", CAMERA_PROFILES["RGB"])
+        self.assertIn("640x480x90", CAMERA_PROFILES["Infra"])
         for stream, profiles in CAMERA_PROFILES.items():
             for profile in profiles:
                 validate_camera_profile(stream, profile)
         params = sensor_parameters(path, rgb_profile="848x480x60", infra_profile="848x480x90")
         self.assertEqual(params["rgb_camera.color_profile"], "848x480x60")
         self.assertEqual(params["depth_module.infra_profile"], "848x480x90")
+        params = sensor_parameters(path, rgb_profile="640x480x60", infra_profile="640x480x90")
+        self.assertEqual(params["depth_module.infra_profile"], "640x480x90")
+        with self.assertRaises(ValueError):
+            sensor_parameters(path, rgb_profile="640x480x90")
         with self.assertRaisesRegex(ValueError, "RGB"):
             sensor_parameters(path, rgb_profile="848x480x90")
         with self.assertRaisesRegex(ValueError, "RGB"):

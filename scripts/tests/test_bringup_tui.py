@@ -19,6 +19,27 @@ spec.loader.exec_module(module)
 
 
 class FzfTests(unittest.TestCase):
+    def test_infra_vga_90_selection_reaches_launch(self):
+        for mode in ("collect", "environment"):
+            def choose(title, values, *args, **kwargs):
+                if title == "用途":
+                    return mode
+                if "解像度 × FPS" in title:
+                    if title.startswith("RGB"):
+                        self.assertNotIn("640x480x90", values)
+                        return "640x480x60"
+                    self.assertIn("640x480x90", values)
+                    return "640x480x90"
+                return values[0]
+            output = io.StringIO()
+            with (patch.object(sys, "argv", ["bringup.py", "--dry-run", "--no-bridge", "--no-evs",
+                                             "--run-name", "vga_check", "--auto-fixed-throttle=-1"]),
+                  patch.object(sys.stdin, "isatty", return_value=True),
+                  patch.object(module, "choose", side_effect=choose), redirect_stdout(output)):
+                module.main()
+            self.assertIn("rgb_profile:=640x480x60", output.getvalue())
+            self.assertIn("infra_profile:=640x480x90", output.getvalue())
+
     def test_additional_camera_profiles_reach_tui_and_launch_arguments(self):
         expected = {f"{size}x{fps}" for size in ("480x270", "640x360") for fps in (30, 60, 90)}
         for mode in ("collect", "environment"):
