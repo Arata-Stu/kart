@@ -1,13 +1,15 @@
 """Load visual_global_localization into a caller-owned container; never create a process."""
 
 import json
+from types import SimpleNamespace
 
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 
 
-def load_component(args: lu.ArgumentContainer) -> list[lut.Action]:
-    # JSON with primitive values may already be evaluated by ArgumentContainer.
+def load_component(args: SimpleNamespace) -> list[lut.Action]:
+    # Launch keeps JSON text; direct Python callers may supply decoded values.
     parameters = (
         json.loads(args.parameters_json)
         if isinstance(args.parameters_json, str)
@@ -30,7 +32,7 @@ def load_component(args: lu.ArgumentContainer) -> list[lut.Action]:
 
 
 def generate_launch_description() -> lut.LaunchDescription:
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     args.add_arg(
         "container_name",
         description="Existing multithreaded component container",

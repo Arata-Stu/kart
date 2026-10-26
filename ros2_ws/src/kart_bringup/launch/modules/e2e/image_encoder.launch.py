@@ -1,6 +1,7 @@
 """Load the official release-5.0 image encoder components into an existing container."""
 
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.e2e import boolean, validate_encoder
 
@@ -86,7 +87,7 @@ def add_nodes(args):
 
 
 def generate_launch_description():
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     for key in ("container_name", "image_topic", "camera_info_topic"):
         args.add_arg(key, cli=True)
     args.add_arg("use_sim_time", "", cli=True)

@@ -2,6 +2,7 @@
 
 import json
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.e2e import validate_evs_tensor
 from kart_e2e.contract import runtime_settings
@@ -28,7 +29,7 @@ def add_pipeline(args):
 
 
 def generate_launch_description():
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     for key in ('container_name', 'input_topic', 'model_dir', 'evs_tensor_config',
                 'use_fixed_throttle', 'fixed_throttle', 'drive_enabled', 'use_sim_time', 'recovery'):
         args.add_arg(key, '', cli=True)

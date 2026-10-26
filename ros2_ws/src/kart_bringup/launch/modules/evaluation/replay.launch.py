@@ -1,6 +1,7 @@
 """Filtered bag player and startup readiness monitor; no physical drivers."""
 
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.replay import playback, imu_topics
 from kart_bringup.mission import boolean
@@ -45,7 +46,7 @@ def add_replay(args):
 
 
 def generate_launch_description():
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     args.add_arg("section_camera_info_topic", "", cli=True)
     args.add_arg("exit_when_done", "false", cli=True)
     args.add_arg("completion_file", "", cli=True)

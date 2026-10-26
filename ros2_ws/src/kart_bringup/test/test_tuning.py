@@ -44,7 +44,7 @@ class TuningCollectionTest(unittest.TestCase):
         self.assertFalse(fixed_configuration(ROOT)[0])
         with self.assertRaisesRegex(ValueError,'require fixed_command'):
             fixed_configuration(ROOT,'',{'throttle':'.1'})
-        for values in ({'fixed_axes':'invalid'},{'throttle':'.3'},{'steering':'nan'},{'duration_s':'-1'},
+        for values in ({'fixed_axes':'invalid'},{'throttle':'1.01'},{'steering':'nan'},{'duration_s':'-1'},
                        {'throttle':'.1','brake':'.1'}):
             with self.assertRaises(ValueError): fixed_configuration(ROOT,True,values)
         on,params=fixed_configuration(ROOT,True,{'throttle':'.1','steering':'-.1','duration_s':'3'})

@@ -1,6 +1,7 @@
 """Load Speed PID into an existing multithreaded container."""
 
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 
 
@@ -30,7 +31,7 @@ def add_node(args):
 
 
 def generate_launch_description():
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     args.add_arg("container_name", description="Existing component container", cli=True)
     args.add_arg("use_sim_time", "", cli=True)
     args.add_arg("recovery", "", cli=True)

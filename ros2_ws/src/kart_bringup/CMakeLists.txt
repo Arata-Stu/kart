@@ -8,6 +8,7 @@ install(PROGRAMS scripts/e2e_latency scripts/prepare_vgl_map scripts/replay_read
 install(FILES README.md DESTINATION share/${PROJECT_NAME})
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(launch_arguments test/test_launch_arguments.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}:${CMAKE_CURRENT_SOURCE_DIR}/../kart_hdmap:${CMAKE_CURRENT_SOURCE_DIR}/../kart_e2e:${CMAKE_CURRENT_SOURCE_DIR}/../kart_bag_manager)
   ament_add_pytest_test(recovery test/test_recovery.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
   ament_add_pytest_test(tuning_selection test/test_tuning_selection.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}:${CMAKE_CURRENT_SOURCE_DIR}/../kart_hdmap)
   ament_add_pytest_test(tuning test/test_tuning.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})

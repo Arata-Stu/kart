@@ -130,6 +130,12 @@ launch/configは`share/${PROJECT_NAME}`へインストールする。すべて�
   launch内の辞書へ重複定義しない。ノード／plugin名等の構成情報はlaunchに記述してよい。
 - 運用上の優先順位は「bringupの静的YAML → 明示的なlaunch引数」。引数未指定ならYAMLを保持する。
   現在は空文字を未指定として扱い、root namespaceの明示は`namespace:=/`を使う。
+- kartのlaunch引数は`kart_bringup.launch_arguments.LaunchArguments`または標準の
+  `LaunchConfiguration.perform()`で文字列のまま受け取る。Isaacの`ArgumentContainer`による
+  Pythonリテラル自動変換は使わない。数値・bool・JSONは用途別の検証処理で明示変換し、
+  `0`／`false`／先頭ゼロ付きserial・録画名を欠落・改変させない。
+- 複数ノードを所有する実行プロセスにparameter辞書を渡す場合は、`Node(name=...)`による
+  scopeを確認する。内部ノードへの明示overrideを親ノードだけに限定しない。
 - container名・機能のenabled・終了猶予もbringup/config/bringup.yamlに基準値を置く。
   record_dir等の明示指定は対応するノードparameterへ変換して最後に適用する。
 - 起動前に設定ファイル・実際の採用値・明示上書きを表示する。未知の起動構成キーや不整合はエラーにする。

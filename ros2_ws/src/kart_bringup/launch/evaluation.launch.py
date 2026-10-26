@@ -1,6 +1,7 @@
 """Bag-only localization review: no vehicle, sensor drivers, recording, or control."""
 
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 import yaml
 from kart_bringup.localization import resolve
@@ -79,7 +80,7 @@ def add_evaluation(args):
 
 
 def generate_launch_description():
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     for key in ("bag", "map_dir", "map_file", "lane_id", "line_type"):
         args.add_arg(key, cli=True)
     args.add_arg("model_dir", "", cli=True)

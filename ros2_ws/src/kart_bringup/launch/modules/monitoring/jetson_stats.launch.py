@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 from ament_index_python.packages import PackageNotFoundError, get_package_prefix
 from kart_bringup.monitoring import is_jetson, should_start
@@ -52,7 +53,7 @@ def add_monitor(args):
 
 
 def generate_launch_description():
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     args.add_arg(
         "mode",
         "",

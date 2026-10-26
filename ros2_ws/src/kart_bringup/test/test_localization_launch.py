@@ -124,7 +124,7 @@ class LocalizationLaunchTest(unittest.TestCase):
                 module.add_localization(args)
             container.assert_not_called()
 
-    def test_real_argument_evaluation_keeps_false_override(self):
+    def test_real_argument_evaluation_keeps_false_text(self):
         description = module.generate_launch_description()
         context = LaunchContext()
         context.launch_configurations.update(
@@ -139,7 +139,7 @@ class LocalizationLaunchTest(unittest.TestCase):
             patch.object(lu, "get_path", return_value=Path("/config")),
         ):
             callback.execute(context)
-        self.assertEqual(resolve.call_args.args[3], {"use_sim_time": False})
+        self.assertEqual(resolve.call_args.args[3], {"use_sim_time": "False"})
 
     def test_external_containers_create_no_processes(self):
         self.route.return_value = ({"vslam": "/external", "vgl": "/external"}, [])

@@ -965,6 +965,7 @@ ROS結合・シミュレータ接触シナリオ・実車挙動は未確認。
 
 `bash scripts/bringup.sh`のdrive/e2eで「壁接触・スタック自動復帰」を選択する。
 候補は「無効」「IR＋IMU」「RGB＋IMU」「IR＋IMU＋EVS補助」。
+地図走行ではVSLAM速度・精度の選択後に表示する。両メニューの表示名は独立して管理する。
 選択は今回の起動だけに適用し、YAMLを書き換えない。未指定の非対話CLIはYAMLを保持する。
 
 ```bash
@@ -982,6 +983,14 @@ mission→tracking→speed_controller、mission→RGB/EVS E2E→inferenceの両�
 collect/evalでは復帰選択を受け付けない。起動による録画/AUTO要求は追加しない。
 
 ### 解像度とFPSの明示選択
+
+bringupからの引数伝達の一覧・検証境界は
+[bringupパラメータ伝達監査](../../../docs/bringup_parameter_audit.md)を参照。
+kartのlaunchは`LaunchArguments`で入力を文字列のまま受け取り、用途別の設定処理で
+数値・bool・JSONへ変換する。数値だけのserial／run_nameも元の文字列を保持する。
+CLIで指定モードが使用しないruntime optionを渡した場合は、黙って破棄せずエラーにする。
+`test_launch_arguments.py`はセンサ・録画、RGB/EVS E2E、offline localizationの
+親子launch callbackからノード設定への伝達をROS代替環境で検証する。
 
 `mission.launch.py`と`modules/sensors/realsense.launch.py`の`rgb_profile` / `infra_profile`
 （文字列、既定は空）は`WIDTHxHEIGHTxFPS`で該当streamの解像度・FPSを一括指定する。

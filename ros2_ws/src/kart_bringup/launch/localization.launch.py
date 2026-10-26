@@ -1,8 +1,10 @@
 """Paired localization following Isaac ROS mapping launch conventions."""
 
 import json
+from types import SimpleNamespace
 
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.container_plan import plan
 from kart_bringup.localization import resolve
@@ -10,10 +12,10 @@ from kart_bringup.mission import boolean
 from kart_bringup.vgl_assets import inspect_engines
 
 
-def add_localization(args: lu.ArgumentContainer) -> list[lut.Action]:
+def add_localization(args: SimpleNamespace) -> list[lut.Action]:
     """Validate the paired assets before starting either component container."""
     config = lu.get_path("kart_bringup", "config/localization")
-    # ArgumentContainer evaluates 'False' to bool: preserve explicit false overrides.
+    # Empty means unspecified; explicit false and zero remain valid overrides.
     overrides = {
         key: getattr(args, key)
         for key in ("use_sim_time", "base_frame", "tracking_mode", "imu_frame", "multicam_mode")
@@ -80,7 +82,7 @@ def add_localization(args: lu.ArgumentContainer) -> list[lut.Action]:
 
 def generate_launch_description() -> lut.LaunchDescription:
     """Expose runtime inputs; node tuning remains in bringup YAML."""
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     args.add_arg("enable_vgl", "true", cli=True)
     args.add_arg(
         "map_dir",

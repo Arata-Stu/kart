@@ -1,5 +1,6 @@
 """Offline registered-map poses for section datasets. No vehicle/control/sensor drivers."""
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 from launch_ros.actions import Node
 from kart_e2e.sections import load, validate_maps
@@ -30,7 +31,7 @@ def add_offline(args):
 
 
 def generate_launch_description():
-    args=lu.ArgumentContainer()
+    args=LaunchArguments()
     for key in ('bag','map_file','map_dir','routing_file','trajectory_output'):
         args.add_arg(key,cli=True)
     args.add_arg('exit_when_done','false',cli=True)

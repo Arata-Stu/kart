@@ -1,6 +1,7 @@
 """Own one standalone Bridge process; do not create/load a component container."""
 
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 import yaml
 
@@ -24,6 +25,6 @@ def add_bridge(args):
 
 
 def generate_launch_description():
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     args.add_opaque_function(add_bridge)
     return lut.LaunchDescription(args.get_launch_actions())

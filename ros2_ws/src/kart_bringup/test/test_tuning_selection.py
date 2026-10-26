@@ -41,7 +41,7 @@ class TuningSelectionTests(unittest.TestCase):
         spec.loader.exec_module(module)
         base = ['bringup.py', '--dry-run', '--no-bridge', '--no-evs', '--foxglove',
                 '--rgb-profile', '424x240x30', '--infra-profile', '424x240x60',
-                '--multicam-mode', '0', '--recovery', 'off', '--auto-fixed-throttle', '-1',
+                '--imu-profile', 'high', '--multicam-mode', '0', '--recovery', 'off', '--auto-fixed-throttle', '-1',
                 '--run-name', 'tuning', '--map-file', str(self.hdmap), '--map-dir', str(self.vgl),
                 '--model-dir', str(self.root/'models')]
         for enabled, interactive in ((True, True), (False, True), (True, False), (False, False)):
@@ -58,7 +58,7 @@ class TuningSelectionTests(unittest.TestCase):
                  patch.object(sys, 'argv', argv), patch.object(sys.stdin, 'isatty', return_value=True), \
                  patch.object(module, 'choose', side_effect=choose), \
                  patch('kart_bringup.mission.hdmap_choices', return_value=[('main','customline')]), \
-                 patch('kart_bringup.localization.resolve', return_value=({}, {}, {}, {'input_shape':[1,3,240,424]})), \
+                 patch('kart_bringup.localization.resolve', return_value=({'cuvslam': {'tracking_mode': 0}}, {}, {}, {'input_shape':[1,3,240,424]})), \
                  contextlib.redirect_stdout(output):
                 module.main()
             self.assertIn('tuning_enabled:='+str(enabled).lower(), output.getvalue())
@@ -71,4 +71,4 @@ class TuningSelectionTests(unittest.TestCase):
         import subprocess
         result = subprocess.run([sys.executable, str(ROOT/'scripts/lib/bringup.py'), '--mode','collect','--tuning','--dry-run'], capture_output=True,text=True)
         self.assertNotEqual(result.returncode,0)
-        self.assertIn('drive専用',result.stderr)
+        self.assertIn('--tuning',result.stderr)

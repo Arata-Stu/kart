@@ -4,6 +4,7 @@ import json
 import re
 
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 
 
@@ -76,7 +77,7 @@ def add_tracking(args):
 
 
 def generate_launch_description():
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     args.add_arg("tuning_enabled", "", cli=True)
     args.add_arg("tuning_map_dir", "", cli=True)
     args.add_arg("tuning_tracking_frame", "", cli=True)

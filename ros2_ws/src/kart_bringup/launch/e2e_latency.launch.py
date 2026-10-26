@@ -6,6 +6,7 @@ The session CLI creates the output directory and reports after all processes exi
 import json
 from pathlib import Path
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 from launch.actions import ExecuteProcess, RegisterEventHandler, TimerAction, EmitEvent, GroupAction
 from launch.event_handlers import OnProcessExit
@@ -66,7 +67,7 @@ def add_latency(args):
 
 
 def generate_launch_description():
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     for key in ('bag', 'model_dir', 'output_dir'):
         args.add_arg(key, cli=True)
     args.add_arg('rate', '', cli=True)

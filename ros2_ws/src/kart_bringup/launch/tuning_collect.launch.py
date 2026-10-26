@@ -1,6 +1,7 @@
 """Mapless recording with optional fixed AUTO trials; recording/mode changes stay explicit."""
 import json
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 from launch.actions import Shutdown
 from launch_ros.actions import Node
@@ -35,7 +36,7 @@ def build(args):
 
 
 def generate_launch_description():
-    args=lu.ArgumentContainer()
+    args=LaunchArguments()
     for key in (*KEYS,'fixed_command',*FIXED_KEYS):
         args.add_arg(key,'',description='Explicit override; empty preserves module YAML',cli=True)
     args.add_opaque_function(build)

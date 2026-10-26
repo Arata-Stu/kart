@@ -81,7 +81,7 @@ def test_bringup_cli_and_tui_forward_selection_without_editing_yaml(monkeypatch,
     before = (ROOT / 'config/recovery/recovery.yaml').read_bytes()
     common = ['bringup.py', '--no-bridge', '--dry-run', '--run-name', 'recovery_test',
               '--e2e-model-dir', '/model', '--e2e-fixed-throttle', '0.1',
-              '--rgb-fps', '30', '--infra-fps', '30', '--no-evs', '--foxglove']
+              '--rgb-fps', '30', '--infra-fps', '30', '--imu-profile', 'high', '--no-evs', '--foxglove']
     with (patch('kart_e2e.contract.input_contract', return_value=('rgb', 'image', [1,3,120,212])),
           patch('kart_e2e.contract.model_contract', return_value=({}, 'steer_only')),
           patch('kart_e2e.contract.routing_settings', return_value=None),

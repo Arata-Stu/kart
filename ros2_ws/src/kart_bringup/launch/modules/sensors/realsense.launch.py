@@ -1,6 +1,7 @@
 """Load RealSense into a caller-owned multithreaded container."""
 
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.mission import sensor_parameters
 
@@ -29,7 +30,7 @@ def add_camera(args):
 
 
 def generate_launch_description():
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     args.add_arg("container_name", description="Existing sensor container", cli=True)
     args.add_arg(
         "rgb_fps", "", description="Empty preserves YAML; 0 disables RGB", cli=True

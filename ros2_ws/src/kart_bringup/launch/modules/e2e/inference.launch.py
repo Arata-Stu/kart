@@ -1,6 +1,7 @@
 """Load official TensorRT and kart's C++ control decoder; no container creation."""
 
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.e2e import boolean, parameters
 from kart_e2e.contract import model_contract, runtime_settings, input_contract, validate_runtime, routing_settings
@@ -97,7 +98,7 @@ def add_nodes(args):
 
 
 def generate_launch_description():
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     for key in ("container_name", "model_dir"):
         args.add_arg(key, cli=True)
     for key in (

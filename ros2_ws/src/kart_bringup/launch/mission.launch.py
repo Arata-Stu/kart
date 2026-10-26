@@ -1,6 +1,7 @@
 """Collect, drive or E2E composition. Never starts recording or requests AUTO."""
 
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 from ament_index_python.packages import get_package_share_directory
 from kart_bringup.configuration import load
@@ -203,7 +204,7 @@ def add_mission(args):
 
 
 def generate_launch_description():
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     args.add_arg("mode", "collect", choices=["collect", "environment", "drive", "e2e"], cli=True)
     for key in (
         *OVERRIDES,

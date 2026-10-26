@@ -19,6 +19,47 @@ spec.loader.exec_module(module)
 
 
 class FzfTests(unittest.TestCase):
+    def test_drive_vslam_then_recovery_renders_each_profiles_labels(self):
+        from kart_bringup.multicam import LABELS as multicam_labels
+        from kart_bringup.recovery import LABELS as recovery_labels
+        for recovery in ('off', 'infra_imu', 'rgb_imu'):
+            with self.subTest(recovery=recovery), tempfile.TemporaryDirectory() as folder:
+                hdmap = Path(folder) / 'hd_map.yaml'
+                hdmap.write_text('{}')
+                prompts = []
+
+                def choose(title, values, label=str, default=0):
+                    prompts.append(title)
+                    # fzf renders every candidate before selecting one.
+                    labels = [label(value) for value in values]
+                    if title == '用途':
+                        return 'drive'
+                    if title == 'VSLAM速度・精度':
+                        self.assertEqual(labels, list(multicam_labels.values()))
+                    if title == '壁接触・スタック自動復帰':
+                        self.assertEqual(labels, list(recovery_labels.values()))
+                        self.assertEqual(values[default], 'off')
+                        return recovery
+                    return values[default]
+
+                output = io.StringIO()
+                argv = ['bringup.py', '--dry-run', '--no-bridge', '--no-evs',
+                        '--rgb-profile', '640x480x30', '--infra-profile', '640x480x90',
+                        '--imu-profile', 'high', '--no-tuning', '--auto-fixed-throttle=-1',
+                        '--run-name', 'recovery_check', '--map-file', str(hdmap),
+                        '--map-dir', folder, '--model-dir', folder]
+                with (patch.object(sys, 'argv', argv),
+                      patch.object(sys.stdin, 'isatty', return_value=True),
+                      patch.object(module, 'choose', side_effect=choose),
+                      patch('kart_bringup.mission.hdmap_choices', return_value=[('lane_001', 'centerline')]),
+                      patch('kart_bringup.localization.resolve', return_value=(
+                          {'cuvslam': {'tracking_mode': 0}}, {}, {}, {'input_shape': [1, 3, 480, 640]})),
+                      redirect_stdout(output)):
+                    module.main()
+                self.assertLess(prompts.index('VSLAM速度・精度'), prompts.index('壁接触・スタック自動復帰'))
+                self.assertIn(f'recovery:={recovery}', output.getvalue())
+                self.assertIn('mission.launch.py', output.getvalue())
+
     def test_infra_vga_90_selection_reaches_launch(self):
         for mode in ("collect", "environment"):
             def choose(title, values, *args, **kwargs):

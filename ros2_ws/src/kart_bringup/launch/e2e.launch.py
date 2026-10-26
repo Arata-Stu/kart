@@ -1,6 +1,7 @@
 """Image encoder + TensorRT + control decoder in one owned or external container."""
 
 import isaac_ros_launch_utils as lu
+from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 from kart_bringup.e2e import container_config, validate_encoder
 from kart_e2e.contract import model_contract, runtime_settings, input_contract
@@ -74,7 +75,7 @@ def add_pipeline(args):
 
 
 def generate_launch_description():
-    args = lu.ArgumentContainer()
+    args = LaunchArguments()
     for key in (
         "container_name",
         "create_container",

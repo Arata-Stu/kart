@@ -86,6 +86,37 @@ def latency_entry(args, config, interactive):
     os.execvp(command[0], command)
 
 
+def validate_mode_options(args):
+    """Reject runtime selections that would otherwise disappear from argv."""
+    offline = args.mode in ("eval", "e2e-latency")
+    groups = [
+        (("rgb_fps", "infra_fps", "rgb_profile", "infra_profile", "imu_profile", "device", "run_name"), not offline),
+        (("bag", "rate"), offline),
+        (("e2e_model_dir",), args.mode in ("e2e", "e2e-latency")),
+        (("multicam_mode",), args.mode in ("drive", "eval")),
+        (("base_frame", "imu_frame", "tracking_mode"), args.mode == "eval"),
+        (("lane_id", "line_type", "model_dir"), args.mode in ("drive", "eval")),
+        (("map_file", "map_dir"), args.mode in ("drive", "eval", "e2e")),
+        (("latency_output",), args.mode == "e2e-latency"),
+        (("tuning",), args.mode == "drive"),
+        (("foxglove",), not offline),
+    ]
+    for keys, allowed in groups:
+        if allowed:
+            continue
+        for key in keys:
+            value = getattr(args, key)
+            if value is not None and value != "" and (key != "foxglove" or value):
+                raise ValueError(f"--{key.replace('_', '-')}はmode={args.mode}では使用しません")
+    if args.eval_localization is not None and not (
+        args.mode == "eval" or (args.mode == "e2e-latency" and args.eval_localization == "e2e_latency")
+    ):
+        raise ValueError("--eval-localizationはeval専用です")
+    if (args.mode == "eval" and args.eval_localization not in ("vgl", "fresh")
+            and args.model_dir):
+        raise ValueError("VSLAM単独評価では--model-dirを使用しません（VGLは--eval-localization vgl）")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="kart: 収集 / 地図走行 / E2E / offline評価。--mode指定時は非対話。"
@@ -126,7 +157,7 @@ def main():
                         help="Collection AUTO throttle, manual steering (collect/drive): -1 normal, 0..speed_scale fixed (not vehicle speed)")
     parser.add_argument("--e2e-fixed-throttle", type=float, default=None,
                         help="E2E model steering + fixed throttle; defaults to model runtime metadata")
-    from kart_bringup.recovery import CHOICES, LABELS, configuration as recovery_configuration, validate_inputs
+    from kart_bringup.recovery import CHOICES, LABELS as RECOVERY_LABELS, configuration as recovery_configuration, validate_inputs
     parser.add_argument("--recovery", choices=CHOICES, default="",
                         help="自動復帰: off / infra_imu / rgb_imu / evs_assisted（未指定はYAML）")
     parser.add_argument("--run-name", default=None)
@@ -243,10 +274,10 @@ def main():
             args.tracking_mode = choose("追跡方式", ["0", "1"], lambda v: "stereo VO（IMUなし）" if v == "0" else "VIO（IMUあり）")
         if args.mode in ("drive","eval") and not args.multicam_mode:
             import yaml
-            from kart_bringup.multicam import LABELS
+            from kart_bringup.multicam import LABELS as MULTICAM_LABELS
             preset='sim/vslam.yaml' if args.mode=='eval' and args.eval_localization=='fresh' else 'localization/cuvslam.yaml'
             default=str(yaml.safe_load((config/preset).read_text())['/**/visual_slam']['ros__parameters']['multicam_mode'])
-            args.multicam_mode=choose("VSLAM速度・精度",list(LABELS),lambda v:LABELS[v],default=list(LABELS).index(default))
+            args.multicam_mode=choose("VSLAM速度・精度",list(MULTICAM_LABELS),lambda v:MULTICAM_LABELS[v],default=list(MULTICAM_LABELS).index(default))
         if args.mode == "drive" or (args.mode == "eval" and args.eval_localization != "fresh"):
             args.map_file = args.map_file or str(
                 choose("HDMap", discover(args.map_root, "hdmap"))
@@ -301,6 +332,7 @@ def main():
             args.run_name = input("run_name [run] > ").strip() or "run"
     if args.mode == "eval" and args.eval_localization == "e2e_latency":
         args.mode = "e2e-latency"
+    validate_mode_options(args)
     if args.mode == "e2e-latency":
         return latency_entry(args, config, interactive)
     if args.latency_output:
@@ -315,6 +347,8 @@ def main():
         if section_routing:
             from kart_e2e.sections import validate_maps
             validate_maps(section_routing, args.map_file, args.map_dir)
+        elif args.map_file or args.map_dir:
+            raise ValueError("section routingなしのE2Eでは--map-file/--map-dirを使用しません")
     if args.tuning is not None and args.mode != 'drive':
         raise ValueError('--tuning / --no-tuningはdrive専用です')
     tuning_enabled = False
@@ -353,7 +387,7 @@ def main():
         enabled, recovery_params = recovery_configuration(config / 'recovery')
         default = recovery_params['sensor_profile'] if enabled else 'off'
         args.recovery = choose('壁接触・スタック自動復帰', list(CHOICES),
-                               lambda v: LABELS[v], default=CHOICES.index(default))
+                               lambda v: RECOVERY_LABELS[v], default=CHOICES.index(default))
     if args.multicam_mode and args.mode not in ('drive','eval'):
         raise ValueError('--multicam-modeはVSLAMを使用するdrive/evalで指定してください')
     fresh = args.mode == "eval" and args.eval_localization == "fresh"
