@@ -161,6 +161,22 @@ class RegistrationTests(unittest.TestCase):
             self.maps.load("source")["lanes"][0]["custom_speeds"][0]["speed"], 0.3
         )
 
+    def test_custom_delete_persists_without_removing_centerline(self):
+        doc = self.maps.load("source")
+        center = doc["lanes"][0]["lines"]["centerline"]
+        other_map = self.maps.load("target")
+        lane = doc["lanes"][0]
+        lane["custom"] = []
+        lane["custom_speeds"] = []
+        lane["lines"].pop("customline")
+        self.maps.save("source", doc)
+        saved = self.maps.load("source")["lanes"][0]
+        self.assertEqual(saved["custom"], [])
+        self.assertEqual(saved["custom_speeds"], [])
+        self.assertNotIn("customline", saved["lines"])
+        self.assertEqual(saved["lines"]["centerline"], center)
+        self.assertEqual(self.maps.load("target"), other_map)
+
 
 class OptimizerTests(unittest.TestCase):
     def test_clearance_refinement_stops_without_returning_invalid_candidate(self):

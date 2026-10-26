@@ -5,20 +5,20 @@
 
 namespace kart_control {
 struct LookaheadSettings {
-  double time_s{0}, min_m{0.4}, max_m{2.0};
+  bool interpolated{false};
+  double low_m{0.8}, high_m{2.0};
 };
 inline bool valid_lookahead(LookaheadSettings c) {
-  return std::isfinite(c.time_s) && c.time_s >= 0 &&
-      std::isfinite(c.min_m) && c.min_m > 0 &&
-      std::isfinite(c.max_m) && c.max_m >= c.min_m;
+  return std::isfinite(c.low_m) && c.low_m > 0 &&
+      std::isfinite(c.high_m) && c.high_m >= c.low_m;
 }
 inline std::optional<double> lookahead_distance(double fixed, double speed,
                                                LookaheadSettings c) {
   if (!valid_lookahead(c) || !std::isfinite(fixed) || fixed <= 0) return {};
-  if (c.time_s == 0) return fixed; // Fixed mode requires no velocity estimate.
+  if (!c.interpolated) return fixed;
   if (!std::isfinite(speed)) return {};
-  const double distance = std::abs(speed) * c.time_s;
-  // Very large but finite speed/time must saturate, never wrap or return NaN.
-  return std::clamp(distance, c.min_m, c.max_m);
+  // The two speed anchors are fixed at 1 m/s and 5 m/s. Clamp outside them.
+  const double ratio = std::clamp((std::abs(speed) - 1.0) / 4.0, 0.0, 1.0);
+  return c.low_m + (c.high_m - c.low_m) * ratio;
 }
 } // namespace kart_control

@@ -70,13 +70,15 @@ class TrackingParametersTest(unittest.TestCase):
         while time.monotonic()<end:rclpy.spin_once(node,timeout_sec=.03)
         self.assertTrue(change(.9).successful)  # Fresh AUTO permits live tracking adjustment.
         self.assertEqual(call(getter,request).values[0].double_value,.9)
-        self.assertFalse(change_many({'min_lookahead_m':3.,'max_lookahead_m':2.}).successful)
-        request.names=['min_lookahead_m','max_lookahead_m']
-        self.assertEqual([v.double_value for v in call(getter,request).values],[.4,2.])
-        self.assertTrue(change_many({'min_lookahead_m':2.5,'max_lookahead_m':3.}).successful)
-        self.assertTrue(change_many({'min_lookahead_m':.4,'max_lookahead_m':2.,'lookahead_time_s':.6}).successful)
-        for invalid in (-1.,float('nan'),True,1):
-            self.assertFalse(change_many({'lookahead_time_s':invalid}).successful)
-        request.names=['lookahead_time_s']
-        self.assertEqual(call(getter,request).values[0].double_value,.6)
-        self.assertTrue(change_many({'lookahead_time_s':0.}).successful)
+        self.assertFalse(change_many({'lookahead_low_speed_m':3.,'lookahead_high_speed_m':2.}).successful)
+        request.names=['lookahead_low_speed_m','lookahead_high_speed_m']
+        self.assertEqual([v.double_value for v in call(getter,request).values],[.8,2.])
+        self.assertTrue(change_many({'lookahead_low_speed_m':2.5,'lookahead_high_speed_m':3.}).successful)
+        self.assertTrue(change_many({'lookahead_low_speed_m':.8,'lookahead_high_speed_m':2.,
+                                    'lookahead_mode':'speed_interpolated'}).successful)
+        for invalid in (-1.,0.,float('nan'),True,1):
+            self.assertFalse(change_many({'lookahead_low_speed_m':invalid}).successful)
+        self.assertFalse(change_many({'lookahead_mode':'unknown'}).successful)
+        request.names=['lookahead_mode']
+        self.assertEqual(call(getter,request).values[0].string_value,'speed_interpolated')
+        self.assertTrue(change_many({'lookahead_mode':'fixed'}).successful)

@@ -1,5 +1,36 @@
 // Pure editing operations. Persisted geometry and speed-section schema stay unchanged.
-export function copyCustom(lane, source) {
+export function downsampleCustom(points, closed, spacing) {
+  if (!Number.isFinite(spacing) || spacing < 0) throw Error("点間隔は0以上の有限値で指定してください");
+  const original = points.map(([x,y]) => [x,y]);
+  if (spacing === 0) return original;
+  const pts = original.filter((p,i) => i === 0 || p.some((v,n) => v !== original[i-1][n]));
+  if (closed && pts.length > 1 && pts[0].every((v,n) => v === pts.at(-1)[n])) pts.pop();
+  const minimum = closed ? 3 : 2;
+  if (pts.length < minimum) throw Error("間引くための有効な編集点が不足しています");
+  const stations = [0];
+  for (let i=1;i<pts.length;i++) stations.push(stations.at(-1)+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));
+  const total = stations.at(-1) + (closed ? Math.hypot(pts[0][0]-pts.at(-1)[0],pts[0][1]-pts.at(-1)[1]) : 0);
+  const count = Math.min(pts.length, Math.max(minimum, Math.ceil(total / spacing)+(closed?0:1)));
+  const result = [];
+  let previous = -1;
+  for (let k=0;k<count;k++) {
+    const target = total*k/(closed?count:count-1);
+    let i = k === 0 ? 0 : previous+1;
+    const last = pts.length-(count-k);
+    while (i<last && Math.abs(stations[i+1]-target)<Math.abs(stations[i]-target)) i++;
+    if (!closed && k === count-1) i=pts.length-1;
+    result.push([...pts[i]]); previous=i;
+  }
+  return result;
+}
+
+export function clearCustom(lane) {
+  lane.custom = [];
+  lane.custom_speeds = [];
+  delete lane.lines.customline;
+}
+
+export function copyCustom(lane, source, spacing = 0) {
   if (source === "manual") return [];
   if (!["centerline", "raceline"].includes(source)) throw Error("作成方法を選んでください");
   const points = lane.lines[source]?.points;
@@ -8,7 +39,7 @@ export function copyCustom(lane, source) {
   const result = points.map(([x, y]) => [x, y]);
   if (lane.closed && result.length > 3 &&
       result[0].every((v, i) => v === result.at(-1)[i])) result.pop();
-  return result;
+  return downsampleCustom(result, lane.closed, spacing);
 }
 
 export const sectionColor = (i) => `hsl(${(i * 137.508 + 205) % 360} 62% 40%)`;

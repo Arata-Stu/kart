@@ -31,7 +31,7 @@ class TrackingTfWaitTest(unittest.TestCase):
             '-r', f'__ns:={namespace}', '-p', f'map_frame:={map_frame}',
             '-p', f'tracking_frame:={rear_frame}', '-p', 'wheelbase_m:=0.257',
             '-p', 'max_steering_rad:=0.38', '-p', 'tf_lookup_timeout_s:=0.05',
-            '-p', 'lookahead_time_s:=0.6'],
+            '-p', 'lookahead_mode:=speed_interpolated'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
         def cleanup():
@@ -101,9 +101,9 @@ class TrackingTfWaitTest(unittest.TestCase):
         spin(2)
         self.assertGreater(len(statuses), 20)
         self.assertEqual(set(statuses), {'tracking'})
-        self.assertAlmostEqual(references[-1].lookahead_m,.9)
-        self.assertAlmostEqual(references[-1].target.x,1.9)
-        for velocity, distance in ((0.,.4), (10.,2.), (-1.5,.9)):
+        self.assertAlmostEqual(references[-1].lookahead_m,.95)
+        self.assertAlmostEqual(references[-1].target.x,1.95)
+        for velocity, distance in ((0.,.8), (1.,.8), (3.,1.4), (5.,2.), (10.,2.), (-1.5,.95)):
             speed[0] = velocity
             spin(.4)
             self.assertTrue(references[-1].valid)

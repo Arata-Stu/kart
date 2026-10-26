@@ -35,9 +35,9 @@ public:
           param("lookahead_m", 0.8),       param("max_speed_mps", 10.0),
           param("max_cross_track_m", 1.0), param("goal_tolerance_m", 0.1),
           param("deceleration_mps2", 1.0)};
-    adaptive_ = {param("lookahead_time_s", 0.0), param("min_lookahead_m", 0.4),
-                 param("max_lookahead_m", 2.0)};
-    if (!valid_lookahead(adaptive_))
+    adaptive_ = {interpolated_mode(param<std::string>("lookahead_mode", "fixed")),
+                 param("lookahead_low_speed_m", 0.8), param("lookahead_high_speed_m", 2.0)};
+    if (!lookahead_distance(c_.lookahead, 0, adaptive_))
       throw std::invalid_argument("Invalid speed-scaled lookahead settings");
     wall_timeout_ = param("wall_timeout_s", 0.0);
     if (!std::isfinite(wall_timeout_) || wall_timeout_ < 0)
@@ -87,25 +87,29 @@ public:
           result.successful = true;
           try {
             LookaheadSettings candidate{
-                get_parameter("lookahead_time_s").as_double(),
-                get_parameter("min_lookahead_m").as_double(),
-                get_parameter("max_lookahead_m").as_double()};
+                interpolated_mode(get_parameter("lookahead_mode").as_string()),
+                get_parameter("lookahead_low_speed_m").as_double(),
+                get_parameter("lookahead_high_speed_m").as_double()};
+            double base = get_parameter("lookahead_m").as_double();
             for (const auto &p : values) if (tunable(p.get_name())) {
               if ((mode_ != kart_interfaces::msg::OperationModeState::STOP &&
                    mode_ != kart_interfaces::msg::OperationModeState::AUTO &&
                    mode_ != kart_interfaces::msg::OperationModeState::MANUAL) ||
                   !fresh(mode_stamp_, mode_received_, 0.3))
                 throw std::invalid_argument("Fresh AUTO/MANUAL/STOP is required for tracking tuning");
+              if (p.get_name()=="lookahead_mode") {
+                candidate.interpolated=interpolated_mode(p.as_string());
+                continue;
+              }
               if (p.get_type() != rclcpp::ParameterType::PARAMETER_DOUBLE ||
-                  !std::isfinite(p.as_double()) || p.as_double() < 0 ||
-                  (p.get_name() != "lookahead_time_s" && p.as_double() == 0))
-                throw std::invalid_argument("Tracking parameters must be finite and positive (lookahead_time_s may be zero)");
-              if (p.get_name()=="lookahead_time_s") candidate.time_s=p.as_double();
-              if (p.get_name()=="min_lookahead_m") candidate.min_m=p.as_double();
-              if (p.get_name()=="max_lookahead_m") candidate.max_m=p.as_double();
+                  !std::isfinite(p.as_double()) || p.as_double() <= 0)
+                throw std::invalid_argument("Tracking distances must be finite and positive");
+              if (p.get_name()=="lookahead_m") base=p.as_double();
+              if (p.get_name()=="lookahead_low_speed_m") candidate.low_m=p.as_double();
+              if (p.get_name()=="lookahead_high_speed_m") candidate.high_m=p.as_double();
             }
-            if (!valid_lookahead(candidate))
-              throw std::invalid_argument("Lookahead requires 0 < min_lookahead_m <= max_lookahead_m and lookahead_time_s >= 0");
+            if (!lookahead_distance(base, 0, candidate))
+              throw std::invalid_argument("Lookahead distances require 0 < lookahead_low_speed_m <= lookahead_high_speed_m");
           } catch (const std::exception &error) {
             result.successful = false;
             result.reason = error.what();
@@ -178,10 +182,15 @@ private:
     d.read_only = !tunable(name);
     return declare_parameter<T>(name, value, d);
   }
+  static bool interpolated_mode(const std::string &mode) {
+    if (mode=="fixed") return false;
+    if (mode=="speed_interpolated") return true;
+    throw std::invalid_argument("lookahead_mode must be fixed or speed_interpolated");
+  }
   static bool tunable(const std::string &name) {
     return name == "lookahead_m" || name == "max_speed_mps" ||
-           name == "lookahead_time_s" || name == "min_lookahead_m" ||
-           name == "max_lookahead_m" ||
+           name == "lookahead_mode" || name == "lookahead_low_speed_m" ||
+           name == "lookahead_high_speed_m" ||
            name == "max_cross_track_m" || name == "goal_tolerance_m" ||
            name == "deceleration_mps2";
   }
@@ -310,9 +319,9 @@ private:
     c_.max_error = get_parameter("max_cross_track_m").as_double();
     c_.goal_tolerance = get_parameter("goal_tolerance_m").as_double();
     c_.deceleration = get_parameter("deceleration_mps2").as_double();
-    adaptive_ = {get_parameter("lookahead_time_s").as_double(),
-                 get_parameter("min_lookahead_m").as_double(),
-                 get_parameter("max_lookahead_m").as_double()};
+    adaptive_ = {interpolated_mode(get_parameter("lookahead_mode").as_string()),
+                 get_parameter("lookahead_low_speed_m").as_double(),
+                 get_parameter("lookahead_high_speed_m").as_double()};
     if (c_.wheelbase <= 0 || c_.steering_limit <= 0) {
       publish({}, "vehicle_geometry_unconfigured");
       return;
@@ -327,7 +336,7 @@ private:
       auto t = buffer_->lookupTransform(map_, frame_, pose_stamp_,
                                         rclcpp::Duration::from_seconds(wait));
       if (!inputs_ready()) return; // Waiting must not rejuvenate expired inputs.
-      if (adaptive_.time_s > 0) {
+      if (adaptive_.interpolated) {
         try {
           auto distance = lookahead_distance(c_.lookahead, rear_axle_speed(), adaptive_);
           if (!distance) throw std::invalid_argument("Invalid speed-scaled lookahead");

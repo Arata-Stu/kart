@@ -292,6 +292,8 @@
                 ><span id="customline-status">未生成</span>
               </div>
               <label>作成方法<select id="custom-source"><option value="manual">手動で新規作成</option><option value="centerline">Centerをベースに作成</option><option value="raceline">Raceをベースに作成</option></select></label>
+              <label>編集点の目安間隔 (m)<input id="custom-spacing" type="number" min="0" max="100" step="0.1" value="1.0" /></label>
+              <p id="custom-point-preview" class="help"></p>
               <button id="custom-start" class="full">空の点列で作成</button>
               <p id="custom-source-help" class="help">生成済みラインをコピーして編集できます。</p>
               <div class="actions">
@@ -299,6 +301,8 @@
                 ><button id="custom-speeds-open">区間速度</button
                 ><button id="generate-customline">生成</button>
               </div>
+              <div class="actions"><button id="custom-downsample">現在の点を間引く</button><button id="custom-delete">Customを削除</button></div>
+              <p class="help">間引きで形状が変わるため再生成前に確認してください。既存点の間引き・削除では区間速度もクリアします。保存前はUndo可能です。</p>
             </div>
             <button id="line-settings-open" class="full">
               車幅・速度などの生成設定</button

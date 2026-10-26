@@ -19,9 +19,16 @@ class PolicyTests(unittest.TestCase):
     def test_type_readonly_revision_and_node_boundaries(self):
         current = catalog('tracking',fields())
         self.assertEqual(changes_for(current,{'lookahead_m':2},current['revision']),{'lookahead_m':2.})
-        settings={'lookahead_time_s':.6,'min_lookahead_m':.4,'max_lookahead_m':2.}
+        settings={'lookahead_low_speed_m':.6,'lookahead_high_speed_m':2.}
         self.assertEqual(changes_for(current,settings,current['revision']),settings)
-        self.assertEqual(changes_for(current,{'lookahead_time_s':0},current['revision']),{'lookahead_time_s':0.})
+        mode_fields=fields()
+        for row in mode_fields:
+            if row['name']=='lookahead_mode': row.update(type=4,value='fixed')
+        mode_catalog=catalog('tracking',mode_fields)
+        self.assertEqual(changes_for(mode_catalog,{'lookahead_mode':'speed_interpolated'},mode_catalog['revision']),
+                         {'lookahead_mode':'speed_interpolated'})
+        with self.assertRaises(ValueError):
+            changes_for(mode_catalog,{'lookahead_mode':'arbitrary'},mode_catalog['revision'])
         for changes, revision in (({'lookahead_m':0.8},'stale'),({'arbitrary':1.},current['revision']),
                                   ({'wheelbase_m':.2},current['revision']),({'lookahead_m':float('nan')},current['revision']),
                                   ({'lookahead_m':True},current['revision'])):

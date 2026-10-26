@@ -17,7 +17,7 @@ tuning.id='course';tuning.connected=true;tuning.received=Date.now();tuning.statu
 element('tuning-parameters-target').value='tracking';element('tuning-line').value='customline';
 const calls=[];
 let available=true, lookahead=.8, offset=0;
-const adaptive={lookahead_time_s:0,min_lookahead_m:.4,max_lookahead_m:2};
+const adaptive={lookahead_mode:'fixed',lookahead_low_speed_m:.8,lookahead_high_speed_m:2};
 globalThis.fetch=async(url,options)=> {
   const body=JSON.parse(options.body);calls.push({url,body});
   if(url.endsWith('parameters_set') && body.changes.lookahead_m!=null)lookahead=body.changes.lookahead_m;
@@ -26,7 +26,7 @@ globalThis.fetch=async(url,options)=> {
   const result={map_id:'map-a',target:body.target,node:'pure_pursuit',available,revision:'params1',
     fields:available?[{name:'lookahead_m',label:'lookahead',type:3,value:lookahead,read_only:false},
                       {name:'wheelbase_m',label:'wheelbase',type:3,value:.257,read_only:true},
-                      ...Object.entries(adaptive).map(([name,value])=>({name,label:name,type:3,value,read_only:false}))]:[],
+                      ...Object.entries(adaptive).map(([name,value])=>({name,label:name,type:typeof value==='string'?4:3,value,read_only:false}))]:[],
     line_choices:['centerline','customline'],applied:url.endsWith('parameters_set'),readback_matches:true};
   if(body.target==='vehicle')result.fields=[{name:'steering_offset',label:'offset',type:3,value:offset,read_only:false},{name:'steering_scale',label:'scale',type:3,value:-1,read_only:true}];
   return {ok:true,json:async()=>result};
@@ -51,16 +51,20 @@ const liveInput=element('tuning-parameter-rows').children[0].children[2].childre
 liveInput.value='1.2';
 await element('tuning-parameters-form').submit({preventDefault(){}});await flush();
 assert.deepEqual(calls.at(-1).body.changes,{lookahead_m:1.2});
-for(const [name,value] of Object.entries({lookahead_time_s:.6,min_lookahead_m:.3,max_lookahead_m:1.8})) {
-  const row=element('tuning-parameter-rows').children.find(row=>row.children[2].children[0]?.['aria-label']===name);
-  row.children[2].children[0].value=String(value);
-}
+const fieldInput=name=>element('tuning-parameter-rows').children.find(row=>row.children[2].children[0]?.['aria-label']===name).children[2].children[0];
+const fieldRow=name=>element('tuning-parameter-rows').children.find(row=>row.children[2].children[0]?.['aria-label']===name);
+assert.equal(fieldRow('lookahead_low_speed_m').hidden,true);
+fieldInput('lookahead_mode').value='speed_interpolated';fieldInput('lookahead_mode').change();
+assert.equal(fieldRow('lookahead_m').hidden,true);
+assert.equal(fieldRow('lookahead_low_speed_m').hidden,false);
+fieldInput('lookahead_low_speed_m').value='0.6';fieldInput('lookahead_high_speed_m').value='1.8';
 await element('tuning-parameters-form').submit({preventDefault(){}});await flush();
-assert.deepEqual(calls.at(-1).body.changes,{lookahead_time_s:.6,min_lookahead_m:.3,max_lookahead_m:1.8});
-const timeRow=element('tuning-parameter-rows').children.find(row=>row.children[2].children[0]?.['aria-label']==='lookahead_time_s');
-timeRow.children[2].children[0].value='0';
+assert.deepEqual(calls.at(-1).body.changes,{lookahead_mode:'speed_interpolated',lookahead_low_speed_m:.6,lookahead_high_speed_m:1.8});
+fieldInput('lookahead_mode').value='fixed';fieldInput('lookahead_mode').change();
+assert.equal(fieldRow('lookahead_m').hidden,false);
+assert.equal(fieldRow('lookahead_high_speed_m').hidden,true);
 await element('tuning-parameters-form').submit({preventDefault(){}});await flush();
-assert.deepEqual(calls.at(-1).body.changes,{lookahead_time_s:0},'Zero returns to fixed mode');
+assert.deepEqual(calls.at(-1).body.changes,{lookahead_mode:'fixed'});
 tuning.status.apply_issue='STOP required';emit('tuning');await flush();
 const count=calls.length;
 await element('tuning-parameters-form').submit({preventDefault(){}});

@@ -60,6 +60,12 @@ ROS処理は`ros2 run kart_mapping build_map`で別プロセスへ分離する�
    Customlineは「作成方法」で手動新規／Centerコピー／Raceコピーを選び、作成ボタンを押す。
    コピー後は「点を編集」でドラッグ、クリック追加、Delete、Undoで調整する。
    コピーは形状のみ。コピー元は変更せず、現在laneのCustom点列・区間速度だけを置き換える（Undo可）。
+   「編集点の目安間隔」は既定1.0 m、0で間引きなし。コピー前に点数の見込みを表示する。
+   既存Customにも「現在の点を間引く」を使える。始点・開路の終点と点の順番を保持し、
+   元の頂点から距離に沿って選ぶ。点を増やさず、閉路は最低3点・開路は最低2点を残す。
+   間引くと形状・距離が変わるので区間速度と生成結果をクリアし、設定し直して再生成する。
+   「Customを削除」は現在laneのCustom編集点・区間速度・生成結果を消す。Center／Raceは保持する。
+   いずれも保存前はUndoでき、削除を永続化するには地図を保存する。
 7. 「HDMap・CSVを書き出す」で同一revisionの成果物を保存する。「転送」からJetsonへ送信できる。
 
 地図左下のCenter／Race／Customチェックで、各ライン・方向矢印を個別に表示／非表示にする。
@@ -1170,8 +1176,11 @@ ROS側のenable_image_denoisingとは別設定。実bag/GPUでの改善効果は
 ### 速度連動の先読み
 
 Pure Pursuitの速度連動先読みは「実車調整→パラメータ調整→追従」から設定できる。
-`lookahead_time_s=0`は固定距離、正値は実速度×時間を`min_lookahead_m`〜`max_lookahead_m`に制限する。
-初期値は0.0 s／0.4 m／2.0 m。設定は実行中のみで、永続化はbringupのcontrol/pure_pursuit.yamlを編集する。
+「固定距離 / 速度に合わせる」を選び、固定時は距離1つ、速度連動時は
+「低速1 m/s時の距離」と「高速5 m/s時の距離」の2つを指定する。
+間を線形補間し、1 m/s未満・5 m/s超は端の距離で一定。初期値は固定0.8 m、低速0.8 m、高速2.0 m。
+ROS parameterはlookahead_mode / lookahead_m / lookahead_low_speed_m / lookahead_high_speed_m。
+設定は実行中のみで、永続化はbringupのcontrol/pure_pursuit.yamlを編集する。
 表示される参照点・lookaheadは実際の制御計算の結果であり、実車追従性能の検証ではない。
 
 ### 保存するCenterline速度

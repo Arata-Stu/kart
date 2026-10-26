@@ -49,22 +49,24 @@ int main() {
   assert(std::abs(r.target_y) < 1e-12);
   assert(std::hypot(r.target_x - 2.8, r.target_y) < c.lookahead);
   {
-    LookaheadSettings adaptive{0, .4, 2};
+    LookaheadSettings adaptive{false, .8, 2};
     const double nan = std::numeric_limits<double>::quiet_NaN();
     assert(lookahead_distance(.8, nan, adaptive)==.8); // Fixed mode ignores unavailable speed.
-    adaptive.time_s=.6;
-    assert(lookahead_distance(.8, 0, adaptive)==.4);
-    assert(std::abs(*lookahead_distance(.8, 1.5, adaptive)-.9)<1e-12);
-    assert(lookahead_distance(.8, 10, adaptive)==2.);
-    assert(lookahead_distance(.8, -10, adaptive)==2.); // Speed magnitude, never negative lookahead.
-    assert(!lookahead_distance(.8, nan, adaptive));
-    assert(!lookahead_distance(.8, std::numeric_limits<double>::infinity(), adaptive));
-    assert(!lookahead_distance(.8, 1, {-1,.4,2}));
-    assert(!lookahead_distance(.8, 1, {1,2,.4}));
-    assert(!lookahead_distance(.8, 1, {1,0,2}));
-    assert(!lookahead_distance(.8, 1, {nan,.4,2}));
-    assert(!lookahead_distance(.8, 1, {1,.4,nan}));
-    assert(lookahead_distance(.8, std::numeric_limits<double>::max(), {2,.4,2})==2.);
+    adaptive.interpolated=true;
+    for (double v : {0., .5, 1., -1.}) assert(lookahead_distance(.8,v,adaptive)==.8);
+    assert(std::abs(*lookahead_distance(.8,1.5,adaptive)-.95)<1e-12);
+    assert(std::abs(*lookahead_distance(.8,3.,adaptive)-1.4)<1e-12);
+    assert(std::abs(*lookahead_distance(.8,-3.,adaptive)-1.4)<1e-12);
+    for (double v : {5.,10.,-10.,std::numeric_limits<double>::max()})
+      assert(lookahead_distance(.8,v,adaptive)==2.);
+    assert(!lookahead_distance(.8,nan,adaptive));
+    assert(!lookahead_distance(.8,std::numeric_limits<double>::infinity(),adaptive));
+    assert(!lookahead_distance(.8,1,{true,2,.8}));
+    assert(!lookahead_distance(.8,1,{true,0,2}));
+    assert(!lookahead_distance(.8,1,{true,nan,2}));
+    assert(!lookahead_distance(.8,1,{true,.8,nan}));
+    assert(lookahead_distance(.8,3,{true,1.2,1.2})==1.2); // Equal endpoints are valid.
+    assert(lookahead_distance(3.,nan,{false,.8,2})==3.);
     // Speed changes move the actual reference point along the same path.
     auto short_config=c, long_config=c;
     short_config.lookahead=*lookahead_distance(.8, .5, adaptive);
@@ -72,12 +74,12 @@ int main() {
     auto short_result=pursue(straight,false,{0,0,0},short_config);
     auto long_result=pursue(straight,false,{0,0,0},long_config);
     assert(short_result.valid && long_result.valid);
-    assert(std::abs(short_result.target_x-.4)<1e-12);
-    assert(std::abs(long_result.target_x-1.2)<1e-12);
+    assert(std::abs(short_result.target_x-.8)<1e-12);
+    assert(std::abs(long_result.target_x-1.1)<1e-12);
     std::vector<Point> bend{{0,0,1},{1,0,1},{1,2,1}};
     auto curved=pursue(bend,false,{0,0,0},long_config);
     assert(curved.valid && std::abs(curved.target_x-1)<1e-12 &&
-           std::abs(curved.target_y-.2)<1e-12); // Arc length, not a circle intersection.
+           std::abs(curved.target_y-.1)<1e-12); // Arc length, not a circle intersection.
     long_config.lookahead=9;
     assert(!pursue(loop,true,{0,0,0},long_config).valid); // Existing short-loop gate remains.
   }

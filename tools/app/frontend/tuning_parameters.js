@@ -14,7 +14,12 @@ function controls() {
   $('tuning-parameters-apply').disabled=!canApply();
   $('tuning-parameters-refresh').disabled=busy || !parameterConnectionReady();
   $('tuning-parameters-target').disabled=busy;
-  for(const {input} of inputs.values())input.disabled=busy || !parameterConnectionReady();
+  const interpolated=inputs.get('lookahead_mode')?.input.value==='speed_interpolated';
+  for(const [name,{input,row}] of inputs) {
+    row.hidden=(name==='lookahead_m' && interpolated) ||
+      (['lookahead_low_speed_m','lookahead_high_speed_m'].includes(name) && !interpolated);
+    input.disabled=busy || !parameterConnectionReady() || row.hidden;
+  }
 }
 function reset() {
   serial++; snapshot=null; inputs.clear();
@@ -30,19 +35,30 @@ function render(result) {
     label.textContent=field.label;
     const code=document.createElement('code');code.textContent=field.name;label.append(code);
     if(field.description){const help=document.createElement('small');help.textContent=field.description;label.append(help);}
-    current.textContent=field.value==null?'未対応':String(field.value);
+    current.textContent=field.value==null?'未対応':field.name==='lookahead_mode'
+      ? ({fixed:'固定距離',speed_interpolated:'速度に合わせる'}[field.value] || String(field.value))
+      : String(field.value);
     if(field.read_only)edit.textContent='起動時固定・変更不可';
     else {
       const input=document.createElement(field.type===4?'select':'input');
       if(field.type===4) {
-        for(const [value,text] of [['centerline','Center'],['raceline','Race'],['customline','Custom']]) {
+        const choices=field.name==='lookahead_mode'
+          ? [['fixed','固定距離'],['speed_interpolated','速度に合わせる']]
+          : [['centerline','Center'],['raceline','Race'],['customline','Custom']];
+        for(const [value,text] of choices) {
           const option=document.createElement('option');option.value=value;option.textContent=text;
-          option.disabled=!!result.line_choices && !result.line_choices.includes(value);
+          option.disabled=field.name==='line_type' && !!result.line_choices && !result.line_choices.includes(value);
           input.append(option);
         }
       } else {input.type='number';input.step=field.type===2?'1':'any';input.required=true;}
       input.value=String(field.value);input.setAttribute('aria-label',field.name);
-      inputs.set(field.name,{input,field});edit.append(input);
+      inputs.set(field.name,{input,field,row});edit.append(input);
+      if(field.name==='lookahead_mode') {
+        input.addEventListener('change',controls);
+        const help=document.createElement('small');
+        help.textContent='速度に合わせる：1〜5 m/sの間を補間し、それより低速・高速では端の距離を使います。';
+        edit.append(help);
+      }
     }
     row.append(label,current,edit);rows.append(row);
   }
@@ -81,7 +97,8 @@ $('tuning-parameters-form').addEventListener('submit',async event=> {
   event.preventDefault();
   if(!canApply())return toast(parameterIssue() || '接続と現在値を確認してください',true);
   const changes={};
-  for(const [name,{input,field}] of inputs) {
+  for(const [name,{input,field,row}] of inputs) {
+    if(row.hidden)continue;
     const value=field.type===4?input.value:Number(input.value);
     if(value!==field.value)changes[name]=value;
   }
