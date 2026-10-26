@@ -108,6 +108,9 @@ Pure Pursuit基準は**後輪軸中心**。既定`rear_axle`へ校正済みTFが
 base_linkが後輪軸中心ならtracking_frameをbase_linkに設定できる。
 カメラ中心を車体後輪軸と同一とみなすidentity TFは追加しない。
 TFは最新odomメッセージのstampで取得する。地図配信stampでTF変換せず、TFを配信もしない。
+TF取得失敗時は`tf_unavailable`と速度0を配信し、WARNに変換元・先frame、要求stamp、
+pose age、tf2例外の詳細を最大1秒に1回記録する。一時的な到着順の差とTF欠落を切り分けるための
+診断ログであり、待ち時間0の検索や下流のSTOP条件は変更しない。ROS実環境でのログ確認は未実施。
 VSLAM診断hardware_id=visual_slam、localized_in_exist_map=Yes、vo_status=OKを要求する。
 ROS時刻の経過とsteady受信時間の両方でfreshnessを判定し、bag停止・巻戻しも不正値を出さない。
 

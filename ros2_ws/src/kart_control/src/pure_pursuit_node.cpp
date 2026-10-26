@@ -284,7 +284,12 @@ private:
                                                        : "zero_speed_target")
                                    : "invalid_geometry_or_off_path",
               {t.transform.translation.x, t.transform.translation.y, yaw});
-    } catch (const tf2::TransformException &) {
+    } catch (const tf2::TransformException &error) {
+      RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 1000,
+          "Tracking TF unavailable: %s <- %s at %.9f (pose age %.6f s): %s",
+          map_.c_str(), frame_.c_str(), pose_stamp_.seconds(),
+          (now() - pose_stamp_).seconds(), error.what());
       publish({}, "tf_unavailable");
     }
   }
