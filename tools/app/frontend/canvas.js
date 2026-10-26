@@ -1,4 +1,5 @@
 import { paintTuning } from "./tuning.js";
+import { lineVisible } from "./line_visibility.js";
 import { viewBounds } from "./view_bounds.js";
 import { placementPreview } from "./placement.js";
 import { paintOccupancy } from "./occupancy.js";
@@ -70,7 +71,7 @@ function paintPlacement() {
   if (
     !(
       state.step === "bounds" ||
-      (state.step === "lines" && state.target === "custom")
+      (state.step === "lines" && state.target === "custom" && lineVisible("customline"))
     )
   )
     return;
@@ -307,6 +308,7 @@ export function draw() {
       line(d.left, colors.left, d.closed);
       line(d.right, colors.right, d.closed);
       for (const [kind, data] of Object.entries(d.lines)) {
+        if (!lineVisible(kind)) continue;
         line(data.points, colors[kind], d.closed, false, 2.5);
         directionArrows(data.points, colors[kind], d.closed);
       }
@@ -323,7 +325,7 @@ export function draw() {
       }
       if (!Object.keys(d.lines).length)
         directionArrows(d.left, colors.left, d.closed);
-      if (state.step === "lines") {
+      if (state.step === "lines" && lineVisible("customline")) {
         if (state.target === "custom")
           line(d.custom, colors.custom, d.closed, true);
         let station = 0,
@@ -372,8 +374,8 @@ export function draw() {
         for (const preview of state.registrationPreview.lanes) {
           for (const key of ["left", "right"])
             line(preview[key], "#119caa", preview.closed, true, 3);
-          for (const data of Object.values(preview.lines))
-            line(data.points, "#119caa", preview.closed, true, 2);
+          for (const [kind, data] of Object.entries(preview.lines))
+            if (lineVisible(kind)) line(data.points, "#119caa", preview.closed, true, 2);
         }
       }
       paintTuning(ctx, project, line);
@@ -451,7 +453,7 @@ canvas.addEventListener("pointerdown", (e) => {
   const edit =
     state.doc &&
     (state.step === "bounds" ||
-      (state.step === "lines" && state.target === "custom"));
+      (state.step === "lines" && state.target === "custom" && lineVisible("customline")));
   if (!edit || e.button !== 0 || e.altKey) {
     drag = { mode: "pan", x, y, origin: [...origin] };
     return;

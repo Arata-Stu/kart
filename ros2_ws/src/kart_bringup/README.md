@@ -252,6 +252,13 @@ container配置・所有権・executorは`config/localization/containers.json`�
 ### オフラインライン追従
 
 `tracking.launch.py`がHDMap serverとPure Pursuit Componentを起動する。
+速度連動先読みは`config/control/pure_pursuit.yaml`の`lookahead_time_s`で選択する。
+既定0は固定`lookahead_m=0.8`。正値なら後輪軸の実速度の絶対値×時間を
+`min_lookahead_m=0.4`〜`max_lookahead_m=2.0`へ制限する（m）。sim設定も同じ項目を明示する。
+Map Studio「実車調整→パラメータ調整→追従」で3項目と固定距離を変更できる。
+新鮮なAUTO/MANUAL/STOPで動的変更可能、上下限の整合性は一括検査する。
+速度連動時は同じodomのtwistを後輪軸へ変換し、不正速度・変換不能なら無効通知でSTOP条件に入る。
+既定では新機能を有効化しない。portable testのみ確認済みで、ROS/実機での追従調整は未実施。
 実機の`config/control/pure_pursuit.yaml`は`tf_lookup_timeout_s=0.05`で同じodom stampのTFを待つ。
 odomがTFより先に届く一時的な到着順の差を吸収し、待機後も入力の鮮度を検査する。
 取得失敗時のSTOP条件は維持。simの完全設定は同項目0で、sim timeでは常に待機なし。

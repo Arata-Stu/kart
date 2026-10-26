@@ -15,7 +15,7 @@ try:
     from nav_msgs.msg import Odometry
     from std_msgs.msg import String
     from tf2_ros import TransformBroadcaster
-    from kart_interfaces.msg import ReferenceLine
+    from kart_interfaces.msg import ReferenceLine, TrackingReference
 except ImportError as error:
     raise unittest.SkipTest(f'ROS/generated interfaces unavailable: {error}') from error
 
@@ -30,7 +30,8 @@ class TrackingTfWaitTest(unittest.TestCase):
             'ros2', 'run', 'kart_control', 'pure_pursuit', '--ros-args',
             '-r', f'__ns:={namespace}', '-p', f'map_frame:={map_frame}',
             '-p', f'tracking_frame:={rear_frame}', '-p', 'wheelbase_m:=0.257',
-            '-p', 'max_steering_rad:=0.38', '-p', 'tf_lookup_timeout_s:=0.05'],
+            '-p', 'max_steering_rad:=0.38', '-p', 'tf_lookup_timeout_s:=0.05',
+            '-p', 'lookahead_time_s:=0.6'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
         def cleanup():
@@ -51,9 +52,11 @@ class TrackingTfWaitTest(unittest.TestCase):
         odom_pub = node.create_publisher(Odometry, 'visual_slam/tracking/odometry', qos_profile_sensor_data)
         diag_pub = node.create_publisher(DiagnosticArray, 'localization/vslam/diagnostics', 10)
         broadcaster = TransformBroadcaster(node)
-        statuses, pending = [], []
+        statuses, pending, references = [], [], []
         node.create_subscription(String, 'control/tracking_status', lambda m: statuses.append(m.data), 100)
+        node.create_subscription(TrackingReference, 'control/tracking_reference', lambda m: references.append(m), 100)
         enabled = [True]
+        speed = [1.5]
 
         def publish_inputs():
             stamp = node.get_clock().now().to_msg()
@@ -64,6 +67,8 @@ class TrackingTfWaitTest(unittest.TestCase):
             line_pub.publish(line)
             odom = Odometry()
             odom.header.stamp = stamp
+            odom.child_frame_id = rear_frame
+            odom.twist.twist.linear.x = speed[0]
             odom_pub.publish(odom)
             diag = DiagnosticArray()
             diag.header.stamp = stamp
@@ -96,6 +101,22 @@ class TrackingTfWaitTest(unittest.TestCase):
         spin(2)
         self.assertGreater(len(statuses), 20)
         self.assertEqual(set(statuses), {'tracking'})
+        self.assertAlmostEqual(references[-1].lookahead_m,.9)
+        self.assertAlmostEqual(references[-1].target.x,1.9)
+        for velocity, distance in ((0.,.4), (10.,2.), (-1.5,.9)):
+            speed[0] = velocity
+            spin(.4)
+            self.assertTrue(references[-1].valid)
+            self.assertAlmostEqual(references[-1].lookahead_m,distance)
+            self.assertAlmostEqual(references[-1].target.x,1.+distance)
+        speed[0] = float('nan')
+        statuses.clear()
+        spin(.4)
+        self.assertIn('speed_unavailable',statuses)
+        self.assertFalse(references[-1].valid)
+        speed[0] = 1.5
+        spin(.4)
+        self.assertEqual(statuses[-1],'tracking')
         enabled[0] = False
         pending.clear()
         statuses.clear()

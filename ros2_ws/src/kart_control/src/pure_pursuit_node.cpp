@@ -2,6 +2,9 @@
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "geometry_msgs/msg/point_stamped.hpp"
 #include "kart_control/pure_pursuit.hpp"
+#include "kart_control/lookahead.hpp"
+#include "tf2/LinearMath/Quaternion.hpp"
+#include "tf2/LinearMath/Vector3.hpp"
 #include "kart_interfaces/msg/reference_line.hpp"
 #include "kart_interfaces/msg/operation_mode_state.hpp"
 #include "kart_interfaces/msg/tracking_reference.hpp"
@@ -32,6 +35,10 @@ public:
           param("lookahead_m", 0.8),       param("max_speed_mps", 10.0),
           param("max_cross_track_m", 1.0), param("goal_tolerance_m", 0.1),
           param("deceleration_mps2", 1.0)};
+    adaptive_ = {param("lookahead_time_s", 0.0), param("min_lookahead_m", 0.4),
+                 param("max_lookahead_m", 2.0)};
+    if (!valid_lookahead(adaptive_))
+      throw std::invalid_argument("Invalid speed-scaled lookahead settings");
     wall_timeout_ = param("wall_timeout_s", 0.0);
     if (!std::isfinite(wall_timeout_) || wall_timeout_ < 0)
       throw std::invalid_argument("wall_timeout_s must be finite and nonnegative");
@@ -79,15 +86,26 @@ public:
           rcl_interfaces::msg::SetParametersResult result;
           result.successful = true;
           try {
+            LookaheadSettings candidate{
+                get_parameter("lookahead_time_s").as_double(),
+                get_parameter("min_lookahead_m").as_double(),
+                get_parameter("max_lookahead_m").as_double()};
             for (const auto &p : values) if (tunable(p.get_name())) {
               if ((mode_ != kart_interfaces::msg::OperationModeState::STOP &&
                    mode_ != kart_interfaces::msg::OperationModeState::AUTO &&
                    mode_ != kart_interfaces::msg::OperationModeState::MANUAL) ||
                   !fresh(mode_stamp_, mode_received_, 0.3))
                 throw std::invalid_argument("Fresh AUTO/MANUAL/STOP is required for tracking tuning");
-              if (!std::isfinite(p.as_double()) || p.as_double() <= 0)
-                throw std::invalid_argument("Tracking parameters must be finite and positive");
+              if (p.get_type() != rclcpp::ParameterType::PARAMETER_DOUBLE ||
+                  !std::isfinite(p.as_double()) || p.as_double() < 0 ||
+                  (p.get_name() != "lookahead_time_s" && p.as_double() == 0))
+                throw std::invalid_argument("Tracking parameters must be finite and positive (lookahead_time_s may be zero)");
+              if (p.get_name()=="lookahead_time_s") candidate.time_s=p.as_double();
+              if (p.get_name()=="min_lookahead_m") candidate.min_m=p.as_double();
+              if (p.get_name()=="max_lookahead_m") candidate.max_m=p.as_double();
             }
+            if (!valid_lookahead(candidate))
+              throw std::invalid_argument("Lookahead requires 0 < min_lookahead_m <= max_lookahead_m and lookahead_time_s >= 0");
           } catch (const std::exception &error) {
             result.successful = false;
             result.reason = error.what();
@@ -118,6 +136,7 @@ public:
         [this](nav_msgs::msg::Odometry::ConstSharedPtr m) {
           pose_stamp_ = rclcpp::Time(m->header.stamp);
           pose_received_ = steady();
+          odometry_ = *m;
         });
     diag_sub_ = create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
         "localization/vslam/diagnostics", 10,
@@ -161,6 +180,8 @@ private:
   }
   static bool tunable(const std::string &name) {
     return name == "lookahead_m" || name == "max_speed_mps" ||
+           name == "lookahead_time_s" || name == "min_lookahead_m" ||
+           name == "max_lookahead_m" ||
            name == "max_cross_track_m" || name == "goal_tolerance_m" ||
            name == "deceleration_mps2";
   }
@@ -261,6 +282,26 @@ private:
     }
     return true;
   }
+  double rear_axle_speed() {
+    if (odometry_.child_frame_id.empty())
+      throw std::invalid_argument("Odometry child frame is empty");
+    auto t = buffer_->lookupTransform(frame_, odometry_.child_frame_id,
+                                      pose_stamp_, rclcpp::Duration::from_seconds(0));
+    const auto &q = t.transform.rotation;
+    tf2::Quaternion rotation(q.x, q.y, q.z, q.w);
+    if (!std::isfinite(rotation.length2()) || std::abs(rotation.length2()-1) > 0.01)
+      throw std::invalid_argument("Invalid velocity frame rotation");
+    const auto &twist = odometry_.twist.twist;
+    for (double value : {twist.linear.x, twist.linear.y, twist.linear.z,
+                         twist.angular.x, twist.angular.y, twist.angular.z,
+                         t.transform.translation.x, t.transform.translation.y, t.transform.translation.z})
+      if (!std::isfinite(value)) throw std::invalid_argument("Nonfinite odometry velocity or transform");
+    // Same rigid-body velocity conversion as speed_controller: child origin -> rear axle.
+    auto linear = tf2::quatRotate(rotation, tf2::Vector3(twist.linear.x, twist.linear.y, twist.linear.z));
+    auto angular = tf2::quatRotate(rotation, tf2::Vector3(twist.angular.x, twist.angular.y, twist.angular.z));
+    tf2::Vector3 p(t.transform.translation.x, t.transform.translation.y, t.transform.translation.z);
+    return (linear - angular.cross(p)).x();
+  }
   void tick() {
     // Read after the parameter transaction commits; never mutate control state
     // from a validation callback that a later validator could still reject.
@@ -269,6 +310,9 @@ private:
     c_.max_error = get_parameter("max_cross_track_m").as_double();
     c_.goal_tolerance = get_parameter("goal_tolerance_m").as_double();
     c_.deceleration = get_parameter("deceleration_mps2").as_double();
+    adaptive_ = {get_parameter("lookahead_time_s").as_double(),
+                 get_parameter("min_lookahead_m").as_double(),
+                 get_parameter("max_lookahead_m").as_double()};
     if (c_.wheelbase <= 0 || c_.steering_limit <= 0) {
       publish({}, "vehicle_geometry_unconfigured");
       return;
@@ -283,6 +327,18 @@ private:
       auto t = buffer_->lookupTransform(map_, frame_, pose_stamp_,
                                         rclcpp::Duration::from_seconds(wait));
       if (!inputs_ready()) return; // Waiting must not rejuvenate expired inputs.
+      if (adaptive_.time_s > 0) {
+        try {
+          auto distance = lookahead_distance(c_.lookahead, rear_axle_speed(), adaptive_);
+          if (!distance) throw std::invalid_argument("Invalid speed-scaled lookahead");
+          c_.lookahead = *distance;
+        } catch (const std::exception &error) {
+          RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                              "Lookahead speed unavailable: %s", error.what());
+          publish({}, "speed_unavailable");
+          return;
+        }
+      }
       const auto &q = t.transform.rotation;
       double norm = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
       if (!std::isfinite(norm) || std::abs(norm - 1) > 0.01) {
@@ -313,6 +369,8 @@ private:
   rclcpp::Subscription<kart_interfaces::msg::OperationModeState>::SharedPtr mode_sub_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_callback_;
   Settings c_;
+  LookaheadSettings adaptive_;
+  nav_msgs::msg::Odometry odometry_;
   std::string frame_, map_;
   bool closed_{false}, localized_{false};
   double pose_timeout_, line_timeout_, localization_timeout_, wall_timeout_, tf_wait_;

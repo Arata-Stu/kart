@@ -17,6 +17,19 @@ from test_studio import track
 
 
 class SpeedTests(unittest.TestCase):
+    def test_raceline_generation_uses_speed_and_acceleration_settings(self):
+        for speed, lateral, accel, decel in ((0.7, 0.3, 0.4, 0.5), (2.0, 0.2, 0.2, 0.3)):
+            with self.subTest(speed=speed):
+                result = generate(track(), "raceline", dict(
+                    max_speed=speed, lateral_accel=lateral, accel=accel,
+                    decel=decel, curvature_limit=2, spacing=0.5))
+                self.assertEqual(result["settings"]["max_speed"], speed)
+                self.assertTrue(all(row[5] <= speed + 1e-7 for row in result["profile"]))
+                self.assertTrue(all(row[5] ** 2 * abs(row[4]) <= lateral + 1e-7
+                                    for row in result["profile"]))
+                self.assertTrue(all(-decel - 1e-7 <= row[6] <= accel + 1e-7
+                                    for row in result["profile"]))
+
     def test_short_section_inserts_boundaries_and_brakes_before_entry(self):
         doc = dict(
             left=[[0, 2], [20, 2]],

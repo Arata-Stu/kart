@@ -104,9 +104,9 @@
             <span class="dot cloud"></span>点群
             <span class="dot left"></span>左境界
             <span class="dot right"></span>右境界
-            <span class="dot center"></span>Center
-            <span class="dot race"></span>Race
-            <span class="dot custom"></span>Custom
+            <label><input id="show-centerline" type="checkbox" checked /><span class="dot center"></span>Center</label>
+            <label><input id="show-raceline" type="checkbox" checked /><span class="dot race"></span>Race</label>
+            <label><input id="show-customline" type="checkbox" checked /><span class="dot custom"></span>Custom</label>
           </div>
         </div>
         <div class="canvas-status">
@@ -280,6 +280,8 @@
                 <small id="raceline-dimensions">車幅・全長・余裕</small>
                 <span class="settings-arrow" aria-hidden="true">›</span>
               </button>
+              <button id="raceline-speed-open" class="full">速度プロファイルを設定</button>
+              <p id="raceline-speed-summary" class="help"></p>
               <button id="generate-raceline" class="full">
                 Racelineを生成
               </button>
@@ -289,7 +291,9 @@
                 <strong>Customline</strong
                 ><span id="customline-status">未生成</span>
               </div>
-              <p>自分で描いた点列に速度を付与</p>
+              <label>作成方法<select id="custom-source"><option value="manual">手動で新規作成</option><option value="centerline">Centerをベースに作成</option><option value="raceline">Raceをベースに作成</option></select></label>
+              <button id="custom-start" class="full">空の点列で作成</button>
+              <p id="custom-source-help" class="help">生成済みラインをコピーして編集できます。</p>
               <div class="actions">
                 <button id="edit-custom">点を編集</button
                 ><button id="custom-speeds-open">区間速度</button
@@ -1028,8 +1032,11 @@
         </div>
         <div class="form-grid" id="line-setting-fields"></div>
         <p id="line-setting-summary" class="help" aria-live="polite"></p>
+        <h3 id="line-speed-heading">速度プロファイル（Race／Custom）</h3>
+        <div class="form-grid" id="line-setting-speed-fields"></div>
+        <p class="help">速度上限と横加速度・加減速上限から各点の目標速度を計算します。カーブでは上限より低くなります。変更後は再生成が必要です。Center速度はlaneの「走行速度」で指定します。</p>
         <details id="line-setting-details">
-          <summary>速度・領域方式などの詳細</summary>
+          <summary>領域方式などの詳細</summary>
           <div class="form-grid" id="line-setting-extra-fields"></div>
         </details>
         <p class="help">
@@ -1048,18 +1055,17 @@
           <button type="button" data-close="speed-dialog">×</button>
         </div>
         <p id="speed-length" class="help"></p>
-        <p class="help">
-          下の図で開始→終了のwaypointを選択。重なった区間は低い上限を採用します。閉路は開始
-          &gt; 終了で始点を跨げます。
-        </p>
+        <label>区間の作り方<select id="speed-mode"><option value="split">境界をクリックして分割</option><option value="ranges">開始・終了を指定（詳細）</option></select></label>
+        <p id="speed-mode-help" class="help"></p>
         <svg
           id="speed-waypoints"
           viewBox="0 0 520 240"
           aria-label="Customlineのwaypoint区間選択"
         ></svg>
         <p id="speed-pick-status" class="help"></p>
+        <p id="speed-overlap" class="help" role="status"></p>
         <div class="speed-columns">
-          <span>開始WP</span><span>終了WP</span><span>上限 m/s</span
+          <span>区間</span><span>開始</span><span>終了</span><span>上限 m/s</span
           ><span></span>
         </div>
         <div id="speed-rows" class="scroll"></div>
@@ -1067,7 +1073,7 @@
           ＋ 区間を追加
         </button>
         <p class="help">
-          開始・終了欄を選んでから図の点をクリックできます。区間の前から減速します。保存は距離基準のため、点を編集した場合は区間を選び直してください。適用後にCustomlineを再生成してください。
+          同じ色の線と行が同じ区間です。「結合」は隣の区間と低い方の速度でまとめます。詳細指定では開始・終了欄を選んで図の点をクリックします。区間の前から減速します。点列の編集後は区間を確認し、適用後にCustomlineを再生成してください。
         </p>
         <button type="submit" class="primary full">区間設定を適用</button>
       </form>

@@ -5,7 +5,8 @@ from .tuning import digest
 
 TARGETS = {
     'vehicle': ('kart_bridge', ('steering_offset', 'steering_scale', 'initial_steering_trim', 'steering_trim_limit')),
-    'tracking': ('pure_pursuit', ('lookahead_m', 'max_speed_mps', 'max_cross_track_m',
+    'tracking': ('pure_pursuit', ('lookahead_m', 'lookahead_time_s', 'min_lookahead_m',
+                                'max_lookahead_m', 'max_speed_mps', 'max_cross_track_m',
                                 'goal_tolerance_m', 'deceleration_mps2', 'wheelbase_m', 'max_steering_rad')),
     'speed': ('speed_controller', ('kp', 'ki', 'kd', 'kff', 'integral_limit', 'derivative_tau_s',
                                  'throttle_limit', 'brake_limit', 'max_target_speed_mps')),
@@ -38,7 +39,10 @@ LABELS = {
     'sensor_profile': 'センサ構成', 'image_topic': '画像topic', 'input_timeout_s': '指令の期限 (s)',
     'sensor_timeout_s': 'センサの期限 (s)', 'processing_width': '画像処理幅 (px)',
     'image_rate_hz': '画像処理上限 (Hz)',
-    'lookahead_m': '前方参照の経路長 (m)', 'max_speed_mps': '目標速度上限 (m/s)',
+    'lookahead_m': '固定モードの先読み距離 (m)', 'max_speed_mps': '目標速度上限 (m/s)',
+    'lookahead_time_s': '速度連動の先読み時間 (s、0=固定距離)',
+    'min_lookahead_m': '速度連動の最小先読み距離 (m)',
+    'max_lookahead_m': '速度連動の最大先読み距離 (m)',
     'max_cross_track_m': '経路からの許容距離 (m)', 'goal_tolerance_m': '終点の許容距離 (m)',
     'deceleration_mps2': '目標減速度 (m/s²)', 'centerline_speed_mps': 'Center速度 (m/s、-1=地図の保存値)',
     'line_type': '実車の参照ライン', 'stuck_duration_s': 'スタック判定継続時間 (s)',

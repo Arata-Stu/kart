@@ -1,4 +1,5 @@
 import { compatible, resizePairs, alignPairs } from "./paired.js";
+import { showLine } from "./line_visibility.js";
 import {
   $,
   state,
@@ -173,6 +174,9 @@ function status() {
   $("raceline-dimensions").textContent =
     `幅 ${cm(state.settings.vehicle_width)} · 全長 ${cm(state.settings.vehicle_length)} · 余裕 ${cm(state.settings.margin)} cm`;
   $("raceline-settings-open").disabled = !d || busy;
+  $("raceline-speed-open").disabled = !d || busy;
+  $("raceline-speed-summary").textContent =
+    `次回生成：上限 ${state.settings.max_speed} m/s · 横加速度 ${state.settings.lateral_accel} m/s² · 加速 ${state.settings.accel} / 減速 ${state.settings.decel} m/s²`;
   $("edit-pair").classList.toggle("active", state.target === "pair");
   $("edit-left").classList.toggle("active", state.target === "left");
   $("edit-right").classList.toggle("active", state.target === "right");
@@ -214,6 +218,7 @@ for (const s of ["cloud", "bounds", "lines"])
 action("bounds-next", () => step("lines"));
 for (const t of ["left", "right", "custom", "pair"])
   action("edit-" + t, () => {
+    if (t === "custom") showLine("customline");
     if (t === "pair" && !compatible(state.lane)) {
       if (
         !confirm(

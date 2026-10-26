@@ -95,7 +95,7 @@ AUTO/MANUALの指令選択は既存muxが担当し、このpackageからAUTOへ�
 |---|---|---|---|
 | 入力 | /operation_mode/state | kart_interfaces/msg/OperationModeState | reliable/volatile/depth1、追従設定の動的変更用STOP確認。stamp/受信0.3秒以内 |
 | 入力 | /planning/reference_line | kart_interfaces/msg/ReferenceLine | reliable/transient_local/depth1、選択ラインと各点速度 |
-| 入力 | /visual_slam/tracking/odometry | nav_msgs/msg/Odometry | best effort/volatile/depth5、観測時刻と入力継続の監視 |
+| 入力 | /visual_slam/tracking/odometry | nav_msgs/msg/Odometry | best effort/volatile/depth5、観測時刻・入力継続の監視、速度連動先読み時はtwistも使用 |
 | 入力 | /localization/vslam/diagnostics | diagnostic_msgs/msg/DiagnosticArray | reliable/volatile/depth10、VSLAM再局在状態 |
 | 入力 | /tf, /tf_static | tf2_msgs/msg/TFMessage | tf2標準、map→tracking_frameを取得 |
 | 出力 | /control/tracking_cmd | ackermann_msgs/msg/AckermannDriveStamped | reliable/volatile/depth1、30 Hz、舵角rad左正・速度m/s前進のみ |
@@ -121,6 +121,14 @@ ROS時刻の経過とsteady受信時間の両方でfreshnessを判定し、bag�
 ## 計算
 
 最近傍線分へ投影し、進行方向へlookahead分の弧長を進んだ点を選ぶ。
+`lookahead_time_s=0`（既定）は固定`lookahead_m`。正値なら
+`L = clamp(abs(v_rear_axle) * lookahead_time_s, min_lookahead_m, max_lookahead_m)`で経路長Lを決める。
+速度は同じodom stampのtwistをtracking_frameへ回転し、角速度×取付位置の効果を補正した後輪軸の前後速度。
+目標速度や正規化throttleは使わない。速度連動時の欠落child frame、不正twist、速度変換TF失敗は
+`speed_unavailable`で参照無効・速度0とする。固定モードはtwist不要で従来の処理を維持する。
+設定例として先読み時間0.6 sなら1.5 m/sで0.9 m、既定の距離上下限は0.4〜2.0 m。
+これらは機能の初期値であり、実車調整済み値ではない。閉路全長以下の先読みであることも従来どおり検査する。
+`control/tracking_reference.lookahead_m`とmarkersのLは、設定した固定値ではなく計算に使った実効値を表示する。
 後輪軸基準で `steering = atan2(2 * wheelbase * target_y, target_x² + target_y²)`。
 曲率計算は[Coulterの原典](https://publications.ri.cmu.edu/implementation-of-the-pure-pursuit-path-tracking-algorithm)に基づく。
 舵角・速度を上限で制限し、閉路は末尾から先頭へ接続する。
@@ -135,7 +143,7 @@ ROS時刻の経過とsteady受信時間の両方でfreshnessを判定し、bag�
 
 ## 全parameter
 
-lookahead_m・max_speed_mps・max_cross_track_m・goal_tolerance_m・deceleration_mps2は
+lookahead_m・lookahead_time_s・min_lookahead_m・max_lookahead_m・max_speed_mps・max_cross_track_m・goal_tolerance_m・deceleration_mps2は
 新鮮なAUTO/MANUAL/STOP中に動的変更可能。それ以外の独自parameterは起動時read_only。
 実運用はkart_bringup/config/control/pure_pursuit.yaml。
 package configは単独起動用。use_sim_timeのみROS共通。
@@ -146,7 +154,10 @@ package configは単独起動用。use_sim_timeのみROS共通。
 | map_frame | map | ラインframeと一致必須 |
 | wheelbase_m | 0.257 | YAML既定。TT-02標準仕様の暫定値、実車の設定を確認。node単独でYAMLなしは0 |
 | max_steering_rad | 0.0 | 要校正。0は計算無効、0以上1.57未満 |
-| lookahead_m | 0.8 | 正値、弧長先読み距離 |
+| lookahead_m | 0.8 | 正値、固定モードの弧長先読み距離[m] |
+| lookahead_time_s | 0.0 | 有限・0以上、0は固定距離、正値は実速度×時間[s]による先読み |
+| min_lookahead_m | 0.4 | 有限・正、速度連動時の最小先読み経路長[m] |
+| max_lookahead_m | 2.0 | 有限・min_lookahead_m以上、速度連動時の最大先読み経路長[m] |
 | max_speed_mps | 10.0 | 正値、目標速度上限 |
 | max_cross_track_m | 1.0 | 正値、ラインからの距離上限 |
 | goal_tolerance_m | 0.1 | 正値、開路終端の停止距離 |
@@ -190,6 +201,10 @@ Pure Pursuit moduleだけをincludeする。入力remapが必要ならmoduleのC
 
 ROS非依存C++計算のテストは直線、左右符号、閉路wrap、終端、ゼロ速度、遠方/後方向、
 非有限値、重複点、未校正値を確認する。
+速度連動の停止時下限・高速時上限・負速度の絶対値・不正速度・固定モード互換・
+速度変更による先読み点移動とカーブの弧長計算もportable testで確認する。
+ROS testは実効距離の配信、速度NaNの無効化、min/max一括変更と不正値の拒否を含むが、
+本変更時のmacOSではROS未導入のため未実行。実機での追従性能は未検証。
 ROS Componentのbuild/load、TF通信、bag上の追従と実車制御は未確認。
 `test_tracking_tf_wait.py`はROS環境で実Pure Pursuitを起動し、15 ms遅れで届く同時刻TFでは
 trackingを維持し、TF配信を止めるとtf_unavailableになることを検証する。

@@ -19,6 +19,7 @@ export const state = {
   zmin: -Infinity,
   zmax: Infinity,
   showPath: true,
+  visibleLines: { centerline: true, raceline: true, customline: true },
   undo: [],
   redo: [],
   config: null,

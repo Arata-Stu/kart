@@ -3,8 +3,12 @@ import {
   waypointSelect,
   renderWaypointPicker,
   resetWaypointPicker,
+  setSectionSplit,
+  speedRows,
+  selectSpeedRow,
 } from "./waypoint_sections.js";
 import { $, state, api, action, toast, emit, remember, on } from "./api.js";
+import { partitionSections, splitSection, mergeSection, isPartition } from "./custom_model.js";
 import { save, loadMap } from "./maps.js";
 
 function length() {
@@ -17,16 +21,19 @@ function length() {
 function addRow(
   value = {
     start: 0,
-    end: waypointStations(state.lane.custom, state.lane.closed)[1],
+    end: waypointStations(state.lane.custom, state.lane.closed).at(-1),
     speed: 1,
   },
+  redraw = true,
 ) {
   if ($("speed-rows").children.length >= 40) return;
   const row = document.createElement("div");
   row.className = "speed-row";
   for (const key of ["start", "end", "speed"]) {
     if (key !== "speed") {
-      row.append(waypointSelect(key, value[key]));
+      const select = waypointSelect(key, value[key]);
+      select.disabled = $("speed-mode").value === "split";
+      row.append(select);
       continue;
     }
     const input = document.createElement("input");
@@ -43,43 +50,69 @@ function addRow(
       "aria-label",
       { start: "開始距離", end: "終了距離", speed: "速度上限" }[key],
     );
+    input.addEventListener("input", renderWaypointPicker);
     row.append(input);
   }
   const remove = document.createElement("button");
   remove.type = "button";
-  remove.textContent = "×";
-  remove.setAttribute("aria-label", "区間を削除");
+  remove.textContent = $("speed-mode").value === "split" ? "結合" : "×";
+  remove.setAttribute("aria-label", $("speed-mode").value === "split" ? "隣の区間と結合（低い速度を保持）" : "区間を削除");
   remove.onclick = () => {
-    row.remove();
-    renderWaypointPicker();
+    if ($("speed-mode").value === "split") {
+      rebuildRows(mergeSection(speedRows(), [...$("speed-rows").children].indexOf(row)));
+    } else { row.remove(); renderWaypointPicker(); }
   };
   row.append(remove);
   $("speed-rows").append(row);
-  row.querySelector("select").focus();
+  row.addEventListener("focusin", event => {
+    if (event.target.dataset.key === "speed") selectSpeedRow(row);
+  });
+  if (redraw) renderWaypointPicker();
+}
+function rebuildRows(rows) {
+  resetWaypointPicker();
+  $("speed-rows").replaceChildren();
+  for (const row of rows) addRow(row, false);
   renderWaypointPicker();
 }
+function configureMode(rows, partition = true) {
+  const splitting = $("speed-mode").value === "split";
+  $("speed-add").hidden = splitting;
+  $("speed-mode-help").textContent = splitting
+    ? "線上をクリックすると、その場所が区切りになります。全体を重複のない区間に分け、行ごとに速度を設定します。"
+    : "開始・終了を個別指定します。既存区間はすべて色分け表示。閉路の始点跨ぎや重複も指定できます。";
+  setSectionSplit(splitting ? station => {
+    try { rebuildRows(splitSection(speedRows(), station)); }
+    catch (error) { toast(error.message, true); }
+  } : null);
+  rebuildRows(splitting && partition
+    ? partitionSections(rows, length(), state.settings.max_speed) : rows);
+}
+$("speed-mode").addEventListener("change", () => {
+  const rows = speedRows();
+  try { configureMode(rows); }
+  catch (error) {
+    $("speed-mode").value = "ranges";
+    configureMode(rows, false);
+    toast(error.message, true);
+  }
+});
 action("custom-speeds-open", () => {
   if (state.lane.custom.length < (state.lane.closed ? 3 : 2))
     throw Error("先にCustomlineの点を描いてください");
-  $("speed-length").textContent =
-    `全長 ${length().toFixed(2)} m / ${state.lane.custom.length} waypoints · 緑＝開始、橙＝終了、紫＝区間`;
-  resetWaypointPicker();
-  $("speed-rows").replaceChildren();
-  for (const row of state.lane.custom_speeds || []) addRow(row);
+  $("speed-length").textContent = `全長 ${length().toFixed(2)} m / ${state.lane.custom.length} 編集点`;
+  const rows = state.lane.custom_speeds || [];
+  // Existing ranges retain their exact distances and overlap until explicitly converted.
+  const partition = isPartition(rows, length());
+  $("speed-mode").value = !rows.length || partition ? "split" : "ranges";
+  configureMode(rows, !partition);
   $("speed-dialog").showModal();
   renderWaypointPicker();
 });
 action("speed-add", () => addRow());
 $("speed-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const limits = [...$("speed-rows").children].map((row) =>
-    Object.fromEntries(
-      [...row.querySelectorAll("input, select")].map((el) => [
-        el.dataset.key,
-        Number(el.value),
-      ]),
-    ),
-  );
+  const limits = speedRows();
   if (
     limits.some(
       (row) =>

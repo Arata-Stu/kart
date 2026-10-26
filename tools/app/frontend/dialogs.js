@@ -148,10 +148,11 @@ function lineSettingSummary() {
     ? `余裕込み：幅 ${(width * 100).toFixed(1)} × 全長 ${(length * 100).toFixed(1)} cm。方式：${method}`
     : "車体寸法と余裕を入力してください。";
 }
-function openLineSettings(details = false) {
+function openLineSettings(details = false, speed = false) {
   lineSettingsTarget = { map: state.id, lane: state.laneId };
   $("line-setting-fields").replaceChildren();
   $("line-setting-extra-fields").replaceChildren();
+  $("line-setting-speed-fields").replaceChildren();
   const fields = {
     vehicle_width: ["車幅 (m)", 0.05, 2, 0.001],
     vehicle_length: ["車体全長 (m)", 0.1, 5, 0.001],
@@ -160,21 +161,23 @@ function openLineSettings(details = false) {
     curvature_limit: ["最適化の曲率上限 (1/m)", 0.01, 20, 0.01],
     spacing: ["点間隔 (m)", 0.05, 1, 0.01],
     region_resolution: ["領域方式の格子解像度 (m)", 0.005, 0.25, 0.005, true],
-    max_speed: ["速度上限 (m/s)", 0.1, 20, 0.01, true],
-    lateral_accel: ["横加速度上限 (m/s²)", 0.1, 15, 0.01, true],
-    accel: ["加速上限 (m/s²)", 0.1, 15, 0.01, true],
-    decel: ["減速上限 (m/s²)", 0.1, 15, 0.01, true],
+    max_speed: ["速度上限 (m/s)", 0.1, 20, 0.01, "speed"],
+    lateral_accel: ["横加速度上限 (m/s²)", 0.1, 15, 0.01, "speed"],
+    accel: ["加速上限 (m/s²)", 0.1, 15, 0.01, "speed"],
+    decel: ["減速上限 (m/s²)", 0.1, 15, 0.01, "speed"],
   };
   for (const [key, [label, min, max, step, extra]] of Object.entries(fields))
-    field($(extra ? "line-setting-extra-fields" : "line-setting-fields"), label, key,
+    field($(extra === "speed" ? "line-setting-speed-fields" : extra ? "line-setting-extra-fields" : "line-setting-fields"), label, key,
       state.settings[key], "number", { min, max, step, required: true });
   $("line-setting-details").open = details;
   $("line-settings-generate").disabled = $("generate-raceline").disabled;
   lineSettingSummary();
   open("line-settings-dialog");
+  if (speed) $("line-setting-speed-fields").querySelector("input").focus();
 }
 action("line-settings-open", () => openLineSettings(true));
 action("raceline-settings-open", () => openLineSettings());
+action("raceline-speed-open", () => openLineSettings(false, true));
 $("line-settings-form").addEventListener("input", lineSettingSummary);
 form("line-settings-form", async (data, submitter) => {
   const generate = submitter?.value === "raceline";

@@ -19,6 +19,9 @@ class PolicyTests(unittest.TestCase):
     def test_type_readonly_revision_and_node_boundaries(self):
         current = catalog('tracking',fields())
         self.assertEqual(changes_for(current,{'lookahead_m':2},current['revision']),{'lookahead_m':2.})
+        settings={'lookahead_time_s':.6,'min_lookahead_m':.4,'max_lookahead_m':2.}
+        self.assertEqual(changes_for(current,settings,current['revision']),settings)
+        self.assertEqual(changes_for(current,{'lookahead_time_s':0},current['revision']),{'lookahead_time_s':0.})
         for changes, revision in (({'lookahead_m':0.8},'stale'),({'arbitrary':1.},current['revision']),
                                   ({'wheelbase_m':.2},current['revision']),({'lookahead_m':float('nan')},current['revision']),
                                   ({'lookahead_m':True},current['revision'])):

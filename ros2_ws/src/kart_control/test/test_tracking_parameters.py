@@ -18,7 +18,7 @@ except ImportError as error:
 
 
 class TrackingParametersTest(unittest.TestCase):
-    def test_native_set_requires_stop_and_preserves_rejected_values(self):
+    def test_native_set_requires_fresh_mode_and_preserves_rejected_values(self):
         if not shutil.which('ros2'):
             self.skipTest('ros2 executable unavailable')
         namespace=f'/tracking_parameter_test_{os.getpid()}'
@@ -52,8 +52,10 @@ class TrackingParametersTest(unittest.TestCase):
             self.assertTrue(future.done())
             return future.result()
         def change(value):
+            return change_many({'lookahead_m':value})
+        def change_many(values):
             request=SetParametersAtomically.Request()
-            request.parameters=[Parameter('lookahead_m',value=value).to_parameter_msg()]
+            request.parameters=[Parameter(name,value=value).to_parameter_msg() for name,value in values.items()]
             return call(setter,request).result
         self.assertFalse(change(1.1).successful)
         mode[0]=OperationModeState.STOP
@@ -66,5 +68,15 @@ class TrackingParametersTest(unittest.TestCase):
         mode[0]=OperationModeState.AUTO
         end=time.monotonic()+.15
         while time.monotonic()<end:rclpy.spin_once(node,timeout_sec=.03)
-        self.assertFalse(change(.9).successful)
-        self.assertEqual(call(getter,request).values[0].double_value,1.1)
+        self.assertTrue(change(.9).successful)  # Fresh AUTO permits live tracking adjustment.
+        self.assertEqual(call(getter,request).values[0].double_value,.9)
+        self.assertFalse(change_many({'min_lookahead_m':3.,'max_lookahead_m':2.}).successful)
+        request.names=['min_lookahead_m','max_lookahead_m']
+        self.assertEqual([v.double_value for v in call(getter,request).values],[.4,2.])
+        self.assertTrue(change_many({'min_lookahead_m':2.5,'max_lookahead_m':3.}).successful)
+        self.assertTrue(change_many({'min_lookahead_m':.4,'max_lookahead_m':2.,'lookahead_time_s':.6}).successful)
+        for invalid in (-1.,float('nan'),True,1):
+            self.assertFalse(change_many({'lookahead_time_s':invalid}).successful)
+        request.names=['lookahead_time_s']
+        self.assertEqual(call(getter,request).values[0].double_value,.6)
+        self.assertTrue(change_many({'lookahead_time_s':0.}).successful)

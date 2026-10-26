@@ -209,6 +209,11 @@ Center速度はROS parameterとHTTP active.centerline_speed_mpsの両方へ反�
 有効かつmap座標・有限値で、計測stampと受信から0.5秒以内のものだけ
 HTTP statusの`tracking_reference`として返す。origin/targetは制御計測時の座標、
 lookahead_mは経路長、target_distance_mは直線距離。無効通知・timeout・地図適用時には消去する。
+Pure Pursuitの速度連動時、ここで表示するlookahead_mは実効先読み距離となる。
+「パラメータ調整」のtracking対象には`lookahead_time_s`（0=固定）、`min_lookahead_m`、
+`max_lookahead_m`を追加した。固定`lookahead_m`も従来どおり編集可能。
+既定値はそれぞれ0.0 s、0.4 m、2.0 m（kart_control/bringup設定）。
+既存のrevision・モード/速度鮮度確認・atomic set/readbackを使用し、新しい独自topic/serviceは追加しない。
 この観測追加による新しいparameter、publisher、serviceはない。
 
 

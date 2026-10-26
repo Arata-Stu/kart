@@ -323,6 +323,9 @@ canvas {
   gap: 5px;
   pointer-events: none;
 }
+.canvas-legend label { display: inline-flex; align-items: center; gap: 3px; margin: 0 0 0 5px; cursor: pointer; pointer-events: auto; font-size: 11px; }
+.canvas-legend label input { margin: 0; width: 13px; height: 13px; accent-color: #338c88; }
+.canvas-legend .dot { flex-shrink: 0; }
 .dot {
   width: 6px;
   height: 6px;
@@ -830,7 +833,7 @@ summary {
 .speed-columns,
 .speed-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 36px;
+  grid-template-columns: 44px 1fr 1fr 1fr 52px;
   gap: 8px;
   align-items: center;
   margin: 6px 0;
@@ -840,8 +843,17 @@ summary {
   color: var(--muted);
 }
 #speed-rows {
-  max-height: 230px;
+  max-height: min(230px, 25vh);
 }
+.speed-row { border-left: 6px solid var(--section-color); padding: 5px 7px; border-radius: 4px; }
+.speed-row.selected { background: #edf2f6; }
+.speed-row::before { content: attr(aria-label); color: var(--section-color); font-size: 12px; font-weight: 700; }
+#speed-dialog { width: min(760px, 94vw); max-height: 94vh; overflow-y: auto; }
+#speed-dialog .help { margin: 6px 0; }
+#speed-dialog .dialog-heading { display: flex; justify-content: space-between; align-items: center; }
+#speed-dialog .dialog-heading h2 { margin: 0; }
+#speed-dialog #speed-waypoints { height: clamp(155px, 26vh, 240px); }
+#speed-waypoints line:focus { outline: none; stroke-width: 11; }
 #registration-preview-bar {
   position: fixed;
   bottom: 18px;

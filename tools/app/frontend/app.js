@@ -6,6 +6,7 @@ import { refreshAudit } from "./audit.js";
 import { poll } from "./jobs.js";
 import "./dialogs.js";
 import "./line_tools.js";
+import "./custom_editor.js";
 import "./simulation.js";
 import "./tuning.js";
 import "./tuning_parameters.js";
