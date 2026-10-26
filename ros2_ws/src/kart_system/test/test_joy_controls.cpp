@@ -27,7 +27,7 @@ int main() {
   unguarded_keys[2]=1; unguarded_actions=unguarded.read(unguarded_keys);
   assert(unguarded_actions->manual && unguarded_actions->deadman); // Triangle alone.
   unguarded_keys[2]=0; unguarded_actions=unguarded.read(unguarded_keys);
-  assert(unguarded_actions->deadman && !unguarded_actions->stop); // Release does not revoke permission.
+  assert(unguarded_actions->deadman && !unguarded_actions->manual_held); // Mode hold handles release below.
   unguarded_keys[0]=1; unguarded_actions=unguarded.read(unguarded_keys);
   assert(unguarded_actions->stop); // Explicit STOP remains available.
   unguarded.reset(); unguarded_keys[2]=1;
@@ -74,6 +74,38 @@ int main() {
   actions=buttons.read(keys); assert(!actions->stop && actions->throttle_delta==0);
   buttons.auto_button=-1; keys.assign(17,0); buttons.read(keys);
   keys[3]=1; actions=buttons.read(keys); assert(!actions->automatic);
+  {
+    JoyButtons held_buttons;
+    JoyModeHold hold;
+    std::vector<int32_t> held(17,0);
+    auto step=[&]() {return hold.update(*held_buttons.read(held));};
+    held[2]=1;
+    assert(step()==0 && !hold.active()); // Held at startup cannot arm.
+    held[2]=0; assert(step()==0);
+    held[2]=1; assert(step()==MANUAL && hold.active());
+    for (int n=0;n<100;++n) assert(step()==0); // No repeated mode request.
+    held[2]=0; assert(step()==STOP && !hold.active()); // Also before mode acknowledgement.
+    held[3]=1; assert(step()==AUTO);
+    held[3]=0; held[2]=1; assert(step()==MANUAL); // Direct handover in one sample.
+    held[2]=0; held[3]=1; assert(step()==AUTO);
+    held[2]=1; assert(step()==STOP); // Conflicting buttons fail closed.
+    held[3]=0; assert(step()==0 && !hold.active()); // No fallback to remaining button.
+    held[2]=0; assert(step()==0);
+    held[2]=1; assert(step()==MANUAL);
+    held[0]=1; assert(step()==STOP);
+    held[0]=0; assert(step()==0 && !hold.active()); // STOP release never resumes.
+    held.assign(17,0); step(); held[3]=1; assert(step()==AUTO);
+    hold.reset(); // External STOP / fault, while square remains held.
+    for (int n=0;n<100;++n) assert(step()==0 && !hold.active());
+    held[3]=0; step(); held[3]=1; assert(step()==AUTO);
+    hold.reset(); held_buttons.reset(); // Input loss and reconnect with button held.
+    assert(step()==0 && !hold.active());
+    held[3]=0; step(); held[3]=1; assert(step()==AUTO);
+    held[3]=0; assert(step()==STOP);
+    held_buttons.auto_button=-1;
+    step(); held[3]=1; assert(step()==0); // Disabled AUTO has no hold permission.
+    held[2]=1; assert(step()==MANUAL);
+  }
   {
     JoyBrakePulse pulse;
     pulse.duration_s=.05; // Longer pulse remains configurable.

@@ -109,8 +109,12 @@ base_linkが後輪軸中心ならtracking_frameをbase_linkに設定できる。
 カメラ中心を車体後輪軸と同一とみなすidentity TFは追加しない。
 TFは最新odomメッセージのstampで取得する。地図配信stampでTF変換せず、TFを配信もしない。
 TF取得失敗時は`tf_unavailable`と速度0を配信し、WARNに変換元・先frame、要求stamp、
-pose age、tf2例外の詳細を最大1秒に1回記録する。一時的な到着順の差とTF欠落を切り分けるための
-診断ログであり、待ち時間0の検索や下流のSTOP条件は変更しない。ROS実環境でのログ確認は未実施。
+pose age、tf2例外の詳細を最大1秒に1回記録する。
+実機ではodomとTFの到着順の差を吸収するため、同じodom stampのTFを既定50 msまで待つ。
+TransformListenerの専用threadで受信し、待機後も全入力の鮮度を再確認する。
+最新TFへの代替・過去の指令の再配信・期限切れ入力の延命は行わない。取得失敗時のSTOP条件は維持する。
+sim timeでは待機を0にし、停止した/clockがsteady watchdogを妨げないようにする。
+利用者の実機ログで11.138 msの未来外挿を確認したが、変更後のROS結合・実車確認は未実施。
 VSLAM診断hardware_id=visual_slam、localized_in_exist_map=Yes、vo_status=OKを要求する。
 ROS時刻の経過とsteady受信時間の両方でfreshnessを判定し、bag停止・巻戻しも不正値を出さない。
 
@@ -148,6 +152,7 @@ package configは単独起動用。use_sim_timeのみROS共通。
 | goal_tolerance_m | 0.1 | 正値、開路終端の停止距離 |
 | deceleration_mps2 | 1.0 | 正値、目標速度減速計算。実減速度保証ではない |
 | pose_timeout_s | 0.2 | ROS時刻でのodom stamp期限。wall_timeout_s=0なら受信期限にも使用 |
+| tf_lookup_timeout_s | 0.05 | 起動時固定、同じodom stampのTFを待つ秒数。0..0.05かつpose_timeout_s未満。sim timeでは指定値によらず0 |
 | line_timeout_s | 2.5 | reference stamp/受信の期限。HDMap既定1Hz |
 | localization_timeout_s | 2.5 | 再局在診断stamp/受信の期限 |
 | wall_timeout_s | 0.0 | 受信の実時間監視。0は各入力期限を使用、正値は独立したsteady秒の期限 |
@@ -186,6 +191,9 @@ Pure Pursuit moduleだけをincludeする。入力remapが必要ならmoduleのC
 ROS非依存C++計算のテストは直線、左右符号、閉路wrap、終端、ゼロ速度、遠方/後方向、
 非有限値、重複点、未校正値を確認する。
 ROS Componentのbuild/load、TF通信、bag上の追従と実車制御は未確認。
+`test_tracking_tf_wait.py`はROS環境で実Pure Pursuitを起動し、15 ms遅れで届く同時刻TFでは
+trackingを維持し、TF配信を止めるとtf_unavailableになることを検証する。
+本変更時のmacOSではROS未導入のためskip。設定parityテストとROS非依存の追従計算テストのみ実行済み。
 `colcon test --packages-select kart_control kart_hdmap`で計算・メッセージテストを実行する。
 
 

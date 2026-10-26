@@ -66,8 +66,38 @@ private:
 
 struct ButtonActions {
   bool deadman{false}, brake{false}, stop{false}, manual{false}, automatic{false};
+  bool manual_held{false}, auto_held{false};
   bool bag_start{false}, bag_stop{false};
   double steering_delta{0}, throttle_delta{0};
+};
+
+// Mode buttons are hold-to-run. A fault/reset requires releasing both buttons;
+// no repeated mode request may rearm a STOP while the operator keeps holding.
+class JoyModeHold {
+public:
+  void reset() {selected_=STOP; locked_=true;}
+  bool active() const {return host_mode(selected_);}
+  uint8_t update(const ButtonActions & a) {
+    if (a.stop || (a.manual_held && a.auto_held)) {
+      reset(); return STOP;
+    }
+    if (!a.manual_held && !a.auto_held) {
+      const bool released=host_mode(selected_);
+      selected_=STOP; locked_=false;
+      return released ? STOP : 0;
+    }
+    if (locked_) {return 0;}
+    if (a.manual && a.manual_held) {selected_=MANUAL; return MANUAL;}
+    if (a.automatic && a.auto_held) {selected_=AUTO; return AUTO;}
+    if ((selected_==MANUAL && !a.manual_held) ||
+        (selected_==AUTO && !a.auto_held)) {
+      reset(); return STOP;
+    }
+    return 0;
+  }
+private:
+  uint8_t selected_{STOP};
+  bool locked_{true};
 };
 
 // Discrete inputs only. First sample after startup/reset establishes the held
@@ -94,6 +124,7 @@ public:
     ButtonActions result;
     result.deadman=deadman_button==-1 || pressed(deadman_button); result.brake=pressed(brake_button);
     result.stop=edge(stop_button); result.manual=edge(manual_button); result.automatic=edge(auto_button);
+    result.manual_held=pressed(manual_button); result.auto_held=pressed(auto_button);
     result.bag_stop=edge(bag_stop_button); result.bag_start=edge(bag_start_button) && !result.bag_stop;
     result.steering_delta=(static_cast<int>(edge(steering_left))-static_cast<int>(edge(steering_right)))*steering_step;
     result.throttle_delta=(static_cast<int>(edge(throttle_up))-static_cast<int>(edge(throttle_down)))*throttle_step;

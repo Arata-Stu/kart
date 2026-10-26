@@ -11,8 +11,8 @@
     brake_pulse_throttle: 0.08  # MANUAL circle: positive pulse, then brake=1 while held
     brake_pulse_s: 0.01         # Steady time; actual output is quantized to Joy delivery
     stop_button: 0
-    manual_button: 2
-    auto_button: 3
+    manual_button: 2  # Hold for MANUAL; release requests STOP
+    auto_button: 3    # Hold for AUTO; release requests STOP; both held -> STOP
     steering_trim_left_button: 15
     steering_trim_right_button: 16
     throttle_trim_up_button: 13

@@ -40,6 +40,7 @@ public:
       ready_=msg->data; ready_at_=steady_now(); if (!ready_) {lose_input();}
     });
     mode_sub_=create_subscription<Mode>("operation_mode/state",1,[this](Mode::ConstSharedPtr msg) {
+      if (host_mode(mode_) && !host_mode(msg->mode)) {mode_hold_.reset();}
       if (mode_!=msg->mode) {reset_brake_pulse("mode_changed");}
       mode_=msg->mode; mode_at_=steady_now(); mode_stamp_=seconds(msg->header.stamp);
       manual_fixed_.observe(mode_,seconds(msg->header.stamp),now().seconds(),steady_now(),
@@ -113,12 +114,18 @@ private:
     if (steady_now()-last_stop_>=0.1) {request(*this,request_pub_,STOP,reason); last_stop_=steady_now();}
   }
   void lose_input() {
-    reset_brake_pulse("input_unavailable"); buttons_.reset(); neutral_input_=false; manual_fixed_.trip();
-    if (mode_==MANUAL || (mode_==AUTO && manual_fixed_.enabled())) {
+    const bool pending=mode_hold_.active();
+    reset_brake_pulse("input_unavailable"); buttons_.reset(); mode_hold_.reset(); neutral_input_=false; manual_fixed_.trip();
+    if (host_mode(mode_) || pending) {
       if (manual_fixed_.enabled() && mode_==AUTO) {stop_fixed({},"joy_manager:fixed_throttle_input_unavailable"); return;}
       blocked_=true;
       if (steady_now()-last_stop_>=0.1) {request(*this,request_pub_,STOP,"joy_manager:input_unavailable"); last_stop_=steady_now();}
     }
+  }
+  void stop_hold(const std::string & reason) {
+    mode_hold_.reset();
+    reset_brake_pulse("mode_hold_released");
+    stop_fixed({},reason);
   }
   void on_joy(const sensor_msgs::msg::Joy & joy) {
     joy_at_=steady_now();
@@ -135,12 +142,16 @@ private:
       RCLCPP_INFO(get_logger(),"Bag request: %s",actions->bag_stop ? "STOP" : "START");
     }
     if (actions->stop) {
-      reset_brake_pulse("stop_button");
-      if (manual_fixed_.enabled() && mode_==AUTO) {stop_fixed({},"joy_manager:stop_button");}
-      else {blocked_=true; request(*this,request_pub_,STOP,"joy_manager:stop_button");}
+      stop_hold("joy_manager:stop_button");
       return;
     }
-    if (!actions->deadman) {if (host_mode(mode_)) {lose_input();} return;}
+    if (!actions->deadman) {lose_input(); return;}
+    const auto requested=mode_hold_.update(*actions);
+    if (requested==STOP || (host_mode(mode_) && !mode_hold_.active())) {
+      stop_hold(actions->manual_held && actions->auto_held ?
+        "joy_manager:mode_buttons_conflict" : "joy_manager:mode_button_released");
+      return;
+    }
     if (blocked_) {return;}
     if ((mode_==STOP || mode_==MANUAL) && (actions->steering_delta!=0 || actions->throttle_delta!=0)) {
       kart_interfaces::msg::ControlTrim trim; trim.header=joy.header;
@@ -148,7 +159,7 @@ private:
       trim.throttle=actions->throttle_delta;
       if (trim.steering!=0 || trim.throttle!=0) {trim_pub_->publish(trim);}
     }
-    if (actions->manual && mode_==AUTO) {
+    if (requested==MANUAL && mode_==AUTO) {
       reset_brake_pulse("manual_takeover");
       request(*this,request_pub_,MANUAL,"joy_manager:manual_takeover");
       Control msg; msg.header=joy.header; set_values(msg,teleop_.command(joy.axes,actions->brake)); pub_->publish(msg); return;
@@ -162,8 +173,8 @@ private:
     if (result.stop) {stop_fixed(result.command,"joy_manager:fixed_throttle_cancelled"); return;}
     Control msg; msg.header=joy.header; set_values(msg,result.command); pub_->publish(msg);
     if ((mode_==STOP && teleop_.can_arm(joy.axes,actions->brake)) || host_mode(mode_)) {
-      if (actions->manual) {request(*this,request_pub_,MANUAL,"joy_manager:manual_button");}
-      else if (actions->automatic) {request(*this,request_pub_,AUTO,"joy_manager:auto_button");}
+      if (requested==MANUAL) {request(*this,request_pub_,MANUAL,"joy_manager:manual_button");}
+      else if (requested==AUTO) {request(*this,request_pub_,AUTO,"joy_manager:auto_button");}
     }
   }
   std::string brake_log_phase_{"idle"};
@@ -172,6 +183,7 @@ private:
   double mode_at_{NEVER}, mode_stamp_{NEVER};
   TeleopInput teleop_;
   JoyButtons buttons_;
+  JoyModeHold mode_hold_;
   ManualFixedThrottle manual_fixed_;
   bool neutral_input_{false};
   double last_config_{NEVER};

@@ -245,6 +245,9 @@ container配置・所有権・executorは`config/localization/containers.json`�
 ### オフラインライン追従
 
 `tracking.launch.py`がHDMap serverとPure Pursuit Componentを起動する。
+実機の`config/control/pure_pursuit.yaml`は`tf_lookup_timeout_s=0.05`で同じodom stampのTFを待つ。
+odomがTFより先に届く一時的な到着順の差を吸収し、待機後も入力の鮮度を検査する。
+取得失敗時のSTOP条件は維持。simの完全設定は同項目0で、sim timeでは常に待機なし。
 引数map_file必須、lane_id空（未選択）、container_name/create_container空（launch.json維持）、
 use_sim_time空（YAML維持）。config/control/launch.jsonはcontainer_name=kart_control_container、
 create_container=true、container_type=multithreaded。
@@ -853,6 +856,14 @@ Jetsonの通常buildは`kart_sim`を探索対象から除外する。simを使�
 
 ## AUTO固定スロットル・手動ステア
 
+通常走行・固定AUTOとも、△保持中のみMANUAL、□保持中のみAUTOとし、離すとSTOP要求。
+両方同時押し、Joy/ready途絶、追加deadman解除でもSTOP。
+起動・再接続・異常STOP後は両ボタンを離し、新鮮なSTOP確認後に押し直す。
+同一Joyサンプルで元ボタン解除＋次ボタン押下なら直接切替可能。同時保持後の片方解除では再開しない。
+録画L1/R1は独立して操作できる。STOPはHOST解除・中立化であり、自動ブレーキではない。
+設定indexは`config/input/joy_manager.yaml`、実装はkart_systemのJoy manager。
+保持・解除等はportable C++テスト済み。ROS結合・実車での変更後の動作は未確認。
+
 `auto_fixed_throttle=-1.0`（既定）は通常動作。0..speed_scale（標準上限0.3）を
 指定すると、□AUTOで固定throttle＋手動ステア、△MANUALで通常R2/L2＋手動ステアになる。
 AUTO中もステアを操作でき、△でSTOPを挟まずMANUALへ直接引き継げる。
@@ -934,7 +945,7 @@ launch配線はtest_e2e_composition.pyと既存EVS/mission testで検証する�
 
 標準録画へ`/e2e/status`（std_msgs/msg/String）を追加し、E2Eの停止時状態を保存する。
 停止の切り分けは`ros2 topic echo /operation_mode/request`と`ros2 topic echo /e2e/status`。
-□は押下イベントでAUTOを選ぶ操作で、保持はSTOP要求を解除しない。
+□は保持中のみAUTOを許可し、離すとSTOP要求。保持したままでは他のSTOP要求を解除しない。
 
 E2E decoderの画像時刻未来ずれは`config/e2e/control_decoder.yaml`の
 `image_future_tolerance_s: 0.005`（5ms、起動時固定）まで許容する。

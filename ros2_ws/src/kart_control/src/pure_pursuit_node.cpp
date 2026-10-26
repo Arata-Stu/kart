@@ -36,6 +36,7 @@ public:
     if (!std::isfinite(wall_timeout_) || wall_timeout_ < 0)
       throw std::invalid_argument("wall_timeout_s must be finite and nonnegative");
     pose_timeout_ = param("pose_timeout_s", 0.2);
+    tf_wait_ = param("tf_lookup_timeout_s", 0.05);
     line_timeout_ = param("line_timeout_s", 2.5);
     localization_timeout_ = param("localization_timeout_s", 2.5);
     double rate = param("control_rate_hz", 30.0);
@@ -47,10 +48,14 @@ public:
                      c_.goal_tolerance, c_.deceleration})
       if (!std::isfinite(v) || v <= 0)
         throw std::invalid_argument("Parameters must be finite and positive");
+    if (!std::isfinite(tf_wait_) || tf_wait_ < 0 || tf_wait_ > 0.05 ||
+        tf_wait_ >= pose_timeout_)
+      throw std::invalid_argument("tf_lookup_timeout_s must be in [0,0.05] and below pose_timeout_s");
     if (!std::isfinite(c_.wheelbase) || !std::isfinite(c_.steering_limit) ||
         c_.wheelbase < 0 || c_.steering_limit < 0 || c_.steering_limit >= 1.57)
       throw std::invalid_argument("Invalid vehicle geometry");
     buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
+    // TransformListener's dedicated thread keeps receiving TF while lookup waits.
     listener_ = std::make_unique<tf2_ros::TransformListener>(*buffer_);
     command_ = create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(
         "control/tracking_cmd", 1);
@@ -240,6 +245,22 @@ private:
       target_->publish(p);
     }
   }
+  bool inputs_ready() {
+    if (!fresh(line_stamp_, line_received_, line_timeout_) || line_.empty()) {
+      publish({}, "reference_unavailable");
+      return false;
+    }
+    if (!fresh(pose_stamp_, pose_received_, pose_timeout_)) {
+      publish({}, "pose_stale");
+      return false;
+    }
+    if (!localized_ ||
+        !fresh(diag_stamp_, diag_received_, localization_timeout_)) {
+      publish({}, "not_localized");
+      return false;
+    }
+    return true;
+  }
   void tick() {
     // Read after the parameter transaction commits; never mutate control state
     // from a validation callback that a later validator could still reject.
@@ -252,23 +273,16 @@ private:
       publish({}, "vehicle_geometry_unconfigured");
       return;
     }
-    if (!fresh(line_stamp_, line_received_, line_timeout_) || line_.empty()) {
-      publish({}, "reference_unavailable");
-      return;
-    }
-    if (!fresh(pose_stamp_, pose_received_, pose_timeout_)) {
-      publish({}, "pose_stale");
-      return;
-    }
-    if (!localized_ ||
-        !fresh(diag_stamp_, diag_received_, localization_timeout_)) {
-      publish({}, "not_localized");
-      return;
-    }
+    if (!inputs_ready()) return;
     try {
       // Use the pose measurement time, never the static line publication time.
+      // Odometry can reach this node before TF for the same stamp. Briefly wait
+      // for that exact TF; never substitute a latest or stale transform.
+      // A paused sim clock must not block the steady-time watchdog in this group.
+      const double wait = get_parameter("use_sim_time").as_bool() ? 0.0 : tf_wait_;
       auto t = buffer_->lookupTransform(map_, frame_, pose_stamp_,
-                                        rclcpp::Duration::from_seconds(0));
+                                        rclcpp::Duration::from_seconds(wait));
+      if (!inputs_ready()) return; // Waiting must not rejuvenate expired inputs.
       const auto &q = t.transform.rotation;
       double norm = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
       if (!std::isfinite(norm) || std::abs(norm - 1) > 0.01) {
@@ -301,7 +315,7 @@ private:
   Settings c_;
   std::string frame_, map_;
   bool closed_{false}, localized_{false};
-  double pose_timeout_, line_timeout_, localization_timeout_, wall_timeout_;
+  double pose_timeout_, line_timeout_, localization_timeout_, wall_timeout_, tf_wait_;
   double pose_received_{0}, line_received_{0}, diag_received_{0};
   rclcpp::Time pose_stamp_{0, 0, RCL_ROS_TIME}, line_stamp_{0, 0, RCL_ROS_TIME},
       diag_stamp_{0, 0, RCL_ROS_TIME};

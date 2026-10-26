@@ -30,7 +30,7 @@ QoSはすべてvolatile、keep-last。R=reliable、BE=best effort、数字=depth
 | 出力 | `/bag/request` | `kart_interfaces/msg/BagRequest` | R/10 | L1 START / R1 STOP。走行モードと独立 |
 | 出力 | `/vehicle/trim/request` | `kart_interfaces/msg/ControlTrim` | R/10 | ボタン押下時の補正増分 |
 
-`TeleopInput`は連続入力、`JoyButtons`は押下edgeを処理する内部クラス。
+`TeleopInput`は連続入力、`JoyButtons`は押下edgeと保持状態、`JoyModeHold`はモード保持許可を処理する内部クラス。
 接続・鮮度・deadman・操作許可は一つのJoyManagerNodeが管理する。
 初回／再接続時に押されていたボタンからはedgeを生成しない。
 
@@ -81,11 +81,11 @@ sim時刻での入力鮮度と実時間での通信断を分離する。元stamp
 | `reverse_axis` | `4` | L2、静止0／最大1 |
 | `bag_start_button` | `4` | L1。録画START要求 |
 | `bag_stop_button` | `5` | R1。録画STOP要求。同時押しはSTOP優先 |
-| `deadman_button` | `-1` | 保持条件なし。4にするとL1をMANUAL操作とモード・トリム要求時に保持 |
+| `deadman_button` | `-1` | 追加deadmanなし。0以上なら△／□に加えて保持が必要。解除はAUTO/MANUALともSTOP |
 | `brake_button` | `1` | ○。MANUALでは正パルス→brake=1、トリガーより優先 |
 | `stop_button` | `0` | ×。STOP要求、deadman不要 |
-| `manual_button` | `2` | △。STOP時は中立でMANUAL要求。AUTOからは直接引継ぎ |
-| `auto_button` | `3` | □。STOP時は中立でAUTO要求。MANUALからは直接切替 |
+| `manual_button` | `2` | △。保持中のみMANUAL、離すとSTOP。STOPからは中立で要求 |
+| `auto_button` | `3` | □。保持中のみAUTO、離すとSTOP。STOPからは中立で要求 |
 | `steering_trim_left_button` | `15` | D-pad左、ステア補正を正へ |
 | `steering_trim_right_button` | `16` | D-pad右、ステア補正を負へ |
 | `throttle_trim_up_button` | `13` | D-pad上、スロットル補正を正へ |
@@ -101,9 +101,16 @@ sim時刻での入力鮮度と実時間での通信断を分離する。元stamp
 
 スロットルは`(R2 − L2) × speed_scale`。各トリガー0.01以下を0とし、負側は`reverse`へ格納する。
 両方同量なら相殺するが、モード要求時には両トリガーを離す必要がある。
-Joyとreadyの有効期間は100 ms、監視は100 Hz（固定値）。MANUAL中の切断・設定開始・入力途絶はSTOP。deadmanを設定した場合はその解除でもSTOP。
-既定は△だけでMANUALを要求し、△を離しても継続する。×でSTOP。□・D-padにもL1は不要。
-AUTO中はJoy切断や、任意設定のdeadman解除だけではSTOPにしない。
+Joyとreadyの有効期間は100 ms、監視は100 Hz（固定値）。AUTO/MANUALとも切断・設定開始・入力途絶はSTOP。
+△保持中だけMANUAL、□保持中だけAUTO。離すと`joy_manager:mode_button_released`でSTOPを要求し、
+teleopへ中立を配信する。×もSTOP。同時保持は`joy_manager:mode_buttons_conflict`でSTOPとし、
+片方だけを離しても再開しない。異常停止・再接続・起動時の押下保持では再armしない。
+両ボタンを離し、新鮮なSTOPを確認後に押し直す。STOPからの進入は従来どおり全入力中立が必要。
+AUTO/MANUALを直接切り替える場合は、同一Joyサンプルで元ボタンを離して次のボタンを押した場合だけ可能。
+追加deadmanを設定した場合はその解除でもAUTO/MANUALともSTOP。□・D-padにL1は不要。
+STOPはHOST解除・中立化であり、自動ブレーキや実停止の確認ではない。
+`test_joy_controls.cpp`で保持・解除・同時押し・押下保持での再接続・異常後の押し直し・
+直接切替を検証する。portable C++テストは確認済み。ROS Component結合・実車での解除動作は未確認。
 L1/R1は録画操作に使用する。任意でdeadmanを設定する場合、録画ボタンとの重複を避ける。
 録画処理は[kart_bag_manager](../kart_bag_manager/README.md)が担当する。Joy切断や車両STOPで録画を自動停止しない。
 トリムの現在値・適用・ログの責務は[kart_vehicle](../kart_vehicle/README.md)にある。
@@ -146,6 +153,7 @@ AUTO中もステアを操作でき、△でSTOPを挟まずMANUALへ直接引き
 AUTO初回進入は0.3秒中立を配信してmux/bridgeのHOST handshakeを待つ。
 直接切替時は中立待ちを挟まない。×はSTOP、固定AUTO中の○はbrake優先＋STOP、L2は中立＋STOP。
 入力途絶・異常・再起動後はSTOPから再armし、モード変更だけで異常解除しない。
+固定AUTOでも□保持が必要で、離すと固定出力を中断してSTOPにする。
 固定値は速度ではなく補正前の正規化要求で、起動時固定。変更はSTOP後に再起動する。
 
 JoyManagerNodeが`/teleop/control_cmd`（kart_interfaces/msg/ControlCommand、reliable/depth1）へ

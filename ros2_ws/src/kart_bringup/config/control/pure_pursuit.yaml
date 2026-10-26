@@ -12,6 +12,7 @@
     goal_tolerance_m: 0.1
     deceleration_mps2: 1.0
     pose_timeout_s: 0.2
+    tf_lookup_timeout_s: 0.05  # Wait for exact odometry-stamp TF; sim time uses zero wait
     line_timeout_s: 2.5
     localization_timeout_s: 2.5
     wall_timeout_s: 0.0  # Wall receive watchdog; 0 follows each data timeout
