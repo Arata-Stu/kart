@@ -25,7 +25,7 @@ export function lineSpeedScale(lane, kinds) {
 
 export function speedColor(value, max) {
   const fraction = max > 0 ? Math.max(0, Math.min(1, value/max)) : 0;
-  return `hsl(${25+200*fraction},75%,43%)`;
+  return `hsl(${225*(1-fraction)},75%,43%)`;
 }
 
 export function paintSpeedLine(ctx, points, closed, speeds, max, project) {

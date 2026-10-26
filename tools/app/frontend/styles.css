@@ -328,8 +328,8 @@ canvas {
 .canvas-legend .dot { flex-shrink: 0; }
 .line-speed-legend { position: absolute; bottom: 58px; left: 14px; display: flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid #e5eaee; border-radius: 7px; background: #ffffffed; color: #354959; font-size: 11px; pointer-events: none; }
 .line-speed-legend[hidden] { display: none; }
-.line-speed-ramp { display: inline-block; width: 115px; height: 9px; border-radius: 3px; background: linear-gradient(to right,hsl(25,75%,43%),hsl(75,75%,43%),hsl(125,75%,43%),hsl(175,75%,43%),hsl(225,75%,43%)); }
-.zero-speed .line-speed-ramp { background: hsl(25,75%,43%); }
+.line-speed-ramp { display: inline-block; width: 115px; height: 9px; border-radius: 3px; background: linear-gradient(to right,hsl(225,75%,43%),hsl(168.75,75%,43%),hsl(112.5,75%,43%),hsl(56.25,75%,43%),hsl(0,75%,43%)); }
+.zero-speed .line-speed-ramp { background: hsl(225,75%,43%); }
 .dot {
   width: 6px;
   height: 6px;

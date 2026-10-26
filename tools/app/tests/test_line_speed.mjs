@@ -10,7 +10,7 @@ assert.equal(lineSpeedScale(lane,[]).speeds.size,0);
 assert.equal(lineSpeeds(lane,'raceline',{...data,profile:[]}),null);
 assert.equal(lineSpeeds(lane,'raceline',{...data,profile:[[0,0,0,0,0,NaN],...data.profile.slice(1)]}),null);
 assert.deepEqual(lineSpeeds({...lane,centerline_speed_mps:0},'centerline',data),[0,0,0]);
-assert.equal(speedColor(0,1),'hsl(25,75%,43%)');assert.equal(speedColor(1,1),'hsl(225,75%,43%)');
+assert.equal(speedColor(0,1),'hsl(225,75%,43%)');assert.equal(speedColor(1,1),'hsl(0,75%,43%)');
 assert.equal(speedColor(1,0),speedColor(0,0));assert.equal(speedColor(-1,1),speedColor(0,1));
 const strokes=[],gradients=[];
 const ctx={save(){},restore(){},setLineDash(){},beginPath(){},moveTo(){},lineTo(){},stroke(){strokes.push(this.strokeStyle);},createLinearGradient(...xy){const stops=[];const g={xy,stops,addColorStop(t,c){stops.push([t,c]);}};gradients.push(g);return g;}};
