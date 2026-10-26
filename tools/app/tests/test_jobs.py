@@ -29,7 +29,7 @@ class JobsTests(unittest.TestCase):
     def cleanup_workers(self):
         for manager in self.controllers:
             for state in manager.list():
-                if state['status'] in ('running','orphaned'):
+                if state['status'] in ('queued','running','orphaned'):
                     manager.jobs[state['id']].stop()
         end = time.monotonic()+14
         while time.monotonic()<end and any(j.claimed for j in self.controllers):
@@ -44,7 +44,7 @@ class JobsTests(unittest.TestCase):
         self.fail('condition did not complete')
 
     def done(self, manager, key):
-        self.wait(lambda: manager.jobs[key].info()['status'] not in ('running','orphaned'))
+        self.wait(lambda: manager.jobs[key].info()['status'] not in ('queued','running','orphaned'))
         return manager.jobs[key].info()
 
     def command(self, seconds=1, ready=None):
@@ -52,6 +52,42 @@ class JobsTests(unittest.TestCase):
         if ready:script+=f'pathlib.Path({str(ready)!r}).write_text(str(os.getpid())); '
         script+=f'time.sleep({seconds})'
         return Task('command', [[sys.executable,'-c',script]])
+
+    def test_transfer_queue_fifo_reconnect_cancel_and_failure(self):
+        jobs = self.controller()
+        ready = self.root / 'first-ready'
+        first = jobs.start('first', ['record:first'], self.command(.8, ready), queue='scp')
+        self.wait(ready.exists)
+        cancelled_ready = self.root / 'cancelled-ready'
+        second = jobs.start('second', ['record:second'], self.command(.01, cancelled_ready), queue='scp')
+        failed = Task('command', [[sys.executable, '-c', 'raise SystemExit(1)']])
+        third = jobs.start('third', ['record:third'], failed, queue='scp')
+        last_ready = self.root / 'last-ready'
+        fourth = jobs.start('fourth', ['record:fourth'], self.command(.01, last_ready), queue='scp')
+        again = self.controller()
+        self.assertEqual(again.jobs[second['id']].status, 'queued')
+        self.assertFalse(last_ready.exists())
+        with self.assertRaises(ValueError):
+            again.start('duplicate', ['record:fourth'], self.command(.01), queue='scp')
+        again.jobs[second['id']].stop()
+        self.assertEqual(self.done(again, second['id'])['status'], 'cancelled')
+        self.assertFalse(cancelled_ready.exists())
+        self.assertEqual(self.done(again, first['id'])['status'], 'succeeded')
+        self.assertEqual(self.done(again, third['id'])['status'], 'failed')
+        self.assertEqual(self.done(again, fourth['id'])['status'], 'succeeded')
+        states = [again.jobs[j['id']].info() for j in (first, third, fourth)]
+        for prev, following in zip(states, states[1:]):
+            self.assertLessEqual(prev['finished'], following['finished'])
+        self.assertTrue(last_ready.exists())
+        self.assertFalse(again.claimed)
+
+    def test_batch_queue_duplicate_reservation_has_no_partial_submission(self):
+        jobs = self.controller()
+        tasks = [('a', ['record:same'], self.command(.01)),
+                 ('b', ['record:same'], self.command(.01))]
+        with self.assertRaisesRegex(ValueError, '重複'):
+            jobs.start_many(tasks, queue='scp')
+        self.assertEqual(jobs.list(), [])
 
     def test_monotonic_elapsed_and_duplicate_stop(self):
         job=Job(self.root,'test',[])

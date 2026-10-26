@@ -209,7 +209,7 @@ class Studio:
             return self.jobs.start(
                 "モデル送信: " + key,
                 ["read:e2e:models:" + key],
-                Task('model_push', [p, key, root]),
+                Task('model_push', [p, key, root]), queue="scp",
             )
         if path == "/api/connection/reset":
             value = self.connection_defaults()
@@ -223,19 +223,28 @@ class Studio:
             return self.transfers.browse(b["connection"], b.get("relative", ""))
         if path == "/api/pull":
             p = profile(b["connection"])
-            key = name(b["name"])
-            return self.jobs.start(
-                "bagを受信: " + key,
-                ["record:" + key],
-                Task('record_pull', [p, b['relative'], key]),
-            )
+            relatives = b.get("relatives")
+            multiple = relatives is not None
+            if not multiple:
+                relatives = [b["relative"]]
+            if not isinstance(relatives, list) or not 1 <= len(relatives) <= 200:
+                raise ValueError("bagを1〜200件選択してください")
+            tasks = []
+            for relative in relatives:
+                if not isinstance(relative, str):
+                    raise ValueError("bagの相対パスを指定してください")
+                key, _ = self.transfers.pull_target(relative, None if multiple else b.get("name"))
+                tasks.append(("bagを受信: " + key, ["record:" + key],
+                              Task('record_pull', [p, relative, None if multiple else b.get("name")])))
+            jobs = self.jobs.start_many(tasks, queue="scp")
+            return dict(jobs=jobs) if multiple else jobs[0]
         if path == "/api/push":
             p = profile(b["connection"])
             name(key)
             return self.jobs.start(
                 "地図を送信: " + key,
                 ["read:map:" + key],
-                Task('map_push', [p, key]),
+                Task('map_push', [p, key]), queue="scp",
             )
         if path == "/api/import":
             key = name(b["name"])

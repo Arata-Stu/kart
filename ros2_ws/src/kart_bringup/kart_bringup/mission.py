@@ -62,6 +62,11 @@ def recording_config(root, mode, evs=False):
 
 
 def sensor_parameters(path, rgb_fps="", infra_fps="", rgb_profile="", infra_profile="", imu_profile=""):
+    # ArgumentContainer evaluates numeric launch arguments ("0" becomes int 0).
+    # Normalize before testing emptiness so OFF never falls back to YAML.
+    rgb_fps, infra_fps, rgb_profile, infra_profile = map(
+        str, (rgb_fps, infra_fps, rgb_profile, infra_profile)
+    )
     params = yaml.safe_load(Path(path).read_text())["/**/realsense"]["ros__parameters"]
     params = dict(params)
     for stream, value, key, flags in (

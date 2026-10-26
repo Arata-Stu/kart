@@ -9,6 +9,10 @@ from unittest.mock import patch
 
 from kart_studio.jobs import Cancelled
 from kart_studio.maps import Maps
+from kart_studio.mapping import local_records
+from kart_studio.server import Studio
+from types import SimpleNamespace
+from unittest.mock import Mock
 from kart_studio.remote_agent import execute
 from kart_studio.storage import atomic_json, read_json
 from kart_studio.transfers import Transfers
@@ -67,10 +71,49 @@ class TransferTests(unittest.TestCase):
     @patch("kart_studio.transfers.request", side_effect=local_request)
     def test_pull_commits_after_validation(self, request):
         result = self.transfer.pull(LocalScpJob(), self.profile, "session/bag", "run1")
-        self.assertEqual(result["record"], "run1")
-        self.assertEqual((self.root / "records/run1/bag.mcap").read_bytes(), b"data")
+        self.assertEqual(result["record"], "session/run1")
+        self.assertEqual((self.root / "records/session/run1/bag.mcap").read_bytes(), b"data")
         with self.assertRaises(ValueError):
             self.transfer.pull(LocalScpJob(), self.profile, "session/bag", "run1")
+
+    @patch("kart_studio.transfers.request", side_effect=local_request)
+    def test_pull_preserves_date_hierarchy_and_duplicate_leaf_names(self, request):
+        source = self.remote / "record/session/bag"
+        for date in ("2026-10-25", "2026-10-26"):
+            relative = date + "/session/bag"
+            shutil.copytree(source, self.remote / "record" / relative)
+            result = self.transfer.pull(LocalScpJob(), self.profile, relative)
+            self.assertEqual(result["record"], relative)
+            self.assertEqual((self.transfer.records / relative / "bag.mcap").read_bytes(), b"data")
+        self.assertEqual({r["id"] for r in local_records(self.transfer.records)},
+                         {"2026-10-25/session/bag", "2026-10-26/session/bag"})
+        with self.assertRaisesRegex(ValueError, "同名"):
+            self.transfer.pull(LocalScpJob(), self.profile, relative)
+
+    def test_pull_refuses_escape_empty_and_symlink(self):
+        for relative in ("", ".", "../bag", "/bag"):
+            with self.assertRaises(ValueError):
+                self.transfer.pull_target(relative)
+        (self.transfer.records / "linked").symlink_to(self.remote, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            self.transfer.pull_target("linked/bag")
+
+    def test_batch_api_reserves_paths_in_selection_order(self):
+        jobs = Mock()
+        jobs.start_many.return_value = [{"id": "a"}, {"id": "b"}]
+        studio = SimpleNamespace(transfers=self.transfer, jobs=jobs)
+        paths = ["2026-10-26/bag", "2026-10-25/bag"]
+        result = Studio.post(studio, "/api/pull", dict(connection=self.profile, relatives=paths))
+        self.assertEqual(result, {"jobs": [{"id": "a"}, {"id": "b"}]})
+        tasks = jobs.start_many.call_args.args[0]
+        self.assertEqual([t[1] for t in tasks], [["record:" + p] for p in paths])
+        self.assertEqual([t[2].args[1] for t in tasks], paths)
+        self.assertEqual(jobs.start_many.call_args.kwargs, {"queue": "scp"})
+        jobs.reset_mock()
+        for paths in ([], ["valid/bag", "../bad"], "not-a-list", [None]):
+            with self.assertRaises(ValueError):
+                Studio.post(studio, "/api/pull", dict(connection=self.profile, relatives=paths))
+        jobs.start_many.assert_not_called()
 
     @patch("kart_studio.transfers.request", side_effect=local_request)
     def test_cancel_does_not_publish_partial_bag(self, request):
@@ -96,7 +139,7 @@ class TransferTests(unittest.TestCase):
             self.assertRaisesRegex(ValueError, "更新"),
         ):
             self.transfer.pull(LocalScpJob(), self.profile, "session/bag", "run1")
-        self.assertFalse((self.root / "records/run1").exists())
+        self.assertFalse((self.root / "records/session/run1").exists())
 
     @patch("kart_studio.transfers.request", side_effect=local_request)
     def test_push_contains_current_export_and_vslam(self, request):

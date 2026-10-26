@@ -109,6 +109,7 @@ class Job:
         self.persist_enabled = False
         self.worker_pid = self.worker_identity = None
         self.process_pid = self.process_identity = self.last_process_pid = None
+        self.queue = None
         self.result = None
         self.diagnostic = None
         self.log_path = root / (self.id + ".log")
@@ -128,7 +129,7 @@ class Job:
                 cancel_requested=self.cancel.is_set(),
                 result=self.result,
                 diagnostic=self.diagnostic,
-                resources=self.resources, worker_pid=self.worker_pid, worker_identity=self.worker_identity,
+                resources=self.resources, queue=self.queue, worker_pid=self.worker_pid, worker_identity=self.worker_identity,
                 process_pid=self.process_pid, process_identity=self.process_identity, last_process_pid=self.last_process_pid,
                 heartbeat=time.time(),
             )
@@ -205,7 +206,7 @@ class Job:
 
     def stop(self):
         with self.lock:
-            if self.status != "running" or self.cancel.is_set():
+            if self.status not in ("running", "queued") or self.cancel.is_set():
                 return
             self.cancel.set()
         self.persist()
@@ -221,7 +222,7 @@ class Job:
 
 
 
-ACTIVE = ('running', 'orphaned')
+ACTIVE = ('queued', 'running', 'orphaned')
 
 
 class JobRef:
@@ -341,41 +342,59 @@ class Jobs:
                 for resource in resources:
                     self._guards.remove(resource)
 
-    def start(self, title, resources, work):
-        if not isinstance(work, Task):
-            raise ValueError('ジョブには再接続可能なTask定義が必要です')
+    def start(self, title, resources, work, *, queue=None):
+        return self.start_many([(title, resources, work)], queue=queue)[0]
+
+    def start_many(self, tasks, *, queue=None):
+        """Reserve the whole selection before spawning; FIFO survives UI reconnects."""
         from .job_worker import ACTIONS
-        if work.action not in ACTIONS:
-            raise ValueError('Unknown worker action')
         with self.registry():
-            self._require_available(resources)
-            job = Job(self.root, title, resources)
-            request = self.root / (job.id + '.request.json')
-            atomic_json(request, dict(schema=1, repo=str(self.repo), base=str(self.base),
-                                     action=work.action, args=pack(work.args), state=job.info()))
+            reserved = []
+            for title, resources, work in tasks:
+                if not isinstance(work, Task) or work.action not in ACTIONS:
+                    raise ValueError('Unknown worker action')
+                self._require_available(resources)
+                if any(resource_conflict(a, b) for a in resources for b in reserved):
+                    raise ValueError('選択した転送先が重複しています')
+                reserved.extend(resources)
+            return [self._start(title, resources, work, queue) for title, resources, work in tasks]
+
+    def _start(self, title, resources, work, queue):
+        job = Job(self.root, title, resources)
+        job.queue = queue
+        if queue:
+            job.status, job.message = 'queued', '転送キューで待機中'
+        predecessors = [s['id'] for s in self._states()
+                        if queue and s.get('queue') == queue and s['status'] in ACTIVE]
+        request = self.root / (job.id + '.request.json')
+        atomic_json(request, dict(schema=1, repo=str(self.repo), base=str(self.base),
+                                 action=work.action, args=pack(work.args), state=job.info(),
+                                 predecessors=predecessors))
+        atomic_json(job.state_path, job.info())
+        env = dict(os.environ)
+        sources = [str(self.repo/'tools/app'), str(self.repo/'ros2_ws/src/kart_mapping'),
+                   str(self.repo/'ros2_ws/src/kart_bringup')]
+        env['PYTHONPATH'] = os.pathsep.join(sources + [env.get('PYTHONPATH', '')])
+        try:
+            with job.log_path.open('a') as stream:
+                process = subprocess.Popen([sys.executable, '-m', 'kart_studio.job_worker', str(request)],
+                                           stdin=subprocess.DEVNULL, stdout=stream, stderr=subprocess.STDOUT,
+                                           env=env, start_new_session=True, close_fds=True)
+            self._spawned[job.id] = process
+        except BaseException:
+            job.status = 'failed'; job.message = '管理プロセスを起動できませんでした'
             atomic_json(job.state_path, job.info())
-            env = dict(os.environ)
-            sources = [str(self.repo/'tools/app'), str(self.repo/'ros2_ws/src/kart_mapping'),
-                       str(self.repo/'ros2_ws/src/kart_bringup')]
-            env['PYTHONPATH'] = os.pathsep.join(sources + [env.get('PYTHONPATH', '')])
-            try:
-                with job.log_path.open('a') as stream:
-                    process = subprocess.Popen([sys.executable, '-m', 'kart_studio.job_worker', str(request)],
-                                               stdin=subprocess.DEVNULL, stdout=stream, stderr=subprocess.STDOUT,
-                                               env=env, start_new_session=True, close_fds=True)
-                self._spawned[job.id] = process
-            except BaseException:
-                job.status = 'failed'; job.message = '管理プロセスを起動できませんでした'
-                atomic_json(job.state_path, job.info())
-                raise
-            ref = JobRef(self, job.id)
-            self.jobs[job.id] = ref
-            return ref.info()
+            raise
+        ref = JobRef(self, job.id)
+        self.jobs[job.id] = ref
+        return ref.info()
 
     def list(self):
         with self.lock:
             states = sorted(self._states(), key=lambda s:s['started'], reverse=True)
-            return [s for s in states if s['status'] in ACTIVE] + [s for s in states if s['status'] not in ACTIVE][:40]
+            active = [s for s in states if s['status'] in ACTIVE and s['status'] != 'queued']
+            queued = sorted((s for s in states if s['status'] == 'queued'), key=lambda s: s['started'])
+            return active + queued + [s for s in states if s['status'] not in ACTIVE][:40]
 
     def shutdown(self):
         # UI shutdown detaches. Only explicit per-job STOP cancels the supervisor.

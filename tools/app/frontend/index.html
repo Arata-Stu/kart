@@ -351,14 +351,9 @@
             <p class="empty">「探索する」でJetsonのrecordを読み込みます。</p>
           </div>
           <div class="transfer-controls">
-            <label
-              >Notebookの保存名<input
-                id="pull-name"
-                placeholder="例: drive_20261007" /></label
-            ><button id="pull" class="primary full" disabled>
-              選択bagを受信 ↓
-            </button>
-            <p class="help">SCPで取得。既存bagは上書きしません。</p>
+            <p id="pull-selection" class="help">bagをクリックして複数選択（選択順に受信）</p>
+            <button id="pull" class="primary full" disabled>bagを選択してください</button>
+            <p class="help">日付などJetsonと同じ階層で順次SCP受信。既存bagは上書きしません。</p>
           </div>
         </section>
         <section class="transfer-panel">
@@ -380,6 +375,10 @@
           </div>
         </section>
       </div>
+      <section class="transfer-panel transfer-queue-panel">
+        <h2 id="transfer-queue-summary">転送キュー · 待機なし</h2>
+        <div id="transfer-queue" class="scroll list" aria-live="polite"></div>
+      </section>
     </main>
     <main id="learning-page" hidden>
       <div class="learning-heading">

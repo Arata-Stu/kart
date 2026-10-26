@@ -96,6 +96,28 @@ class MissionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 sensor_parameters(path, **kwargs)
 
+    def test_numeric_launch_zero_disables_profiles(self):
+        # Isaac ArgumentContainer converts CLI "0" into int 0 before callbacks.
+        for filename in ("realsense.yaml", "realsense_environment.yaml"):
+            path = CONFIG / "sensors" / filename
+            original = sensor_parameters(path)
+            for zero in ("0", 0):
+                for stream, flags in (("rgb", ("enable_color",)),
+                                      ("infra", ("enable_infra1", "enable_infra2"))):
+                    with self.subTest(config=filename, zero=zero, stream=stream):
+                        params = sensor_parameters(path, **{stream + "_profile": zero})
+                        expected = dict(original, **{flag: False for flag in flags})
+                        self.assertEqual(params, expected)
+                params = sensor_parameters(path, rgb_profile=zero, infra_profile=zero)
+                self.assertFalse(params["enable_color"])
+                self.assertFalse(params["enable_infra1"])
+                self.assertFalse(params["enable_infra2"])
+                self.assertEqual(params["enable_depth"], original["enable_depth"])
+                self.assertEqual(params["enable_gyro"], original["enable_gyro"])
+                self.assertEqual(params, sensor_parameters(path, zero, zero))
+            with self.assertRaises(ValueError):
+                sensor_parameters(path, rgb_profile=0, rgb_fps=0)
+
     def test_d455_additional_widescreen_profiles(self):
         from kart_bringup.mission import CAMERA_PROFILES
 
@@ -261,6 +283,33 @@ class MissionTests(unittest.TestCase):
 
 
 class MissionCompositionTests(unittest.TestCase):
+    def test_realsense_launch_passes_numeric_off_to_driver(self):
+        import importlib.util
+        from types import ModuleType, SimpleNamespace
+        from unittest.mock import MagicMock, patch
+
+        lu = ModuleType("isaac_ros_launch_utils")
+        lu.__path__ = []
+        lu.get_path = lambda pkg, suffix: PACKAGE / suffix
+        lu.log_info = MagicMock()
+        lu.load_composable_nodes = MagicMock()
+        lut = ModuleType("isaac_ros_launch_utils.all_types")
+        lut.ComposableNode = MagicMock()
+        with patch.dict(sys.modules, {"isaac_ros_launch_utils": lu,
+                                      "isaac_ros_launch_utils.all_types": lut}):
+            spec = importlib.util.spec_from_file_location(
+                "realsense_launch_test", PACKAGE / "launch/modules/sensors/realsense.launch.py")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            args = SimpleNamespace(camera_config="", rgb_fps="", infra_fps="",
+                                   rgb_profile=0, infra_profile=0, imu_profile="",
+                                   container_name="/sensors")
+            module.add_camera(args)
+            params = lut.ComposableNode.call_args.kwargs["parameters"][0]
+            for flag in ("enable_color", "enable_infra1", "enable_infra2"):
+                self.assertIs(params[flag], False)
+            self.assertTrue(params["enable_gyro"])
+
     """Test callback routing with launch actions mocked, not ROS execution."""
 
     def test_modes_route_and_external_container_is_not_created(self):

@@ -17,8 +17,12 @@ def setup(context):
         image=LaunchConfiguration("evs_image").perform(context))
     return [
         LogInfo(msg=f"OpenEB configs={paths}; overrides={overrides}; packet default OFF"),
+        # Do not set name here: launch_ros scopes a parameter dict to that node
+        # when named. This process also owns event_preprocessor and the driver;
+        # overrides must use /** so image OFF, serial and bias reach them too.
+        # The executable itself names its selector node tensor_pipeline.
         Node(package="openeb_ros2", executable="openeb_tensor_pipeline",
-             name="tensor_pipeline", namespace="event_camera",
+             namespace="event_camera",
              parameters=[*(str(p) for p in paths), overrides], output="screen"),
     ]
 

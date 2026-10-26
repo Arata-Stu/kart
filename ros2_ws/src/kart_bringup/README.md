@@ -986,6 +986,12 @@ collect/evalでは復帰選択を受け付けない。起動による録画/AUTO
 `mission.launch.py`と`modules/sensors/realsense.launch.py`の`rgb_profile` / `infra_profile`
 （文字列、既定は空）は`WIDTHxHEIGHTxFPS`で該当streamの解像度・FPSを一括指定する。
 `0`は無効化、空はYAML保持。旧`rgb_fps` / `infra_fps`と同一streamで併用するとエラー。
+Isaac launchの引数評価で`0`が整数に変換される場合も無効化として扱う。
+RGB OFFは`enable_color=false`、Infra OFFは`enable_infra1/enable_infra2=false`を
+RealSenseへ渡す。Depth・IMUの有効設定は個別に保持する。
+`test_mission.py`で整数／文字列のOFF、単独／両streamのOFFとdriverへの引渡しを検証する。
+実機では再build・source・bringup再起動後に`ros2 param get /realsense enable_color`
+および`enable_infra1`／`enable_infra2`を確認する。topic名の一覧だけでは配信有無を判断しない。
 640×360・480×270もRGB / Infraの対話候補から選択できる。CLI例（640×360・60 FPS）:
 
 ```bash
@@ -1376,6 +1382,11 @@ bash scripts/bringup.sh --mode collect --evs-backend cuda_async \
 launch引数`evs_image`は空（既定、YAML保持）/`true`/`false`。
 既存`event_preprocessor`の`event_image_enabled`だけを起動時に上書きする。
 OFFでは画像用enqueue・decode・描画・`/event_camera/event_image` publisherを無効化する。
+rosbag等が購読してもOFFを上書きしない。OFF時のpublisher数は0とする。
+複数ノードを所有する実行プロセスなので、launchの`Node`へ`name`を指定せず、
+明示overrideを`/**`へ適用する（内部ノード名は実行プログラムが設定する）。
+`tensor_pipeline`だけにoverrideを限定すると画像ノードへOFFが届かないため、
+`test_evs.py`でlaunchのscopeも検証する。
 Tensor生成、RAW記録機能、Tensor/driver診断は継続する。録画開始の操作は従来どおり別。
 変更は再起動後に反映。確認例:
 

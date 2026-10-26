@@ -117,6 +117,8 @@ OpenEB sourceはpackages.reposのf89015ba1f05d2fe432b270e73e132351c1a9377。
 | /event_camera/tensor_diagnostics | diagnostic_msgs/msg/DiagnosticArray | reliable/volatile/depth 10 | tensor診断、1 Hz |
 
 ノードは/event_camera/{tensor_pipeline,event_camera_driver,event_tensor,event_preprocessor}。
+`--no-evs-image`で起動した場合は`event_image_enabled=false`となり、画像publisher自体を
+作らない。rosbag等が購読しても画像生成・配信は開始しない。変更は起動時に適用する。
 標準ROS自動topicは省略。RAW start/stop/splitは同namespaceのstd_srvs/srv/Trigger。
 Tensorはbag標準対象から除外。RAWと制御stampの正確な同期、GPU共有、実機性能は未検証。
 

@@ -179,6 +179,10 @@ class EvsTests(unittest.TestCase):
             spec.loader.exec_module(module)
             module.setup({"evs_backend": "cuda", "evs_serial": "E522", "evs_bias_file": "@default", "evs_tensor_config": "", "evs_aggregation": "", "evs_image": ""})
         params = node.call_args.kwargs["parameters"]
+        # launch_ros scopes parameter dicts to an explicit process node name.
+        # Leaving it unset emits /** overrides for all nodes in the process.
+        self.assertNotIn("name", node.call_args.kwargs)
+        self.assertEqual(node.call_args.kwargs["namespace"], "event_camera")
         self.assertEqual(len(params), 5)
         self.assertEqual(params[-1], {"tensor_backend": "cuda", "serial": "E522", "bias_file": ""})
         self.assertTrue(params[1].endswith("openeb_tensor_cuda.yaml"))
@@ -187,6 +191,7 @@ class EvsTests(unittest.TestCase):
         module.setup({'evs_backend':'cuda_async','evs_serial':'','evs_bias_file':'',
                       'evs_tensor_config':custom,'evs_aggregation':'evt3_runs_grouped_gpu','evs_image':'false'})
         params=node.call_args.kwargs['parameters']
+        self.assertNotIn('name', node.call_args.kwargs)
         self.assertEqual(params[1],custom)
         self.assertEqual(params[-1],{'tensor_backend':'cuda_async','event_aggregation':'evt3_runs_grouped_gpu','event_image_enabled':False})
 

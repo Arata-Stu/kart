@@ -97,13 +97,21 @@ class Transfers:
         p = profile(raw)
         return request(p, "browse", p["record_root"], relative)
 
-    def pull(self, job, raw, relative, key):
+    def pull_target(self, relative, key=None):
+        relative = relative_path(relative)
+        if not relative or relative.strip('./') == '':
+            raise ValueError("bagの相対パスを指定してください")
+        # Optional legacy rename only changes the leaf; preserve parent directories.
+        target_key = str(Path(relative).parent / name(key)) if key else str(Path(relative))
+        target = within(self.records, target_key, exists=False)
+        if target.exists():
+            raise ValueError("同名のローカル記録があります: " + target_key)
+        return target_key, target
+
+    def pull(self, job, raw, relative, key=None):
         p = profile(raw)
         relative = relative_path(relative)
-        name(key)
-        target = within(self.records, key, exists=False)
-        if target.exists():
-            raise ValueError("同名のローカル記録があります")
+        key, target = self.pull_target(relative, key)
         before = request(p, "stat", p["record_root"], relative)
         stage = Path(tempfile.mkdtemp(prefix=".pull-", dir=self.records))
         job.log(f"受信予定 {before['bytes']:,} bytes / 一時保存 {stage}")
@@ -138,6 +146,10 @@ class Transfers:
             if not (stage / "bag" / "metadata.yaml").is_file():
                 raise ValueError("metadata.yamlがありません")
             job.check()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target = within(self.records, key, exists=False)
+            if target.exists():
+                raise ValueError("同名のローカル記録があります: " + key)
             os.rename(stage / "bag", target)
             return dict(record=key, bytes=before["bytes"])
         finally:

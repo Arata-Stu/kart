@@ -1,7 +1,7 @@
 import { $, state, api, action, item, toast, on, emit } from "./api.js";
 import { openBuild } from "./dialogs.js";
-let relative = "",
-  selected = null;
+let relative = "", pullPending = false;
+const selected = new Map();
 export async function refreshRecords() {
   state.records = await api("records");
   const list = $("local-records");
@@ -40,7 +40,7 @@ function handle(button, fn) {
   });
 }
 function renderRemote() {
-  const path = selected?.relative || relative;
+  const path = relative;
   const crumbs = $("remote-path");
   crumbs.replaceChildren();
   crumbs.title = state.config.connection.record_root + (path ? "/" + path : "");
@@ -51,12 +51,15 @@ function renderRemote() {
     button.textContent = i ? parts[i - 1] : "record";
     if (i === parts.length) button.setAttribute("aria-current", "location");
     const target = parts.slice(0, i).join("/");
-    if (selected && i === parts.length) button.disabled = true;
-    else handle(button, () => browse(target));
+    handle(button, () => browse(target));
     crumbs.append(button);
   }
   $("remote-up").disabled = !path;
-  $("pull").disabled = !selected;
+  $("pull").disabled = pullPending || !selected.size;
+  $("pull").textContent = selected.size ? `${selected.size}件をキューに追加 ↓` : "bagを選択してください";
+  $("pull-selection").textContent = selected.size
+    ? [...selected.keys()].map((path, i) => `${i + 1}. ${path}`).join("\n")
+    : "bagをクリックして複数選択（選択順に受信）";
   const list = $("remote-list");
   list.replaceChildren();
   function branch(entry, parent) {
@@ -64,34 +67,26 @@ function renderRemote() {
     const button = document.createElement("button");
     const isOpen = expanded.has(entry.relative);
     button.className = "remote-tree-row";
-    button.textContent = (entry.bag ? "▣ " : isOpen ? "▾ " : "▸ ") + entry.name;
+    button.textContent = (entry.bag ? selected.has(entry.relative) ? "☑ " : "☐ " : isOpen ? "▾ " : "▸ ") + entry.name;
     button.title = state.config.connection.record_root + "/" + entry.relative;
-    button.classList.toggle("selected", selected?.relative === entry.relative);
+    button.classList.toggle("selected", selected.has(entry.relative));
     button.classList.toggle(
       "current-folder",
-      !selected && relative === entry.relative,
+      relative === entry.relative,
     );
     if (entry.bag)
       button.setAttribute(
         "aria-pressed",
-        String(selected?.relative === entry.relative),
+        String(selected.has(entry.relative)),
       );
     else button.setAttribute("aria-expanded", String(isOpen));
     handle(button, async () => {
       if (entry.bag) {
-        selected = entry;
+        if (selected.has(entry.relative)) selected.delete(entry.relative);
+        else selected.set(entry.relative, entry);
         relative = entry.relative.split("/").slice(0, -1).join("/");
-        $("pull-name").value = entry.name
-          .replace(/[^A-Za-z0-9_-]/g, "_")
-          .replace(/^[^A-Za-z0-9]+/, "")
-          .slice(0, 64);
       } else if (isOpen) {
         expanded.delete(entry.relative);
-        if (
-          !entry.relative ||
-          selected?.relative.startsWith(entry.relative + "/")
-        )
-          selected = null;
         relative = entry.relative;
       } else {
         await browse(entry.relative);
@@ -137,23 +132,30 @@ async function browse(path = "") {
   for (let i = 1; i <= parts.length; i++)
     expanded.add(parts.slice(0, i).join("/"));
   relative = r.relative;
-  selected = null;
   renderRemote();
 }
 action("browse-remote", () => browse(folders.has("") ? relative : ""));
 action("remote-up", () =>
-  browse((selected?.relative || relative).split("/").slice(0, -1).join("/")),
+  browse(relative.split("/").slice(0, -1).join("/")),
 );
 action("refresh-records", refreshRecords);
 action("pull", async () => {
-  if (!selected) throw new Error("bagを選択してください");
-  const job = await api("pull", {
-    connection: state.config.connection,
-    relative: selected.relative,
-    name: $("pull-name").value,
-  });
-  emit("job-started", job);
-  toast("bagの受信を開始しました");
+  if (!selected.size) throw new Error("bagを選択してください");
+  const version = connectionVersion;
+  const paths = [...selected.keys()];
+  pullPending = true;
+  try {
+    const result = await api("pull", {
+      connection: state.config.connection,
+      relatives: paths,
+    });
+    if (version === connectionVersion) for (const path of paths) selected.delete(path);
+    for (const job of result.jobs) emit("job-started", job);
+    renderRemote();
+    toast(`${result.jobs.length}件のbagを転送キューに追加しました`);
+  } finally {
+    pullPending = false;
+  }
 });
 action("push", async () => {
   const id = $("push-map").value;
@@ -166,7 +168,7 @@ action("push", async () => {
     throw new Error("地図画面で編集を保存してから送信してください");
   const job = await api("push", { connection: state.config.connection, id });
   emit("job-started", job);
-  toast("新規フォルダへの地図送信を開始しました");
+  toast("地図送信を転送キューに追加しました");
 });
 on("catalog", () => {
   const select = $("push-map"),
@@ -197,7 +199,7 @@ on("connection", () => {
   folders.clear();
   expanded.clear();
   relative = "";
-  selected = null;
+  selected.clear();
   $("remote-list").replaceChildren();
   $("remote-path").textContent = "record /";
   $("remote-up").disabled = true;
@@ -205,3 +207,32 @@ on("connection", () => {
 });
 on("job-finished", () => refreshRecords().catch((e) => toast(e.message, true)));
 on("ready", connection);
+
+let queueView = null;
+function renderQueue() {
+  const list = $("transfer-queue");
+  const jobs = state.jobs.filter(job => job.queue === "scp" && ["queued", "running", "orphaned"].includes(job.status))
+    .sort((a, b) => a.started - b.started);
+  const view = JSON.stringify(jobs.map(job => [job.id, job.title, job.status, job.cancel_requested, job.message]));
+  if (view === queueView) return;
+  queueView = view;
+  list.replaceChildren();
+  $("transfer-queue-summary").textContent = jobs.length ? `転送キュー · ${jobs.length}件` : "転送キュー · 待機なし";
+  for (const [i, job] of jobs.entries()) {
+    const row = document.createElement("div");
+    row.className = "job-row";
+    const text = document.createElement("span");
+    const status = job.status === "queued" ? "待機中" : job.status === "orphaned" ? "管理喪失・要確認" : "転送中";
+    text.textContent = `${i + 1}. ${job.title} · ${status}${job.status === "queued" || job.message?.startsWith("実行: ") ? "" : " · " + job.message}`;
+    const stop = document.createElement("button");
+    stop.textContent = job.cancel_requested ? "停止要求中…" : job.status === "queued" ? "取消" : "停止";
+    stop.disabled = job.cancel_requested;
+    handle(stop, async () => {
+      Object.assign(job, await api("stop", { id: job.id }));
+      renderQueue();
+    });
+    row.append(text, stop);
+    list.append(row);
+  }
+}
+on("status", () => { renderQueue(); $("pull").disabled = pullPending || !selected.size; });

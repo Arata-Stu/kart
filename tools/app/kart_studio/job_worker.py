@@ -7,7 +7,7 @@ import sys
 import threading
 import time
 
-from .jobs import Job, Cancelled, process_identity, unpack
+from .jobs import Job, Jobs, ACTIVE, Cancelled, process_identity, unpack
 from .storage import read_json
 
 ACTIONS = {'command', 'audit', 'learning', 'model_push', 'record_pull', 'map_push',
@@ -79,6 +79,8 @@ def main():
     with (root / (key + '.worker.lock')).open('a') as lease:
         fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
         job = Job(root, saved['title'], saved['resources'], key)
+        job.queue = saved.get('queue')
+        job.status = saved['status']
         job.started = saved['started']
         job.started_monotonic = saved['started_monotonic']
         job.worker_pid, job.worker_identity = os.getpid(), process_identity(os.getpid())
@@ -99,6 +101,18 @@ def main():
         def work():
             job.check()
             if (root / (key + '.cancel')).exists(): raise Cancelled('開始前に中止しました')
+            if job.queue:
+                manager = Jobs(root, Path(config['repo']), Path(config['base']))
+                pending = config.get('predecessors', [])
+                while pending:
+                    job.check()
+                    pending = [key for key in pending
+                               if manager.read(root / (key + '.json'))['status'] in ACTIVE]
+                    if pending:
+                        job.cancel.wait(.2)
+                job.check()
+                job.status = 'running'
+                job.log('転送キューから開始')
             return execute(config['action'], unpack(config['args']), job, Path(config['repo']), Path(config['base']))
         try:
             perform(job, work)

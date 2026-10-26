@@ -3,8 +3,8 @@ import { duration } from "./job_time.js";
 import { compactLog } from "./job_log.js";
 let selected = globalThis.localStorage?.getItem("kart.job.selected") || null,
   busy = false;
-const activeJob = job => ["running", "orphaned"].includes(job.status);
-const pidLabel = job => job.process_pid ? `実行PID ${job.process_pid} · 管理PID ${job.worker_pid || "—"}` :
+const activeJob = job => ["queued", "running", "orphaned"].includes(job.status);
+const pidLabel = job => job.status === "queued" ? `未開始 · 管理PID ${job.worker_pid || "起動中"}` : job.process_pid ? `実行PID ${job.process_pid} · 管理PID ${job.worker_pid || "—"}` :
   job.status === "running" ? `管理PID ${job.worker_pid || "起動中"}` : `最終実行PID ${job.last_process_pid || job.worker_pid || "—"}`;
 const known = new Map();
 const stopping = new Set();
@@ -46,6 +46,7 @@ async function stopJob(id) {
 for (const id of ["job-stop-active", "job-stop-selected"])
   action(id, () => stopJob($(id).dataset.job));
 const labels = {
+  queued: "転送待機中",
   running: "実行中",
   orphaned: "管理喪失・プロセス稼働",
   succeeded: "完了",
@@ -102,7 +103,7 @@ export async function poll() {
   try {
     state.jobs = await api("jobs");
     for (const job of state.jobs) {
-      if (["running", "orphaned"].includes(known.get(job.id)) && !activeJob(job)) {
+      if (["queued", "running", "orphaned"].includes(known.get(job.id)) && !activeJob(job)) {
         emit("job-finished", job);
         toast(`${job.title}: ${job.message}`, job.status === "failed");
       }
@@ -159,7 +160,7 @@ action("jobs-close", () => {
   $("jobs-drawer").hidden = true;
 });
 on("job-started", (e) => {
-  known.set(e.detail.id, "running");
+  known.set(e.detail.id, e.detail.status);
   selected = e.detail.id;
   globalThis.localStorage?.setItem("kart.job.selected", selected);
   poll();
