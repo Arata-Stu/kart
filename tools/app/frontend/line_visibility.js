@@ -6,9 +6,14 @@ export function showLine(kind) {
   render();
 }
 function render() {
+  $("show-line-speeds").checked = state.showLineSpeeds;
   for (const kind of ["centerline", "raceline", "customline"])
     $("show-" + kind).checked = lineVisible(kind);
 }
+$("show-line-speeds").addEventListener("change", () => {
+  state.showLineSpeeds = $("show-line-speeds").checked;
+  emit("view");
+});
 for (const kind of ["centerline", "raceline", "customline"]) {
   $("show-" + kind).addEventListener("change", () => {
     state.visibleLines[kind] = $("show-" + kind).checked;

@@ -1,5 +1,6 @@
 import { paintTuning } from "./tuning.js";
 import { lineVisible } from "./line_visibility.js";
+import { lineSpeedScale, paintSpeedLine } from "./line_speed.js";
 import { viewBounds } from "./view_bounds.js";
 import { placementPreview } from "./placement.js";
 import { paintOccupancy } from "./occupancy.js";
@@ -241,6 +242,7 @@ export function draw() {
   if (frame) return;
   frame = requestAnimationFrame(() => {
     frame = 0;
+    $("line-speed-legend").hidden = true;
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = "#f4f6f8";
     ctx.fillRect(0, 0, width, height);
@@ -307,9 +309,18 @@ export function draw() {
       }
       line(d.left, colors.left, d.closed);
       line(d.right, colors.right, d.closed);
+      const speedScale = state.showLineSpeeds
+        ? lineSpeedScale(d, Object.keys(d.lines).filter(lineVisible)) : null;
+      if (speedScale?.speeds.size) {
+        $("line-speed-legend").hidden = false;
+        $("line-speed-legend").classList.toggle("zero-speed", speedScale.max === 0);
+        $("line-speed-max").textContent = `${speedScale.max.toLocaleString("ja-JP", {maximumFractionDigits: 2})} m/s`;
+      }
       for (const [kind, data] of Object.entries(d.lines)) {
         if (!lineVisible(kind)) continue;
-        line(data.points, colors[kind], d.closed, false, 2.5);
+        if (speedScale?.speeds.has(kind))
+          paintSpeedLine(ctx, data.points, d.closed, speedScale.speeds.get(kind), speedScale.max, project);
+        else line(data.points, colors[kind], d.closed, false, 2.5);
         directionArrows(data.points, colors[kind], d.closed);
       }
       const failure = state.diagnostic;
@@ -326,7 +337,7 @@ export function draw() {
       if (!Object.keys(d.lines).length)
         directionArrows(d.left, colors.left, d.closed);
       if (state.step === "lines" && lineVisible("customline")) {
-        if (state.target === "custom")
+        if (state.target === "custom" && !speedScale?.speeds.has("customline"))
           line(d.custom, colors.custom, d.closed, true);
         let station = 0,
           lastLabel = -Infinity;
@@ -344,23 +355,6 @@ export function draw() {
               d.custom[i + 1][0] - p[0],
               d.custom[i + 1][1] - p[1],
             );
-        }
-        const custom = d.lines.customline;
-        if (custom?.speed_sections?.length) {
-          for (let i = 0; i < custom.points.length - (d.closed ? 0 : 1); i++) {
-            const j = (i + 1) % custom.points.length;
-            const v = Math.min(custom.profile[i][5], custom.profile[j][5]);
-            const ratio = v / custom.settings.max_speed;
-            line(
-              [custom.points[i], custom.points[j]],
-              `hsl(${25 + 200 * ratio},75%,43%)`,
-              false,
-              false,
-              3,
-            );
-          }
-          ctx.fillStyle = "#647c8c";
-          ctx.fillText("Custom速度: 橙 低速 → 青 高速", 14, 22);
         }
       }
       if (state.target === "pair" && state.step === "bounds" && compatible(d)) {
@@ -382,7 +376,7 @@ export function draw() {
       const target =
         state.step === "bounds"
           ? state.target
-          : state.step === "lines" && state.target === "custom"
+          : state.step === "lines" && state.target === "custom" && lineVisible("customline")
             ? "custom"
             : null;
       if (target)

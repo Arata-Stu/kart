@@ -107,6 +107,10 @@
             <label><input id="show-centerline" type="checkbox" checked /><span class="dot center"></span>Center</label>
             <label><input id="show-raceline" type="checkbox" checked /><span class="dot race"></span>Race</label>
             <label><input id="show-customline" type="checkbox" checked /><span class="dot custom"></span>Custom</label>
+            <label><input id="show-line-speeds" type="checkbox" checked />速度色</label>
+          </div>
+          <div id="line-speed-legend" class="line-speed-legend" hidden title="表示中ライン共通の目標速度スケール。実測速度ではありません。速度データがないラインは単色で表示します。">
+            <span>目標速度</span><span>0</span><span class="line-speed-ramp" aria-hidden="true"></span><span id="line-speed-max"></span>
           </div>
         </div>
         <div class="canvas-status">

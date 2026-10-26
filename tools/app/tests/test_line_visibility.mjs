@@ -18,6 +18,11 @@ for (const kind of ['centerline','raceline','customline']) {
  assert.deepEqual(state.doc,original);
 }
 assert.equal(state.selected,-1,'hidden editing points are deselected');
+elements.get('show-line-speeds').checked=false;
+elements.get('show-line-speeds').change();
+assert.equal(state.showLineSpeeds,false);
+assert.equal(state.dirty,false);
+assert.deepEqual(state.doc,original);
 showLine('customline');
 assert.equal(lineVisible('customline'),true);
 assert.equal(lineVisible('centerline'),false);
