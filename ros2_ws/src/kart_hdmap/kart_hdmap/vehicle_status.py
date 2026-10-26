@@ -36,12 +36,18 @@ class VehicleStatus:
         if len(matches) != 1:
             return
         status = matches[0]
+        # ROS byte fields can arrive as a single raw byte rather than an int.
+        level = status.level
+        if isinstance(level, bytes) and len(level) == 1:
+            level = level[0]
+        if type(level) is not int or not 0 <= level <= 3:
+            return
         values = {v.key: v.value for v in status.values}
         fields = {k: str(values[k])[:200] for k in (
             'host_active', 'host_phase', 'command_fresh', 'fault_bits', 'selector',
             'esc_command_state', 'steering_trim', 'steering_offset', 'steering_scale') if k in values}
         self.samples['bridge'] = (stamp, time.monotonic(), dict(
-            level=int(status.level), message=status.message[:200], values=fields))
+            level=level, message=status.message[:200], values=fields))
 
     def view(self, now, publishers):
         result = {}

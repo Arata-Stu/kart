@@ -250,6 +250,9 @@ AUTO/MANUAL中は走行中に切替可能。STOP中は従来の停車条件を�
 復帰状態はstamp/受信時刻とも0.8秒以内、bridge診断は2.5秒以内だけ有効。
 未起動・受信待ち/無効・受信停止・復帰topicの配信元競合を区別する。
 共有diagnostics topicの他ノードは無視する。復帰のsuspectは衝突の確定判定ではない。
+診断levelは整数とROSの1 byte表現の両方を0〜3の整数として受理する。
+不正なlevelでは過去のbridge状態を破棄して受信待ちに戻し、参照ライン配信を継続する。
+`test/test_vehicle_status.py`でbyte表現・不正値・次の正常受信への復帰をROS非依存で検証する。
 車両パラメータ対象`vehicle`は`kart_bridge`の`steering_offset`を変更可能、
 `steering_scale`・`initial_steering_trim`・`steering_trim_limit`は参照専用。
 通常の新しいSTOP・1秒以上の低速確認を適用し、bridge自身のSTOPチェックも必要。
