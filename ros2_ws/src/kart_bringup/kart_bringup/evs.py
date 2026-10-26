@@ -3,13 +3,18 @@ from pathlib import Path
 import yaml
 
 BACKENDS = ("cpu", "cuda", "cuda_async")
+BACKEND_LABELS = {
+    "cpu": "CPU同期処理: CPUでTensorを生成し、全体をGPUへ転送（cpu）",
+    "cuda": "GPU同期処理: 取得callback内でGPU集計・Tensor生成（cuda）",
+    "cuda_async": "非同期処理: workerで集計・Tensor生成。次に集計方式を選択（cuda_async）",
+}
 AGGREGATIONS = ("events", "evt3_runs", "evt3_runs_gpu", "evt3_runs_gpu_direct", "evt3_runs_grouped_gpu")
 AGGREGATION_LABELS = {
-    "events": "events: 既存decode → 全イベントをGPU集計",
-    "evt3_runs": "evt3_runs: CPU直接集計 → 全Tensor転送",
-    "evt3_runs_gpu": "evt3_runs_gpu: CPU直接集計 → 変更bin転送",
-    "evt3_runs_gpu_direct": "evt3_runs_gpu_direct: CPU直接集計 → 中間コピー削減",
-    "evt3_runs_grouped_gpu": "evt3_runs_grouped_gpu: 圧縮RAW＋run → GPU集計",
+    "events": "GPUイベント集計: CPUでデコードし、全イベントをGPUへ転送（events）",
+    "evt3_runs": "CPU集計・全Tensor転送: CPUで直接集計・Tensor生成し、全体をGPUへ転送（evt3_runs）",
+    "evt3_runs_gpu": "CPU集計・差分転送: 変更binだけGPUへ転送し、GPUでTensor生成（evt3_runs_gpu）",
+    "evt3_runs_gpu_direct": "CPU集計・差分直接転送: 差分転送の中間コピーを省き、GPUでTensor生成（evt3_runs_gpu_direct）",
+    "evt3_runs_grouped_gpu": "GPU圧縮データ集計: CPUで状態復元・run生成し、圧縮RAWとrunをGPUへ転送・集計（evt3_runs_grouped_gpu）",
 }
 DEFAULT_BIAS = "@default"
 

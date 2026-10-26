@@ -138,7 +138,7 @@ def main():
     parser.add_argument("--bag", default="")
     parser.add_argument("--rate", default="")
     args = parser.parse_args()
-    from kart_bringup.evs import BACKENDS, AGGREGATIONS, AGGREGATION_LABELS, DEFAULT_BIAS, bias_files, bias_selection, pipeline_configuration
+    from kart_bringup.evs import BACKENDS, BACKEND_LABELS, AGGREGATIONS, AGGREGATION_LABELS, DEFAULT_BIAS, bias_files, bias_selection, pipeline_configuration
     selected_evs = args.evs or any((args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config, args.evs_aggregation))
     if args.no_evs and selected_evs:
         raise ValueError("--no-evsとEVS指定は併用できません")
@@ -201,7 +201,8 @@ def main():
                 if not args.evs_backend:
                     import yaml
                     default_backend = yaml.safe_load((config / "sensors/openeb_tensor_pipeline.yaml").read_text())["/**/tensor_pipeline"]["ros__parameters"]["tensor_backend"]
-                    args.evs_backend = choose("EVS decoder", list(BACKENDS), default=BACKENDS.index(default_backend))
+                    args.evs_backend = choose("EVS Tensor処理方式", list(BACKENDS),
+                        label=lambda v: BACKEND_LABELS[v], default=BACKENDS.index(default_backend))
                 if args.evs_backend == "cuda_async" and not args.evs_aggregation:
                     import yaml
                     source = Path(args.evs_tensor_config).expanduser() if args.evs_tensor_config else config / "sensors/openeb_tensor_cuda_async.yaml"

@@ -57,7 +57,7 @@ class EvsTests(unittest.TestCase):
         spec=importlib.util.spec_from_file_location('bringup_tui_grouped',ROOT/'scripts/lib/bringup.py')
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
         def choose(title,values,label=str,default=0):
-            if title=='EVS decoder':return 'cuda_async'
+            if title=='EVS Tensor処理方式':return 'cuda_async'
             if title=='EVS 集計方式':
                 self.assertIn('evt3_runs_grouped_gpu',values);return 'evt3_runs_grouped_gpu'
             if title=='EVS bias file':return '@default'
@@ -133,7 +133,7 @@ class EvsTests(unittest.TestCase):
                  patch.object(module, "choose", side_effect=choose), \
                  contextlib.redirect_stdout(output):
                 module.main()
-            self.assertIn("EVS decoder", output.getvalue())
+            self.assertIn("EVS Tensor処理方式", output.getvalue())
             self.assertIn("evs_backend:=cpu", output.getvalue())
             self.assertIn(f"evs_bias_file:={bias}", output.getvalue())
 

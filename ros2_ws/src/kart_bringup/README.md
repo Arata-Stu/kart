@@ -455,10 +455,10 @@ EVSモデルのTensorRT接続・制御decoder統合は別途必要。
 
 ### EVS起動時選択
 
-`bash scripts/bringup.sh`のTUIでEVS有効/無効、decoder（cpu/cuda/cuda_async）、
+`bash scripts/bringup.sh`のTUIでEVS有効/無効、Tensor処理方式（CPU同期処理 / GPU同期処理 / 非同期処理）、
 `bias/evs/`の.bias一覧またはカメラ既定を選択する。packet topicは既定OFF。
 CLIは`--evs`、`--no-evs`、`--evs-backend`、`--evs-serial`、`--evs-bias-file`、
-`--bias-root`。decoder/serial/biasの明示指定はEVSを有効にする。evalではEVS指定を拒否する。
+`--bias-root`。backend/serial/biasの明示指定はEVSを有効にする。evalではEVS指定を拒否する。
 
 | mission/module launch引数 | 既定値 | 意味 |
 |---|---|---|
@@ -1306,13 +1306,26 @@ bash scripts/bringup.sh --mode collect --evs \
 
 backend未指定でaggregationを指定するとcuda_asyncを選び、EVSを有効化する。
 明示cpu/cudaや--no-evsとの併用は起動前に拒否する。
-対話起動ではEVS有効→decoder=cuda_async→「EVS 集計方式」で選ぶ。
+対話起動ではEVS有効→「EVS Tensor処理方式」で非同期処理→「EVS 集計方式」で選ぶ。
 `--dry-run`を追加すれば起動せず設定とlaunchコマンドを確認できる。
 
 モデル由来`--evs-tensor-config /path/model/openeb_tensor.yaml`を併用できる。
 modeだけをselectorのevent_aggregationへoverrideし、モデルのshape/mean/stdは変更しない。
 launch直接指定はmission.launch.py/modules/sensors/openeb.launch.pyの`evs_aggregation`（既定空）。
 バックエンドとaggregationは独立した選択で、aggregationはcuda_async専用。
+
+TUIは「mode名: 注釈（設定値）」の形式で表示する。処理方式はCPU同期処理（cpu）、
+GPU同期処理（cuda）、非同期処理（cuda_async）。非同期処理の集計方式は以下の表示名とする。
+
+| TUIのmode名 | 注釈 | 設定値 |
+|---|---|---|
+| GPUイベント集計 | CPUでデコードし、全イベントをGPUへ転送 | events |
+| CPU集計・全Tensor転送 | CPUで直接集計・Tensor生成し、全体をGPUへ転送 | evt3_runs |
+| CPU集計・差分転送 | 変更binだけGPUへ転送し、GPUでTensor生成 | evt3_runs_gpu |
+| CPU集計・差分直接転送 | 差分転送の中間コピーを省き、GPUでTensor生成 | evt3_runs_gpu_direct |
+| GPU圧縮データ集計 | CPUで状態復元・run生成し、圧縮RAWとrunをGPUへ転送・集計 | evt3_runs_grouped_gpu |
+
+表示名のみ変更し、CLI/launch/YAMLの設定値・既定値・ノード・topic・処理動作は従来どおり。
 
 運用の全設定profileをconfig/sensors/openeb_tensor_cuda_async_runs_gpu_direct.yaml、
 openeb_tensor_cuda_async_grouped_gpu.yamlに追加。従来の3 async profileも残す。
