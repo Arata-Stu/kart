@@ -229,7 +229,14 @@ VSLAMのhint失敗時は既存triggerで再探索する。VSLAMだけがTFを配
 モデルはALIKED/LightGlueを明示し、既定424×240。モデル自体・GPU別engineは別途必要。
 必須引数、全parameter、topic型、service、TFとモデルの制約、検証範囲は
 [localization README](config/localization/README.md)を参照。
-Joyの再要求service接続先は用意したが、ボタン割当は未実装。
+Joy左上のShare/Create（正規化index 8）押下でVGL探索を再要求する。
+`config/input/joy_manager.yaml`の`vgl_trigger_button=8`（-1で無効）、
+`vgl_trigger_service=/visual_localization/trigger_localization`（`std_srvs/srv/Trigger`、client）、
+`vgl_trigger_timeout_s=2.0`（0.1〜30秒、実時間）で設定する。全て起動時固定。
+既存`kart_joy_manager`が非同期で1押下1要求を行い、長押し・再接続時の押下保持では要求しない。
+未起動なら警告、応答待ち中の追加押下は無視し、timeout後も自動再試行しない。
+AUTO/MANUAL/STOP/PROPOと独立した探索要求で、モードを変更しない。受付成功と局在成功は別。
+portableボタンテスト済み。ROSサービス結合・実機動作は未確認。
 
 localization launchの記述はIsaac ROS公式mapping系と同じ`isaac_ros_launch_utils`形式。
 引数宣言、設定検証、Component定義、container起動、Component読込みを分離する。

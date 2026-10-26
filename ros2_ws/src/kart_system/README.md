@@ -34,6 +34,16 @@ QoSはすべてvolatile、keep-last。R=reliable、BE=best effort、数字=depth
 接続・鮮度・deadman・操作許可は一つのJoyManagerNodeが管理する。
 初回／再接続時に押されていたボタンからはedgeを生成しない。
 
+| サービス方向 | 既定名 | 型 | 用途 |
+| --- | --- | --- | --- |
+| クライアント | `/visual_localization/trigger_localization` | `std_srvs/srv/Trigger` | Share/Create押下でVGL探索を1回要求 |
+
+Share/Createは有効・新鮮なJoy入力の押下edgeだけで要求する。走行モード・deadmanと独立し、
+長押し／起動・再接続時の押下保持では要求しない。サービス未起動なら警告し、非同期要求中の
+追加押下は無視する。応答timeoutでpendingを破棄し、自動再試行しない。
+受付成功は自己位置推定成功ではなく、pose hintとVSLAM診断で別途確認する。
+ボタンedgeはportable C++テストで検証。サービス接続・ROS結合・実機ボタンは未確認。
+
 ### operation_mode_manager
 
 | 方向 | 既定topic名 | 型 | QoS | 内容 |
@@ -72,7 +82,7 @@ sim時刻での入力鮮度と実時間での通信断を分離する。元stamp
 
 ### kart_joy_manager
 
-軸・ボタンの値は`kart_joy`の正規化後配列index。通常のindexは0..63、`auto_button`・`deadman_button`・`bag_start_button`・`bag_stop_button`は-1で無効化可。
+軸・ボタンの値は`kart_joy`の正規化後配列index。通常のindexは0..63、`auto_button`・`deadman_button`・`bag_start_button`・`bag_stop_button`・`vgl_trigger_button`は-1で無効化可。
 
 | 名前 | 既定値 | 説明 |
 | --- | --- | --- |
@@ -81,6 +91,9 @@ sim時刻での入力鮮度と実時間での通信断を分離する。元stamp
 | `reverse_axis` | `4` | L2、静止0／最大1 |
 | `bag_start_button` | `4` | L1。録画START要求 |
 | `bag_stop_button` | `5` | R1。録画STOP要求。同時押しはSTOP優先 |
+| `vgl_trigger_button` | `8` | 左上Share/Create。VGL探索要求。-1で無効 |
+| `vgl_trigger_service` | `/visual_localization/trigger_localization` | VGLのTriggerサービス名、起動時固定 |
+| `vgl_trigger_timeout_s` | `2.0` | 応答待ちの実時間上限、0.1〜30秒、起動時固定 |
 | `deadman_button` | `-1` | 追加deadmanなし。0以上なら△／□に加えて保持が必要。解除はAUTO/MANUALともSTOP |
 | `brake_button` | `1` | ○。MANUALでは正パルス→brake=1、トリガーより優先 |
 | `stop_button` | `0` | ×。STOP要求、deadman不要 |

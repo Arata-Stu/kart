@@ -68,6 +68,7 @@ struct ButtonActions {
   bool deadman{false}, brake{false}, stop{false}, manual{false}, automatic{false};
   bool manual_held{false}, auto_held{false};
   bool bag_start{false}, bag_stop{false};
+  bool vgl_trigger{false};
   double steering_delta{0}, throttle_delta{0};
 };
 
@@ -106,13 +107,14 @@ class JoyButtons {
 public:
   int deadman_button{-1}, brake_button{1}, stop_button{0}, manual_button{2}, auto_button{3};
   int bag_start_button{4}, bag_stop_button{5};
+  int vgl_trigger_button{8};
   int steering_left{15}, steering_right{16}, throttle_up{13}, throttle_down{14};
   double steering_step{0.001}, throttle_step{0.001};
 
   void reset() {primed_=false; previous_.clear();}
   std::optional<ButtonActions> read(const std::vector<int32_t> & buttons) {
     for (int index : {deadman_button,brake_button,stop_button,manual_button,
-                     auto_button,bag_start_button,bag_stop_button,steering_left,steering_right,throttle_up,throttle_down}) {
+                     auto_button,bag_start_button,bag_stop_button,vgl_trigger_button,steering_left,steering_right,throttle_up,throttle_down}) {
       if (index < -1 || (index>=0 && static_cast<std::size_t>(index)>=buttons.size())) {
         reset(); return std::nullopt;
       }
@@ -126,6 +128,7 @@ public:
     result.stop=edge(stop_button); result.manual=edge(manual_button); result.automatic=edge(auto_button);
     result.manual_held=pressed(manual_button); result.auto_held=pressed(auto_button);
     result.bag_stop=edge(bag_stop_button); result.bag_start=edge(bag_start_button) && !result.bag_stop;
+    result.vgl_trigger=edge(vgl_trigger_button);
     result.steering_delta=(static_cast<int>(edge(steering_left))-static_cast<int>(edge(steering_right)))*steering_step;
     result.throttle_delta=(static_cast<int>(edge(throttle_up))-static_cast<int>(edge(throttle_down)))*throttle_step;
     previous_=buttons; primed_=true;

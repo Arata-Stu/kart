@@ -6,6 +6,9 @@
     reverse_axis: 4
     bag_start_button: 5  # R1
     bag_stop_button: 4   # L1
+    vgl_trigger_button: 8  # Share/Create; -1 disables
+    vgl_trigger_service: /visual_localization/trigger_localization
+    vgl_trigger_timeout_s: 2.0
     deadman_button: -1
     brake_button: 1
     brake_pulse_throttle: 0.08  # MANUAL circle: positive pulse, then brake=1 while held

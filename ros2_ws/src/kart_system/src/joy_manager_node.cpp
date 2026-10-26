@@ -6,6 +6,7 @@
 #include <kart_interfaces/msg/control_trim.hpp>
 #include <kart_interfaces/msg/bag_request.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <std_srvs/srv/trigger.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
 
 namespace kart_system {
@@ -16,6 +17,10 @@ public:
     buttons_.deadman_button=index("deadman_button",-1); buttons_.brake_button=index("brake_button",1);
     buttons_.stop_button=index("stop_button",0); buttons_.manual_button=index("manual_button",2); buttons_.auto_button=index("auto_button",3);
     buttons_.bag_start_button=index("bag_start_button",4); buttons_.bag_stop_button=index("bag_stop_button",5);
+    buttons_.vgl_trigger_button=index("vgl_trigger_button",8);
+    const auto vgl_service=declare_parameter<std::string>("vgl_trigger_service","/visual_localization/trigger_localization",fixed());
+    vgl_timeout_=number(*this,"vgl_trigger_timeout_s",2.0,0.1,30.0);
+    vgl_client_=create_client<std_srvs::srv::Trigger>(vgl_service);
     bag_pub_=create_publisher<kart_interfaces::msg::BagRequest>("bag/request",10);
     buttons_.steering_left=index("steering_trim_left_button",15); buttons_.steering_right=index("steering_trim_right_button",16);
     buttons_.throttle_up=index("throttle_trim_up_button",13); buttons_.throttle_down=index("throttle_trim_down_button",14);
@@ -49,6 +54,10 @@ public:
     });
     joy_sub_=create_subscription<sensor_msgs::msg::Joy>("joy",1,[this](sensor_msgs::msg::Joy::ConstSharedPtr msg) {on_joy(*msg);});
     timer_=create_wall_timer(std::chrono::milliseconds(10),[this] {
+      if (vgl_pending_ && steady_now()-vgl_sent_at_>=vgl_timeout_) {
+        vgl_client_->remove_pending_request(vgl_request_id_); vgl_pending_=false;
+        RCLCPP_WARN(get_logger(),"VGL trigger response timed out; outcome unknown, no automatic retry");
+      }
       if (!input_healthy()) {lose_input();}
       else if (manual_fixed_.enabled() && mode_==AUTO &&
                !manual_fixed_.allowed(now().seconds(),steady_now(),!blocked_)) {
@@ -61,11 +70,39 @@ public:
 private:
   int index(const std::string & key,int value) {
     const int result=declare_parameter<int>(key,value,fixed());
-    if (result < ((key=="auto_button" || key=="deadman_button" || key=="bag_start_button" || key=="bag_stop_button") ? -1 : 0) || result > 63) {throw std::invalid_argument(key+" invalid index");}
+    if (result < ((key=="auto_button" || key=="deadman_button" || key=="bag_start_button" || key=="bag_stop_button" || key=="vgl_trigger_button") ? -1 : 0) || result > 63) {throw std::invalid_argument(key+" invalid index");}
     return result;
   }
   bool input_healthy() const {
     return ready_ && fresh(steady_now(),ready_at_,0.1) && fresh(steady_now(),joy_at_,0.1);
+  }
+  void trigger_vgl() {
+    if (vgl_pending_) {
+      RCLCPP_WARN(get_logger(),"VGL trigger already pending"); return;
+    }
+    if (!vgl_client_->service_is_ready()) {
+      RCLCPP_WARN(get_logger(),"VGL trigger service unavailable; request skipped"); return;
+    }
+    try {
+      auto pending=vgl_client_->async_send_request(std::make_shared<std_srvs::srv::Trigger::Request>(),
+        [this](rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture future) {
+          vgl_pending_=false;
+          try {
+            const auto response=future.get();
+            if (response->success) {
+              RCLCPP_INFO(get_logger(),"VGL trigger accepted (localization success is not confirmed): %s",response->message.c_str());
+            } else {
+              RCLCPP_WARN(get_logger(),"VGL trigger rejected: %s",response->message.c_str());
+            }
+          } catch (const std::exception & error) {
+            RCLCPP_WARN(get_logger(),"VGL trigger response failed: %s",error.what());
+          }
+        });
+      vgl_request_id_=pending.request_id; vgl_sent_at_=steady_now(); vgl_pending_=true;
+      RCLCPP_INFO(get_logger(),"VGL trigger requested by Share/Create");
+    } catch (const std::exception & error) {
+      RCLCPP_WARN(get_logger(),"VGL trigger request failed: %s",error.what());
+    }
   }
   bool manual_brake_permitted() const {
     return mode_==MANUAL && !blocked_ && input_healthy() &&
@@ -134,6 +171,7 @@ private:
     const auto actions=buttons_.read(joy.buttons);
     if (!actions) {lose_input(); return;}
     neutral_input_=teleop_.can_arm(joy.axes,actions->brake);
+    if (actions->vgl_trigger) {trigger_vgl();}
     // Recording is independent of driving mode, deadman and STOP. R1 wins on simultaneous edges.
     if (actions->bag_start || actions->bag_stop) {
       kart_interfaces::msg::BagRequest msg; msg.header=joy.header;
@@ -183,6 +221,10 @@ private:
   double mode_at_{NEVER}, mode_stamp_{NEVER};
   TeleopInput teleop_;
   JoyButtons buttons_;
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr vgl_client_;
+  bool vgl_pending_{false};
+  int64_t vgl_request_id_{0};
+  double vgl_sent_at_{NEVER}, vgl_timeout_{2.0};
   JoyModeHold mode_hold_;
   ManualFixedThrottle manual_fixed_;
   bool neutral_input_{false};

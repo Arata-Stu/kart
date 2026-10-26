@@ -34,6 +34,26 @@ int main() {
   assert(!unguarded.read(unguarded_keys)->manual); // Held at reconnect must not rearm.
 
   JoyButtons recording_buttons;
+  JoyButtons localization_buttons;
+  std::vector<int32_t> localization_keys(17,0);
+  localization_keys[8]=1;
+  assert(!localization_buttons.read(localization_keys)->vgl_trigger); // Held at startup.
+  localization_keys[8]=0; localization_buttons.read(localization_keys);
+  localization_keys[8]=1;
+  auto localization_actions=localization_buttons.read(localization_keys);
+  assert(localization_actions->vgl_trigger);
+  assert(!localization_actions->manual && !localization_actions->automatic &&
+         !localization_actions->bag_start && !localization_actions->bag_stop);
+  assert(!localization_buttons.read(localization_keys)->vgl_trigger); // No repeats.
+  localization_buttons.reset();
+  assert(!localization_buttons.read(localization_keys)->vgl_trigger); // Held at reconnect.
+  localization_buttons.vgl_trigger_button=-1;
+  localization_keys[8]=0; localization_buttons.read(localization_keys);
+  localization_keys[8]=1;
+  assert(!localization_buttons.read(localization_keys)->vgl_trigger);
+  localization_buttons.vgl_trigger_button=63;
+  assert(!localization_buttons.read(localization_keys)); // Invalid array rejected.
+
   std::vector<int32_t> recording_keys(17,0);
   recording_buttons.read(recording_keys);
   recording_keys[4]=1;
