@@ -1,6 +1,9 @@
 import { $, state, action, on, emit, remember, toast } from "./api.js";
 
 function update() {
+  const speed = $("centerline-speed");
+  speed.disabled = !state.lane || state.doc?.snapshot_status === "pending";
+  if (document.activeElement !== speed) speed.value = state.lane?.centerline_speed_mps ?? 1.5;
   const select = $("lane-select");
   const ids = state.doc?.lanes.map((lane) => lane.id) || [];
   if (
@@ -22,6 +25,23 @@ function update() {
   $("lane-remove").disabled =
     !state.doc || state.doc.snapshot_status === "pending" || ids.length <= 1;
 }
+function changeCenterSpeed(reportInvalid) {
+  if (!state.lane || state.doc.snapshot_status === "pending") return;
+  const input = $("centerline-speed"), value = Number(input.value);
+  if (!input.value.trim() || !Number.isFinite(value) || value < 0 || value > 20) {
+    if (!reportInvalid) return;
+    input.value = state.lane.centerline_speed_mps ?? 1.5;
+    toast("Center速度は0〜20 m/sで指定してください", true);
+    return;
+  }
+  if (value === (state.lane.centerline_speed_mps ?? 1.5)) return;
+  remember();
+  state.lane.centerline_speed_mps = value;
+  state.dirty = true;
+  emit("document");
+}
+$("centerline-speed").addEventListener("input", () => changeCenterSpeed(false));
+$("centerline-speed").addEventListener("change", () => changeCenterSpeed(true));
 $("lane-select").addEventListener("change", () => {
   state.laneId = $("lane-select").value;
   state.selected = -1;
@@ -52,7 +72,7 @@ $("lane-form").addEventListener("submit", (event) => {
   if (state.doc.lanes.length >= 64) return toast("laneは64個までです", true);
   const lane = event.target.elements.duplicate.checked
     ? structuredClone(state.lane)
-    : { closed: true, left: [], right: [], custom: [], custom_speeds: [] };
+    : { closed: true, left: [], right: [], custom: [], custom_speeds: [], centerline_speed_mps: 1.5 };
   lane.id = id;
   lane.lines = {};
   remember();
@@ -109,6 +129,7 @@ action("hdmap-reset-confirm", () => {
       right: [],
       custom: [],
       custom_speeds: [],
+      centerline_speed_mps: 1.5,
       lines: {},
     },
   ];

@@ -15,7 +15,7 @@ from std_msgs.msg import String
 from std_srvs.srv import Trigger
 from visualization_msgs.msg import MarkerArray
 
-from .speed import validate_speed_override, override_speeds
+from .speed import validate_speed_override, override_speeds, centerline_speed
 from .document import KINDS, load, select
 from .messages import markers, path_message, reference_message
 
@@ -31,7 +31,7 @@ class HDMapNode(Node):
             "frame_id": "map",
             "lane_id": "",
             "line_type": "centerline",
-            "centerline_speed_mps": 0.0,
+            "centerline_speed_mps": -1.0,
             "allow_speed_override": False,
             "nominal_speed_limit_mps": 0.0,
             "speed_override_mps": -1.0,
@@ -52,8 +52,7 @@ class HDMapNode(Node):
         if self.settings["line_type"] not in KINDS:
             raise ValueError("Unknown line_type")
         speed = self.settings["centerline_speed_mps"]
-        if not math.isfinite(speed) or speed < 0:
-            raise ValueError("centerline_speed_mps must be finite and nonnegative")
+        centerline_speed(None, speed)
         limit = self.settings["nominal_speed_limit_mps"]
         if not math.isfinite(limit) or limit < 0:
             raise ValueError("nominal_speed_limit_mps must be finite and nonnegative")
@@ -109,8 +108,8 @@ class HDMapNode(Node):
         for parameter in parameters:
             if parameter.name == "centerline_speed_mps" and (
                     parameter.type_ != Parameter.Type.DOUBLE or
-                    not math.isfinite(parameter.value) or parameter.value < 0):
-                return SetParametersResult(successful=False, reason="Centerline speed must be finite and nonnegative")
+                    not math.isfinite(parameter.value) or (parameter.value != -1 and parameter.value < 0)):
+                return SetParametersResult(successful=False, reason="Centerline speed must be -1 (map) or finite and nonnegative")
             if tuning is not None and not getattr(self, "tuning_transaction", False) and parameter.name == "line_type":
                 lane = select(self.document, self.selected)
                 if lane is None or parameter.value not in lane['lines']:
@@ -173,6 +172,7 @@ class HDMapNode(Node):
     def publish(self):
         stamp = self.get_clock().now().to_msg()
         lane = select(self.document, self.selected)
+        self.runtime_centerline_speed = centerline_speed(lane, self.settings["centerline_speed_mps"])
         reference = reference_message(
             lane, self.line_type, self.runtime_centerline_speed,
             self.document["frame_id"], stamp,

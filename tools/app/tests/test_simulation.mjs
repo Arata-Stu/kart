@@ -17,7 +17,7 @@ for(const reverse of [false,true]) {
  if(reverse)points.reverse();
  const sim=createSimulation({points},true);
  for(let i=0;i<15000&&!sim.car.done;i++)sim.step();
- assert.equal(sim.car.reason,'1周完了');assert.ok(sim.car.maxError<.08);assert.ok(sim.car.time>20);
+ assert.equal(sim.car.reason,'1周完了');assert.ok(sim.car.maxError<.08);assert.ok(sim.car.time>15 && sim.car.time<20);
 }
 const points=Array.from({length:41},(_,i)=>[i/10,0]);
 const sim=createSimulation({points,profile:points.map((p,i)=>[i/10,...p,0,0,i===0||i===40?0:.6,0])},false);
@@ -37,3 +37,7 @@ const oldSections=structuredClone(speedLane.custom_speeds);
 reverseLane(speedLane);
 const cap=(s,rows)=>rows.reduce((v,r)=>((r.start<r.end?s>=r.start&&s<=r.end:s>=r.start||s<=r.end)?Math.min(v,r.speed):v),3);
 for(let s=.1;s<12;s+=.13)assert.equal(cap(s,oldSections),cap(12-s,speedLane.custom_speeds));
+
+const stopped=createSimulation({points},false,{speed:0});
+for(let i=0;i<100;i++)stopped.step();
+assert.equal(stopped.car.speed,0);assert.equal(stopped.car.x,points[0][0]);

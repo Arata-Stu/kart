@@ -326,7 +326,7 @@ Jetsonとの実SSH/SCP転送は別途確認する。
 ## 検証
 
 ```bash
-PYTHONPATH=tools/app:ros2_ws/src/kart_mapping python3 -m unittest discover -s tools/app/tests -v
+PYTHONPATH=tools/app:ros2_ws/src/kart_mapping:ros2_ws/src/kart_bringup:ros2_ws/src/kart_hdmap python3 -m unittest discover -s tools/app/tests -v
 PYTHONPATH=ros2_ws/src/kart_mapping python3 -m unittest discover -s ros2_ws/src/kart_mapping/test -v
 ```
 
@@ -988,7 +988,7 @@ IPプリセット・SSHユーザー・portを共用する。新しい接続設�
 検証コマンド:
 
 ```bash
-PYTHONPATH=tools/app:ros2_ws/src/kart_mapping python3 -m unittest discover -s tools/app/tests -p test_tuning.py -v
+PYTHONPATH=tools/app:ros2_ws/src/kart_mapping:ros2_ws/src/kart_bringup:ros2_ws/src/kart_hdmap python3 -m unittest discover -s tools/app/tests -p test_tuning.py -v
 PYTHONPATH=ros2_ws/src/kart_hdmap python3 -m unittest discover -s ros2_ws/src/kart_hdmap/test -v
 node --test tools/app/tests/test_tuning.mjs
 ```
@@ -1143,3 +1143,16 @@ ROS側cuVSLAM YAMLの`slam_max_map_size`とは別設定。実bag/GPUでの効果
 `denoising=true`で有効にし、`--override cuvslam.cfg_denoising=true`を渡す。
 falseでOFF比較できる。UI再起動後の新規生成に適用し、同じbagから別名で比較する。
 ROS側のenable_image_denoisingとは別設定。実bag/GPUでの改善効果は未検証。
+
+### 保存するCenterline速度
+
+「3 ライン」のCenterline欄でlaneごとの走行速度[m/s]を設定する（既定1.5、範囲0〜20）。
+変更はUndo可能で、地図を保存すると`map.json`、HDMap書出し後は`hd_map.yaml`の
+各laneの`centerline_speed_mps`へ保存する。速度だけの変更でCenterlineの再生成は不要。
+地図転送後はHDMap serverが保存速度を使用する（ROS parameterの既定-1は地図追従）。
+旧地図の項目欠落時は1.5 m/sを補い、ファイルは保存するまで書き換えない。
+0は停止目標。Race/Customの既存profileは保持し、新規生成設定の速度上限は既定1.5 m/s。
+実車調整のCenter速度プレビューと試走の初期速度上限にも保存値を使用する。
+試走は簡易モデルで、実車速度・舵角の検証ではない。
+検証: `test_lanes.py`（保存→export→ROS側読込み）、
+`test_lane_speed.mjs`（lane別設定・Undo・0・不正値・生成結果保持）。

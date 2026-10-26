@@ -40,7 +40,7 @@ LABELS = {
     'image_rate_hz': '画像処理上限 (Hz)',
     'lookahead_m': '前方参照の経路長 (m)', 'max_speed_mps': '目標速度上限 (m/s)',
     'max_cross_track_m': '経路からの許容距離 (m)', 'goal_tolerance_m': '終点の許容距離 (m)',
-    'deceleration_mps2': '目標減速度 (m/s²)', 'centerline_speed_mps': 'Centerの一定速度 (m/s)',
+    'deceleration_mps2': '目標減速度 (m/s²)', 'centerline_speed_mps': 'Center速度 (m/s、-1=地図の保存値)',
     'line_type': '実車の参照ライン', 'stuck_duration_s': 'スタック判定継続時間 (s)',
     'stationary_flow_px_s': '停車判定の画像flow上限 (px/s)',
     'moving_flow_px_s': '移動判定の画像flow下限 (px/s)',

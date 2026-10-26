@@ -262,7 +262,7 @@ tracking.launch.pyは同じcontainerへ`kart_control::SpeedControllerNode`もloa
 `kp=0.02`、`ki=kd=kff=0`、`throttle_limit=0.4`、`max_target_speed_mps=10.0`。
 表使用中はkffを使わない。目標0・異常・brake時は増減制限を迂回してthrottle=0。
 詳細とノード単独既定値は[kart_control](../kart_control/README.md#速度pid-component)を参照。
-最大舵角は引き続き未校正0。Pure Pursuitの実機目標速度上限も10.0m/s。参照ライン速度は別設定。
+実運用の最大舵角は2026-10-26の利用者推定22〜27°から暫定22°（0.3839724354 rad）を採用。実測校正済みではない。Pure Pursuitと速度制御で同値。目標速度上限10.0 m/sとは独立し、参照速度は地図に保存する。
 4.74m/s超はFF末尾0.375を保持し、throttle_limit=0.4は維持する。AUTO要求は行わない。
 PID係数はROS parameterで動的調整でき、全値とtopic型はkart_control README参照。
 
@@ -1409,3 +1409,14 @@ ros2 param get /event_camera/event_preprocessor event_image_enabled
 OFFで`false`、ONで`true`を確認する。topic一覧はbag manager等のsubscriberが残る場合があるため、
 `ros2 topic info /event_camera/event_image`ではpublisher数を確認する。
 portable CLI/TUI/launchテストで伝達を確認し、実ROS・SDK・GPUでの負荷変化は実機確認が必要。
+
+### 地図の速度と暫定舵角（2026-10-26）
+
+Map StudioのCenterline欄でlaneごとの走行速度を設定し、保存・HDMap書出し・Jetson転送する。
+既定は1.5 m/s、0は停止目標。bringup/config/hdmap/hdmap.yamlの
+`centerline_speed_mps=-1.0`は保存値に従い、0以上は明示上書き。
+Race/Customは保存した速度profileを使い、新規生成の速度上限の既定も1.5 m/s。
+既存の明示速度や生成済みprofileは自動変更しない。
+実運用のpure_pursuit/speed_controller両YAMLのmax_steering_radは暫定22°。
+出典は利用者の22〜27°という推定であり、実測校正・ROS/実車追従は未確認。
+変更反映はSTOP・bringup終了後の再build/source/restartで行う。

@@ -157,3 +157,6 @@ export function paintTuning(ctx, project, line) {
   ctx.beginPath();ctx.moveTo(17,0);ctx.lineTo(-9,-8);ctx.lineTo(-5,0);ctx.lineTo(-9,8);ctx.closePath();
   ctx.fillStyle='#e78228';ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();ctx.restore();
 }
+
+// Preview starts from the persisted lane speed; editing this live control remains temporary.
+on('document', () => { $('tuning-speed').value = state.lane?.centerline_speed_mps ?? 1.5; });

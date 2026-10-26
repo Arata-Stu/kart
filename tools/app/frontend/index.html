@@ -67,7 +67,7 @@
             <span id="tuning-target" class="small"></span>
             <button id="tuning-connect" disabled>自己位置を接続</button>
             <select id="tuning-line" aria-label="適用するライン"><option value="centerline">Center</option><option value="raceline">Race</option><option value="customline">Custom</option></select>
-            <label>Center速度 <input id="tuning-speed" type="number" min="0" step="0.05" value="0" aria-label="Center速度 m/s" /> m/s</label>
+            <label>Center速度 <input id="tuning-speed" type="number" min="0" step="0.05" value="1.5" aria-label="Center速度 m/s" /> m/s</label>
             <button id="tuning-line-switch" disabled>実車ラインを切替</button>
             <button id="tuning-offset-open" disabled>ステア補正</button>
             <button id="tuning-parameters-open" disabled>パラメータ調整</button>
@@ -257,6 +257,8 @@
                 <option value="region">領域・等距離線（実験／閉路）</option>
               </select>
               <p class="help">生成すると現在のCenterを更新します。方式を比較する場合は地図を複製してください。</p>
+              <label>走行速度 m/s<input id="centerline-speed" type="number" min="0" max="20" step="0.1" value="1.5" /></label>
+              <p class="help">laneごとに保存・書き出し。既定1.5 m/s、0は停止目標。速度変更だけなら再生成不要です。</p>
               <button id="generate-centerline" class="full">
                 Centerlineを生成
               </button>
@@ -1250,10 +1252,10 @@
           >速度上限 m/s<input
             id="simulation-speed"
             type="number"
-            min="0.1"
+            min="0"
             max="20"
             step="0.1"
-            value="1"
+            value="1.5"
         /></label>
         <label
           >先読み m<input
@@ -1280,7 +1282,7 @@
             min="1"
             max="60"
             step="1"
-            value="26"
+            value="22"
         /></label>
       </div>
       <canvas

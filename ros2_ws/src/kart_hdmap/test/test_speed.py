@@ -1,9 +1,19 @@
 """Speed trials preserve original profiles, stop points and real-default opt-out."""
 import unittest
-from kart_hdmap.speed import validate_speed_override, override_speeds
+from kart_hdmap.speed import validate_speed_override, override_speeds, centerline_speed
 
 
 class SpeedTests(unittest.TestCase):
+    def test_center_speed_follows_map_and_explicit_override(self):
+        self.assertEqual(centerline_speed({}, -1), 1.5)
+        self.assertEqual(centerline_speed({'centerline_speed_mps': .7}, -1), .7)
+        self.assertEqual(centerline_speed({'centerline_speed_mps': 0.}, -1), 0.)
+        self.assertEqual(centerline_speed({'centerline_speed_mps': .7}, 0.), 0.)
+        self.assertEqual(centerline_speed({'centerline_speed_mps': .7}, 1.2), 1.2)
+        for value in (-.1, -2, True, float('nan')):
+            with self.assertRaises(ValueError):
+                centerline_speed({}, value)
+
     def test_opt_in_and_numeric_bounds(self):
         validate_speed_override(-1., False)
         for value in (.05, .8, 1.5):

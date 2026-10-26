@@ -54,6 +54,7 @@ action("simulation-open",()=>{
   const kinds=["centerline","raceline","customline"].filter(k=>state.lane.lines[k]?.points.length);
   if(!kinds.length)throw Error("先にラインを生成してください");
   snapshot=structuredClone({...state.lane,obstacles:state.doc.obstacles||[]});
+  $("simulation-speed").value = state.lane.centerline_speed_mps ?? 1.5;
   $("simulation-title").textContent=`試走 · ${state.laneId}`;
   $("simulation-line").replaceChildren(...kinds.map(k=>new Option(k,k)));
   dialog.showModal();reset();

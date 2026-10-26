@@ -2,11 +2,11 @@
 
 import copy
 
-from .geometry import points
+from .geometry import points, number
 from .speed_sections import sections
 from .storage import name
 
-FIELDS = ("closed", "left", "right", "custom", "custom_speeds", "lines")
+FIELDS = ("closed", "left", "right", "custom", "custom_speeds", "centerline_speed_mps", "lines")
 
 
 def empty(lane_id="lane_001"):
@@ -17,6 +17,7 @@ def empty(lane_id="lane_001"):
         right=[],
         custom=[],
         custom_speeds=[],
+        centerline_speed_mps=1.5,
         lines={},
     )
 
@@ -29,6 +30,8 @@ def upgrade(document):
             if key in doc:
                 lane[key] = doc.pop(key)
         doc["lanes"] = [lane]
+    for lane in doc["lanes"]:
+        lane.setdefault("centerline_speed_mps", 1.5)
     doc["schema"] = "kart.hdmap.v2"
     return doc
 
@@ -65,6 +68,10 @@ def validate(raw, existing):
             row.get("custom_speeds", []), lane["custom"], closed
         )
         old = previous.get(lane_id, empty(lane_id))
+        speed = row.get("centerline_speed_mps", old.get("centerline_speed_mps", 1.5))
+        if isinstance(speed, bool):
+            raise ValueError("Center速度は0〜20 m/sで指定してください")
+        lane["centerline_speed_mps"] = number(speed, 0, 20, "Center速度 m/s")
         # Generated results are server-owned; never trust client-provided lines.
         lane["lines"] = copy.deepcopy(old["lines"])
         if any(lane[k] != old[k] for k in ("left", "right", "closed")):

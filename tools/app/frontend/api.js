@@ -33,7 +33,7 @@ export const state = {
     vehicle_length: 0.35,
     rear_axle_to_rear: 0.1065,
     margin: 0.05,
-    max_speed: 3,
+    max_speed: 1.5,
     lateral_accel: 2.5,
     accel: 1.5,
     decel: 2.5,

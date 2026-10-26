@@ -74,12 +74,14 @@ def export_map(folder, doc):
                     left_bound=lane["left"],
                     right_bound=lane["right"],
                     centerline=lane["lines"]["centerline"]["points"],
+                    centerline_speed_mps=lane.get("centerline_speed_mps", 1.5),
                     offline_lines=files,
                 )
             )
             metadata[lane["id"]] = dict(
                 closed=lane["closed"],
                 custom_speeds=lane.get("custom_speeds", []),
+                centerline_speed_mps=lane.get("centerline_speed_mps", 1.5),
                 lines={
                     k: {
                         f: v

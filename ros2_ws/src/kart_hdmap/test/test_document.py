@@ -13,6 +13,7 @@ def example():
     lane = {
         "id": "main",
         "closed": True,
+        "centerline_speed_mps": 1.5,
         "left": xy,
         "right": xy,
         "lines": {
@@ -52,6 +53,16 @@ class DocumentTests(unittest.TestCase):
         self.assertEqual(samples[0][:2], (1.0, 2.0))
         for p in samples:
             self.assertAlmostEqual(math.hypot(p[2], p[3]), 1)
+
+    def test_saved_center_speed_and_legacy_default(self):
+        self.doc["lanes"][0]["centerline_speed_mps"] = .7
+        self.assertEqual(self.read()["lanes"][0]["centerline_speed_mps"], .7)
+        self.doc["lanes"][0].pop("centerline_speed_mps")
+        self.assertEqual(self.read()["lanes"][0]["centerline_speed_mps"], 1.5)
+        for value in (-1, True, float('nan'), 21):
+            self.doc["lanes"][0]["centerline_speed_mps"] = value
+            with self.assertRaises(ValueError):
+                self.read()
 
     def test_obstacles_preserved_and_invalid_rejected(self):
         self.doc["obstacles"] = [{"id": "block", "polygon": [[1, 2], [3, 2], [3, 4]]}]

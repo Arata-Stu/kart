@@ -7,7 +7,7 @@
     frame_id: map  # Must match file. Never relabel or transform coordinates.
     lane_id: ""  # Empty: all markers, no selected paths
     line_type: centerline  # Initial selection; dynamically changeable via ROS parameter
-    centerline_speed_mps: 0.0  # Dynamic; explicit Center speed, tuning requires STOP
+    centerline_speed_mps: -1.0  # -1: selected map lane speed (default 1.5 m/s); >=0: runtime override  # Dynamic; explicit Center speed, tuning requires STOP
     allow_speed_override: false  # Opt in to runtime uniform speed trials
     nominal_speed_limit_mps: 0.0  # Original-speed ceiling; 0: no extra ceiling
     speed_override_mps: -1.0  # -1: original speed; 0.05..1.5: replace positive speeds

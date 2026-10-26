@@ -23,7 +23,7 @@ const active={document:state.doc,lane_id:'main',line_type:'customline'};
 const calls=[];
 globalThis.fetch=async(url, options)=> {
   calls.push([url,JSON.parse(options.body)]);
-  const result=url.endsWith('/prepare') ? {revision:'preview',document:structuredClone(state.doc),lane_id:'main',line_type:'customline',centerline_speed_mps:0}
+  const result=url.endsWith('/prepare') ? {revision:'preview',document:structuredClone(state.doc),lane_id:'main',line_type:'customline',centerline_speed_mps:JSON.parse(options.body).centerline_speed_mps}
     : {map_id:'map-a',revision:url.endsWith('/apply')?'r2':'r1',mode:1,speed_mps:2,stop_issue:'STOP required',localized:true,pose:{x:1,y:2,yaw:0},active,apply_issue:'',can_rollback:true};
   return {ok:true,json:async()=>result};
 };

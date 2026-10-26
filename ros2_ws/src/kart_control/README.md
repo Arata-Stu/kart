@@ -331,7 +331,8 @@ ROS parameter serviceによる実変更、Component build/load、モード遷移
 
 TT-02標準ホイールベース257mmをpackage/bringup YAMLへ設定した。
 出典と暫定外形は[車体寸法方針](../../../docs/policies/vehicle_geometry.md)。
-最大舵角は引き続き未校正0であり、この寸法更新だけでは追従出力は有効にならない。
+package単独の最大舵角は未校正0であり、この寸法更新だけでは追従出力は有効にならない。
+bringupの暫定舵角は末尾の「実運用の暫定舵角」を参照する。
 
 
 ## 共通復帰モジュールとの接続
@@ -378,3 +379,11 @@ UIは追加で1秒以上の停車を要求する。速度PIDも同じ画面か�
 独立した速度controllerのmax_target_speed_mps等は起動時上限として保持される。
 変更はメモリ上のみで、再起動後はYAMLに戻る。追加parameterはなく、全既定値は既存configと同じ。
 C++計算のportable検証とUI/通信state machineの単体検証は実施し、ROS結合・実車は未確認。
+
+### 実運用の暫定舵角（2026-10-26）
+
+利用者申告の推定22〜27°をもとに、bringup/config/controlのPure Pursuitと速度制御を
+同じ22°（0.3839724354 rad）へ設定した。実測校正値ではない。
+ノード単独・package configの既定0（未設定時は無効）は維持する。
+前述の「未校正0」は単独起動の既定であり、現在のbringup実運用値とは区別する。
+この設定変更は、舵角線形性・左右差・実車での追従を証明しない。

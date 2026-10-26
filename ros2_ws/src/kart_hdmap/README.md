@@ -120,7 +120,7 @@ QoSはreliable/transient_local/depth1、既存のpublish_rate_hzと同周期。
 遅いsimでも地図heartbeatの実時間間隔が伸びず、制御側の受信watchdogと整合する。
 再配信は静的参照の状態通知であり、推定姿勢や制御指令のstampは更新しない。
 閉路でも先頭を末尾に重複追加しない。XY/速度の要素数は同じ。
-追加parameterは`line_type=centerline`（動的）と`centerline_speed_mps=0.0`（動的）（有限・非負）。
+追加parameterは`line_type=centerline`（動的）と`centerline_speed_mps=-1.0`（動的）（-1は地図保存値、0以上は明示速度）。
 Race/Customはprofileのvx_mpsを使用し、Centerlineは明示した一定速度を使う。
 
 | 速度試験parameter | 既定値 | 動的 | 意味 |
@@ -261,3 +261,14 @@ AUTO/MANUAL中は走行中に切替可能。STOP中は従来の停車条件を�
 走行中チューニングの状態応答は`apply_issue`（ライン・追従・速度用）と
 `stop_issue`（車両補正・復帰用）を返す。版競合・timeout拒否・atomic適用・readbackは維持する。
 PROPO・不明mode・古い速度では走行中変更を許可しない。portable testでAUTO中の適用・rollbackを確認し、ROS/実車は未確認。
+
+## 地図に保存するCenter速度
+
+Studio v2の各laneとexportの各laneに`centerline_speed_mps`を保存する。既定1.5 m/s、
+0〜20 m/sの有限値。旧ファイルの項目欠落時も1.5 m/sを使用する。
+ROS parameter `centerline_speed_mps`の既定は-1.0（選択laneの保存値を使用）。
+0以上の明示値は保存値より優先し、0は停止目標になる。lane切替・reload時は保存値を再評価する。
+Race/Customの点ごとの速度profileと停止点は変更しない。
+実車調整のsnapshotには解決済みのCenter速度を出し、既存のrevision・モード確認を維持する。
+`test_speed.py`と`test_document.py`は保存値・旧形式・明示上書き・0・不正値を検証する。
+ROSメッセージ配信・実車での速度追従は未検証。

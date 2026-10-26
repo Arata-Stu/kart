@@ -50,6 +50,33 @@ class LanesTests(unittest.TestCase):
             "course", kind, {"spacing": 0.5}, doc["revision"], lambda: None, lane_id
         )
 
+    def test_center_speed_persists_exports_and_preserves_generated_geometry(self):
+        doc = self.maps.load("course")
+        self.assertEqual(doc["lanes"][0]["centerline_speed_mps"], 1.5)
+        self.generate("lane_001")
+        doc = self.maps.load("course")
+        lines = copy.deepcopy(doc["lanes"][0]["lines"])
+        doc["lanes"][0]["centerline_speed_mps"] = .7
+        doc = self.maps.save("course", doc)
+        self.assertEqual(doc["lanes"][0]["lines"], lines)
+        self.assertEqual(self.maps.load("course")["lanes"][0]["centerline_speed_mps"], .7)
+        export = self.maps.export("course")
+        self.assertEqual(read_json(export / "hd_map.yaml")["lanes"][0]["centerline_speed_mps"], .7)
+        self.assertEqual(read_json(export / "metadata.json")["lanes"]["lane_001"]["centerline_speed_mps"], .7)
+        from kart_hdmap.document import load
+        from kart_hdmap.speed import centerline_speed
+        exported = load(export / "hd_map.yaml")
+        self.assertEqual(centerline_speed(exported["lanes"][0], -1), .7)
+        for value in (0., 1.5):
+            doc["lanes"][0]["centerline_speed_mps"] = value
+            doc = self.maps.save("course", doc)
+            self.assertEqual(self.maps.load("course")["lanes"][0]["centerline_speed_mps"], value)
+        for value in (-1, True, float('nan'), 21):
+            bad = copy.deepcopy(doc)
+            bad["lanes"][0]["centerline_speed_mps"] = value
+            with self.assertRaises(ValueError):
+                self.maps.save("course", bad)
+
     def test_generation_and_invalidation_are_per_lane(self):
         self.two_lanes()
         self.generate("lane_001")

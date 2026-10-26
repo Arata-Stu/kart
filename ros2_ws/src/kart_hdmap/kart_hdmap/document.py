@@ -108,6 +108,10 @@ def normalize(doc, frame_id="map", root=None):
             "right": points(raw["right_bound" if exported else "right"]),
             "lines": {},
         }
+        speed = raw.get("centerline_speed_mps", 1.5)
+        if isinstance(speed, bool) or not isinstance(speed, (int, float)) or not math.isfinite(speed) or not 0 <= speed <= 20:
+            raise ValueError("Centerline speed must be finite and in 0..20 m/s")
+        lane["centerline_speed_mps"] = float(speed)
         data = (
             {
                 k: csv_line(root, v, k)

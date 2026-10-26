@@ -1,8 +1,8 @@
 // Offline kinematic preview. No ROS, motor, localization, or tire model.
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 export function createSimulation(line, closed, options = {}) {
-  const cfg = {wheelbase: .257, lookahead: .8, maxSteer: .45, speed: 1, ...options};
-  for (const key of Object.keys(cfg)) if (!Number.isFinite(cfg[key]) || cfg[key] <= 0) throw Error("試走設定は正の数にしてください");
+  const cfg = {wheelbase: .257, lookahead: .8, maxSteer: 22 * Math.PI / 180, speed: 1.5, ...options};
+  for (const key of Object.keys(cfg)) if (!Number.isFinite(cfg[key]) || (key === "speed" ? cfg[key] < 0 : cfg[key] <= 0)) throw Error("試走設定は正の数（速度は0以上）にしてください");
   const points = line.points;
   if (!points || points.length < (closed ? 3 : 2) || points.some(p => !p.every(Number.isFinite))) throw Error("生成済みラインが必要です");
   const segments = []; let total = 0;
