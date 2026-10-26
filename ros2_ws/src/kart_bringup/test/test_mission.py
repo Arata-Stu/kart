@@ -402,6 +402,7 @@ class MissionCompositionTests(unittest.TestCase):
             args.enable_evs = 'true'
             args.evs_tensor_config = '/model/openeb.yaml'
             args.evs_aggregation = 'evt3_runs_grouped_gpu'
+            args.evs_image = 'false'
             args.rgb_profile = ''
             args.rgb_fps = '0'
             with (
@@ -423,6 +424,7 @@ class MissionCompositionTests(unittest.TestCase):
             sensors = [c.kwargs['launch_arguments'] for c in lu.include.call_args_list
                        if c.args[1] == 'launch/modules/sensors/openeb.launch.py']
             self.assertEqual(sensors[0]['evs_aggregation'], 'evt3_runs_grouped_gpu')
+            self.assertEqual(sensors[0]['evs_image'], 'false')
             self.assertNotIn('container_name', evs)
             self.assertNotIn('launch/localization.launch.py', paths)
             self.assertNotIn('launch/tracking.launch.py', paths)

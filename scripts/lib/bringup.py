@@ -111,6 +111,8 @@ def main():
     parser.add_argument("--no-evs", action="store_true", help="EVSを無効にする")
     parser.add_argument("--evs-backend", choices=("cpu", "cuda", "cuda_async"), default="")
     parser.add_argument("--evs-aggregation", choices=("events", "evt3_runs", "evt3_runs_gpu", "evt3_runs_gpu_direct", "evt3_runs_grouped_gpu"), default="", help="cuda_asyncの集計方式。指定時は未指定backendをcuda_asyncにする")
+    parser.add_argument("--evs-image", action=argparse.BooleanOptionalAction, default=None,
+                        help="イベント可視化画像の生成をON/OFF。未指定はYAMLを保持")
     parser.add_argument("--evs-serial", default="")
     parser.add_argument("--evs-tensor-config", default="", help="Model-derived full OpenEB tensor YAML")
     parser.add_argument("--evs-bias-file", default="", help=".bias path; @defaultでカメラ既定")
@@ -139,7 +141,7 @@ def main():
     parser.add_argument("--rate", default="")
     args = parser.parse_args()
     from kart_bringup.evs import BACKENDS, BACKEND_LABELS, AGGREGATIONS, AGGREGATION_LABELS, DEFAULT_BIAS, bias_files, bias_selection, pipeline_configuration
-    selected_evs = args.evs or any((args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config, args.evs_aggregation))
+    selected_evs = args.evs or any((args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config, args.evs_aggregation, args.evs_image is not None))
     if args.no_evs and selected_evs:
         raise ValueError("--no-evsとEVS指定は併用できません")
     args.evs = selected_evs
@@ -209,6 +211,12 @@ def main():
                     current = yaml.safe_load(source.read_text())["/**/event_tensor"]["ros__parameters"].get("event_aggregation", "events")
                     args.evs_aggregation = choose("EVS 集計方式", list(AGGREGATIONS),
                         label=lambda v: AGGREGATION_LABELS[v], default=AGGREGATIONS.index(current))
+                if args.evs_image is None:
+                    import yaml
+                    image_default = yaml.safe_load((config / "sensors/openeb_visualization.yaml").read_text())["/**/event_preprocessor"]["ros__parameters"]["event_image_enabled"]
+                    args.evs_image = choose("EVS event image可視化", [False, True],
+                        label=lambda v: "ON（画像生成あり）" if v else "OFF（画像生成なし・Tensorのみ）",
+                        default=int(image_default))
                 if not args.evs_bias_file:
                     args.evs_bias_file = str(choose("EVS bias file", [DEFAULT_BIAS] + bias_files(args.bias_root), lambda p: "カメラ既定" if p == DEFAULT_BIAS else str(p)))
             args.foxglove = args.foxglove or choose(
@@ -358,7 +366,7 @@ def main():
     if args.imu_profile and args.mode in ("eval", "e2e-latency"):
         raise ValueError("--imu-profileは実機のcollect/environment/drive/e2eで使用してください")
     if args.evs:
-        paths, overrides = pipeline_configuration(config / "sensors", args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config, args.evs_aggregation)
+        paths, overrides = pipeline_configuration(config / "sensors", args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config, args.evs_aggregation, "" if args.evs_image is None else str(args.evs_image).lower())
         if args.evs_bias_file and args.evs_bias_file != DEFAULT_BIAS:
             args.evs_bias_file = bias_selection(args.evs_bias_file)
         print(f"EVS: {overrides}; packet topic OFF; configs={paths}")
@@ -475,6 +483,7 @@ def main():
         "evs_bias_file": args.evs_bias_file,
         "evs_tensor_config": args.evs_tensor_config,
         "evs_aggregation": args.evs_aggregation,
+        "evs_image": "" if args.evs_image is None else str(args.evs_image).lower(),
         "enable_foxglove": str(args.foxglove).lower(),
         "record_dir": args.record_dir,
         "run_name": args.run_name or "run",

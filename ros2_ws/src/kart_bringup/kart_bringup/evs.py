@@ -39,7 +39,7 @@ def bias_files(root):
                   if p.is_file() and not any(x.startswith(".") for x in p.relative_to(root).parts))
 
 
-def pipeline_configuration(root, backend="", serial="", bias_file="", tensor_config="", aggregation=""):
+def pipeline_configuration(root, backend="", serial="", bias_file="", tensor_config="", aggregation="", image=""):
     root = Path(root)
     selector = root / "openeb_tensor_pipeline.yaml"
     configured = yaml.safe_load(selector.read_text())["/**/tensor_pipeline"]["ros__parameters"]["tensor_backend"]
@@ -61,6 +61,10 @@ def pipeline_configuration(root, backend="", serial="", bias_file="", tensor_con
         if not path.is_file():
             raise ValueError(f"Missing EVS config: {path}")
     overrides = {"tensor_backend": backend}
+    if image not in ("", "true", "false"):
+        raise ValueError("EVS image must be empty, true, or false")
+    if image:
+        overrides["event_image_enabled"] = image == "true"
     if aggregation:
         overrides["event_aggregation"] = aggregation
     if serial:

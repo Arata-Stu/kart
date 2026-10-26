@@ -60,6 +60,7 @@ class EvsTests(unittest.TestCase):
             if title=='EVS Tensor処理方式':return 'cuda_async'
             if title=='EVS 集計方式':
                 self.assertIn('evt3_runs_grouped_gpu',values);return 'evt3_runs_grouped_gpu'
+            if title=='EVS event image可視化':return False
             if title=='EVS bias file':return '@default'
             if title.startswith('EVS（'):return True
             if title=='AUTOスロットル':return 'normal'
@@ -71,6 +72,22 @@ class EvsTests(unittest.TestCase):
         output=io.StringIO()
         with patch.object(sys,'argv',['bringup.py','--no-bridge','--dry-run','--run-name','trial']),patch.object(sys.stdin,'isatty',return_value=True),patch.object(module,'choose',side_effect=choose),contextlib.redirect_stdout(output):module.main()
         self.assertIn('evs_aggregation:=evt3_runs_grouped_gpu',output.getvalue())
+        self.assertIn('evs_image:=false',output.getvalue())
+
+    def test_image_selection(self):
+        for backend in ('cpu', 'cuda', 'cuda_async'):
+            for image, expected in [('true', True), ('false', False)]:
+                _, overrides = pipeline_configuration(CONFIG, backend, image=image)
+                self.assertIs(overrides['event_image_enabled'], expected)
+            self.assertNotIn('event_image_enabled', pipeline_configuration(CONFIG, backend)[1])
+        with self.assertRaises(ValueError): pipeline_configuration(CONFIG, image='off')
+        for flag, value in [('--evs-image', 'true'), ('--no-evs-image', 'false')]:
+            result=self.run_cli(flag)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('enable_evs:=true', result.stdout)
+            self.assertIn('evs_image:='+value, result.stdout)
+            self.assertNotEqual(self.run_cli(flag, '--no-evs').returncode, 0)
+        self.assertNotIn('evs_image:=', self.run_cli('--evs').stdout)
 
     def test_bias_default_preserve_and_validation(self):
         self.assertIsNone(bias_selection(""))
@@ -122,7 +139,7 @@ class EvsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             bias = Path(folder).resolve() / "indoor.bias"
             bias.write_text("178 % bias_diff_off\n")
-            answers = iter(("collect", "424x240x30", "424x240x60", "low", True, "cpu", bias, False, "normal"))
+            answers = iter(("collect", "424x240x30", "424x240x60", "low", True, "cpu", False, bias, False, "normal"))
             def choose(title, values, label=str, default=0):
                 print(title)
                 return next(answers)
@@ -160,7 +177,7 @@ class EvsTests(unittest.TestCase):
             spec = importlib.util.spec_from_file_location("evs_launch_test", PACKAGE / "launch/modules/sensors/openeb.launch.py")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-            module.setup({"evs_backend": "cuda", "evs_serial": "E522", "evs_bias_file": "@default", "evs_tensor_config": "", "evs_aggregation": ""})
+            module.setup({"evs_backend": "cuda", "evs_serial": "E522", "evs_bias_file": "@default", "evs_tensor_config": "", "evs_aggregation": "", "evs_image": ""})
         params = node.call_args.kwargs["parameters"]
         self.assertEqual(len(params), 5)
         self.assertEqual(params[-1], {"tensor_backend": "cuda", "serial": "E522", "bias_file": ""})
@@ -168,10 +185,10 @@ class EvsTests(unittest.TestCase):
         node.reset_mock()
         custom=str(CONFIG/'openeb_tensor_cuda_async_runs_gpu_direct.yaml')
         module.setup({'evs_backend':'cuda_async','evs_serial':'','evs_bias_file':'',
-                      'evs_tensor_config':custom,'evs_aggregation':'evt3_runs_grouped_gpu'})
+                      'evs_tensor_config':custom,'evs_aggregation':'evt3_runs_grouped_gpu','evs_image':'false'})
         params=node.call_args.kwargs['parameters']
         self.assertEqual(params[1],custom)
-        self.assertEqual(params[-1],{'tensor_backend':'cuda_async','event_aggregation':'evt3_runs_grouped_gpu'})
+        self.assertEqual(params[-1],{'tensor_backend':'cuda_async','event_aggregation':'evt3_runs_grouped_gpu','event_image_enabled':False})
 
     def test_cli_conflict_and_missing_bias_rejected(self):
         result = self.run_cli("--evs", "--no-evs")

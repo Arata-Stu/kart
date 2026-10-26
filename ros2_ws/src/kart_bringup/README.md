@@ -1359,3 +1359,30 @@ ROS/SDK/CUDA一体のbuild・USB live・推論併走・Orinでの速度は未確
 EVS packet受信からの時間や車両bridge/PWMまでの時間ではない。
 `ros2 run kart_e2e e2e_live_latency_report /absolute/new-run.csv`でactive初回出力のみの
 p50/p95/p99/maxを集計する。詳細と計測限界は[kart_e2e README](../kart_e2e/README.md#live-decoder-latencyrgb--evs共通)参照。
+
+
+### EVS event imageのON/OFF
+
+TUIはEVS有効化後に「EVS event image可視化」でON/OFFを選択する。
+CLIは`--evs-image` / `--no-evs-image`。指定時はEVSも有効になるため`--no-evs`とは併用不可。
+未指定のCLIは`config/sensors/openeb_visualization.yaml`の`event_image_enabled`を保持する
+（現行true）。TUIの初期選択も同YAMLから読む。backendはcpu/cuda/cuda_asyncすべて対応。
+
+```bash
+bash scripts/bringup.sh --mode collect --evs-backend cuda_async \
+  --evs-aggregation evt3_runs_grouped_gpu --no-evs-image
+```
+
+launch引数`evs_image`は空（既定、YAML保持）/`true`/`false`。
+既存`event_preprocessor`の`event_image_enabled`だけを起動時に上書きする。
+OFFでは画像用enqueue・decode・描画・`/event_camera/event_image` publisherを無効化する。
+Tensor生成、RAW記録機能、Tensor/driver診断は継続する。録画開始の操作は従来どおり別。
+変更は再起動後に反映。確認例:
+
+```bash
+ros2 param get /event_camera/event_preprocessor event_image_enabled
+```
+
+OFFで`false`、ONで`true`を確認する。topic一覧はbag manager等のsubscriberが残る場合があるため、
+`ros2 topic info /event_camera/event_image`ではpublisher数を確認する。
+portable CLI/TUI/launchテストで伝達を確認し、実ROS・SDK・GPUでの負荷変化は実機確認が必要。
