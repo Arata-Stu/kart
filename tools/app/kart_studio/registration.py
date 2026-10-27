@@ -39,6 +39,14 @@ def preview(maps, target, body):
         dict(id=o["id"], polygon=[xy(p) for p in o["polygon"]])
         for o in src.get("obstacles", [])
     ]
+    result['parking_drivable'] = [xy(p) for p in src.get('parking_drivable', [])]
+    result['parking_areas'] = copy.deepcopy(src.get('parking_areas', []))
+    for area in result['parking_areas']:
+        for key in ('polygon', 'entrance', 'maneuver'):
+            area[key] = [xy(p) for p in area[key]]
+        goal = area['goal_pose']
+        area['goal_pose'] = xy(goal) + [math.atan2(math.sin(goal[2]+angle), math.cos(goal[2]+angle))]
+        area['forward_yaw'] = math.atan2(math.sin(area['forward_yaw']+angle), math.cos(area['forward_yaw']+angle))
     for lane in result["lanes"]:
         for key in ("left", "right", "custom"):
             lane[key] = [xy(p) for p in lane[key]]

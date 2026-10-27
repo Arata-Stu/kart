@@ -467,3 +467,12 @@ RGB 640×480も最大60Hz。RGBの90Hz候補は424×240、480×270、640×360。
 collect/environment/drive/e2eで同じ検証を使用する。profile引数だけでなく旧FPS引数と
 有効なstreamのYAMLも検査し、非対応値はドライバ起動前に拒否する。
 これらは個々のprofileの対応確認であり、複数stream同時配信の安定性は実機で別途確認する。
+
+## 駐車planner付きdrive
+
+通常のdrive引数へ`--parking-slot P2 --recovery off --no-tuning`を追加する。
+選択した`--map-file`内の`parking_areas`を参照する。site/slot両方未指定は従来動作。drive以外での指定は拒否。
+別の互換site JSONを使う場合のみ`--parking-site`を明示する。
+固定AUTO throttleは併用不可。駐車の起動・goal・停止ラッチの詳細は
+[kart_parking README](../ros2_ws/src/kart_parking/README.md)を参照。
+レース終了判定は自動化しない。`/parking/start`の明示要求後に順方向のコースから駐車へ向かう。

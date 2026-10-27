@@ -131,6 +131,8 @@ def main():
     parser.add_argument("--infra-profile", default="", help="Infra WIDTHxHEIGHTxFPS; 0 disables")
     for key in ("device", "map-file", "map-dir", "model-dir", "lane-id", "line-type"):
         parser.add_argument("--" + key, default="")
+    parser.add_argument("--parking-site", default="", help="drive: optional HDMap or legacy parking site override")
+    parser.add_argument("--parking-slot", default="", help="drive: parking area ID, e.g. P1/P2/P3")
     parser.add_argument("--tuning", action=argparse.BooleanOptionalAction, default=None,
                         help="driveでMap Studioの動的調整を有効化（--no-tuningで無効化）")
     parser.add_argument("--record-dir", default=str(ROOT / "record"))
@@ -351,6 +353,12 @@ def main():
             raise ValueError("section routingなしのE2Eでは--map-file/--map-dirを使用しません")
     if args.tuning is not None and args.mode != 'drive':
         raise ValueError('--tuning / --no-tuningはdrive専用です')
+    parking_site = getattr(args, 'parking_site', '')
+    parking_slot = getattr(args, 'parking_slot', '')
+    if (parking_site or parking_slot) and args.mode != 'drive':
+        raise ValueError('Parking is drive-only')
+    if parking_slot and not parking_site:
+        parking_site = args.map_file
     tuning_enabled = False
     tuning_map_dir = ''
     if args.mode == 'drive':
@@ -500,6 +508,8 @@ def main():
 
         playback(config,args.bag,args.rate,extra_topics=imu_topics(config,args.tracking_mode or "0"))
     values = {
+        "parking_site": parking_site,
+        "parking_slot": parking_slot,
         "mode": args.mode,
         "recovery": args.recovery,
         "auto_fixed_throttle": None if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle),

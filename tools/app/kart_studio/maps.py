@@ -5,7 +5,7 @@ import shutil
 import time
 import uuid
 
-from . import footprint, lanes, obstacles
+from . import footprint, lanes, obstacles, parking
 from .exports import export_map
 from .lines import generate
 from .snapshots import normalize
@@ -177,7 +177,9 @@ class Maps:
         if regions != current.get("obstacles", []):
             for lane in current["lanes"]:
                 lane["lines"] = {}
+        parking_fields = parking.validate(dict(current, **dict(body, obstacles=regions)))
         current.update(
+            **parking_fields,
             obstacles=regions,
             lanes=lanes.validate(body["lanes"], current["lanes"]),
             revision=current["revision"] + 1,

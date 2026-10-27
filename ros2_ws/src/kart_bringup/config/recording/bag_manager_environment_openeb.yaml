@@ -63,6 +63,10 @@
     - /localization/vslam/diagnostics
     - /localization/vgl/diagnostics
     - /localization/pose_hint
+    - /parking/status
+    - /parking/path
+    - /parking/goal
+    - /planning/course_reference
     - /planning/reference_line
     - /hdmap/selected_lane
     - /hdmap/selected_line

@@ -1,3 +1,4 @@
+import { parkingWarnings } from "./parking_model.js";
 import { compatible, resizePairs, alignPairs } from "./paired.js";
 import { showLine } from "./line_visibility.js";
 import {
@@ -58,6 +59,7 @@ export async function loadMap(id, preserve = false) {
     redo: [],
     selected: -1,
   });
+  emit("parking-reset-editor");
   state.laneId = doc.lanes.some((lane) => lane.id === state.laneId)
     ? state.laneId
     : doc.lanes[0].id;
@@ -332,9 +334,15 @@ export async function generateLine(kind) {
 for (const kind of ["centerline", "raceline", "customline"])
   action("generate-" + kind, () => generateLine(kind));
 action("export", async () => {
+  const warning = parkingWarnings(state.doc);
+  if (warning && !confirm(warning + "\n駐車を行わない地図として、このまま書き出しますか？")) {
+    $("parking-editor").open = true;
+    $("parking-editor").scrollIntoView({block:"start"});
+    return;
+  }
   await save();
   const r = await api("export", { id: state.id });
-  toast("書き出しました: " + r.path);
+  toast(["書き出しました: " + r.path, ...(r.warnings || [])].join("\n"));
 });
 on("status", status);
 on("document", status);

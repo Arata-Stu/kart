@@ -111,6 +111,8 @@ function editSnapshot() {
   return structuredClone({
     lanes: state.doc.lanes,
     laneId: state.laneId,
+    parking_areas: state.doc.parking_areas || [],
+    parking_drivable: state.doc.parking_drivable || [],
     obstacles: state.doc.obstacles || [],
     obstacleId: state.obstacleId,
   });
@@ -141,8 +143,13 @@ export function undo(redo = false) {
   const snapshot = from.pop();
   state.doc.lanes = snapshot.lanes;
   state.laneId = snapshot.laneId;
+  state.doc.parking_areas = snapshot.parking_areas;
+  state.doc.parking_drivable = snapshot.parking_drivable;
+  state.parkingDraft = null;
+  state.parkingPick = null;
   state.doc.obstacles = snapshot.obstacles;
   state.obstacleId = snapshot.obstacleId;
+  emit("parking-reset-editor");
   state.selected = -1;
   state.dirty = true;
   emit("document");

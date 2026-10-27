@@ -1434,3 +1434,8 @@ summary {
 #transfer-queue { max-height: 180px; }
 #transfer-queue .job-row { align-items: center; gap: 12px; }
 #transfer-queue .job-row span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+#parking-editor { padding: 10px; border-bottom: 1px solid #ccc; }
+#parking-editor textarea { width: 100%; font-family: monospace; resize: vertical; }
+#parking-editor summary { cursor: pointer; font-weight: 600; }
+#parking-warning { color: #965b00; }

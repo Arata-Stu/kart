@@ -1200,3 +1200,45 @@ ROS parameterはlookahead_mode / lookahead_m / lookahead_low_speed_m / lookahead
 試走は簡易モデルで、実車速度・舵角の検証ではない。
 検証: `test_lanes.py`（保存→export→ROS側読込み）、
 `test_lane_speed.mjs`（lane別設定・Undo・0・不正値・生成結果保持）。
+
+## 駐車区画 P1・P2・P3
+
+地図を開き、右側の **「駐車 P1・P2・P3」** を展開する。
+
+1. 区画IDを選ぶ。areaの頂点を順番に地図上でクリック、または1行`x y`のm座標で入力する。
+2. コース側の入口を2点で指定する。2点はareaの同じ辺上。入口の辺は壁ではない。
+3. goal位置と向きを指定する。数値はrear_axle基準のx/y（m）、yaw（rad）。向きはgoalから向けたい点をクリックしても設定できる。
+4. コースから区画へ進入してよい範囲と、入口付近のコース進行方向を指定する。
+5. コース全周の外周入力は不要。left/right boundの間から走行領域を自動生成する。進入範囲はコースと面積を持って重ね、入口の両側とgoalを含める。仕切り壁・奥壁は「走行不可能領域」に厚み付き多角形で定義し、入口を塞がない。
+6. 「区画を適用」で幾何を検証して編集内容へ反映し、「保存」でmap.jsonに保存する。P2/P3も同様。
+
+座標欄は自由に修正・行削除できる。地図クリック追加は「入力終了」で終える。
+適用前の入力はまだ地図には反映されない。適用済みの編集は既存のUndo/Redoで戻せる。
+区画は緑破線、入口は水色の太線、goalは紫の矢印、進入範囲は薄紫破線で表示する。
+壁の登録は自動生成しない。goal中心と入口の幾何は保存時、車体全体の余裕はplanner起動・計画時に検査する。
+
+HDMap v2の追加属性（既存地図は省略可）:
+
+- `parking_areas`: `[{id: P1, polygon: [[x,y],...], goal_pose: [x,y,yaw], entrance: [[x,y],[x,y]], maneuver: [[x,y],...], forward_yaw: rad}]`
+- `parking_drivable`: 通常は空欄／省略。旧データ互換の明示外周上書き。指定時はboundからの生成を使わない。
+- `obstacles`: 既存の共通壁・禁止領域。駐車区画内の三方の壁もここへ保存する。
+
+保存・HDMap書き出し・地図の複製・位置合わせ・HDMapリセット/Undoに対応する。
+位置合わせではpolygon/入口/進入範囲/外周とgoal位置を剛体変換し、goal yawと進行方向も回転する。
+駐車属性だけの編集では生成済みの通常走行ラインは破棄しない。壁変更は従来どおり再生成が必要。
+
+「HDMap・CSVを書き出す」時、P1/P2/P3のいずれかが未定義なら
+**「駐車areaを定義してください。未定義: …」**を表示する。キャンセルで駐車編集を開く。
+駐車を行わない地図は確認後に書き出せる。API応答とmetadata.jsonにも警告を残す。
+不正な定義は警告で通さず保存/exportを拒否する。
+
+plannerは`--parking-slot P2`で同じHDMapの区画を選ぶ。別parking.jsonは不要。
+既存の`--parking-site`は互換入力として保持する。車体寸法・速度・停止判定はplanner YAMLに残す。
+実際の起動は[kart_parking README](../../ros2_ws/src/kart_parking/README.md)を参照。
+テスト: `test_parking_hdmap.py`（保存/export/変換/planner読み込み/入口）、`test_parking_model.mjs`（座標入力/警告）。
+ローカル合成地図でフォーム入力・適用・保存・書き出し警告を確認。ROS結合・実車駐車は未確認。
+
+駐車の領域結合はShapely（ROS/Docker: `python3-shapely`、ローカルStudio: 起動Python環境へ`pip install shapely`）を使用する。
+閉路boundは包含する内外周、開路boundは両端を結んだ帯として検証する。接続していない進入範囲・交差boundは拒否する。
+和集合の継ぎ目は壁にせず、残った中島・外周・共通obstaclesに対して車体と余裕を検査する。
+生成結果を別の手描き属性として保存せず、保存したboundとparking属性から再構成する。ROS topic・parameterの追加はない。

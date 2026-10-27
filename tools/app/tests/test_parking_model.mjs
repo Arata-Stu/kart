@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {parkingWarnings,parsePoints,pointText} from '../frontend/parking_model.js';
+assert.match(parkingWarnings({}), /P1、P2、P3/);
+assert.match(parkingWarnings({parking_areas:[{id:'P1'}]}), /P2、P3/);
+assert.equal(parkingWarnings({parking_areas:['P1','P2','P3'].map(id=>({id}))}), '');
+assert.deepEqual(parsePoints('1 2\n3, 4'),[[1,2],[3,4]]);
+assert.equal(pointText([[1,2],[3,4]]),'1 2\n3 4');
+assert.throws(()=>parsePoints('NaN 1'));
+assert.throws(()=>parsePoints('1 2 3'));
+console.log('Parking editor coordinate and warning tests passed');
+assert.throws(()=>parsePoints('1,'));

@@ -17,15 +17,16 @@ const median = (sorted) => {
 };
 export function viewBounds(doc, cloud = [], all = false) {
   const lanes = doc?.lanes || [];
+  const parking = (doc?.parking_areas || []).flatMap(a => [...(a.polygon || []), ...(a.entrance || []), ...(a.goal_pose ? [a.goal_pose] : [])]).filter(finite);
   const course = lanes.flatMap((lane) => [...(lane.left || []), ...(lane.right || [])]).filter(finite);
   const lines = lanes.flatMap((lane) => [
     ...(lane.custom || []),
     ...Object.values(lane.lines || {}).flatMap((line) => line?.points || []),
   ]).filter(finite);
   const points = cloud.filter(finite);
-  if (all) return bounds([...points, ...course, ...lines]);
-  if (course.length >= 2) return bounds(course);
-  if (lines.length >= 2) return bounds(lines);
+  if (all) return bounds([...points, ...course, ...lines, ...parking]);
+  if (course.length >= 2) return bounds([...course,...parking]);
+  if (lines.length >= 2) return bounds([...lines,...parking]);
   if (points.length < 20) return bounds(points);
   // Median absolute deviation resists sparse distant points. A one-metre
   // minimum window also handles nearly straight or coincident point clouds.

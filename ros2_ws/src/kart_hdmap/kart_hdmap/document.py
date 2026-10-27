@@ -172,7 +172,9 @@ def normalize(doc, frame_id="map", root=None):
         if not 3 <= len(polygon) <= 100:
             raise ValueError("Exclusion region needs 3..100 vertices")
         obstacles.append(dict(id=key, polygon=polygon))
+    from .parking import validate as validate_parking
     return {
+        **validate_parking(doc),
         "obstacles": obstacles,
         "schema": "kart.hdmap.visualization.v1",
         "frame_id": frame,

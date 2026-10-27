@@ -27,6 +27,7 @@
   <exec_depend>foxglove_bridge</exec_depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>kart_hdmap</exec_depend>
+  <exec_depend>kart_parking</exec_depend>
   <exec_depend>kart_control</exec_depend>
   <exec_depend>kart_recovery</exec_depend>
   <exec_depend>kart_e2e</exec_depend>

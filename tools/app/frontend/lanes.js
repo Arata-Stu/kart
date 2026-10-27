@@ -134,6 +134,9 @@ action("hdmap-reset-confirm", () => {
     },
   ];
   state.doc.obstacles = [];
+  state.doc.parking_areas = [];
+  state.doc.parking_drivable = [];
+  emit("parking-reset-editor");
   state.obstacleId = null;
   state.selected = -1;
   state.target = "pair";

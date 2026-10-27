@@ -28,6 +28,14 @@ def add_tracking(args):
         raise ValueError("Namespaced container must be externally owned")
     if config["container_type"] not in ("multithreaded", "isolated_multithreaded"):
         raise ValueError("Unsupported executor")
+    parking_site = getattr(args, "parking_site", "") or (args.map_file if getattr(args, "parking_slot", "") else "")
+    if not parking_site and getattr(args, "parking_slot", ""):
+        raise ValueError("parking_slot requires map_file or parking_site")
+    if parking_site:
+        from kart_bringup.parking import validate, node_action
+        validate(lu.get_path("kart_bringup", "config"), parking_site,
+                 getattr(args, "parking_slot", ""), getattr(args, "recovery", ""),
+                 getattr(args, "tuning_enabled", ""))
     actions = [lu.log_info(f"Tracking container config: {config}")]
     if create:
         actions.append(
@@ -41,6 +49,7 @@ def add_tracking(args):
                 "tuning_enabled": getattr(args, "tuning_enabled", ""),
                 "tuning_map_dir": getattr(args, "tuning_map_dir", ""),
                 "tuning_tracking_frame": getattr(args, "tuning_tracking_frame", ""),
+                "reference_topic": "planning/course_reference" if parking_site else "planning/reference_line",
                 "map_file": args.map_file,
                 "lane_id": args.lane_id,
                 "line_type": args.line_type,
@@ -73,6 +82,9 @@ def add_tracking(args):
             forwarding=False,
         )
     )
+    if parking_site:
+        actions += node_action(lu.get_path("kart_bringup", "config"), parking_site,
+                               getattr(args, "parking_slot", ""), args.use_sim_time)
     return actions
 
 
@@ -99,6 +111,8 @@ def generate_launch_description():
     args.add_arg(
         "use_sim_time", "", choices=["", "true", "false", "True", "False"], cli=True
     )
+    args.add_arg("parking_site", "", cli=True)
+    args.add_arg("parking_slot", "", cli=True)
     args.add_arg("recovery", "", cli=True)
     args.add_opaque_function(add_tracking)
     return lut.LaunchDescription(args.get_launch_actions())

@@ -133,6 +133,25 @@
           ><button id="step-lines">3 ライン</button>
         </div>
         <div id="inspector-body" class="scroll">
+          <details id="parking-editor">
+            <summary>駐車 P1・P2・P3 <span id="parking-defined">未定義</span></summary>
+            <p class="help">区画の輪郭は壁ではありません。奥壁・側壁は「走行不可能領域」で厚みを持たせて描き、コース側の入口を開けてください。</p>
+            <label>区画<select id="parking-id"><option>P1</option><option>P2</option><option>P3</option></select></label>
+            <label>駐車area（各行 x y、m）<textarea id="parking-polygon" rows="4"></textarea></label><button id="parking-pick-polygon">地図でareaの頂点を追加</button>
+            <label>入口（同じ辺上の2点）<textarea id="parking-entrance" rows="2"></textarea></label><button id="parking-pick-entrance">地図で入口の2点を指定</button>
+            <label>goal X m<input id="parking-goal-x" type="number" step="0.01"></label>
+            <label>goal Y m<input id="parking-goal-y" type="number" step="0.01"></label>
+            <label>goal yaw rad<input id="parking-goal-yaw" type="number" step="0.01"></label>
+            <button id="parking-pick-goal">地図でgoal位置</button><button id="parking-pick-heading">地図でgoalの向き</button>
+            <p class="help">goalは後輪軸中心です。区画内で車体全体と余裕が収まる位置に置いてください。</p>
+            <label>進入可能範囲（各行 x y、m）<textarea id="parking-maneuver" rows="4"></textarea></label><button id="parking-pick-maneuver">地図で進入範囲を追加</button>
+            <label>入口付近のコース進行方向 rad<input id="parking-forward" type="number" step="0.01"></label><button id="parking-pick-forward">地図で進行方向の2点を指定</button>
+            <p class="help">走行可能領域はleft/right boundから自動生成します。進入範囲はコースと重ね、入口の両側とgoalを含めて描いてください。全周の外周入力は不要です。</p>
+            <details><summary>旧データ用の外周指定（通常は空欄）</summary><label>走行可能外周の上書き<textarea id="parking-drivable" rows="4"></textarea></label><button id="parking-pick-drivable">地図で外周の頂点を追加</button>
+            <p class="help">空欄ならboundから自動生成。旧外周を消して「区画を適用」すると自動生成へ切り替わります。</p></details>
+            <p id="parking-pick-note" class="help"></p><button id="parking-pick-end">入力終了</button>
+            <button id="parking-apply" class="primary">区画を適用</button><button id="parking-reload">適用済みの値に戻す</button><button id="parking-remove">区画を削除</button>
+          </details>
           <section id="panel-cloud">
             <button id="dense-open" disabled>占有地図・3Dメッシュ</button>
             <button id="mesh-open" disabled>3Dで重ね合わせ</button>
@@ -310,7 +329,7 @@
             </div>
             <button id="line-settings-open" class="full">
               車幅・速度などの生成設定</button
-            ><button id="export" class="primary full">
+            ><p id="parking-warning" class="help"></p><button id="export" class="primary full">
               HDMap・CSVを書き出す
             </button>
             <p class="help">

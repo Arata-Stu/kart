@@ -1446,3 +1446,24 @@ Race/Customは保存した速度profileを使い、新規生成の速度上限�
 実運用のpure_pursuit/speed_controller両YAMLのmax_steering_radは暫定22°。
 出典は利用者の22〜27°という推定であり、実測校正・ROS/実車追従は未確認。
 変更反映はSTOP・bringup終了後の再build/source/restartで行う。
+
+## レース後のparkingチャレンジ
+
+`mission.launch.py mode:=drive`と`tracking.launch.py`に`parking_site`（既定空＝slot指定時はmap_file）と
+`parking_slot`（既定空＝parking.yamlのP1を使用）を追加した。siteまたはslotを指定した場合のみ
+`kart_parking/parking_planner`を起動し、HDMapの`planning/reference_line`を
+`planning/course_reference`へremapする。Pure Pursuitの入力は変わらずplannerが唯一の参照publisherになる。
+`hdmap.launch.py reference_topic`は既定`planning/reference_line`、parking時のみ明示変更する。
+
+実運用設定は`config/parking/parking.yaml`の全項目。
+[全パラメータ、topic・service、区画JSON、操作手順](../kart_parking/README.md)を参照。
+P1/P2/P3は`parking_slot:=P2`で選択。map座標の実データはMap StudioでHDMapの`parking_areas`へ保存する。
+slotのみ指定すると同じ`map_file`を参照し、未定義区画は起動前に拒否する。siteの明示指定は旧形式との互換用。
+通常コース走行を維持し、レース終了後`/parking/start`で駐車に移る。開始時のAUTO／録画操作は変更しない。
+`recovery:=off tuning_enabled:=false`が必要。固定AUTO throttleも拒否する。
+Pure Pursuitの駐車用先読み0.25m・終端停止0.04mはcontrol/sim YAMLへ明記した。
+録画設定は`/parking/status`, `/parking/path`, `/parking/goal`, `/planning/course_reference`を追加する。
+追加外部APT依存はなく、既存のrclpy/tf2/msg/PyYAMLを使用する。
+
+構成検査は`test/test_parking_composition.py`、経路・停止・理想追従はkart_parkingのportable test。
+ROS graph・Jetson・実車での駐車成立は未確認。

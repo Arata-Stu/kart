@@ -39,6 +39,8 @@ public:
                  param("lookahead_low_speed_m", 0.8), param("lookahead_high_speed_m", 2.0)};
     if (!lookahead_distance(c_.lookahead, 0, adaptive_))
       throw std::invalid_argument("Invalid speed-scaled lookahead settings");
+    parking_lookahead_ = param("parking_lookahead_m", 0.25);
+    parking_goal_ = param("parking_goal_tolerance_m", 0.04);
     wall_timeout_ = param("wall_timeout_s", 0.0);
     if (!std::isfinite(wall_timeout_) || wall_timeout_ < 0)
       throw std::invalid_argument("wall_timeout_s must be finite and nonnegative");
@@ -52,7 +54,7 @@ public:
       throw std::invalid_argument("Invalid TF frames");
     for (double v : {pose_timeout_, line_timeout_, localization_timeout_, rate,
                      c_.lookahead, c_.max_speed, c_.max_error,
-                     c_.goal_tolerance, c_.deceleration})
+                     c_.goal_tolerance, c_.deceleration, parking_lookahead_, parking_goal_})
       if (!std::isfinite(v) || v <= 0)
         throw std::invalid_argument("Parameters must be finite and positive");
     if (!std::isfinite(tf_wait_) || tf_wait_ < 0 || tf_wait_ > 0.05 ||
@@ -134,6 +136,7 @@ public:
             line_.push_back({m->points[i].x, m->points[i].y, m->speeds[i]});
           }
           closed_ = m->closed;
+          parking_ = m->line_type == "parking";
         });
     odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
         "visual_slam/tracking/odometry", rclcpp::SensorDataQoS(),
@@ -348,6 +351,10 @@ private:
           return;
         }
       }
+      if (parking_) {
+        c_.lookahead = std::min(c_.lookahead, parking_lookahead_);
+        c_.goal_tolerance = std::min(c_.goal_tolerance, parking_goal_);
+      }
       const auto &q = t.transform.rotation;
       double norm = q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
       if (!std::isfinite(norm) || std::abs(norm - 1) > 0.01) {
@@ -381,7 +388,8 @@ private:
   LookaheadSettings adaptive_;
   nav_msgs::msg::Odometry odometry_;
   std::string frame_, map_;
-  bool closed_{false}, localized_{false};
+  bool closed_{false}, localized_{false}, parking_{false};
+  double parking_lookahead_, parking_goal_;
   double pose_timeout_, line_timeout_, localization_timeout_, wall_timeout_, tf_wait_;
   double pose_received_{0}, line_received_{0}, diag_received_{0};
   rclcpp::Time pose_stamp_{0, 0, RCL_ROS_TIME}, line_stamp_{0, 0, RCL_ROS_TIME},

@@ -30,6 +30,7 @@ def setup(context):
             name="hdmap_server",
             parameters=[str(config), overrides],
             output="screen",
+            remappings=[("planning/reference_line", LaunchConfiguration("reference_topic").perform(context))],
         )
     ]
 
@@ -40,6 +41,7 @@ def generate_launch_description():
             DeclareLaunchArgument("tuning_enabled", default_value=""),
             DeclareLaunchArgument("tuning_map_dir", default_value=""),
             DeclareLaunchArgument("tuning_tracking_frame", default_value=""),
+            DeclareLaunchArgument("reference_topic", default_value="planning/reference_line"),
             DeclareLaunchArgument("map_file", default_value=""),
             DeclareLaunchArgument("lane_id", default_value=""),
             DeclareLaunchArgument(

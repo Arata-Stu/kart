@@ -12,6 +12,7 @@ import "./tuning.js";
 import "./tuning_parameters.js";
 import "./lanes.js";
 import "./obstacles.js";
+import "./parking.js";
 import "./copies.js";
 import "./capture.js";
 import "./vgl.js";

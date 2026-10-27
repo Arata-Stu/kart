@@ -73,3 +73,30 @@ Centerlineの一定速度はlaneに保存し、Studio編集→保存→export→
 Race/Customの点ごとの速度profileと停止点は維持し、新規生成の速度上限の既定を1.5 m/sとする。
 実運用舵角は利用者の推定22〜27°から暫定22°を採用し、Pure Pursuitと速度正規化で同値にする。
 ノード単独の未設定0ゲートは維持する。暫定値を実測校正済み・実機走行確認済みと扱わない。
+
+## レース後の前進駐車
+
+明示opt-inの`kart_parking`をHDMapとPure Pursuitの間に置く。通常周回は透過し、
+レース終了後のstart要求で順方向の閉路＋局所進入経路へ切り替える。HDMap出力を
+`planning/course_reference`へremapし、`planning/reference_line`のpublisherを1つにする。
+P1〜P3の実座標・区画・入口・進入領域・進行方向はHDMapのparking_areasへ明示する。
+壁は共通obstacles。走行領域はleft/right bound間と選択区画のmaneuver・polygonの和集合とし、閉路の中島を保持する。区画の輪郭を自動的に壁と扱わない。parking_drivableは旧形式の明示上書きに限定する。
+保存・export・地図位置合わせ・Undoで全属性を保持し、入口の辺を通る進入を要求する。
+export時に未定義のP1/P2/P3を注意表示し、駐車を行わない地図の書き出しは妨げない。
+未知領域を自由空間と仮定せず、明示走行可能多角形の外側を禁止する。
+
+局所探索は前進primitive、曲率制限、車体長方形の掃引検査、入口進行方向への非負進捗を要求する。
+入口通過後は順方向に次周へ進み、後退やUターンによる逆走を生成しない。
+後退recovery・固定AUTO throttle・動的HDMap編集との併用を拒否する。
+探索失敗で直線を代用しない。探索上限による失敗と物理的不可能を区別する。
+
+到達後は空参照とSTOP要求をラッチし、区画内の外形・位置・yaw・推定並進／角速度の
+継続成立で駐車成功とする。目標外の停滞は失敗。位置ずれやAUTO再要求で自動再発進しない。
+解除は新鮮なSTOPでのreset。AUTO／録画の開始は従来の操作者の責務を維持する。
+実装の幾何テスト・理想二輪追従・ROS結合・実地図・実機停止の検証を区別する。
+詳細と全設定は[kart_parking](../../ros2_ws/src/kart_parking/README.md)を参照。
+
+駐車の領域結合はShapely（ROS/Docker: `python3-shapely`、ローカルStudio: 起動Python環境へ`pip install shapely`）を使用する。
+閉路boundは包含する内外周、開路boundは両端を結んだ帯として検証する。接続していない進入範囲・交差boundは拒否する。
+和集合の継ぎ目は壁にせず、残った中島・外周・共通obstaclesに対して車体と余裕を検査する。
+生成結果を別の手描き属性として保存せず、保存したboundとparking属性から再構成する。ROS topic・parameterの追加はない。

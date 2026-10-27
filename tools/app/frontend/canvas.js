@@ -61,6 +61,7 @@ function nearestPoint(x, y) {
 }
 function paintPlacement() {
   if (
+    state.parkingPick ||
     !hover ||
     hover.alt ||
     drag ||
@@ -307,6 +308,21 @@ export function draw() {
           ctx.fillText(o.id, p[0] + 8, p[1] - 8);
         }
       }
+      const parking = [...(state.doc.parking_areas || []).filter(a => a.id !== state.parkingDraft?.id), ...(state.parkingDraft ? [state.parkingDraft] : [])];
+      line(state.doc.parking_drivable, '#607d8b', true, true, 1);
+      for (const a of parking) {
+        line(a.maneuver, '#9c8abb', true, true, 1);
+        line(a.polygon, '#238457', true, true, 2);
+        line(a.entrance, '#00bddd', false, false, 5);
+        if (a.polygon?.length) { const p=project(a.polygon[0]); ctx.fillStyle='#238457'; ctx.fillText(a.id,p[0]+6,p[1]-8); }
+        if (a.goal_pose) {
+          const [x,y,yaw]=a.goal_pose;
+          const tip=[x+.35*Math.cos(yaw),y+.35*Math.sin(yaw)];
+          line([[x,y],tip], '#bb4499', false, false, 3);
+          for (const sign of [-1,1]) line([tip,[tip[0]-.12*Math.cos(yaw+sign*.5),tip[1]-.12*Math.sin(yaw+sign*.5)]], '#bb4499');
+          const p=project([x,y]);ctx.beginPath();ctx.arc(...p,4,0,Math.PI*2);ctx.fillStyle='#bb4499';ctx.fill();
+        }
+      }
       line(d.left, colors.left, d.closed);
       line(d.right, colors.right, d.closed);
       const speedScale = state.showLineSpeeds
@@ -443,6 +459,10 @@ canvas.addEventListener("pointerdown", (e) => {
   if (e.button !== 0 && e.button !== 1 && e.button !== 2) return;
   const [x, y] = local(e);
   canvas.focus();
+  if (state.parkingPick && state.doc && e.button === 0 && !e.altKey) {
+    emit("parking-click", world(x,y));
+    return;
+  }
   canvas.setPointerCapture(e.pointerId);
   const edit =
     state.doc &&

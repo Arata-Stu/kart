@@ -57,9 +57,20 @@ def add_mission(args):
         pipeline_configuration(root / "sensors", *evs_values.values())
         get_package_share_directory("openeb_ros2")
         vehicle["bag_shutdown_timeout"] = "26"
+    parking_site = getattr(args, 'parking_site', '') or (args.map_file if getattr(args, 'parking_slot', '') else '')
+    if parking_site:
+        if args.mode != 'drive':
+            raise ValueError('Parking is drive-only')
+        from kart_bringup.parking import validate
+        validate(root, parking_site, getattr(args, 'parking_slot', ''),
+                 getattr(args, 'recovery', ''), getattr(args, 'tuning_enabled', ''))
+    elif getattr(args, 'parking_slot', ''):
+        raise ValueError('parking_slot requires map_file or parking_site')
     _, vehicle_modules = load(
         root / "bringup.yaml", vehicle
     )  # Validate device/config before any node starts.
+    if parking_site and vehicle_modules["joy_manager"]["effective"]["auto_fixed_throttle"] >= 0:
+        raise ValueError("Parking cannot use fixed AUTO throttle")
     from kart_bringup.recovery import configuration, validate_inputs
     recovery = getattr(args, 'recovery', '')
     if recovery and args.mode not in ('drive', 'e2e'):
@@ -174,6 +185,8 @@ def add_mission(args):
                     "tuning_enabled": getattr(args, "tuning_enabled", ""),
                     "tuning_map_dir": getattr(args, "tuning_map_dir", ""),
                     "tuning_tracking_frame": getattr(args, "tuning_tracking_frame", ""),
+                    "parking_site": parking_site,
+                    "parking_slot": getattr(args, "parking_slot", ""),
                     "map_file": args.map_file,
                     "lane_id": args.lane_id,
                     "line_type": args.line_type,
@@ -213,6 +226,8 @@ def generate_launch_description():
         "run_name",
         "auto_fixed_throttle",
         "recovery",
+        "parking_site",
+        "parking_slot",
         "e2e_model_dir",
         "e2e_fixed_throttle",
         "evs_backend",

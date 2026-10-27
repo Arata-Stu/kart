@@ -5,7 +5,7 @@ import os
 import shutil
 import uuid
 
-from . import footprint
+from . import footprint, parking
 from .lines import settings
 from .obstacles import validate
 from .storage import atomic_json, fingerprint, within
@@ -28,6 +28,7 @@ def export_map(folder, doc):
     missing = [lane["id"] for lane in doc["lanes"] if "centerline" not in lane["lines"]]
     if missing:
         raise ValueError("centerlineを生成してください: " + ", ".join(missing))
+    parking_fields = parking.validate(doc)
     regions = validate(doc.get("obstacles", []))
     for lane in doc["lanes"]:
         for line in lane["lines"].values():
@@ -100,6 +101,7 @@ def export_map(folder, doc):
                 line_role="offline_reference",
                 lanes=lanes,
                 obstacles=regions,
+                **parking_fields,
             ),
         )
         atomic_json(
@@ -111,6 +113,7 @@ def export_map(folder, doc):
                 frame="map",
                 line_role="offline_reference",
                 lanes=metadata,
+                parking_warnings=parking.warnings(doc),
                 warning="オフライン参照ライン。障害物回避・オンライン計画は行わない。",
             ),
         )

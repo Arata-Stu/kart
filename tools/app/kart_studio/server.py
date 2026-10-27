@@ -288,10 +288,15 @@ class Studio:
                 ["map:" + name(key)],
                 Task('line_generate', [key, b['kind'], b.get('settings', {}), b['revision'], b.get('lane_id')]),
             )
+        if path == "/api/parking-validate":
+            from .parking import validate
+            return validate(b["document"])
         if path == "/api/export":
+            from .parking import warnings as parking_warnings
             with self.jobs.guard("map:" + name(key)):
                 output = self.maps.export(key)
                 return dict(
+                    warnings=parking_warnings(self.maps.load(key)),
                     path=str(output), files=sorted(p.name for p in output.iterdir())
                 )
         if path == "/api/dense":

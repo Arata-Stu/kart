@@ -416,3 +416,13 @@ C++計算のportable検証とUI/通信state machineの単体検証は実施し�
 ノード単独・package configの既定0（未設定時は無効）は維持する。
 前述の「未校正0」は単独起動の既定であり、現在のbringup実運用値とは区別する。
 この設定変更は、舵角線形性・左右差・実車での追従を証明しない。
+
+## 駐車経路の追従
+
+`kart_parking`から`ReferenceLine.line_type=parking`を受けた区間では、固定／速度補間の
+実効先読み距離に`parking_lookahead_m`（double、既定0.25m、正値、起動時固定）を上限として適用する。
+終端停止距離は`goal_tolerance_m`と`parking_goal_tolerance_m`（double、既定0.04m、正値、起動時固定）の小さい方。
+通常のline種別は従来どおり。package/bringup/sim各configに設定する。
+追加topicはない。空ReferenceLineは従来の無効参照として速度0と異常通知を出す。
+区画・姿勢・停止の成立と再発進ラッチは`kart_parking`が担当する。
+駐車経路の理想二輪追従テストは`kart_parking/test/test_tracking.py`、ROS結合・実車駐車は未確認。
