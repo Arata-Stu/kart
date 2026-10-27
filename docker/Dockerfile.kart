@@ -8,6 +8,11 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy
 COPY --from=uv /uv /usr/local/bin/uv
 
+# Inherited Jetson APT sources may use HTTP, which the NVIDIA CDN rejects
+# with 403. Keep suites, components and signature verification unchanged.
+RUN find /etc/apt -type f \( -name sources.list -o -name '*.list' -o -name '*.sources' \) \
+    -exec sed -i 's|http://repo.download.nvidia.com/|https://repo.download.nvidia.com/|g' {} +
+
 # Project dependencies follow the expensive RealSense build. Isaac ROS 5.0
 # publishes these mapping packages for both noble and noble-jetpack.
 # Install the FoundationStereo model installer only; run model download and
