@@ -20,6 +20,9 @@ export function waypointStations(points, closed) {
     );
   return stations;
 }
+export function snapWaypointStation(stations, station) {
+  return stations.reduce((best, s) => Math.abs(s-station) < Math.abs(best-station) ? s : best, stations[0]);
+}
 let active = null;
 let split = null;
 export function setSectionSplit(callback) { split = callback; }
@@ -76,7 +79,7 @@ export function renderWaypointPicker() {
     row.setAttribute("aria-label", `区間 ${i + 1}`);
   });
   $("speed-pick-status").textContent = split
-    ? `${rows.length} 区間 · 線上をクリックして分割。色付きの線を確認しながら各行で速度を変更できます`
+    ? `${rows.length} 区間 · 白いWP点をクリックして分割。線上のクリックも最寄りWPに合わせます`
     : active ? `${selected + 1}番の区間：${active.dataset.key === "start" ? "開始" : "終了"}WPをクリック`
     : "「区間を追加」で開始します";
   if (!pts.length) return;
@@ -95,7 +98,7 @@ export function renderWaypointPicker() {
     svg.append(el); return el;
   }
   function pick(station) {
-    if (split) { split(station); return; }
+    if (split) { split(snapWaypointStation(stations, station)); return; }
     if (!active) return;
     active.value = String(station);
     if (active.dataset.key === "start") active = active.parentElement.querySelector('[data-key="end"]');
@@ -119,7 +122,7 @@ export function renderWaypointPicker() {
       const line=element("line",{x1:p[0],y1:p[1],x2:q[0],y2:q[1],
         stroke:chosen?sectionColor(chosen.index):"#bac6ce","stroke-width":chosen?.index===selected?9:6,
         "stroke-linecap":"round", tabindex:0,role:"button",
-        "aria-label":chosen?`区間 ${chosen.index+1}: ${chosen.r.speed} m/s。クリックで分割`:"未設定区間。クリックで分割"});
+        "aria-label":chosen?`区間 ${chosen.index+1}: ${chosen.r.speed} m/s。最寄りWPで分割`:"未設定区間。最寄りWPで分割"});
       const title=document.createElementNS("http://www.w3.org/2000/svg","title");
       title.textContent=line.getAttribute("aria-label");line.append(title);
       line.style.cursor="pointer";
@@ -151,9 +154,16 @@ export function renderWaypointPicker() {
     const [bx,by]=at(r.start);
     element("circle",{cx:bx,cy:by,r:5,fill:sectionColor(i),stroke:"white","stroke-width":2,"pointer-events":"none"});
   });
-  if(!split)pts.forEach((p,i)=>{
+  pts.forEach((p,i)=>{
     const [x,y]=project(p);
-    const dot=element("circle",{cx:x,cy:y,r:4,fill:"white",stroke:"#9063b0",tabindex:0,role:"button","aria-label":`WP ${i+1}`});
+    const dot=element("circle",{cx:x,cy:y,r:5,fill:"white",stroke:"#9063b0","stroke-width":2,tabindex:0,role:"button","aria-label":`WP ${i+1}`});
+    dot.style.cursor="pointer";
+    const title=document.createElementNS("http://www.w3.org/2000/svg","title");
+    title.textContent=`WP ${i+1} · ${stations[i].toFixed(2)} m`;dot.append(title);
+    const highlight=()=>{dot.setAttribute("r",8);dot.setAttribute("fill","#ffe08a");$("speed-pick-status").textContent=`WP ${i+1} · ${stations[i].toFixed(2)} m${split ? "：クリックでこの点を境界に分割" : "：クリックで選択"}`;};
+    const unhighlight=()=>{dot.setAttribute("r",5);dot.setAttribute("fill","white");};
+    dot.addEventListener("mouseenter",highlight);dot.addEventListener("focus",highlight);
+    dot.addEventListener("mouseleave",unhighlight);dot.addEventListener("blur",unhighlight);
     dot.addEventListener("click",()=>pick(stations[i]));keyboard(dot,()=>pick(stations[i]));
     if(pts.length<50 || i%Math.ceil(pts.length/35)===0){
       const text=element("text",{x:x+6,y:y-6,"font-size":10,fill:"#354959","pointer-events":"none"});text.textContent=String(i+1);
