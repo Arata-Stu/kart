@@ -51,7 +51,11 @@ def follow(route, zone, world, settings, departure, pose, options, initial_speed
             # Ideal longitudinal response; does not simulate the real speed PID.
             speed=command;omega=speed*math.tan(steering)/settings.wheelbase_m
             pose=(pose[0]+speed*math.cos(pose[2]+omega/60)/30,pose[1]+speed*math.sin(pose[2]+omega/60)/30,wrap(pose[2]+omega/30))
-        return dict(frames=frames,reason='simulated_parked' if mission.state=='parked' else mission.reason or 'time_limit')
+        result = dict(frames=frames,reason='simulated_parked' if mission.state=='parked' else mission.reason or 'time_limit')
+        if mission.state == 'failed':
+            from .parking_diagnostics import clearance_diagnostic
+            result['diagnostic'] = clearance_diagnostic(world, pose, zone['area'] if mission.reason == 'left_goal_after_arrival' else None)
+        return result
     finally:
         proc.stdin.close()
         try:proc.wait(timeout=2)

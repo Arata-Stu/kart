@@ -1,12 +1,12 @@
 import { $, state, action, on, remember, emit, toast, api } from "./api.js";
 import { reverseLane } from "./direction.js";
 import { replaySimulation } from "./simulation_replay.js";
-let requestSerial=0, parkingRoute=null, documentRevision=null;
+let requestSerial=0, parkingRoute=null, documentRevision=null, parkingMessage="";
 let sim=null, snapshot=null, trail=[], running=false, last=0, accumulator=0, raf=0;
 const dialog=$("simulation-dialog"), canvas=$("simulation-canvas"), ctx=canvas.getContext("2d");
 function pause() {running=false; cancelAnimationFrame(raf); raf=0; $("simulation-play").textContent="再生";}
 async function reset() {
-  pause();parkingRoute=null;
+  pause();parkingRoute=null;parkingMessage="";
   const serial=++requestSerial;sim=null;
   const mpc=$("simulation-controller").value==="mpc";
   $("simulation-lookahead").hidden=mpc;
@@ -35,7 +35,8 @@ function draw() {
   canvas.width=w*dpr; canvas.height=h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.fillStyle="#f4f6f8"; ctx.fillRect(0,0,w,h);
   const line=parkingRoute || snapshot.lines[$("simulation-line").value];
-  const pts=[...snapshot.left,...snapshot.right,...line.points];
+  const diagnostic=sim.car.done?sim.diagnostic:null;
+  const pts=[...snapshot.left,...snapshot.right,...line.points,...(diagnostic?.body||[])];
   let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
   for(const [x,y] of pts){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);}
   const scale=Math.min((w-60)/Math.max(1,x1-x0),(h-60)/Math.max(1,y1-y0));
@@ -57,7 +58,32 @@ function draw() {
   ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(tx,ty);ctx.stroke();ctx.setLineDash([]);
   ctx.beginPath();ctx.arc(tx,ty,6,0,Math.PI*2);ctx.fillStyle="#fff";ctx.fill();ctx.lineWidth=2;ctx.stroke();
   ctx.fillStyle="#b51f5a";ctx.font="12px sans-serif";ctx.fillText("先読み点",tx+10,ty-10);ctx.restore();
-  $("simulation-metrics").textContent=`${parkingRoute?"駐車試走（理想車両モデル） · ":""}${c.reason || (running?"試走中":"停止中")} · ${c.time.toFixed(1)} s · ${c.speed.toFixed(2)} m/s${sim.cfg.controller==="pure_pursuit"?` · 先読み ${c.lookahead.toFixed(2)} m`:""} · 目標 ${c.targetSpeed.toFixed(2)} m/s · 計算 ${c.solverMs.toFixed(2)} ms · 舵角 ${(c.steering*180/Math.PI).toFixed(1)}° · 誤差 ${c.error.toFixed(2)} m / 最大 ${c.maxError.toFixed(2)} m`;
+  if(diagnostic){
+    function geometry(g,color,fill=false){
+      if(!g)return;
+      if(g.type==='GeometryCollection'){for(const child of g.geometries)geometry(child,color,fill);return;}
+      if(g.type==='Polygon'){
+        ctx.beginPath();for(const ring of g.coordinates){ring.forEach((v,i)=>{const p=project(v);i?ctx.lineTo(...p):ctx.moveTo(...p);});ctx.closePath();}
+        ctx.strokeStyle=color;ctx.lineWidth=2;ctx.stroke();if(fill){ctx.fillStyle=color+'44';ctx.fill('evenodd');}
+      } else if(g.type==='MultiPolygon')for(const coordinates of g.coordinates)geometry({type:'Polygon',coordinates},color,fill);
+      else if(g.type==='LineString')path(g.coordinates,color);
+      else if(g.type==='MultiLineString')for(const coordinates of g.coordinates)path(coordinates,color);
+    }
+    geometry(diagnostic.surface,'#278ca0',true);
+    geometry(diagnostic.clearance,'#ed9b15');
+    path(diagnostic.body,'#d52943',true);
+    for(const hit of diagnostic.hits){
+      geometry(hit.geometry,'#d52943');geometry(hit.outside,'#d52943',true);path(hit.closest,'#d52943');
+      const [hx,hy]=project(hit.marker);ctx.beginPath();ctx.arc(hx,hy,8,0,Math.PI*2);ctx.strokeStyle='#d52943';ctx.lineWidth=3;ctx.stroke();
+      ctx.font='12px sans-serif';ctx.fillStyle='#a51c30';ctx.fillText(`${hit.kind}（距離 ${hit.distance_m.toFixed(3)} m）`,Math.min(w-230,Math.max(8,hx+12)),Math.max(20,hy-12));
+    }
+  }
+  $("simulation-metrics").textContent=`${parkingRoute?"駐車試走（理想車両モデル） · ":""}${diagnostic?`水色:走行可能領域 / 赤:車体・抵触箇所 / 橙:余裕 ${diagnostic.margin_m.toFixed(3)} m${diagnostic.hits.length?"":" / 壁・領域の抵触なし"} · `:""}${parkingMessage || c.reason || (running?"試走中":"停止中")} · ${c.time.toFixed(1)} s · ${c.speed.toFixed(2)} m/s${sim.cfg.controller==="pure_pursuit"?` · 先読み ${c.lookahead.toFixed(2)} m`:""} · 目標 ${c.targetSpeed.toFixed(2)} m/s · 計算 ${c.solverMs.toFixed(2)} ms · 舵角 ${(c.steering*180/Math.PI).toFixed(1)}° · 誤差 ${c.error.toFixed(2)} m / 最大 ${c.maxError.toFixed(2)} m`;
+}
+function play(){
+  if(!sim || sim.car.done)return;
+  running=true;last=performance.now();accumulator=0;
+  $("simulation-play").textContent="一時停止";raf=requestAnimationFrame(tick);
 }
 function tick(now){
   if(!running)return;
@@ -76,7 +102,7 @@ action("simulation-open",async()=>{
   $("simulation-line").replaceChildren(...kinds.map(k=>new Option(k,k)));
   dialog.showModal();await reset();
 });
-action("simulation-play",async()=>{if(!sim)await reset();if(running){pause();draw();return;}if(!sim)return;if(sim.car.done)await reset();if(!sim)return;running=true;last=performance.now();accumulator=0;$("simulation-play").textContent="一時停止";raf=requestAnimationFrame(tick);});
+action("simulation-play",async()=>{if(!sim)await reset();if(running){pause();draw();return;}if(!sim)return;if(sim.car.done){if(parkingRoute){toast(sim.car.reason+"。通常試走へ戻るにはリセットしてください。");return;}await reset();}parkingMessage="";play();draw();});
 action("simulation-reset",reset);
 for(const id of ["simulation-controller","simulation-horizon","simulation-tracking","simulation-smoothness","simulation-rate","simulation-line","simulation-speed","simulation-wheelbase","simulation-steer"]){
   $(id).addEventListener("change",async()=>{try{await reset();}catch(e){pause();sim=null;$("simulation-metrics").textContent=e.message;toast(e.message,true);}});
@@ -92,13 +118,17 @@ on("document",()=>{if(dialog.open)dialog.close();});
 
 action('simulation-parking',async()=>{
   if(!sim || state.dirty || state.doc.revision!==documentRevision)throw Error('地図を保存し、試走を開き直してください');
-  pause();const serial=++requestSerial;
+  pause();parkingMessage="駐車経路と追従を計算中…";draw();const serial=++requestSerial;
   $('simulation-parking').disabled=true;$('simulation-play').disabled=true;
   try {
     const result=await api('parking-preview',{id:state.id,revision:documentRevision,lane_id:state.laneId,line_type:$('simulation-line').value,slot:$('simulation-parking-slot').value,pose:[sim.car.x,sim.car.y,sim.car.yaw],options:sim.cfg,initial_speed:sim.car.speed});
     if(serial!==requestSerial || !dialog.open)return;
     parkingRoute={points:result.route.map(p=>p.slice(0,2))};
-    sim=replaySimulation(result,sim.cfg);trail=[[sim.car.x,sim.car.y]];draw();
-    toast('駐車経路と追従を計算しました。「再生」で確認できます。');
+    sim=replaySimulation(result,sim.cfg);trail=[[sim.car.x,sim.car.y]];parkingMessage="";
+    play();draw();
+    toast(sim.car.done?sim.car.reason:'駐車試走を開始しました。',sim.car.done && result.reason!=='simulated_parked');
+  } catch(e) {
+    if(serial===requestSerial && dialog.open){parkingMessage='駐車試走を開始できません: '+e.message;draw();}
+    throw e;
   } finally {if(serial===requestSerial)$('simulation-play').disabled=!sim;$('simulation-parking').disabled=false;}
 });
