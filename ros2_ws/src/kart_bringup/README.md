@@ -1460,7 +1460,7 @@ Race/Customは保存した速度profileを使い、新規生成の速度上限�
 P1/P2/P3は`parking_slot:=P2`で選択。map座標の実データはMap StudioでHDMapの`parking_areas`へ保存する。
 slotのみ指定すると同じ`map_file`を参照し、未定義区画は起動前に拒否する。siteの明示指定は旧形式との互換用。
 通常コース走行を維持し、レース終了後`/parking/start`で駐車に移る。開始時のAUTO／録画操作は変更しない。
-`recovery:=off tuning_enabled:=false`が必要。固定AUTO throttleも拒否する。
+`recovery:=off`が必要。固定AUTO throttleも拒否する。`tuning_enabled:=true`を併用可能で、駐車構成ではHDMapの`tuning_parking_enabled=true`を明示し、地図・parameter書込みを止めて駐車開始／STOP中リセットと状態表示を提供する。
 Pure Pursuitの駐車用先読み0.25m・終端停止0.04mはcontrol/sim YAMLへ明記した。
 録画設定は`/parking/status`, `/parking/path`, `/parking/goal`, `/planning/course_reference`を追加する。
 追加外部APT依存はなく、既存のrclpy/tf2/msg/PyYAMLを使用する。

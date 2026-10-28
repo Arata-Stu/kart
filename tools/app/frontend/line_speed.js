@@ -28,7 +28,7 @@ export function speedColor(value, max) {
   return `hsl(${225*(1-fraction)},75%,43%)`;
 }
 
-export function paintSpeedLine(ctx, points, closed, speeds, max, project) {
+export function paintSpeedLine(ctx, points, closed, speeds, max, project, step=false) {
   ctx.save();
   ctx.setLineDash([]);
   ctx.lineWidth = 4;
@@ -39,9 +39,29 @@ export function paintSpeedLine(ctx, points, closed, speeds, max, project) {
     if (a[0] === b[0] && a[1] === b[1]) continue;
     const gradient=ctx.createLinearGradient(a[0],a[1],b[0],b[1]);
     for (const t of [0,.25,.5,.75,1])
-      gradient.addColorStop(t,speedColor(speeds[i]+(speeds[j]-speeds[i])*t,max));
+      gradient.addColorStop(t,speedColor(step?speeds[i]:speeds[i]+(speeds[j]-speeds[i])*t,max));
     ctx.strokeStyle=gradient;
     ctx.beginPath(); ctx.moveTo(...a); ctx.lineTo(...b); ctx.stroke();
   }
   ctx.restore();
+}
+
+// Return one nearest segment per visible line so overlapping lines stay readable.
+export function speedAtCursor(lane,kinds,p,project,tolerance=9) {
+  const scale=lineSpeedScale(lane,kinds), result=[];
+  for(const [kind,speeds] of scale.speeds) {
+    const data=lane.lines[kind], points=data.points;let best=null;
+    for(let i=0;i<points.length-(lane.closed?0:1);i++) {
+      const j=(i+1)%points.length,a=project(points[i]),b=project(points[j]);
+      const dx=b[0]-a[0],dy=b[1]-a[1],length=dx*dx+dy*dy;if(!length)continue;
+      const t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/length));
+      const distance=Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy);
+      if(distance<=tolerance && (!best || distance<best.distance)) {
+        const speed=data.speed_mode==='step'?speeds[i]:speeds[i]+(speeds[j]-speeds[i])*t;
+        best={kind,speed,distance,color:speedColor(speed,scale.max)};
+      }
+    }
+    if(best)result.push(best);
+  }
+  return result.sort((a,b)=>a.distance-b.distance);
 }

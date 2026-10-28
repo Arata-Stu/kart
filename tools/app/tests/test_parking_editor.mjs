@@ -21,5 +21,8 @@ assert.ok(Math.abs(state.parkingDraft.goal_pose[2]-Math.PI/2)<1e-6);
 emit('parking-drag',{handle:{field:'goal'},p:[1.5,.5]});await flush();
 assert.equal(state.parkingDraft.goal_pose[0],1.5);
 assert.deepEqual(state.doc.parking_areas,[]); // Draft edits never silently commit.
-await el('parking-pick-forward').click();await flush();emit('parking-click',[0,0]);await flush();emit('parking-end');await flush();
-assert.equal(state.parkingPick,null);assert.equal(state.parkingDirectionStart,null);
+emit('parking-end');await flush();
+assert.equal(state.parkingPick,null);
+await el('parking-clear-maneuver').click();await flush();
+assert.deepEqual(state.parkingDraft.maneuver,[]);
+assert.equal(state.parkingPick,null);

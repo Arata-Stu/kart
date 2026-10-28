@@ -26,6 +26,7 @@ class HDMapNode(Node):
         defaults = {
             "map_file": "",
             "tuning_enabled": False,
+            "tuning_parking_enabled": False,
             "tuning_map_dir": "",
             "tuning_tracking_frame": "rear_axle",
             "frame_id": "map",

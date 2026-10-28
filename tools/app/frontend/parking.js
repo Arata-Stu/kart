@@ -5,11 +5,10 @@ const fields = ['polygon','entrance','maneuver','drivable'];
 let mapId = null, picking = null;
 function row() { return state.doc?.parking_areas?.find(a => a.id === $('parking-id').value); }
 function load() {
-  picking = state.parkingPick = null; directionStart = null;state.parkingDirectionStart=null;
+  picking = state.parkingPick = null;
   const a = row();
   for (const f of fields) $('parking-'+f).value = pointText(f === 'drivable' ? state.doc?.parking_drivable : a?.[f]);
   for (const [i,f] of ['x','y','yaw'].entries()) $('parking-goal-'+f).value = a?.goal_pose?.[i] ?? '';
-  $('parking-forward').value = a?.forward_yaw ?? '';
   $('parking-pick-note').textContent = '1から順に地図で指定します。丸い点はドラッグで修正。右ドラッグで移動、ホイールで拡大できます。';
   state.parkingDraft = null;
   if($('parking-editor').open) preview();
@@ -27,24 +26,22 @@ function preview() {
     state.parkingDraft = { id: $('parking-id').value,
       polygon:parsePoints($('parking-polygon').value), entrance:parsePoints($('parking-entrance').value),
       maneuver:parsePoints($('parking-maneuver').value) };
-    const forward=$('parking-forward').value;
-    if(forward.trim()!=='' && Number.isFinite(Number(forward))) state.parkingDraft.forward_yaw=Number(forward);
     const goal=['x','y','yaw'].map(f => $('parking-goal-'+f).value);
     if (goal.every(v => v.trim() !== '' && Number.isFinite(Number(v)))) state.parkingDraft.goal_pose=goal.map(Number);
     const a=state.parkingDraft;
-    $('parking-progress').textContent=[['枠',a.polygon.length>=3],['入口',a.entrance.length===2],['停車姿勢',!!a.goal_pose],['進入範囲',a.maneuver.length>=3],['順方向',Number.isFinite(a.forward_yaw)]].map(([name,ok])=>`${ok?'✓':'未指定'} ${name}`).join(' · ')+'（形状の検証は区画を適用時）';
+    $('parking-progress').textContent=[['枠',a.polygon.length>=3],['入口',a.entrance.length===2],['停車姿勢',!!a.goal_pose]].map(([name,ok])=>`${ok?'✓':'未指定'} ${name}`).join(' · ')+'（形状の検証は区画を適用時）';
     emit('view');
   } catch { /* Incomplete text is not committed to the map. */ }
 }
 $('parking-id').addEventListener('change',load);
 $('parking-editor').addEventListener('toggle',()=>{
   if($('parking-editor').open) preview();
-  else {picking=state.parkingPick=null;state.parkingDraft=null;state.parkingDirectionStart=null;emit('view');}
+  else {picking=state.parkingPick=null;state.parkingDraft=null;emit('view');}
 });
 for(const f of ['polygon','maneuver']) action('parking-clear-'+f,()=>{
   $('parking-'+f).value='';if(f==='polygon')$('parking-entrance').value='';
-  picking=state.parkingPick=f;preview();
-  $('parking-pick-note').textContent='角を順番にクリックしてください。3点以上で範囲になります。';
+  picking=state.parkingPick=f==='maneuver'?null:f;preview();
+  $('parking-pick-note').textContent=f==='maneuver'?'経路制限を解除しました。通常コース＋駐車枠で計画します。区画を適用して保存してください。':'角を順番にクリックしてください。3点以上で範囲になります。';
 });
 on('parking-drag',e=>{
   const {handle,p}=e.detail;
@@ -60,13 +57,12 @@ on('parking-drag',e=>{
   preview();
 });
 for (const e of $('parking-editor').querySelectorAll('textarea,input')) e.addEventListener('input',preview);
-for (const field of [...fields,'goal','heading','forward']) action('parking-pick-'+field, () => {
-  picking = state.parkingPick = field; directionStart = null;state.parkingDirectionStart=null;preview();
-  $('parking-pick-note').textContent = field === 'heading' ? 'goalから向けたい方向を地図上でクリック。' : field === 'entrance' ? '水色の入口にしたい枠の辺をクリックしてください。' : field === 'forward' ? 'コース順方向に2点クリック。' : '地図をクリックして入力。頂点は順番に追加します。「入力終了」で終了。';
+for (const field of [...fields,'goal','heading']) action('parking-pick-'+field, () => {
+  picking = state.parkingPick = field;preview();
+  $('parking-pick-note').textContent = field === 'heading' ? 'goalから向けたい方向を地図上でクリック。' : field === 'entrance' ? '水色の入口にしたい枠の辺をクリックしてください。' : '地図をクリックして入力。頂点は順番に追加します。「入力終了」で終了。';
 });
-function finish(){picking=state.parkingPick=null;directionStart=null;state.parkingDirectionStart=null;$('parking-pick-note').textContent='地図入力を終了しました。丸い点はドラッグで修正できます。区画を適用後、地図を保存してください。';emit('view');}
+function finish(){picking=state.parkingPick=null;$('parking-pick-note').textContent='地図入力を終了しました。丸い点はドラッグで修正できます。区画を適用後、地図を保存してください。';emit('view');}
 action('parking-pick-end',finish);on('parking-end',finish);
-let directionStart = null;
 on('parking-click', e => {
   if (!picking || !state.doc) return;
   const p=e.detail.map(v => Number(v.toFixed(4)));
@@ -90,9 +86,6 @@ on('parking-click', e => {
     if (Math.hypot(p[0]-Number(x),p[1]-Number(y))<1e-6) throw Error('goalと異なる点で向きを指定してください');
     $('parking-goal-yaw').value=Math.atan2(p[1]-Number(y),p[0]-Number(x)).toFixed(6);
     picking=state.parkingPick=null;
-  } else if (picking === 'forward') {
-    if (!directionStart) {directionStart=p;state.parkingDirectionStart=p;emit('view');}
-    else { if (Math.hypot(p[0]-directionStart[0],p[1]-directionStart[1])<1e-6) throw Error('進行方向は異なる2点で指定してください'); $('parking-forward').value=Math.atan2(p[1]-directionStart[1],p[0]-directionStart[0]).toFixed(6); directionStart=null;state.parkingDirectionStart=null; picking=state.parkingPick=null; }
   }
   if (!picking) $('parking-pick-note').textContent='指定しました。区画を適用後、地図を保存してください。';
   if(picking==='heading')$('parking-pick-note').textContent='次に車の前方をクリックしてください。';
@@ -102,12 +95,12 @@ action('parking-apply', async () => {
   const id=state.id, revision=state.doc.revision;
   const candidate=structuredClone(state.doc);
   const goal=['x','y','yaw'].map(f => $('parking-goal-'+f).value);
-  if (goal.some(v => v.trim()==='') || $('parking-forward').value.trim()==='') throw Error('手順3で停車位置と向き、手順4でコースの順方向を指定してください');
-  const area={id:$('parking-id').value,goal_pose:goal.map(Number),forward_yaw:Number($('parking-forward').value)};
+  if (goal.some(v => v.trim()==='')) throw Error('手順3で停車位置と向きを指定してください');
+  const area={id:$('parking-id').value,goal_pose:goal.map(Number)};
   for (const f of ['polygon','entrance','maneuver']) area[f]=parsePoints($('parking-'+f).value);
   candidate.parking_areas=[...(candidate.parking_areas || []).filter(a => a.id!==area.id),area];
   candidate.parking_drivable=parsePoints($('parking-drivable').value);
-  if(area.polygon.length<3 || area.maneuver.length<3)throw Error('駐車枠と進入範囲は、それぞれ角を3点以上指定してください');
+  if(area.polygon.length<3 || (area.maneuver.length>0 && area.maneuver.length<3))throw Error('駐車枠と、指定する場合の経路制限範囲は3点以上で描いてください');
   const fields=await api('parking-validate',{id,document:candidate});
   if (state.id!==id || state.doc.revision!==revision) throw Error('地図が変わりました。再入力してください');
   remember(); Object.assign(state.doc,fields); state.dirty=true;

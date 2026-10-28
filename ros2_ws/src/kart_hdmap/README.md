@@ -171,6 +171,7 @@ ros2 topic pub --once /hdmap/select_line std_msgs/msg/String '{data: centerline}
 
 | 起動時固定parameter | 既定値 | 意味 |
 | --- | --- | --- |
+| tuning_parking_enabled | false | 起動時固定。駐車service操作を有効化し、地図・parameter変更は拒否。parking構成のbringupがtrueへ上書き |
 | tuning_enabled | false | loopback TCP 8782の調整窓口を有効化 |
 | tuning_map_dir | 空文字 | 自己位置推定に使用する転送bundleの絶対パス。map_fileはこの配下に限定 |
 | tuning_tracking_frame | rear_axle | mapから取得する車両のTF frame |
@@ -285,14 +286,14 @@ ROSメッセージ配信・実車での速度追従は未検証。
 ## 駐車属性
 
 HDMap v2は任意の`parking_areas`（P1/P2/P3）と`parking_drivable`を保持する。
-各areaは`id`, `polygon`, `goal_pose`（rear_axle x/y/yaw、m/rad）, `entrance`（同一辺上の2点）, `maneuver`, `forward_yaw`。
+各areaは`id`, `polygon`, `goal_pose`（rear_axle x/y/yaw、m/rad）, `entrance`（同一辺上の2点）を持つ。`maneuver`は任意の経路制限（空で制限なし）。`forward_yaw`は不要で、旧値も正規化時に除去する。
 省略時は空。Map Studioとplannerは本packageのROS非依存`parking.py`・`parking_geometry.py`で共通検証する。
 共通の`obstacles`が物理壁・禁止領域で、区画の輪郭は壁へ自動変換しない。
 `hdmap/document`の正規化documentにも属性を含める。既存topic型・parameterの追加はなし。
 保存・export・登録変換の詳細は[Map Studio](../../../../tools/app/README.md)、実行は[kart_parking](../kart_parking/README.md)を参照。
 
 駐車の領域結合はShapelyを使用する。Dockerはapt版の上にNumPy 1/2対応の`shapely==2.1.2` wheelを導入し、領域結合までビルド時に検査する。ローカルStudioも実行Pythonに対応するwheelを導入する。読み込み失敗は形状エラーと区別して通知する。既存コンテナの修復手順はtools/app/README.md「Shapely / NumPyの互換性エラー」を参照。
-閉路boundは包含する内外周、開路boundは両端を結んだ帯として検証する。接続していない進入範囲・交差boundは拒否する。
+閉路boundは包含する内外周、開路boundは両端を結んだ帯として検証する。通常コース＋駐車枠の和集合を使い、入口の接続不備・交差boundは拒否する。紫のmaneuverは自由空間を広げず、経路を制限する。
 和集合の継ぎ目は壁にせず、残った中島・外周・共通obstaclesに対して車体と余裕を検査する。
 生成結果を別の手描き属性として保存せず、保存したboundとparking属性から再構成する。ROS topic・parameterの追加はない。
 
@@ -306,3 +307,15 @@ Customlineの生成属性`speed_mode: step`を`ReferenceLine.step_speed`へ反�
 保存map.jsonと書き出しHDMapの`line_speed_modes`から正規化し、動的snapshot適用でも維持する。
 省略は従来のprofile方式。stepはcustomline以外では拒否する。既存の速度override/上限は維持する。
 ROS parameter追加なし。ReferenceLine型変更のためpublisher/subscriberを同じ版で再ビルドする。
+
+
+### 駐車の手動開始UI
+
+`tuning_enabled`と`tuning_parking_enabled`がtrueのとき、同じlocalhost:8782窓口の
+`POST /parking_start`・`/parking_reset`で既存`parking/start`・`parking/reset`
+（双方`std_srvs/srv/Trigger`）を非同期で1回だけ呼ぶ。
+`parking/status`（`std_msgs/msg/String`、JSON、depth 1）を購読し、1秒以内の状態のみUIへ渡す。
+地図identity・適用版・新鮮なモード/速度を検査し、開始はAUTO/STOP、リセットはSTOP・停車時のみ。
+planner側の自己位置・経路・停止条件もそのまま適用する。タイムアウト時は結果不明と表示して再送しない。
+駐車構成では地図適用・巻戻し・parameter書込みを禁止する。status/parameter読み取りは可能。
+AUTO切替・STOP操作・録画開始はこの窓口から行わない。

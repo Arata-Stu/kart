@@ -21,3 +21,15 @@ assert.equal(gradients.at(-1).stops[0][1],speedColor(1,1));assert.equal(gradient
 assert.equal(gradients[0].stops.length,5,'intermediate colors follow the same scale');
 strokes.length=0;paintSpeedLine(ctx,data.points,false,[0,.5,1],1,p=>p);assert.equal(strokes.length,2,'open line does not wrap');
 console.log('Target-speed sources, shared visible scale, invalid profiles, zero speed, continuous colors and loop closure passed');
+const {speedAtCursor}=await import('../frontend/line_speed.js');
+const project=p=>p.map(v=>100*v);
+let hits=speedAtCursor(lane,['centerline','raceline'],[50,2],project);
+assert.equal(hits.length,2);assert.equal(hits.find(h=>h.kind==='raceline').speed,.25);
+assert.equal(hits.find(h=>h.kind==='centerline').speed,.7);
+assert.equal(hits.find(h=>h.kind==='raceline').color,speedColor(.25,1));
+assert.deepEqual(speedAtCursor(lane,['raceline'],[50,20],project),[]);
+const stepped={...lane,closed:false,lines:{customline:{...data,speed_mode:'step'}}};
+assert.equal(speedAtCursor(stepped,['customline'],[50,0],project)[0].speed,0);
+assert.equal(speedAtCursor({...lane,closed:true},['raceline'],[50,50],project)[0].speed,.5);
+gradients.length=0;paintSpeedLine(ctx,data.points,false,[0,.5,1],1,project,true);
+assert.ok(gradients[0].stops.every(([,c])=>c===speedColor(0,1)));

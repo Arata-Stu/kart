@@ -53,6 +53,8 @@ class TuningBridge:
         ]
         from .parameter_bridge import ParameterBridge
         self.parameters = ParameterBridge(self)
+        from .parking_bridge import ParkingBridge
+        self.parking = ParkingBridge(self)
         bridge = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -147,6 +149,8 @@ class TuningBridge:
         return digest(self.active())
 
     def issue(self):
+        if self.node.settings.get("tuning_parking_enabled",False):
+            return "駐車構成では地図・パラメータ編集を停止しています。駐車開始／リセットは利用できます"
         if self.node.count_publishers('planning/reference_line') != 1:
             return '参照ラインの配信元が競合しています'
         return self.gate.issue(allow_running=True)
@@ -160,6 +164,7 @@ class TuningBridge:
                       pose=self.pose, tracking_reference=self.tracking_status(), localized=self.localized and now - self.localized_at <= 1.5,
                       apply_issue=self.issue(), stop_issue=self.gate.issue(),
                       can_rollback=self.previous is not None)
+        if hasattr(self, 'parking'): result['parking']=self.parking.view()
         if hasattr(self, 'vehicle'):
             result['vehicle'] = self.vehicle.view(self.node.get_clock().now().nanoseconds / 1e9,
                 dict(bridge=int(self.node.count_publishers('diagnostics') > 0),
@@ -192,6 +197,7 @@ class TuningBridge:
     def tick(self):
         from rclpy.time import Time
         self.parameters.tick()
+        self.parking.tick()
         n = self.node
         self.pose = None
         try:
@@ -206,7 +212,9 @@ class TuningBridge:
             action, body, reply, deadline = self.requests.get_nowait()
         except queue.Empty:
             return
-        if action in ('/parameters_get', '/parameters_set'):
+        if action in ('/parking_start','/parking_reset'):
+            self.parking.begin(action,body,reply,deadline)
+        elif action in ('/parameters_get', '/parameters_set'):
             self.parameters.begin(action, body, reply, deadline)
         else:
             reply.put(self.handle(action, body, deadline))

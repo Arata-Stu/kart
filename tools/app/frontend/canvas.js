@@ -1,7 +1,7 @@
 import { vehicleShape, handles, hitHandle } from './parking_visual.js';
 import { paintTuning } from "./tuning.js";
 import { lineVisible } from "./line_visibility.js";
-import { lineSpeedScale, paintSpeedLine } from "./line_speed.js";
+import { lineSpeedScale, paintSpeedLine, speedAtCursor } from "./line_speed.js";
 import { viewBounds } from "./view_bounds.js";
 import { placementPreview } from "./placement.js";
 import { paintOccupancy } from "./occupancy.js";
@@ -335,20 +335,12 @@ export function draw() {
           for (const sign of [-1,1]) line([tip,[tip[0]-.12*Math.cos(yaw+sign*.5),tip[1]-.12*Math.sin(yaw+sign*.5)]], '#bb4499');
           const p=project([x,y]);ctx.beginPath();ctx.arc(...p,4,0,Math.PI*2);ctx.fillStyle='#bb4499';ctx.fill();
         }
-        if(parkingOpen && Number.isFinite(a.forward_yaw) && a.entrance?.length===2){
-          const mid=a.entrance[0].map((v,i)=>(v+a.entrance[1][i])/2);
-          const tip=[mid[0]+.65*Math.cos(a.forward_yaw),mid[1]+.65*Math.sin(a.forward_yaw)];
-          line([mid,tip],'#d18400',false,false,3);
-          for(const sign of [-1,1])line([tip,[tip[0]-.13*Math.cos(a.forward_yaw+sign*.5),tip[1]-.13*Math.sin(a.forward_yaw+sign*.5)]],'#d18400');
-          const q=project(tip);ctx.fillStyle='#996000';ctx.fillText('コース順方向',q[0]+7,q[1]);
-        }
         if(parkingOpen && a.id===$('parking-id').value) for(const h of handles(a,vehicleSettings)) {
           const q=project(h.point);ctx.beginPath();ctx.arc(...q,6,0,2*Math.PI);
           ctx.fillStyle='white';ctx.fill();ctx.strokeStyle=h.field==='polygon'?'#238457':h.field==='maneuver'?'#9c8abb':'#bb4499';ctx.lineWidth=2;ctx.stroke();
           ctx.fillStyle=ctx.strokeStyle;ctx.fillText(h.field==='heading'?'向き':h.field==='goal'?'後輪軸':String(h.index+1),q[0]+8,q[1]-7);
         }
       }
-      if(parkingOpen && state.parkingDirectionStart){const q=project(state.parkingDirectionStart);ctx.beginPath();ctx.arc(...q,6,0,Math.PI*2);ctx.fillStyle='#d18400';ctx.fill();ctx.fillText('ここから順方向へ次の点',q[0]+8,q[1]);}
       line(d.left, colors.left, d.closed);
       line(d.right, colors.right, d.closed);
       const speedScale = state.showLineSpeeds
@@ -361,7 +353,7 @@ export function draw() {
       for (const [kind, data] of Object.entries(d.lines)) {
         if (!lineVisible(kind)) continue;
         if (speedScale?.speeds.has(kind))
-          paintSpeedLine(ctx, data.points, d.closed, speedScale.speeds.get(kind), speedScale.max, project);
+          paintSpeedLine(ctx, data.points, d.closed, speedScale.speeds.get(kind), speedScale.max, project, data.speed_mode==='step');
         else line(data.points, colors[kind], d.closed, false, 2.5);
         directionArrows(data.points, colors[kind], d.closed);
       }
@@ -434,6 +426,19 @@ export function draw() {
         }
     }
     paintPlacement();
+    if(hover && !drag && state.lane && state.showLineSpeeds) {
+      const hits=speedAtCursor(state.lane,Object.keys(state.lane.lines).filter(lineVisible),hover.xy,project);
+      if(hits.length){
+        ctx.save();ctx.font='12px sans-serif';ctx.textAlign='left';
+        const names={centerline:'Center',raceline:'Race',customline:'Custom'};
+        const labels=hits.map(h=>`${names[h.kind]||h.kind}: ${h.speed.toFixed(2)} m/s（目標）`);
+        const w=Math.max(...labels.map(t=>ctx.measureText(t).width))+30,h=hits.length*22+12;
+        const x=Math.max(0,Math.min(width-w,hover.xy[0]+15)),y=Math.max(0,Math.min(height-h,hover.xy[1]+16));
+        ctx.fillStyle='#ffffffee';ctx.fillRect(x,y,w,h);
+        hits.forEach((hit,i)=>{ctx.fillStyle=hit.color;ctx.fillRect(x+7,y+9+i*22,9,9);ctx.fillStyle='#243746';ctx.fillText(labels[i],x+22,y+18+i*22);});
+        ctx.restore();
+      }
+    }
     const bar = spacing * scale;
     ctx.strokeStyle = "#647c8c";
     ctx.lineWidth = 2;

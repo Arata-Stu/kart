@@ -149,7 +149,7 @@ class Studio:
                                    Task('audit', [plan]))
         if path == "/api/tuning/prepare":
             return self.tuning.prepare(b)
-        if path in ("/api/tuning/status", "/api/tuning/apply", "/api/tuning/rollback", "/api/tuning/parameters_get", "/api/tuning/parameters_set"):
+        if path in ("/api/tuning/status", "/api/tuning/apply", "/api/tuning/rollback", "/api/tuning/parameters_get", "/api/tuning/parameters_set", "/api/tuning/parking_start", "/api/tuning/parking_reset"):
             return self.tuning.request(b, path.rsplit("/", 1)[1])
         key = b.get("id", "")
         if path in ("/api/e2e/trash", "/api/e2e/restore"):
@@ -288,6 +288,11 @@ class Studio:
                 ["map:" + name(key)],
                 Task('line_generate', [key, b['kind'], b.get('settings', {}), b['revision'], b.get('lane_id')]),
             )
+        if path == "/api/parking-preview":
+            from .parking_preview import preview
+            document=self.maps.load(key)
+            if document['revision']!=b['revision']: raise ValueError('地図が変わりました。試走を開き直してください')
+            return preview(document,b['lane_id'],b['line_type'],b['slot'],b['pose'],b.get('options'),b.get('initial_speed',0.))
         if path == "/api/tracking-preview":
             from .tracking_preview import preview
             return preview(b)

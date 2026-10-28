@@ -180,3 +180,11 @@ def test_lattice_detours_when_tangent_connections_hit_obstacle(setup):
     assert path and w.swept(path,z['maneuver'])
     assert distance(path[-1],z['goal'])<1e-8
     assert all(directed(p,z) for p in path)
+
+
+def test_auto_course_direction_tracks_selected_line_order():
+    from kart_parking.planner import course_forward
+    points=[(-4,0),(6,0),(6,4),(-4,4)]
+    gate=[(1,-1),(3,-1)]
+    assert course_forward(points,gate)==pytest.approx(0)
+    assert abs(course_forward(list(reversed(points)),gate))==pytest.approx(math.pi)

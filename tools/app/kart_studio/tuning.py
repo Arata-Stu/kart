@@ -20,7 +20,7 @@ _protocol = importlib.import_module('_kart_tuning_protocol.tuning')
 
 
 def remote(connection, action, payload):
-    if action not in ('status', 'apply', 'rollback', 'parameters_get', 'parameters_set'):
+    if action not in ('status', 'apply', 'rollback', 'parameters_get', 'parameters_set', 'parking_start', 'parking_reset'):
         raise ValueError('Unknown tuning action')
     p = profile(connection)
     script = """import sys,urllib.request,urllib.error
@@ -94,7 +94,7 @@ class Tuning:
             if candidate['document'] != self.maps.load(body['id']):
                 raise ValueError('プレビュー後に地図が変わりました。作り直してください')
             payload['snapshot'] = candidate
-        if action in ('apply', 'rollback', 'parameters_set'):
+        if action in ('apply', 'rollback', 'parameters_set', 'parking_start', 'parking_reset'):
             payload['expected_revision'] = body['expected_revision']
         if action in ('parameters_get', 'parameters_set'):
             from _kart_tuning_protocol.parameter_policy import target

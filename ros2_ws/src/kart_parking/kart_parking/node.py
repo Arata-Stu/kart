@@ -227,7 +227,7 @@ class ParkingNode(Node):
         self.status.publish(String(data=json.dumps(dict(state=state,slot=self.p['slot'],
             goal=self.zone['goal'],reason=self.mission.reason if self.mission else self.error,
             progress_index=self.mission.index if self.mission else None,
-            parked=state=='parked'))))
+            parked=state=='parked',parking_speed_mps=self.c.parking_speed_mps))))
 
     def destroy_node(self):
         self.pool.shutdown(wait=False,cancel_futures=True)

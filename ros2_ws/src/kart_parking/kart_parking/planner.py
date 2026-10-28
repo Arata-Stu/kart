@@ -68,18 +68,19 @@ def load_site(path, frame, slot, c):
         doc=dict(schema='kart.parking.v1',frame_id=frame,drivable=fields['parking_drivable'],
                  obstacles=[o['polygon'] for o in doc.get('obstacles',[])],
                  slots={slot:dict(area=row['polygon'],goal=row['goal_pose'],entrance=row['entrance'],
-                                 maneuver=row['maneuver'],forward_yaw=row['forward_yaw'])})
+                                 maneuver=row['maneuver'],auto_forward=True)})
     if doc.get('schema') != 'kart.parking.v1' or doc.get('frame_id') != frame:
         raise ValueError('Parking schema/frame mismatch; coordinates must already be in map frame')
     zone = dict(doc['slots'][slot])
     zone['area'] = polygon(zone['area'])
-    zone['maneuver'] = polygon(zone['maneuver'])
+    zone['maneuver'] = polygon(zone['maneuver']) if zone.get('maneuver') else None
     zone['goal'] = tuple(float(v) for v in zone['goal'])
     if len(zone['goal']) != 3 or not all(math.isfinite(v) for v in zone['goal']):
         raise ValueError('goal must be finite [x,y,yaw]')
-    zone['forward_yaw'] = float(zone['forward_yaw'])
-    if not math.isfinite(zone['forward_yaw']):
-        raise ValueError('Invalid course forward_yaw')
+    if not zone.get('auto_forward'):
+        zone['forward_yaw'] = float(zone['forward_yaw'])
+        if not math.isfinite(zone['forward_yaw']):
+            raise ValueError('Invalid course forward_yaw')
     if derived is None:
         world = World(doc['drivable'],doc.get('obstacles',[]),c.front_m,c.rear_m,c.width_m,c.margin_m)
     else:
@@ -213,8 +214,19 @@ def legal_entrance(path, zone):
     return entrance_path(path,zone)
 
 
+def course_forward(points, entrance):
+    """Tangent of the selected directed reference segment nearest the entrance."""
+    mid=tuple((a+b)/2 for a,b in zip(*entrance))
+    nearest=min(range(len(points)),key=lambda i:point_segment(mid,points[i],points[(i+1)%len(points)])[0])
+    a,b=points[nearest],points[(nearest+1)%len(points)]
+    return math.atan2(b[1]-a[1],b[0]-a[0])
+
+
 def prepare(points, speeds, closed, zone, world, c):
     course=course_samples(points,speeds,closed,c)
+    if zone.get('auto_forward'):
+        # Read direction from the selected reference line, never from goal yaw.
+        zone=dict(zone,forward_yaw=course_forward(points,zone['entrance']))
     poses=[p[:3] for p in course]
     if sum(distance(a,b) for a,b in zip(poses,poses[1:]+poses[:1])) <= c.horizon_m+1.:
         raise ValueError('Course too short for non-overlapping route horizon')
@@ -223,7 +235,7 @@ def prepare(points, speeds, closed, zone, world, c):
     # Try separated departures near the bay; choose a valid forward connector.
     candidates=[i for i,p in enumerate(course) if .3<distance(p,zone['goal'])<c.departure_radius_m
                 and math.cos(wrap(p[2]-zone['forward_yaw']))>.8
-                and inside(p,zone['maneuver'])]
+                and (zone['maneuver'] is None or inside(p,zone['maneuver']))]
     candidates.sort(key=lambda i:distance(course[i],zone['goal']))
     chosen=[]
     deadline=time.monotonic()+c.search_timeout_s

@@ -81,6 +81,8 @@
             <div id="vehicle-health" class="small"></div>
             <div id="vehicle-calibration" class="small"></div>
           </section>
+          <div class="tuning-controls"><span id="tuning-parking-status">駐車planner未接続</span><button id="tuning-parking-start" disabled>駐車を開始</button><button id="tuning-parking-reset" disabled>駐車をリセット（STOP）</button></div>
+          <p class="small">駐車構成では地図・パラメータ編集は停止します。AUTO中の「駐車を開始」は実車の経路を切り替えます。STOP中は経路を準備し、AUTOへの切替は従来の操作で行います。</p>
           <div class="small" id="tuning-status" role="status">未接続</div>
           <div class="small" id="tuning-revision"></div>
           <div class="small" id="tuning-lookahead" role="status">横制御の参照点: 未受信</div>
@@ -135,7 +137,7 @@
         <div id="inspector-body" class="scroll">
           <details id="parking-editor">
             <summary>駐車 P1・P2・P3 <span id="parking-defined">未定義</span></summary>
-            <p class="help">地図上で作ります。緑＝車を収める枠、水色＝入口、紫＝コースから枠まで通れる範囲、ピンク＝停車時の車体。赤い領域は実際の壁・障害物です。</p>
+            <p class="help">地図上で作ります。緑＝車を収める枠、水色＝入口、紫＝任意の経路制限、ピンク＝停車時の車体。赤い領域は実際の壁・障害物です。</p>
             <label>編集する区画<select id="parking-id"><option>P1</option><option>P2</option><option>P3</option></select></label>
             <section class="parking-step"><strong>1 · 駐車枠を描く</strong>
             <p class="help">壁の内側に沿って角を順番にクリック。コの字の開口側も結んで、車体を収める閉じた枠にします。丸い頂点はドラッグで修正できます。</p>
@@ -147,11 +149,11 @@
             <p class="help">枠内をクリックして車体を置き、前方をクリックして向きを決めます。中心の点は後輪軸中心。点をドラッグで移動、矢印の先をドラッグで回転できます。</p>
             <button id="parking-pick-goal">停車位置を置く</button><button id="parking-pick-heading">車の前方を指定</button>
             <p class="help">車体表示は生成ラインの寸法（未設定は長さ0.35 m・幅0.19 m）の目安です。plannerの車両寸法と照合してください。</p></section>
-            <section class="parking-step"><strong>4 · コースと枠をつなぐ</strong>
-            <p class="help">紫の範囲をコースと重ね、入口の両側と停車位置を含めます。ここだけ通常ラインを離れて駐車へ向かいます。壁の向こうへ広げないでください。コース全周はleft/rightから自動生成します。</p>
-            <button id="parking-pick-maneuver">進入範囲の頂点を追加</button><button id="parking-clear-maneuver">進入範囲を描き直す</button>
-            <p class="help">逆走を防ぐため、入口付近のコース上を走行順に2点クリックしてください。</p><button id="parking-pick-forward">コースの順方向を指定</button></section>
-            <section class="parking-step"><strong>5 · 実際の壁を確認</strong><p class="help">緑の枠は物理的な壁ではありません。奥・左右の壁は境界編集の「走行不可能領域」で厚みを持たせて描き、入口は開けます。既に赤く描かれた壁は追加不要です。</p></section>
+            <p class="help">走行可能範囲は通常コース（left/right間）＋駐車枠。入口をコースに接続してください。順方向は実行時の参照ラインから自動取得します。</p>
+            <details><summary>任意 · 駐車経路をさらに制限する</summary>
+            <p class="help">通常は指定不要です。紫の範囲を描くと、通常コースを離れてから停車するまでの経路をその内側に制限します。コース・入口・停車位置を含めます。この指定で走行可能範囲は広がりません。</p>
+            <button id="parking-pick-maneuver">経路制限の頂点を追加</button><button id="parking-clear-maneuver">制限を解除（標準に戻す）</button></details>
+            <section class="parking-step"><strong>4 · 実際の壁を確認</strong><p class="help">奥・左右の壁は境界編集の「走行不可能領域」で厚みを持たせて描き、入口は開けます。既に赤く描かれた壁は追加不要です。</p></section>
             <p id="parking-progress" class="help" role="status"></p>
             <details><summary>詳細設定 · 座標を直接編集</summary>
             <label>駐車枠（各行 x y、m）<textarea id="parking-polygon" rows="4"></textarea></label>
@@ -159,8 +161,7 @@
             <label>後輪軸 X m<input id="parking-goal-x" type="number" step="0.01"></label>
             <label>後輪軸 Y m<input id="parking-goal-y" type="number" step="0.01"></label>
             <label>車体 yaw rad<input id="parking-goal-yaw" type="number" step="0.01"></label>
-            <label>進入範囲（各行 x y、m）<textarea id="parking-maneuver" rows="4"></textarea></label>
-            <label>コース順方向 rad<input id="parking-forward" type="number" step="0.01"></label>
+            <label>任意の経路制限（空欄で制限なし、各行 x y、m）<textarea id="parking-maneuver" rows="4"></textarea></label>
             <details><summary>旧データ用の外周指定（通常は空欄）</summary><label>走行可能外周の上書き<textarea id="parking-drivable" rows="4"></textarea></label><button id="parking-pick-drivable">地図で外周の頂点を追加</button><p class="help">空欄ならleft/rightから自動生成します。</p></details></details>
             <p id="parking-pick-note" class="help"></p><button id="parking-pick-end">入力終了</button>
             <button id="parking-apply" class="primary">区画を適用</button><button id="parking-reload">適用済みの値に戻す</button><button id="parking-remove">区画を削除</button>
@@ -1339,6 +1340,8 @@
       <div class="actions">
         <button id="simulation-play">再生</button
         ><button id="simulation-reset">リセット</button>
+        <select id="simulation-parking-slot" aria-label="試走する駐車区画"><option>P1</option><option>P2</option><option>P3</option></select><button id="simulation-parking">現在位置から駐車を試走</button>
+        <p class="small">駐車は共通planner・選択中のPP/MPC・駐車完了判定で試走します。速度応答は理想モデルで、実車のPID・タイヤ・遅延は再現しません。保存済み地図を使用します。</p>
       </div>
       <p id="simulation-metrics" aria-live="off"></p>
       <p class="help">

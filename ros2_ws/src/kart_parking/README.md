@@ -10,11 +10,12 @@
 - 駐車区画近くの出発点から、接線付き曲線を試し、通らなければ前進のみの状態格子探索を行う。
   旋回上限は`tan(max_steering_rad)/wheelbase_m`。探索は時間・展開数に上限があり、
   解なしは「物理的に不可能」の証明ではない。最短路・探索完全性は保証しない。
-- 探索は指定した`maneuver`内に限定する。`forward_yaw`方向の進行を非負に制約し、
+- 標準の探索範囲は通常コース＋駐車枠。任意の`maneuver`があればその内側へ追加制限する。
+  HDMapでは入口に最も近い選択参照ラインの線分から順方向を自動取得し、その方向の進行を非負に制約し、
   前進ギアのUターンによる逆走も拒否する。区画へ直角に入る進行は許可する。
   曲がった進入区間では単一方向制約が保守的になり、通れる経路も拒否する場合がある。
 - 入口を過ぎた／進入距離が不足した場合は**順方向にもう1周**する。切り返し・後退は生成しない。
-  自動後退するrecoveryや固定AUTO throttle、Map Studioの走行中編集とは併用できない。
+  自動後退するrecoveryや固定AUTO throttle、Map Studioの地図・parameter書込みとは併用できない。状態表示・手動開始／STOP中リセットは利用できる。
 - 既存ラインにも、進入経路にもrear_axle基準の前後非対称長方形と余裕を適用する。
   点間移動・姿勢変化の余裕を加えた掃引チェックを行う。区画中心だけを衝突判定しない。
   既存ラインの走行可能性は元ライン生成・追従調整を前提とし、ここで周回ラインを作り直さない。
@@ -35,8 +36,9 @@ STOP要求・中立出力は物理停止やESC制動の証明ではない。停�
 ## 地図ファイル
 
 標準はMap Studioの「駐車 P1・P2・P3」で編集し、HDMap内の`parking_areas`へ保存する。
-`polygon`（区画）、`goal_pose`（後輪軸x/y/yaw）、`entrance`（開口2点）、`maneuver`（進入可能範囲）、
-`forward_yaw`（コース順方向）を区画ごとに持つ。走行領域はleft/right boundの間と選択区画のmaneuver・polygonの和集合から生成し、
+`polygon`（区画）、`goal_pose`（後輪軸x/y/yaw）、`entrance`（開口2点）を区画ごとに持つ。
+`maneuver`は省略／空で追加制限なし。指定しても走行可能領域を拡張しない。方向の手入力は不要。
+走行領域はleft/right boundの間と選択区画のpolygonの和集合から生成し、
 壁は共通の`obstacles`。入口を塞ぐ壁・区画の別の辺からの進入を拒否する。
 
 従来の独立site JSONも互換入力として使用できる。以下の表はその形式。
@@ -100,7 +102,7 @@ bash scripts/bringup.sh --mode drive \
   --map-dir /workspaces/maps/course --model-dir /workspaces/models/vgl \
   --lane-id main --line-type raceline \
   --parking-slot P2 \
-  --recovery off --no-tuning
+  --recovery off --tuning
 ```
 
 map/modelのパス・lane IDは実際の構成に合わせる。設定正本は
@@ -205,3 +207,15 @@ PYTHONPATH=ros2_ws/src/kart_parking:ros2_ws/src/kart_hdmap python3 -m pytest ros
 閉路boundは包含する内外周、開路boundは両端を結んだ帯として検証する。接続していない進入範囲・交差boundは拒否する。
 和集合の継ぎ目は壁にせず、残った中島・外周・共通obstaclesに対して車体と余裕を検査する。
 生成結果を別の手描き属性として保存せず、保存したboundとparking属性から再構成する。ROS topic・parameterの追加はない。
+
+
+### Map Studioから練習で開始
+
+bringupで`--parking-slot P2 --recovery off --tuning`を指定し、Studioの「実車調整」から自己位置を接続する。
+起動時に選択した区画とplanner状態が表示され、readyなら「駐車を開始」で既存start serviceを呼ぶ。
+AUTO中はその時点で通常コースから駐車missionへ切り替え、通過済みなら順方向にもう1周する。
+STOP中の開始は経路を準備するだけでAUTOへは変更しない。再試行はSTOP・停車後のリセットで行う。
+`parking/status` JSONへ`parking_speed_mps`（設定値）を追加した。既定0.25 m/s、最終目標0 m/s。
+通常コース部分は参照ライン速度を維持し、進入前に`deceleration_mps2=0.4`で減速する。
+Studioのオフライン試走は同じplanner/Mission・PP/MPCコアを使うが、縦は理想応答で実車PIDではない。
+ROS結合・実車での開始/停止は未検証。

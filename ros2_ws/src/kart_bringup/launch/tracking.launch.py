@@ -49,6 +49,7 @@ def add_tracking(args):
                 "tuning_enabled": getattr(args, "tuning_enabled", ""),
                 "tuning_map_dir": getattr(args, "tuning_map_dir", ""),
                 "tuning_tracking_frame": getattr(args, "tuning_tracking_frame", ""),
+                "tuning_parking_enabled": "true" if parking_site else "false",
                 "reference_topic": "planning/course_reference" if parking_site else "planning/reference_line",
                 "map_file": args.map_file,
                 "lane_id": args.lane_id,

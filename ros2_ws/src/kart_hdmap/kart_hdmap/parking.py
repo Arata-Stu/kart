@@ -15,17 +15,16 @@ def validate(doc):
         if key not in ('P1','P2','P3') or key in ids:
             raise ValueError('駐車区画IDは重複のないP1/P2/P3にしてください')
         ids.add(key)
-        area=polygon(r['polygon']); maneuver=polygon(r['maneuver'])
+        area=polygon(r['polygon']); maneuver=polygon(r['maneuver']) if r.get('maneuver') else []
         goal=[float(v) for v in r['goal_pose']]
-        heading=float(r['forward_yaw'])
         entrance=[[float(v) for v in p] for p in r['entrance']]
-        if len(goal)!=3 or not all(math.isfinite(v) for v in goal+[heading]):
+        if len(goal)!=3 or not all(math.isfinite(v) for v in goal):
             raise ValueError('goal poseは有限のx・y・yawで指定してください')
         if len(entrance)!=2 or any(len(p)!=2 or not all(math.isfinite(v) for v in p) for p in entrance) or distance(*entrance)<1e-4:
             raise ValueError('入口は異なる2点で指定してください')
         if not any(all(point_segment(p,a,b)[0]<1e-6 for p in entrance) for a,b in edges(area)):
             raise ValueError('入口の2点は駐車区画の同じ辺上に置いてください')
-        if not inside(goal,area) or not inside(goal,maneuver):
+        if not inside(goal,area) or (maneuver and not inside(goal,maneuver)):
             raise ValueError('goal poseは駐車区画・進入可能範囲の内側に置いてください')
         if drivable and not inside(goal,drivable):
             raise ValueError('駐車用の走行可能外周を設定し、goalを内側に置いてください')
@@ -35,8 +34,8 @@ def validate(doc):
             wall=polygon(obstacle['polygon'])
             if inside(goal,wall) or any(inside(p,wall) for p in entrance) or any(intersect(*inner,a,b) for a,b in edges(wall)):
                 raise ValueError('goalまたは入口が壁・禁止領域に接触しています')
-        result.append(dict(id=key,polygon=area,goal_pose=goal,entrance=entrance,
-                           maneuver=maneuver,forward_yaw=heading))
+        item=dict(id=key,polygon=area,goal_pose=goal,entrance=entrance,maneuver=maneuver)
+        result.append(item)
     if result and not drivable:
         from .parking_space import surface
         surface(doc, result)

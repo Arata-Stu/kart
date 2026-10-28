@@ -15,8 +15,7 @@ def test_configuration_accepts_forward_parking():
 def test_recovery_and_live_map_edits_rejected():
     with pytest.raises(ValueError,match='reverse recovery'):
         validate(ROOT/'config',str(SITE),'P1','infra_imu','false')
-    with pytest.raises(ValueError,match='reference line'):
-        validate(ROOT/'config',str(SITE),'P1','off','true')
+    validate(ROOT/'config',str(SITE),'P1','off','true')  # Read-only map + parking controls.
 
 
 def test_unknown_slot_is_not_silently_changed():

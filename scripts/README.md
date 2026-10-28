@@ -470,7 +470,7 @@ collect/environment/drive/e2eで同じ検証を使用する。profile引数だ�
 
 ## 駐車planner付きdrive
 
-通常のdrive引数へ`--parking-slot P2 --recovery off --no-tuning`を追加する。
+通常のdrive引数へ`--parking-slot P2 --recovery off --tuning`を追加する。
 選択した`--map-file`内の`parking_areas`を参照する。site/slot両方未指定は従来動作。drive以外での指定は拒否。
 別の互換site JSONを使う場合のみ`--parking-site`を明示する。
 固定AUTO throttleは併用不可。駐車の起動・goal・停止ラッチの詳細は

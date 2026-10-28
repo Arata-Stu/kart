@@ -1,5 +1,6 @@
 /**/hdmap_server:
   ros__parameters:
+    tuning_parking_enabled: false  # Parking start/reset UI; disables map/parameter mutations
     tuning_enabled: false  # Optional loopback tuning endpoint, TCP 8782
     tuning_map_dir: ""  # Same bundle root used for localization
     tuning_tracking_frame: rear_axle  # Vehicle pose frame, no TF publication

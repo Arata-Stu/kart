@@ -9,9 +9,6 @@ def validate(root, site, slot='', recovery='', tuning=''):
     root=Path(root)
     if configuration(root/'recovery',recovery)[0]:
         raise ValueError('Parking prohibits reverse recovery; select recovery:=off')
-    hd=yaml.safe_load((root/'hdmap/hdmap.yaml').read_text())['/**/hdmap_server']['ros__parameters']
-    if (hd['tuning_enabled'] if tuning=='' else str(tuning).lower()=='true'):
-        raise ValueError('Parking owns the reference line; set tuning_enabled:=false')
     p=yaml.safe_load((root/'parking/parking.yaml').read_text())['/**/parking_planner']['ros__parameters']
     c=Settings(**{k:p[k] for k in vars(Settings())}).validate()
     load_site(site,p['map_frame'],slot or p['slot'],c)

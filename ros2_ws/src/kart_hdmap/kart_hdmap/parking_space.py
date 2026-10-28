@@ -42,12 +42,17 @@ def surface(doc, rows):
     course = unary_union(corridors)
     additions = []
     for row in rows:
-        approach, area = poly(row['maneuver']), poly(row['polygon'])
-        if approach.intersection(course).area <= 1e-8:
-            raise ValueError(row['id']+'の進入領域をコースに重ねて接続してください')
+        area = poly(row['polygon'])
         gate = LineString(row['entrance'])
-        # A full opening must be inside the local approach, not just touch its edge.
-        if not approach.contains(gate) or approach.boundary.distance(gate) <= 1e-8:
-            raise ValueError(row['id']+'の進入領域を入口の両側まで広げてください')
-        additions.extend([approach, area])
+        approach = poly(row['maneuver']) if row.get('maneuver') else None
+        if approach is not None:
+            if approach.intersection(course).area <= 1e-8:
+                raise ValueError(row['id']+'の経路制限範囲をコースに重ねてください')
+            if not approach.contains(gate) or approach.boundary.distance(gate) <= 1e-8:
+                raise ValueError(row['id']+'の経路制限範囲を入口の両側まで広げてください')
+        joined = unary_union([course, area])
+        # A bay must connect through its entrance, not an unrelated side/corner.
+        if not joined.contains(LineString([gate.interpolate(1e-6, normalized=True),gate.interpolate(1-1e-6, normalized=True)])):
+            raise ValueError(row['id']+'の入口が通常コースに接続していません。boundと駐車枠の間の隙間を修正してください')
+        additions.append(area)
     return unary_union([course]+additions)

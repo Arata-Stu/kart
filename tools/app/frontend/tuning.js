@@ -63,6 +63,10 @@ function render() {
   $('tuning-preview').disabled=tuning.busy || !state.lane || state.dirty;
   $('tuning-apply').disabled=tuning.busy || !!applyIssue() || !previewValid();
   $('tuning-rollback').disabled=tuning.busy || !!applyIssue() || !s?.can_rollback;
+  const parking=fresh()?s?.parking:null, ps=parking?.status;
+  $('tuning-parking-status').textContent=parking?.available?`駐車 ${ps.slot}: ${ps.state} · ${ps.parking_speed_mps??.25} m/s · ${ps.reason||''}`:'駐車planner未起動・未受信';
+  $('tuning-parking-start').disabled=tuning.busy || !parking?.available || parking.pending || ps?.state!=='ready' || ![1,3].includes(s?.mode);
+  $('tuning-parking-reset').disabled=tuning.busy || !parking?.available || parking.pending || !!s?.stop_issue;
   const mode={1:'AUTO',2:'MANUAL',3:'STOP',4:'PROPO'}[s?.mode] || '不明';
   $('tuning-status').textContent=tuning.error || (fresh()
     ? `${mode} · ${s.localized?'自己位置確定':'自己位置未確定'} · ${s.speed_mps==null?'速度不明':s.speed_mps.toFixed(2)+' m/s'} · ${s.apply_issue || '適用可能'}`
@@ -160,3 +164,13 @@ export function paintTuning(ctx, project, line) {
 
 // Preview starts from the persisted lane speed; editing this live control remains temporary.
 on('document', () => { $('tuning-speed').value = state.lane?.centerline_speed_mps ?? 1.5; });
+
+for(const [id,kind] of [['tuning-parking-start','parking_start'],['tuning-parking-reset','parking_reset']])action(id,async()=>{
+  if(!fresh() || !tuning.status?.parking?.available)throw Error('駐車plannerの接続を確認してください');
+  tuning.busy=true;render();
+  try {
+    const result=await request(kind,{expected_revision:tuning.status.revision});
+    if(!result.success)throw Error(result.message);
+    toast(result.message);
+  } finally {tuning.busy=false;render();}
+});

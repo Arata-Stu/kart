@@ -22,7 +22,8 @@ def parking_fields():
 @pytest.mark.parametrize("derived", [False, True])
 def test_roundtrip_save_export_planner_and_registration(tmp_path, derived):
     maps=Maps(tmp_path)
-    atomic_json(tmp_path/'course/map.json',dict(track(),title='course',frame='map',revision=1,lines={},point_count=0,updated=0))
+    seed=track();seed['left']=[[x*.5,y*.5] for x,y in seed['left']]
+    atomic_json(tmp_path/'course/map.json',dict(seed,title='course',frame='map',revision=1,lines={},point_count=0,updated=0))
     maps.generate('course','centerline',{},1,lambda:None)
     original=maps.load('course')
     original.update(parking_fields())
@@ -42,7 +43,7 @@ def test_roundtrip_save_export_planner_and_registration(tmp_path, derived):
     proposal=registration.preview(maps,'target',dict(source='course',revision=saved['revision'],x=1,y=2,yaw=90))
     transformed=proposal['document']['parking_areas'][0]
     assert transformed['goal_pose']==pytest.approx([2,4,0])
-    assert transformed['forward_yaw']==pytest.approx(math.pi/2)
+    assert 'forward_yaw' not in transformed
     # A client omitting optional attributes must not erase existing parking data.
     old_client=maps.load('course');old_client.pop('parking_areas');old_client.pop('parking_drivable')
     assert maps.save('course',old_client)['parking_areas']
@@ -79,15 +80,18 @@ def test_entrance_required_and_wrong_side_rejected():
 def test_embedded_map_to_forward_parking_plan(tmp_path, derived):
     from kart_parking.planner import prepare, activate
     doc=dict(schema='kart.hdmap.v2',frame='map',**parking_fields())
-    doc['parking_areas'][0]['maneuver']=[[-2,-2],[3.5,-2],[3.5,1.5],[-2,1.5]]
+    row=doc['parking_areas'][0]
+    row.update(polygon=[[1,-2.5],[3,-2.5],[3,-1],[1,-1]],
+               entrance=[[1,-1],[3,-1]],goal_pose=[2,-1.8,-math.pi/2])
+    row.pop('maneuver');row.pop('forward_yaw')
     if derived:
         doc['parking_drivable']=[]
         doc['lanes']=[dict(id='main',closed=True,
-            left=[[r*math.sin(2*math.pi*i/120),2-r*math.cos(2*math.pi*i/120)] for i in range(120)],
-            right=[[q*math.sin(2*math.pi*i/120),2-q*math.cos(2*math.pi*i/120)] for i in range(120)]) for r,q in [(1.6,2.4)]]
+            left=[[-3,1],[5,1],[5,3],[-3,3]],
+            right=[[-5,-1],[7,-1],[7,5],[-5,5]])]
     path=tmp_path/'map.json';atomic_json(path,doc)
     world,zone=load_site(path,'map','P1',Settings())
-    course=[(2*math.sin(2*math.pi*i/240),2-2*math.cos(2*math.pi*i/240)) for i in range(240)]
+    course=[(-4,0),(6,0),(6,4),(-4,4)]
     prepared=prepare(course,[.5]*len(course),True,zone,world,Settings())
     assert entrance_path(prepared.connector,zone)
     start=prepared.course[(prepared.departure+20)%len(prepared.course)][:3]
@@ -158,3 +162,23 @@ def test_shapely_import_error_is_actionable(monkeypatch):
     monkeypatch.setattr(builtins, '__import__', broken)
     with pytest.raises(ValueError, match='描き直しは不要'):
         surface({}, [])
+
+
+def test_default_space_and_optional_restriction(tmp_path):
+    from kart_hdmap.parking_space import surface
+    d=derived_doc();row=d['parking_areas'][0]
+    row.pop('forward_yaw');row.pop('maneuver')
+    fields=parking.validate(d)
+    assert fields['parking_areas'][0]['maneuver']==[]
+    assert 'forward_yaw' not in fields['parking_areas'][0]
+    default=surface(d,[row])
+    row['maneuver']=[[-100,-100],[100,-100],[100,100],[-100,100]]
+    assert surface(d,[row]).equals(default)  # Purple cannot authorize extra space.
+    path=tmp_path/'map.json';atomic_json(path,d)
+    world,zone=load_site(path,'map','P1',Settings())
+    assert not world.clear((8,4,0),zone['maneuver'])
+    row['polygon']=[[x,y-.1] for x,y in row['polygon']]
+    row['entrance']=[[x,y-.1] for x,y in row['entrance']]
+    row['goal_pose'][1]-=.1
+    with pytest.raises(ValueError,match='入口が通常コースに接続'):
+        parking.validate(d)  # Purple must not bridge a gap, even in old files.
