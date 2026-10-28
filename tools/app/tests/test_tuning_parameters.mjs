@@ -112,3 +112,9 @@ byName('mpc_horizon_s').children[2].children[0].value='1.2';
 await element('tuning-parameters-form').submit({preventDefault(){}});await flush();
 assert.deepEqual(calls.at(-1).body.changes,{lateral_controller:'mpc',mpc_horizon_s:1.2});
 assert.equal(byName('mpc_horizon_s').children[2].children[0].value,'1.2');
+
+assert.match(element('tuning-parameters-status').textContent,/横制御 · 適用済み: MPC · 設定版/);
+assert.equal(element('tuning-parameters-status').title,'ROSノード: pure_pursuit');
+const staged=byName('lateral_controller').children[2].children[0];
+staged.value='pure_pursuit';staged.change();
+assert.match(element('tuning-parameters-status').textContent,/適用済み: MPC/,'editing must not pretend the selection is applied');

@@ -67,8 +67,13 @@ function render(result) {
     }
     row.append(label,current,edit);rows.append(row);
   }
+  const controller=result.fields?.find(f=>f.name==='lateral_controller')?.value;
+  const targetLabel=result.target==='tracking'
+    ? `横制御 · 適用済み: ${{pure_pursuit:'Pure Pursuit',mpc:'MPC'}[controller] || '方式未取得（Jetson側の更新を確認）'}`
+    : result.node;
+  $('tuning-parameters-status').title=`ROSノード: ${result.node || '—'}`;
   $('tuning-parameters-status').textContent=result.available
-    ? `${result.node} · 現在値 ${result.revision.slice(0,10)}${result.applied ? (result.readback_matches ? ' · 適用後の値を確認しました' : ' · 値が再変更されています。現在値を確認してください') : ''}`
+    ? `${targetLabel} · 設定版 ${result.revision.slice(0,10)}${result.applied ? (result.readback_matches ? ' · 適用後の値を確認しました' : ' · 値が再変更されています。現在値を確認してください') : ''}`
     : result.reason || '対象ノードが未起動です';
   controls();
 }
