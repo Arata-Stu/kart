@@ -91,3 +91,28 @@ export function isPartition(rows, total) {
 export function deleteSection(rows, index) {
   return rows.filter((_, i) => i !== index).map(r => ({...r}));
 }
+
+// Keep section boundaries attached to surviving waypoints / segment fractions.
+export function reanchorSections(before, after, closed, rows) {
+  const stations=pts=>{const s=[0];for(let i=1;i<pts.length;i++)s.push(s.at(-1)+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));if(closed&&pts.length)s.push(s.at(-1)+Math.hypot(pts[0][0]-pts.at(-1)[0],pts[0][1]-pts.at(-1)[1]));return s;};
+  if(after.length<(closed?3:2)||before.length<(closed?3:2))return [];
+  const a=stations(before),b=stations(after), anchors=[[0,0]];
+  if(!(a.at(-1)>0&&b.at(-1)>0))return [];
+  if(before.length===after.length) {
+    for(let i=1;i<a.length-1;i++)anchors.push([a[i],b[i]]);
+  } else {
+    let last=0;
+    for(let i=1;i<before.length;i++) {
+      const j=after.findIndex((p,j)=>j>last&&p[0]===before[i][0]&&p[1]===before[i][1]);
+      if(j>0 && a[i]<a.at(-1) && b[j]<b.at(-1)){anchors.push([a[i],b[j]]);last=j;}
+    }
+  }
+  anchors.push([a.at(-1),b.at(-1)]);
+  const map=s=>{
+    s=Math.max(0,Math.min(a.at(-1),s));
+    let i=0;while(i<anchors.length-2 && anchors[i+1][0]<s)i++;
+    const [x,y]=anchors[i],[xx,yy]=anchors[i+1];
+    return y+(yy-y)*(s-x)/Math.max(1e-12,xx-x);
+  };
+  return rows.map(r=>({...r,start:map(r.start),end:map(r.end)})).filter(r=>Math.abs(r.end-r.start)>1e-6);
+}

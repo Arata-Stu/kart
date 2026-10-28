@@ -212,7 +212,7 @@ lookahead_mは経路長、target_distance_mは直線距離。無効通知・time
 Pure Pursuitの速度連動時、ここで表示するlookahead_mは実効先読み距離となる。
 「パラメータ調整」では`lookahead_mode`を「固定距離 / 速度に合わせる」から選ぶ。
 固定時は`lookahead_m`、速度連動時は1 m/s用の`lookahead_low_speed_m`と
-5 m/s用の`lookahead_high_speed_m`だけを表示する。初期値はfixed、固定0.8 m、低速0.8 m、高速2.0 m。
+5 m/s用の`lookahead_high_speed_m`だけを表示する。初期値は速度連動（speed_interpolated）、低速0.8 m、高速3.0 m。固定方式の距離は0.8 m。
 速度範囲内を線形補間し、範囲外は端の距離を維持する。従来の係数/上限指定は置き換えた。
 既存のrevision・モード/速度鮮度確認・atomic set/readbackを使用し、新しい独自topic/serviceは追加しない。
 この観測追加による新しいparameter、publisher、serviceはない。

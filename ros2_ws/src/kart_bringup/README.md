@@ -253,8 +253,8 @@ container配置・所有権・executorは`config/localization/containers.json`�
 
 `tracking.launch.py`がHDMap serverとPure Pursuit Componentを起動する。
 先読み方式は`config/control/pure_pursuit.yaml`の`lookahead_mode`で選択する。
-既定fixedは固定`lookahead_m=0.8`。speed_interpolatedでは実速度の絶対値1 m/s時の
-`lookahead_low_speed_m=0.8`と5 m/s時の`lookahead_high_speed_m=2.0`の間を線形補間する。
+fixedは固定`lookahead_m=0.8`。既定のspeed_interpolatedでは実速度の絶対値1 m/s時の
+`lookahead_low_speed_m=0.8`と5 m/s時の`lookahead_high_speed_m=3.0`の間を線形補間する。
 速度範囲外は端の距離を維持し、外挿しない。sim設定も全項目を明示する。
 Map Studio「実車調整→パラメータ調整→追従」で方式を選び、固定距離または低速/高速距離を編集する。
 新鮮なAUTO/MANUAL/STOPで動的変更可能。0 < 低速距離 <= 高速距離を一括検査する。

@@ -9,10 +9,18 @@ def sections(raw, control, closed):
     if not isinstance(raw, list) or len(raw) > 40:
         raise ValueError("速度区間は40個以内の配列で指定してください")
     total = sum(math.dist(a, b) for a, b in edges(control, closed))
+    def boundary(value, label):
+        position = float(value)
+        # JS Math.hypot and Python math.dist/sum can differ at the last bit.
+        # Only absorb sub-micrometre endpoint roundoff, not stale geometry.
+        if not math.isfinite(position) or position < -1e-7 or position > total + 1e-7:
+            raise ValueError(f"{label}: 指定位置 {position:.6f} m がCustomlineの範囲（0〜{total:.6f} m）外です。点列を変更した場合は区間の開始・終了WPを選び直してください")
+        return min(total, max(0.0, position))
+
     result = []
     for row in raw:
-        start = number(row["start"], 0, total, "区間開始 (m)")
-        end = number(row["end"], 0, total, "区間終了 (m)")
+        start = boundary(row["start"], "区間開始")
+        end = boundary(row["end"], "区間終了")
         speed = number(row["speed"], 0.1, 20, "区間速度 (m/s)")
         if abs(start - end) < 1e-6 or (not closed and start > end):
             raise ValueError(

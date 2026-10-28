@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {reanchorSections} from '../frontend/custom_model.js';
+import {replaySimulation} from '../frontend/simulation_replay.js';
+const rows=[{start:0,end:10,speed:1},{start:10,end:20,speed:2}];
+assert.deepEqual(reanchorSections([[0,0],[10,0],[20,0]],[[0,0],[5,0],[8,0]],false,rows),[{start:0,end:5,speed:1},{start:5,end:8,speed:2}]);
+assert.deepEqual(reanchorSections([[0,0],[10,0],[20,0]],[[0,0],[5,0],[10,0],[20,0]],false,rows),rows);
+assert.deepEqual(reanchorSections([[0,0],[10,0],[20,0]],[[0,0],[20,0]],false,rows),rows);
+assert.deepEqual(reanchorSections([[0,0],[10,0],[20,0]],[[0,0]],false,rows),[]);
+const wrap=reanchorSections([[0,0],[3,0],[3,4]],[[0,0],[6,0],[6,8]],true,[{start:10,end:2,speed:1}]);
+assert.deepEqual(wrap,[{start:20,end:4,speed:1}]);
+const sim=replaySimulation({frames:[[0,0,0,0,0,0,0,0,1,0,2,1],[1/30,1,0,0,1,0,0,0,2,0,3,1]],reason:'completed'},{});
+assert.equal(sim.car.done,false);sim.step(1);assert.equal(sim.car.done,true);assert.equal(sim.car.x,1);

@@ -1285,6 +1285,11 @@
       </div>
       <div class="simulation-controls">
         <label>ライン<select id="simulation-line"></select></label>
+        <label>横制御<select id="simulation-controller"><option value="pure_pursuit">Pure Pursuit</option><option value="mpc">MPC</option></select></label>
+        <label hidden>予測時間 s<input data-mpc id="simulation-horizon" type="number" min="0.3" max="2" step="0.1" value="1"></label>
+        <label hidden>追従の強さ<input data-mpc id="simulation-tracking" type="number" min="0.1" max="100" step="0.1" value="10"></label>
+        <label hidden>操舵の滑らかさ<input data-mpc id="simulation-smoothness" type="number" min="0.1" max="100" step="0.1" value="1"></label>
+        <label hidden>操舵速度 rad/s<input data-mpc id="simulation-rate" type="number" min="0.1" max="5" step="0.1" value="1.5"></label>
         <label
           >速度上限 m/s<input
             id="simulation-speed"
@@ -1332,8 +1337,7 @@
       </div>
       <p id="simulation-metrics" aria-live="off"></p>
       <p class="help">
-        Pure
-        Pursuit＋自転車モデル。Race／Customは生成速度を目標に使用。長方形の基準は後輪軸。境界・障害物は表示のみで、試走軌跡の衝突判定・回避、実車PIDやタイヤ特性は未再現です。
+        実車と共通のPure Pursuit／MPC計算＋理想自転車モデル（30 Hz）。設定変更で再計算し、再生して比較できます。実車の設定は変更しません。Race／Customは生成速度を目標に使用。長方形の基準は後輪軸。境界・障害物は表示のみで、試走軌跡の衝突判定・回避、実車PIDやタイヤ特性は未再現です。
       </p>
     </dialog>
     <script type="module" src="app.js"></script>

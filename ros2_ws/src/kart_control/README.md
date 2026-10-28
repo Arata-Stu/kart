@@ -121,8 +121,8 @@ ROS時刻の経過とsteady受信時間の両方でfreshnessを判定し、bag�
 ## 計算
 
 最近傍線分へ投影し、進行方向へlookahead分の弧長を進んだ点を選ぶ。
-`lookahead_mode=fixed`（既定）は従来の固定`lookahead_m`を使う。
-`speed_interpolated`は実速度の絶対値1 m/sで`lookahead_low_speed_m`、5 m/sで
+`lookahead_mode=fixed`は従来の固定`lookahead_m`を使う。
+既定の`speed_interpolated`は実速度の絶対値1 m/sで`lookahead_low_speed_m`、5 m/sで
 `lookahead_high_speed_m`となるように線形補間する。
 `r = clamp((abs(v_rear_axle)-1)/4, 0, 1)`、`L = low + (high-low)*r`。
 速度は同じodom stampのtwistをtracking_frameへ回転し、角速度×取付位置の効果を補正した後輪軸の前後速度。
@@ -158,9 +158,9 @@ package configは単独起動用。use_sim_timeのみROS共通。
 | wheelbase_m | 0.257 | YAML既定。TT-02標準仕様の暫定値、実車の設定を確認。node単独でYAMLなしは0 |
 | max_steering_rad | 0.0 | 要校正。0は計算無効、0以上1.57未満 |
 | lookahead_m | 0.8 | 有限・正、固定モードの弧長先読み距離[m] |
-| lookahead_mode | fixed | fixed / speed_interpolated。固定距離または速度2点間の線形補間 |
+| lookahead_mode | speed_interpolated | fixed / speed_interpolated。固定距離または速度2点間の線形補間 |
 | lookahead_low_speed_m | 0.8 | 有限・正、実速度の絶対値1 m/s以下で使う先読み距離[m] |
-| lookahead_high_speed_m | 2.0 | 有限・低速距離以上、実速度の絶対値5 m/s以上で使う先読み距離[m] |
+| lookahead_high_speed_m | 3.0 | 有限・低速距離以上、実速度の絶対値5 m/s以上で使う先読み距離[m] |
 | max_speed_mps | 10.0 | 正値、目標速度上限 |
 | max_cross_track_m | 1.0 | 正値、ラインからの距離上限 |
 | goal_tolerance_m | 0.1 | 正値、開路終端の停止距離 |

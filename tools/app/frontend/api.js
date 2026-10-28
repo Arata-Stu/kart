@@ -1,3 +1,4 @@
+import { reanchorSections } from "./custom_model.js";
 export const $ = (id) => document.getElementById(id);
 export const state = {
   id: null,
@@ -129,8 +130,9 @@ export function edited() {
     for (const lane of state.doc.lanes) lane.lines = {};
   } else if (state.target === "custom") {
     delete state.lane.lines.customline;
-    if (state.lane.custom.length < (state.lane.closed ? 3 : 2))
-      state.lane.custom_speeds = [];
+    const previous=state.undo.at(-1)?.lanes.find(lane=>lane.id===state.laneId);
+    if(previous) state.lane.custom_speeds=reanchorSections(previous.custom,state.lane.custom,state.lane.closed,previous.custom_speeds || []);
+    else if (state.lane.custom.length < (state.lane.closed ? 3 : 2)) state.lane.custom_speeds = [];
   } else state.lane.lines = {};
   emit("document");
 }

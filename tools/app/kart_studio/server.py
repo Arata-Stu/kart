@@ -288,6 +288,9 @@ class Studio:
                 ["map:" + name(key)],
                 Task('line_generate', [key, b['kind'], b.get('settings', {}), b['revision'], b.get('lane_id')]),
             )
+        if path == "/api/tracking-preview":
+            from .tracking_preview import preview
+            return preview(b)
         if path == "/api/parking-validate":
             from .parking import validate
             return validate(b["document"])

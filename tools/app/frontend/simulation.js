@@ -1,18 +1,33 @@
-import { $, state, action, on, remember, emit, toast } from "./api.js";
+import { $, state, action, on, remember, emit, toast, api } from "./api.js";
 import { reverseLane } from "./direction.js";
-import { createSimulation } from "./simulation_model.js";
+import { replaySimulation } from "./simulation_replay.js";
+let requestSerial=0;
 let sim=null, snapshot=null, trail=[], running=false, last=0, accumulator=0, raf=0;
 const dialog=$("simulation-dialog"), canvas=$("simulation-canvas"), ctx=canvas.getContext("2d");
 function pause() {running=false; cancelAnimationFrame(raf); raf=0; $("simulation-play").textContent="再生";}
-function reset() {
+async function reset() {
   pause();
+  const serial=++requestSerial;sim=null;
+  const mpc=$("simulation-controller").value==="mpc";
+  $("simulation-lookahead").parentElement.hidden=mpc;
+  for(const input of dialog.querySelectorAll("[data-mpc]")) input.parentElement.hidden=!mpc;
   for (const input of dialog.querySelectorAll("input")) if (!input.checkValidity()) throw Error("試走設定の範囲を確認してください");
   const kind=$("simulation-line").value;
-  sim=createSimulation(snapshot.lines[kind], snapshot.closed, {
+  const cfg={
+    controller:$("simulation-controller").value,
+    horizon:Number($("simulation-horizon").value),tracking:Number($("simulation-tracking").value),
+    smoothness:Number($("simulation-smoothness").value),steeringRate:Number($("simulation-rate").value),
     speed:Number($("simulation-speed").value), lookahead:Number($("simulation-lookahead").value),
     wheelbase:Number($("simulation-wheelbase").value), maxSteer:Number($("simulation-steer").value)*Math.PI/180,
-  });
-  trail=[[sim.car.x,sim.car.y]]; draw();
+  };
+  $("simulation-metrics").textContent="実車と共通の制御計算で試走を計算中…（初回はコンパイル）";
+  $("simulation-play").disabled=true;
+  try {
+    const result=await api("tracking-preview",{line:snapshot.lines[kind],closed:snapshot.closed,options:cfg});
+    if(serial!==requestSerial || !dialog.open)return;
+    sim=replaySimulation(result,cfg);trail=[[sim.car.x,sim.car.y]];draw();
+  } catch(e) {if(serial===requestSerial)$("simulation-metrics").textContent=e.message;throw e;} finally {if(serial===requestSerial)$("simulation-play").disabled=!sim;}
+
 }
 function draw() {
   if (!sim) return;
@@ -41,7 +56,7 @@ function draw() {
   ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(tx,ty);ctx.stroke();ctx.setLineDash([]);
   ctx.beginPath();ctx.arc(tx,ty,6,0,Math.PI*2);ctx.fillStyle="#fff";ctx.fill();ctx.lineWidth=2;ctx.stroke();
   ctx.fillStyle="#b51f5a";ctx.font="12px sans-serif";ctx.fillText("先読み点",tx+10,ty-10);ctx.restore();
-  $("simulation-metrics").textContent=`${c.reason || (running?"試走中":"停止中")} · ${c.time.toFixed(1)} s · ${c.speed.toFixed(2)} m/s · 舵角 ${(c.steering*180/Math.PI).toFixed(1)}° · 誤差 ${c.error.toFixed(2)} m / 最大 ${c.maxError.toFixed(2)} m`;
+  $("simulation-metrics").textContent=`${c.reason || (running?"試走中":"停止中")} · ${c.time.toFixed(1)} s · ${c.speed.toFixed(2)} m/s · 目標 ${c.targetSpeed.toFixed(2)} m/s · 計算 ${c.solverMs.toFixed(2)} ms · 舵角 ${(c.steering*180/Math.PI).toFixed(1)}° · 誤差 ${c.error.toFixed(2)} m / 最大 ${c.maxError.toFixed(2)} m`;
 }
 function tick(now){
   if(!running)return;
@@ -49,7 +64,7 @@ function tick(now){
   while(accumulator>=.02&&!sim.car.done){sim.step(.02);accumulator-=.02;trail.push([sim.car.x,sim.car.y]);}
   if(sim.car.done)pause();draw();if(running)raf=requestAnimationFrame(tick);
 }
-action("simulation-open",()=>{
+action("simulation-open",async()=>{
   if(!state.lane || state.doc.snapshot_status==="pending")throw Error("編集可能な地図を選んでください");
   const kinds=["centerline","raceline","customline"].filter(k=>state.lane.lines[k]?.points.length);
   if(!kinds.length)throw Error("先にラインを生成してください");
@@ -57,14 +72,14 @@ action("simulation-open",()=>{
   $("simulation-speed").value = state.lane.centerline_speed_mps ?? 1.5;
   $("simulation-title").textContent=`試走 · ${state.laneId}`;
   $("simulation-line").replaceChildren(...kinds.map(k=>new Option(k,k)));
-  dialog.showModal();reset();
+  dialog.showModal();await reset();
 });
-action("simulation-play",()=>{if(!sim)reset();if(running){pause();draw();return;}if(sim.car.done)reset();running=true;last=performance.now();accumulator=0;$("simulation-play").textContent="一時停止";raf=requestAnimationFrame(tick);});
+action("simulation-play",async()=>{if(!sim)await reset();if(running){pause();draw();return;}if(!sim)return;if(sim.car.done)await reset();if(!sim)return;running=true;last=performance.now();accumulator=0;$("simulation-play").textContent="一時停止";raf=requestAnimationFrame(tick);});
 action("simulation-reset",reset);
-for(const id of ["simulation-line","simulation-speed","simulation-lookahead","simulation-wheelbase","simulation-steer"]){
-  $(id).addEventListener("change",()=>{try{reset();}catch(e){pause();sim=null;$("simulation-metrics").textContent=e.message;toast(e.message,true);}});
+for(const id of ["simulation-controller","simulation-horizon","simulation-tracking","simulation-smoothness","simulation-rate","simulation-line","simulation-speed","simulation-lookahead","simulation-wheelbase","simulation-steer"]){
+  $(id).addEventListener("change",async()=>{try{await reset();}catch(e){pause();sim=null;$("simulation-metrics").textContent=e.message;toast(e.message,true);}});
 }
-dialog.addEventListener("close",pause);
+dialog.addEventListener("close",()=>{requestSerial++;pause();});
 new ResizeObserver(()=>{if(dialog.open)draw();}).observe(canvas);
 action("lane-reverse",()=>{
   if(!state.lane || state.doc.snapshot_status==="pending")throw Error("編集可能な地図を選んでください");

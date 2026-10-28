@@ -5,8 +5,8 @@
 
 namespace kart_control {
 struct LookaheadSettings {
-  bool interpolated{false};
-  double low_m{0.8}, high_m{2.0};
+  bool interpolated{true};
+  double low_m{0.8}, high_m{3.0};
 };
 inline bool valid_lookahead(LookaheadSettings c) {
   return std::isfinite(c.low_m) && c.low_m > 0 &&

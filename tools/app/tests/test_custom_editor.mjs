@@ -27,3 +27,14 @@ undo();await flush();assert.deepEqual(state.lane,reduced);
 undo();await flush();assert.equal(state.lane.custom.length,26);
 undo();await flush();assert.deepEqual(state.lane,original);
 console.log('Custom editor: copy count preview, downsample, scoped deletion and undo passed');
+// Each pointermove is anchored to the same pointerdown snapshot, not compounded.
+const {remember,edited}=await import('../frontend/api.js');
+state.target='custom';state.lane.closed=false;
+state.lane.custom=[[0,0],[10,0],[20,0]];
+state.lane.custom_speeds=[{start:0,end:20,speed:1}];
+remember();
+state.lane.custom[2]=[15,0];edited();
+assert.equal(state.lane.custom_speeds[0].end,15);
+state.lane.custom[2]=[12,0];edited();
+assert.equal(state.lane.custom_speeds[0].end,12);
+undo();assert.equal(state.lane.custom_speeds[0].end,20);

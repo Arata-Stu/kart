@@ -36,8 +36,8 @@ public:
           param("lookahead_m", 0.8),       param("max_speed_mps", 10.0),
           param("max_cross_track_m", 1.0), param("goal_tolerance_m", 0.1),
           param("deceleration_mps2", 1.0)};
-    adaptive_ = {interpolated_mode(param<std::string>("lookahead_mode", "fixed")),
-                 param("lookahead_low_speed_m", 0.8), param("lookahead_high_speed_m", 2.0)};
+    adaptive_ = {interpolated_mode(param<std::string>("lookahead_mode", "speed_interpolated")),
+                 param("lookahead_low_speed_m", 0.8), param("lookahead_high_speed_m", 3.0)};
     if (!lookahead_distance(c_.lookahead, 0, adaptive_))
       throw std::invalid_argument("Invalid speed-scaled lookahead settings");
     auto method=param<std::string>("lateral_controller", "pure_pursuit");
