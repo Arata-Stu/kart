@@ -1242,3 +1242,19 @@ plannerは`--parking-slot P2`で同じHDMapの区画を選ぶ。別parking.json�
 閉路boundは包含する内外周、開路boundは両端を結んだ帯として検証する。接続していない進入範囲・交差boundは拒否する。
 和集合の継ぎ目は壁にせず、残った中島・外周・共通obstaclesに対して車体と余裕を検査する。
 生成結果を別の手描き属性として保存せず、保存したboundとparking属性から再構成する。ROS topic・parameterの追加はない。
+
+### 横MPCとPure Pursuitの比較
+
+Jetsonを新しいkart_control / kart_hdmapでビルド・sourceして再起動し、Studioも再起動・再読込する。
+「実車調整 → 自己位置を接続 → パラメータ調整 → 横制御（Pure Pursuit / MPC） → 現在値を再取得」。
+STOPで停車して「横制御方式」をMPCに変更し、「一括適用」。適用後の現在値を確認してから既存操作でAUTOにする。
+Pure Pursuitへ戻す場合もSTOP・停車中に方式を変更する。方式切替は自動でAUTOを要求しない。
+
+MPCを選ぶと予測時間(s)・追従の強さ・操舵の滑らかさ・操舵速度上限(rad/s)だけを表示し、
+Pure Pursuitのlookahead欄を隠す。共有の速度上限等は残る。
+MPC数値はAUTO/MANUAL走行中も一括適用できるが、方式の切替はSTOP・停車が必要。
+初期値は1秒・10・1・1.5 rad/s。操舵速度上限は車両に合わせて校正する。
+同じRacelineと速度profileを使い、一項目ずつ変えて比較する。
+黄色の参照点はMPCでは予測終端を示す。単一の先読み点に向けて制御している意味ではない。
+変更はJetsonのメモリ上のみ。再起動後も使う設定はbringupのcontrol/pure_pursuit.yamlへ保存する。
+MPC計算失敗はSTOPに移行し、画面切断自体では停止しない。

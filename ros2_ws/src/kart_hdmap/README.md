@@ -295,3 +295,9 @@ HDMap v2は任意の`parking_areas`（P1/P2/P3）と`parking_drivable`を保持�
 閉路boundは包含する内外周、開路boundは両端を結んだ帯として検証する。接続していない進入範囲・交差boundは拒否する。
 和集合の継ぎ目は壁にせず、残った中島・外周・共通obstaclesに対して車体と余裕を検査する。
 生成結果を別の手描き属性として保存せず、保存したboundとparking属性から再構成する。ROS topic・parameterの追加はない。
+
+横制御の動的調整には既存tracking対象（ノードpure_pursuit）経由で`lateral_controller`
+(pure_pursuit既定 / mpc)、`mpc_horizon_s`(1.0 s)、`mpc_tracking_weight`(10.0)、
+`mpc_smoothness_weight`(1.0)、`mpc_steering_rate_rad_s`(1.5 rad/s)を公開する。
+方式はSTOP・停車中、MPC数値は新鮮なAUTO/MANUAL/STOPで変更可能。ノード側で範囲・状態を検証する。
+既存parameter bridgeを使い、HDMap自身のROS parameter/topic追加はない。

@@ -4,6 +4,9 @@ import { tuning, parameterConnectionReady, parameterRequest } from './tuning.js'
 let snapshot=null, busy=false, serial=0, epoch=tuning.epoch;
 const inputs=new Map();
 function parameterIssue() {
+  const method=inputs.get('lateral_controller');
+  if(method && method.input.value!==String(method.field.value) && tuning.status?.stop_issue)
+    return tuning.status.stop_issue;
   const stopped = ['vehicle','recovery'].includes($('tuning-parameters-target').value);
   return (stopped ? tuning.status?.stop_issue : tuning.status?.apply_issue) || tuning.status?.apply_issue || '';
 }
@@ -16,7 +19,8 @@ function controls() {
   $('tuning-parameters-target').disabled=busy;
   const interpolated=inputs.get('lookahead_mode')?.input.value==='speed_interpolated';
   for(const [name,{input,row}] of inputs) {
-    row.hidden=(name==='lookahead_m' && interpolated) ||
+    const mpc=inputs.get('lateral_controller')?.input.value==='mpc';
+    row.hidden=(name.startsWith('mpc_') && !mpc) || (name.startsWith('lookahead') && mpc) || (name==='lookahead_m' && interpolated) ||
       (['lookahead_low_speed_m','lookahead_high_speed_m'].includes(name) && !interpolated);
     input.disabled=busy || !parameterConnectionReady() || row.hidden;
   }
@@ -42,7 +46,7 @@ function render(result) {
     else {
       const input=document.createElement(field.type===4?'select':'input');
       if(field.type===4) {
-        const choices=field.name==='lookahead_mode'
+        const choices=field.name==='lateral_controller' ? [['pure_pursuit','Pure Pursuit'],['mpc','MPC']] : field.name==='lookahead_mode'
           ? [['fixed','固定距離'],['speed_interpolated','速度に合わせる']]
           : [['centerline','Center'],['raceline','Race'],['customline','Custom']];
         for(const [value,text] of choices) {
@@ -53,6 +57,7 @@ function render(result) {
       } else {input.type='number';input.step=field.type===2?'1':'any';input.required=true;}
       input.value=String(field.value);input.setAttribute('aria-label',field.name);
       inputs.set(field.name,{input,field,row});edit.append(input);
+      if(field.name==='lateral_controller') input.addEventListener('change',controls);
       if(field.name==='lookahead_mode') {
         input.addEventListener('change',controls);
         const help=document.createElement('small');

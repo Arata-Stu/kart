@@ -13,6 +13,7 @@ try:
     from rcl_interfaces.srv import GetParameters, SetParametersAtomically
     from rclpy.parameter import Parameter
     from kart_interfaces.msg import OperationModeState
+    from nav_msgs.msg import Odometry
 except ImportError as error:
     raise unittest.SkipTest(f'ROS/generated interfaces unavailable: {error}') from error
 
@@ -36,11 +37,17 @@ class TrackingParametersTest(unittest.TestCase):
         node=Node('parameter_test_client',namespace=namespace)
         self.addCleanup(node.destroy_node)
         pub=node.create_publisher(OperationModeState,'operation_mode/state',1)
+        odom_pub=node.create_publisher(Odometry,'visual_slam/tracking/odometry',10)
+        measured=[0.]
         mode=[None]
         def publish():
             if mode[0] is not None:
                 message=OperationModeState();message.header.stamp=node.get_clock().now().to_msg();message.mode=mode[0]
                 pub.publish(message)
+                odom=Odometry();odom.header.stamp=message.header.stamp
+                odom.header.frame_id='map';odom.child_frame_id='rear_axle'
+                odom.pose.pose.orientation.w=1.;odom.twist.twist.linear.x=measured[0]
+                odom_pub.publish(odom)
         timer=node.create_timer(.03,publish)
         setter=node.create_client(SetParametersAtomically,'pure_pursuit/set_parameters_atomically')
         getter=node.create_client(GetParameters,'pure_pursuit/get_parameters')
@@ -82,3 +89,24 @@ class TrackingParametersTest(unittest.TestCase):
         request.names=['lookahead_mode']
         self.assertEqual(call(getter,request).values[0].string_value,'speed_interpolated')
         self.assertTrue(change_many({'lookahead_mode':'fixed'}).successful)
+        self.assertTrue(change_many({'mpc_horizon_s':1.2,'mpc_tracking_weight':12.}).successful)
+        self.assertFalse(change_many({'mpc_horizon_s':2.1}).successful)
+        self.assertFalse(change_many({'mpc_smoothness_weight':0.}).successful)
+        self.assertFalse(change_many({'lateral_controller':'invalid'}).successful)
+        self.assertFalse(change_many({'lateral_controller':'mpc'}).successful)  # AUTO switch prohibited
+        request.names=['lateral_controller','mpc_horizon_s']
+        result=call(getter,request)
+        self.assertEqual(result.values[0].string_value,'pure_pursuit')
+        self.assertEqual(result.values[1].double_value,1.2)
+
+        mode[0]=OperationModeState.STOP;measured[0]=.2
+        end=time.monotonic()+.2
+        while time.monotonic()<end:rclpy.spin_once(node,timeout_sec=.03)
+        self.assertFalse(change_many({'lateral_controller':'mpc'}).successful)
+        measured[0]=0.
+        end=time.monotonic()+.2
+        while time.monotonic()<end:rclpy.spin_once(node,timeout_sec=.03)
+        self.assertTrue(change_many({'lateral_controller':'mpc'}).successful)
+        request.names=['lateral_controller']
+        self.assertEqual(call(getter,request).values[0].string_value,'mpc')
+        self.assertTrue(change_many({'lateral_controller':'pure_pursuit'}).successful)

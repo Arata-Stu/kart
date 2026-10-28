@@ -24,7 +24,11 @@ class PolicyTests(unittest.TestCase):
         mode_fields=fields()
         for row in mode_fields:
             if row['name']=='lookahead_mode': row.update(type=4,value='fixed')
+            if row['name']=='lateral_controller': row.update(type=4,value='pure_pursuit')
         mode_catalog=catalog('tracking',mode_fields)
+        self.assertEqual(changes_for(mode_catalog,{'lateral_controller':'mpc'},mode_catalog['revision']), {'lateral_controller':'mpc'})
+        with self.assertRaises(ValueError):
+            changes_for(mode_catalog,{'lateral_controller':'invalid'},mode_catalog['revision'])
         self.assertEqual(changes_for(mode_catalog,{'lookahead_mode':'speed_interpolated'},mode_catalog['revision']),
                          {'lookahead_mode':'speed_interpolated'})
         with self.assertRaises(ValueError):
@@ -98,7 +102,7 @@ class BridgeTests(unittest.TestCase):
             self.manager.tick()
             result=reply.get_nowait()
             self.assertTrue(result['applied'] and result['readback_matches'])
-            self.assertEqual(result['fields'][0]['value'],.8)
+            self.assertEqual(next(f['value'] for f in result['fields'] if f['name']=='lookahead_m'),.8)
             self.assertEqual(len(self.writes),1)
 
     def test_unavailable_stale_and_stop_rejections_do_not_write(self):

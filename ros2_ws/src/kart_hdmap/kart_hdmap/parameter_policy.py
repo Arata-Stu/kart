@@ -5,7 +5,8 @@ from .tuning import digest
 
 TARGETS = {
     'vehicle': ('kart_bridge', ('steering_offset', 'steering_scale', 'initial_steering_trim', 'steering_trim_limit')),
-    'tracking': ('pure_pursuit', ('lookahead_m', 'lookahead_mode', 'lookahead_low_speed_m',
+    'tracking': ('pure_pursuit', ('lateral_controller', 'mpc_horizon_s', 'mpc_tracking_weight', 'mpc_smoothness_weight',
+                                'mpc_steering_rate_rad_s', 'lookahead_m', 'lookahead_mode', 'lookahead_low_speed_m',
                                 'lookahead_high_speed_m', 'max_speed_mps', 'max_cross_track_m',
                                 'goal_tolerance_m', 'deceleration_mps2', 'wheelbase_m', 'max_steering_rad')),
     'speed': ('speed_controller', ('kp', 'ki', 'kd', 'kff', 'integral_limit', 'derivative_tau_s',
@@ -24,6 +25,11 @@ TARGETS = {
 }
 
 LABELS = {
+    'lateral_controller': '横制御方式（切替はSTOP・停車中）',
+    'mpc_horizon_s': 'MPC 予測時間 (0.3..2 s)',
+    'mpc_tracking_weight': 'MPC 追従の強さ (0.1..100)',
+    'mpc_smoothness_weight': 'MPC 操舵の滑らかさ (0.1..100)',
+    'mpc_steering_rate_rad_s': 'MPC 操舵速度上限 (0.1..5 rad/s)',
     'post_reverse_pulse_throttle': '後退後の制動に入る正パルス出力 (0.002..1)',
     'post_reverse_pulse_s': '後退後の正パルス保持時間 (s)',
     'steering_offset': 'スケール適用後のステア補正 (-0.5..0.5)',
@@ -92,7 +98,7 @@ def changes_for(snapshot, changes, revision):
         elif kind == 2 and type(value) is int:
             pass
         elif kind == 4 and type(value) is str:
-            choices = {'line_type': ('centerline', 'raceline', 'customline'),
+            choices = {'lateral_controller': ('pure_pursuit', 'mpc'), 'line_type': ('centerline', 'raceline', 'customline'),
                        'lookahead_mode': ('fixed', 'speed_interpolated')}
             if value not in choices.get(name, ()):
                 raise ValueError(name + ': 選択値が不正です')

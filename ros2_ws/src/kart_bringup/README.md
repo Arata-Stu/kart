@@ -1467,3 +1467,13 @@ Pure Pursuitの駐車用先読み0.25m・終端停止0.04mはcontrol/sim YAMLへ
 
 構成検査は`test/test_parking_composition.py`、経路・停止・理想追従はkart_parkingのportable test。
 ROS graph・Jetson・実車での駐車成立は未確認。
+
+### 横MPCの比較
+
+`config/control/pure_pursuit.yaml`（simは`config/sim/drive_pure_pursuit.yaml`）の
+`lateral_controller: pure_pursuit`を`mpc`へ変更すると既存追従ノード内で横MPCを選ぶ。
+速度PIDの構成は維持する。起動中はMap Studioの横制御パネルからSTOP・停車中に方式を変更できる。
+MPCの全設定は上記YAMLにあり、予測時間1秒・追従重み10・滑らかさ1・操舵速度上限1.5 rad/sが既定。
+詳細と範囲は[kart_control](../kart_control/README.md#横制御の選択とmpc)。
+録画profileに`/control/lateral_diagnostics`（diagnostic_msgs/msg/DiagnosticArray）を追加し、方式・計算時間・反復数を記録する。
+ROS/Jetson/実車での動作・計算時間は対象環境での確認が必要。

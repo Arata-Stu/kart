@@ -71,7 +71,7 @@ function render() {
   const ref = fresh() ? s?.tracking_reference : null;
   $('tuning-lookahead').textContent=ref
     ? `Pure Pursuit: lookahead ${ref.lookahead_m.toFixed(2)} m（経路長） / 参照点まで ${ref.target_distance_m.toFixed(2)} m（直線）`
-    : 'Pure Pursuit参照点: 未受信・無効・受信停止';
+    : '横制御の参照点: 未受信・無効・受信停止';
 
 }
 action('tuning-connect', async()=> {

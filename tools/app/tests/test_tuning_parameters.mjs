@@ -92,3 +92,23 @@ await element('tuning-parameters-form').submit({preventDefault(){}});await flush
 assert.deepEqual(calls.at(-1).body.changes,{steering_offset:0.02});
 assert.equal(calls.at(-1).body.target,'vehicle');
 assert.match(element('tuning-parameters-status').textContent,/適用後の値/);
+
+// MPC controls use the same atomic parameter transport, with method-specific inputs.
+element('tuning-parameters-target').value='tracking';
+adaptive.lateral_controller='pure_pursuit';adaptive.mpc_horizon_s=1;
+adaptive.mpc_tracking_weight=10;adaptive.mpc_smoothness_weight=1;adaptive.mpc_steering_rate_rad_s=1.5;
+await element('tuning-parameters-refresh').click();await flush();
+const rows=()=>element('tuning-parameter-rows').children;
+const byName=name=>rows().find(r=>r.children[0].children[0].textContent===name);
+assert.equal(byName('mpc_horizon_s').hidden,true);
+const method=byName('lateral_controller').children[2].children[0];
+assert.deepEqual(method.children.map(o=>o.value),['pure_pursuit','mpc']);
+method.value='mpc';tuning.status.stop_issue='STOP required';method.change();
+assert.equal(element('tuning-parameters-apply').disabled,true);
+tuning.status.stop_issue='';method.change();
+assert.equal(byName('lookahead_m').hidden,true);
+assert.equal(byName('mpc_horizon_s').hidden,false);
+byName('mpc_horizon_s').children[2].children[0].value='1.2';
+await element('tuning-parameters-form').submit({preventDefault(){}});await flush();
+assert.deepEqual(calls.at(-1).body.changes,{lateral_controller:'mpc',mpc_horizon_s:1.2});
+assert.equal(byName('mpc_horizon_s').children[2].children[0].value,'1.2');

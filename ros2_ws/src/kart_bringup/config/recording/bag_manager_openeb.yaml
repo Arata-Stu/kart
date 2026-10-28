@@ -65,6 +65,7 @@
     - /hdmap/selected_lane
     - /hdmap/selected_line
     - /control/tracking_cmd
+    - /control/lateral_diagnostics
     - /control/tracking_status
     - /control/lookahead
     - /control/speed_diagnostics

@@ -426,3 +426,49 @@ C++計算のportable検証とUI/通信state machineの単体検証は実施し�
 追加topicはない。空ReferenceLineは従来の無効参照として速度0と異常通知を出す。
 区画・姿勢・停止の成立と再発進ラッチは`kart_parking`が担当する。
 駐車経路の理想二輪追従テストは`kart_parking/test/test_tracking.py`、ROS結合・実車駐車は未確認。
+
+## 横制御の選択とMPC
+
+既存の`pure_pursuit`ノード／`kart_control::PurePursuitNode`内で横制御を選ぶ。
+`speed_controller`の速度PID・操舵正規化・停止要求経路は変更しない。
+実運用は`kart_bringup/config/control/pure_pursuit.yaml`、単体起動は本packageの
+`config/pure_pursuit.yaml`を使う。既定は従来のPure Pursuit。
+
+| parameter | 既定 | 意味・動的変更 |
+| --- | --- | --- |
+| lateral_controller | pure_pursuit | pure_pursuit / mpc。方式変更は新鮮なSTOP・odomとrear_axle速度の絶対値0.03 m/s以下を要求 |
+| mpc_horizon_s | 1.0 | 予測時間、0.3..2秒。20分割 |
+| mpc_tracking_weight | 10.0 | 横ずれの重み、0.1..100。向きの重みはこの0.4倍 |
+| mpc_smoothness_weight | 1.0 | 操舵角差の重み、0.1..100 |
+| mpc_steering_rate_rad_s | 1.5 | 指令操舵速度上限、0.1..5 rad/s。暫定値で、実サーボの計測値ではない |
+
+MPCの4数値は新鮮なAUTO/MANUAL/STOPで原子的に更新可能。方式変更と重み変更を
+一括で送信でき、検証失敗時は全て維持する。lookahead関連設定はMPCでは使わない。
+共有の速度上限・許容横ずれ・終点許容・減速度は両方式に適用する。
+
+MPCは前進用の運動学的自転車モデルを経路誤差座標で線形化した20入力の凸QP。
+経路曲率から計算した操舵を線形化点とし、横ずれ・向き・操舵変化と小さな
+feedforward操舵偏差（重み0.05）を評価する。実測rear_axle速度を予測に使い、
+発進付近だけ0.15 m/sを下限とする。参照は経路の弧長補間、方向は前後0.05 mの弦から計算する。
+目標速度は最近傍のprofileと全前方点の減速包絡・終点停止から計算する。
+縦方向の最適化、タイヤの滑り、障害物回避、操舵遅延補償は含まない。
+横ずれ上限超過、方向誤差0.7 rad超過、後退速度-0.05 m/s未満は拒否する。
+
+内部ADMMは角度と角度差の制約を解き、最大1500反復・壁時計10 ms。
+主残差1e-5・補助変数変化×rho 1e-4以下を収束条件とし、最初の出力は数値誤差も
+角度・速度上限内へ収める。初回角度差には制御周期（連続呼出しでは実間隔との小さい方）を使う。
+直前のAUTO指令を前回舵角とするため、実舵角の観測ではない。非AUTO・異常出力で履歴を0へ戻す。
+未収束・時間超過・無効入力ではゼロ速度と異常statusを発行し、既存speed_controllerがSTOP要求する。
+Pure Pursuitへの自動fallbackや古い解の再利用はしない。
+
+既存topicは維持。追加出力は`/control/lateral_diagnostics`
+（`diagnostic_msgs/msg/DiagnosticArray`、reliable/volatile/depth10、制御出力時）。
+controller・solver_ms・iterations・steering_rad・target_speed_mpsと異常理由を記録する。
+`/control/tracking_status`は正常時の`tracking`/`zero_speed_target`を維持し、異常時は`mpc_*`理由を出す。
+`/control/tracking_reference`・`/control/lookahead`のMPC時の点は予測区間終端で、
+Pure Pursuitの操舵計算用先読み点ではない。MPC時のlookahead_mはその点への直線距離。
+
+検証: `test_lateral_mpc`は実装本体を用い、直線への復帰（0.5/1/2/3 m/s）、閉路追従、
+舵角速度制約、終点、入力異常・期限超過を検査する。理想自転車モデルによる検証であり、
+速度PID込みの実車応答やJetsonでの10 ms達成を保証しない。ROS parameter serviceテストは
+ROSがない環境ではskipする。実車では従来設定を保存し、同じRaceline・速度で比較する。
