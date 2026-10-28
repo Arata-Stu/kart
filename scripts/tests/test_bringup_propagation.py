@@ -54,6 +54,11 @@ class PropagationTests(unittest.TestCase):
             with self.subTest(mode=mode, options=options), self.assertRaises(ValueError):
                 self.run_cli('--mode', mode, *options)
 
+    def test_848_by_100_infra_profile_reaches_mission_without_rgb(self):
+        output = self.run_cli('--mode', 'collect', '--rgb-profile', '0', '--infra-profile', '848x100x100')
+        self.assertIn('infra_profile:=848x100x100', output)
+        self.assertIn('rgb_profile:=0', output)
+
     def test_every_registered_option_has_an_audit_classification(self):
         parsers = []
         original = argparse.ArgumentParser.parse_args
@@ -69,7 +74,7 @@ class PropagationTests(unittest.TestCase):
                      'tuning', 'record_dir', 'evs', 'no_evs', 'evs_backend', 'evs_aggregation',
                      'evs_image', 'evs_serial', 'evs_tensor_config', 'evs_bias_file', 'foxglove',
                      'no_bridge', 'auto_fixed_throttle', 'e2e_fixed_throttle', 'recovery',
-                     'run_name', 'e2e_model_dir', 'eval_localization', 'multicam_mode',
+                     'run_name', 'e2e_model_dir', 'eval_localization', 'multicam_mode', 'parking_site', 'parking_slot',
                      'tracking_mode', 'base_frame', 'imu_frame', 'latency_output', 'bag', 'rate'}
         actual = {action.dest for action in parsers[0]._actions}
         self.assertEqual(actual, selector | forwarded)

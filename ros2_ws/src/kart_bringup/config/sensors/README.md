@@ -131,6 +131,9 @@ Bias配置先はproject rootの`bias/evs/`。運用YAMLのbias_file既定は空�
 解像度とFPSを一括指定する。例：`rgb_profile:=1280x720x30`。
 候補一覧・対応条件は[bringup README](../../README.md#解像度とfpsの明示選択)を参照。
 同一streamの`*_fps`との併用は拒否する。既定YAMLの解像度は変更しない。
+実験用Infra候補`848x100x100`を追加（ユーザー提示一覧、2026-10-29）。RGBには追加しない。
+左右の画素形式は既存Y8のまま。左右Y8・100 Hzの同時取得とCameraInfoは実機未確認。
+Depth有効時は既存の同一profile規則が働くため、Z16/IMUとの併走も未確認。
 
 環境記録用の完全な設定は`realsense_environment.yaml`。
 `mission mode:=environment`でのみ選択し、RGB 1280×720×30・Depth/Infra 848×480×30・

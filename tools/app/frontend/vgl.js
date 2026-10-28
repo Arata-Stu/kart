@@ -23,7 +23,8 @@ function checkSelection() {
     error ||= "選択したモデルと画像幅・高さが一致しません。";
   $("vgl-selection").textContent = error ||
     `モデル: ${path}\n画像: ${width} × ${height}` +
-    (model?.width ? "（manifest・ONNXハッシュ照合済み）" : "（解像度未確認・生成開始時に検査）");
+    (model?.width ? "（manifest・ONNXハッシュ照合済み）" : "（解像度未確認・生成開始時に検査）") +
+    (width === 848 && height === 100 ? "\n横長848×100用：左右の入力も848×100に揃えてください。実機のY8・100 Hz動作は未検証です。" : "");
   $("vgl-start").disabled = submitting || !!error || !$("vgl-name").value.trim();
   return !$("vgl-start").disabled;
 }

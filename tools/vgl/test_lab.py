@@ -93,6 +93,29 @@ class LabTest(unittest.TestCase):
         with self.assertRaises(argparse.ArgumentTypeError):
             lab.positive("0")
 
+    def test_named_export_profile_preserves_848_by_100_without_padding_shape(self):
+        self.assertEqual(lab.export_size("848x100", None, None), (848, 100))
+        self.assertEqual(lab.export_size("848x100", 848, 100), (848, 100))
+        self.assertEqual(lab.export_size(None, None, None), (424, 240))
+        self.assertEqual(lab.export_size(None, 640, 480), (640, 480))
+        with self.assertRaisesRegex(ValueError, "conflicts"):
+            lab.export_size("848x100", None, 128)
+
+    def test_export_dry_run_does_not_load_gpu_or_create_artifacts(self):
+        import contextlib
+        import io
+        import json
+        with tempfile.TemporaryDirectory() as tmp, patch.object(lab, "ARTIFACTS", Path(tmp)), \
+                patch.object(lab, "source_check") as source:
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                lab.export(types.SimpleNamespace(name="848x100", width=848, height=100, dry_run=True))
+            plan = json.loads(output.getvalue())
+            self.assertEqual(plan["input_shape"], [1, 3, 100, 848])
+            self.assertFalse(plan["gpu_export_executed"])
+            self.assertFalse(lab.run_dir("848x100").exists())
+            source.assert_not_called()
+
     def test_manifest_rejects_replaced_model(self):
         with (
             tempfile.TemporaryDirectory() as temporary,

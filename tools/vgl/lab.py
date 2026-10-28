@@ -36,6 +36,22 @@ FILES = [
     "models/aliked-n16.pth",
 ]
 
+EXPORT_PROFILES = {
+    "424x240": (424, 240), "480x270": (480, 270),
+    "640x360": (640, 360), "640x480": (640, 480),
+    "848x100": (848, 100), "848x480": (848, 480),
+    "1280x720": (1280, 720),
+}
+
+
+def export_size(profile, width, height):
+    selected = EXPORT_PROFILES[profile] if profile else (424, 240)
+    if profile and any(value is not None and value != expected
+                       for value, expected in zip((width, height), selected)):
+        raise ValueError("--profile conflicts with --width/--height")
+    return tuple(default if value is None else value
+                 for value, default in zip((width, height), selected))
+
 
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -245,6 +261,11 @@ def export(args):
         raise ValueError(f"Run already exists; choose a new --name: {directory}")
     if args.width * args.height < 2048:
         raise ValueError("Input has fewer pixels than TopK=2048")
+    if getattr(args, "dry_run", False):
+        print(json.dumps(dict(stage="export_plan_only", directory=str(directory),
+                              input_shape=[1, 3, args.height, args.width],
+                              top_k=2048, gpu_export_executed=False), indent=2))
+        return
     source_check()
     import onnx
     import torch
@@ -620,8 +641,11 @@ def main():
         type=Path,
         help="Real image optional; otherwise deterministic synthetic export input",
     )
-    p.add_argument("--width", type=positive, default=424)
-    p.add_argument("--height", type=positive, default=240)
+    p.add_argument("--profile", choices=sorted(EXPORT_PROFILES),
+                   help="Named input size; defaults to 424x240 when unset")
+    p.add_argument("--width", type=positive)
+    p.add_argument("--height", type=positive)
+    p.add_argument("--dry-run", action="store_true", help="Show resolved export shape without CUDA, downloads or writes")
     p.add_argument("--name")
     p.set_defaults(func=export)
     p = sub.add_parser(
@@ -651,6 +675,8 @@ def main():
         p.set_defaults(func=function)
     args = parser.parse_args()
     try:
+        if args.func is export:
+            args.width, args.height = export_size(args.profile, args.width, args.height)
         args.func(args)
     except (ValueError, OSError, ImportError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"ERROR: {error}\n")

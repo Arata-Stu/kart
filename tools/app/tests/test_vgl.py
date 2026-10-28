@@ -119,6 +119,20 @@ class ModelOptionTests(unittest.TestCase):
         self.assertEqual(option['path'], str(self.models))
         self.assertFalse(option['error'])
 
+    def test_848_by_100_model_shape_is_available_without_rounding_height(self):
+        self.data['input_shape'] = [1, 3, 100, 848]
+        atomic_json(self.manifest, self.data)
+        option = vgl.model_option(self.models)
+        self.assertFalse(option['error'])
+        self.assertEqual((option['width'], option['height']), (848, 100))
+        app = SimpleNamespace(maps=Maps(self.root / 'map'))
+        (app.maps.root / 'course').mkdir()
+        body = dict(id='course', name='course-vgl-848x100', model_dir=str(self.models))
+        with patch('kart_bringup.prepare_vgl_map.source_frames'), patch('kart_studio.vgl.shutil.which', return_value='ros2'):
+            self.assertEqual(vgl.prepare(app, body)[-1], [848, 100])
+            with self.assertRaisesRegex(ValueError, '一致'):
+                vgl.prepare(app, dict(body, height=128))
+
     def test_bad_hash_shape_or_incomplete_engines_are_not_candidates(self):
         for change in (dict(onnx_sha256='wrong'), dict(input_shape=[1, 3, 0, 640]),
                        dict(input_shape='640x480')):

@@ -1308,6 +1308,14 @@ collect/environment/drive/e2eで同じ検証を使用する。profile引数だ�
 有効なstreamのYAMLも検査し、非対応値はドライバ起動前に拒否する。
 これらは個々のprofileの対応確認であり、複数stream同時配信の安定性は実機で別途確認する。
 
+2026-10-29のユーザー提示Infrared一覧に基づき、実験用`848x100x100`をInfra候補へ追加した。
+RGB候補には含めず、通常YAMLは変更しない。`--infra-profile 848x100x100`で明示指定する。
+旧`--infra-fps`は30/60/90のまま。左右Y8の両眼100 Hz、画角・CameraInfo、USB/IMU併走は未確認。
+提示されたUYVY/RGB8等の列挙だけでは左右Y8の同時対応を保証しない。
+environmentでは既存規則によりDepthも848x100x100になるため、Z16同時取得も未確認。
+まずDepth無効のcollectで取得確認し、driveでは`[1,3,100,848]`のVGLモデルと対応bundleを選択する。
+VGLのexport/build手順は[tools/vgl](../../../tools/vgl/README.md#848100100-hz用の実験profile)を参照。
+
 ### EVS直接bin集計の試験選択
 
 cuda_asyncのevent_aggregationは既定events。evt3_runsはイベント配列を作らず

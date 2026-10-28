@@ -213,7 +213,7 @@ def main():
                     setattr(args, kind + "_profile", choose(
                         ("Infra（有効時はDepthも同じprofile）" if kind == "infra" and args.mode == "environment" else kind.upper()) + " 解像度 × FPS（USB3 D455候補）",
                         profiles,
-                        label=lambda v: "なし" if v == "0" else v.replace("x", " × "),
+                        label=lambda v: "なし" if v == "0" else v.replace("x", " × ") + ("（実験・左右Y8要確認）" if v == "848x100x100" else ""),
                         default=profiles.index(sensor[key] if enabled else "0"),
                     ))
             if not args.imu_profile:

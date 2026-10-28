@@ -109,6 +109,24 @@ class FzfTests(unittest.TestCase):
                     for key in ("rgb_profile", "infra_profile"):
                         self.assertIn(f"{key}:={profile}", output.getvalue())
 
+    def test_848_by_100_is_infra_only_in_tui(self):
+        def choose(title, values, *args, **kwargs):
+            if title == '用途': return 'collect'
+            if '解像度 × FPS' in title:
+                if title.startswith('RGB'):
+                    self.assertNotIn('848x100x100', values)
+                    return '0'
+                self.assertIn('848x100x100', values)
+                return '848x100x100'
+            return values[0]
+        output = io.StringIO()
+        with (patch.object(sys, 'argv', ['bringup.py', '--dry-run', '--no-bridge', '--no-evs',
+                                        '--run-name', 'narrow', '--auto-fixed-throttle=-1']),
+              patch.object(sys.stdin, 'isatty', return_value=True),
+              patch.object(module, 'choose', side_effect=choose), redirect_stdout(output)):
+            module.main()
+        self.assertIn('infra_profile:=848x100x100', output.getvalue())
+
     def test_imu_selection_reaches_mission_command(self):
         for mode in ("collect", "environment"):
             for profile in ("low", "high", "off"):

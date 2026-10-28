@@ -135,6 +135,15 @@ class MissionTests(unittest.TestCase):
     def test_stream_specific_enumerated_profiles(self):
         from kart_bringup.mission import CAMERA_PROFILES, validate_camera_profile
         path = CONFIG / "sensors/realsense.yaml"
+        self.assertIn("848x100x100", CAMERA_PROFILES["Infra"])
+        self.assertNotIn("848x100x100", CAMERA_PROFILES["RGB"])
+        narrow = sensor_parameters(path, rgb_profile="0", infra_profile="848x100x100")
+        self.assertEqual(narrow["depth_module.infra_profile"], "848x100x100")
+        self.assertTrue(narrow["enable_infra1"] and narrow["enable_infra2"])
+        self.assertEqual(narrow["depth_module.infra1_format"], "Y8")
+        self.assertEqual(narrow["depth_module.infra2_format"], "Y8")
+        with self.assertRaisesRegex(ValueError, "RGB"):
+            sensor_parameters(path, rgb_profile="848x100x100")
         self.assertNotIn("848x480x90", CAMERA_PROFILES["RGB"])
         self.assertIn("848x480x90", CAMERA_PROFILES["Infra"])
         self.assertNotIn("640x480x90", CAMERA_PROFILES["RGB"])

@@ -23,6 +23,8 @@ ONNX/NumPy/Pillowが必要。doctorは不足依存を表示し、PyTorchを自�
 buildはROS環境とisaac_ros_visual_mappingの公式exporter、TensorRT Pythonが必要。
 
 exportの幅/高さは既定424/240。`--width`/`--height`で変更できる。
+`--profile`で424x240、480x270、640x360、640x480、848x100、848x480、1280x720を選択できる。
+明示した幅／高さとprofileが矛盾する場合はexport前に拒否する。
 480×270、640×360、640×480、848×480、1280×720も同じ入口で指定できる（各サイズでのGPU生成・推論は未検証）。
 例: `bash scripts/vgl_model.sh export --name 640x480 --width 640 --height 480`、
 続いて`bash scripts/vgl_build.sh 640x480`。解像度ごとに別名へ生成する。
@@ -38,6 +40,37 @@ bash scripts/vgl_build.sh 640x360
 
 UIは完成済みruntime_modelsとmanifestを探索するため、これらもモデル候補へ自動追加される。
 Jetsonには各aliked.onnxとmanifest.jsonだけを転送し、Jetson側で同名のvgl_build.shを実行する。
+
+### 848×100・100 Hz用の実験profile
+
+848×100はモデルの入力サイズ、100 Hzはカメラ側の取得設定で、engine名・shapeにFPSは含めない。
+848×100は16の倍数へ外側で丸めず、ONNXとengineの外部入力を`[1,3,100,848]`として検査する。
+export計画だけならCUDA・ダウンロード・ファイル生成なしで確認できる:
+
+```bash
+bash scripts/vgl_model.sh export --profile 848x100 --dry-run
+```
+
+CUDA GPUのあるNotebook側kart Docker内で、ONNXとそのGPU用engineを生成する:
+
+```bash
+cd /workspaces
+source ros2_ws/install/setup.bash
+bash scripts/vgl_model.sh prepare --source-only
+bash scripts/vgl_model.sh doctor --stage export
+bash scripts/vgl_model.sh export --profile 848x100
+bash scripts/vgl_build.sh 848x100
+```
+
+出力は`models/vgl/848x100/aliked.onnx`・`manifest.json`と`runtime_models/`。
+UIの「VGL地図を追加生成」で`848 × 100`の完成モデルを選ぶと幅848／高さ100が自動設定される。
+実行GPUがJetsonならONNXとmanifestを同名ディレクトリへ転送し、Jetson側Dockerで
+`bash scripts/vgl_build.sh 848x100`を実行する。Notebookのengineは別GPUへ流用しない。
+既存exportは上書きしない。再exportには`--name 848x100-v2`などを併用する。
+既存のengine再buildだけなら原因を確認してから`--retry`を使い、元ONNXを保持する。
+
+848×100のGPU export・TensorRT build・特徴抽出・cuVGL実動作は未確認。
+左右Y8取得と100 Hzの実受信を別途確認し、848×100の保存画像・対応VGL地図で検証する。
 
 `--image /path/to/frame.png`があればRGB bilinear resizeを使用し、省略時は固定seedの合成入力で変換する。
 合成入力でのexport成功は数値精度や実際のcuVGL動作の検証ではない。
