@@ -291,7 +291,7 @@ HDMap v2は任意の`parking_areas`（P1/P2/P3）と`parking_drivable`を保持�
 `hdmap/document`の正規化documentにも属性を含める。既存topic型・parameterの追加はなし。
 保存・export・登録変換の詳細は[Map Studio](../../../../tools/app/README.md)、実行は[kart_parking](../kart_parking/README.md)を参照。
 
-駐車の領域結合はShapely（ROS/Docker: `python3-shapely`、ローカルStudio: 起動Python環境へ`pip install shapely`）を使用する。
+駐車の領域結合はShapelyを使用する。Dockerはapt版の上にNumPy 1/2対応の`shapely==2.1.2` wheelを導入し、領域結合までビルド時に検査する。ローカルStudioも実行Pythonに対応するwheelを導入する。読み込み失敗は形状エラーと区別して通知する。既存コンテナの修復手順はtools/app/README.md「Shapely / NumPyの互換性エラー」を参照。
 閉路boundは包含する内外周、開路boundは両端を結んだ帯として検証する。接続していない進入範囲・交差boundは拒否する。
 和集合の継ぎ目は壁にせず、残った中島・外周・共通obstaclesに対して車体と余裕を検査する。
 生成結果を別の手描き属性として保存せず、保存したboundとparking属性から再構成する。ROS topic・parameterの追加はない。

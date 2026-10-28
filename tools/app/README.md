@@ -1328,3 +1328,23 @@ MPCとの比較時はライン・速度上限・車両寸法を揃えてくだ�
 編集途中のドラフトは自動保存しません。区画を切り替える前に適用してください。
 進捗のチェック印は必要な入力の有無を表し、形状の妥当性・車体の衝突判定を保証しません。
 車体表示は選択laneのCustom／Race／Centerの順で生成設定を参照し、未設定時は長さ0.35 m、幅0.19 m、後輪軸から後端0.1065 mです。planner設定と照合してください。
+
+### Shapely / NumPyの互換性エラー
+
+`compiled using NumPy 1.x`と表示され、Shapelyが`/usr/lib/python3/dist-packages`、
+NumPyが`/usr/local/lib/python3.12/dist-packages`から読み込まれている場合、apt版Shapelyと
+後から導入されたNumPy 2のバイナリ互換性が原因です。駐車枠の描き直しは不要です。
+DockerfileではNumPy 1/2対応のShapely 2.1.2 wheelを上書き優先で導入し、領域結合を検証します。
+
+既存のUbuntuコンテナでは、Studioを停止してコンテナ内で実行します（権限がなければ`sudo uv ...`）。
+
+```bash
+uv pip install --python /usr/bin/python3 \
+  --target "$(/usr/bin/python3 -c 'import sysconfig; print(sysconfig.get_path("purelib"))')" \
+  --upgrade --no-deps --only-binary=:all: 'shapely==2.1.2'
+/usr/bin/python3 -c 'import numpy, shapely; from shapely.geometry import box; from shapely.ops import unary_union; print(numpy.__version__, shapely.__version__, shapely.__file__); assert unary_union([box(0,0,1,1),box(1,0,2,1)]).area == 2'
+```
+
+apt所有ファイルを削除せず、NumPy・学習／推論用venvの依存関係も変更しません。
+確認後は通常の`webui`で再起動してください。`KART_STUDIO_PYTHON`を指定している場合は、
+上記のsystem Pythonではなく、その環境のShapelyを修復する必要があります。

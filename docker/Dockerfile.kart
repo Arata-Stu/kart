@@ -149,6 +149,15 @@ RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
         'opencv-python-headless>=4.10,<5' 'scipy>=1.11,<2' 'moderngl==5.12.0'; \
     fi
 
+# Ubuntu's apt Shapely is built against NumPy 1.x, while notebook mesh
+# dependencies may install NumPy 2.x in /usr/local. Overlay a compatible wheel
+# without uninstalling dpkg-owned files or changing NumPy in other environments.
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv pip install --python /usr/bin/python3 \
+      --target "$(/usr/bin/python3 -c 'import sysconfig; print(sysconfig.get_path("purelib"))')" \
+      --upgrade --no-deps --only-binary=:all: 'shapely==2.1.2' \
+    && /usr/bin/python3 -c 'import numpy, shapely; from shapely.geometry import box; from shapely.ops import unary_union; assert shapely.__version__ == "2.1.2"; assert unary_union([box(0,0,1,1), box(1,0,2,1)]).area == 2; print("Parking geometry:", numpy.__version__, shapely.__version__, shapely.__file__)'
+
 # OpenEB Python event buffers on this SDK build require NumPy 1.x. Keep RAW
 # extraction isolated from Notebook NumPy 2 and from training/inference venvs.
 # RAW dataset extraction runs on the amd64 notebook; Jetson only records/infers.

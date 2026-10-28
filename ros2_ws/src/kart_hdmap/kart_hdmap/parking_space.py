@@ -3,8 +3,15 @@ import math
 
 
 def surface(doc, rows):
-    from shapely.geometry import Polygon, LineString
-    from shapely.ops import unary_union
+    try:
+        from shapely.geometry import Polygon, LineString
+        from shapely.ops import unary_union
+    except (ImportError, AttributeError, OSError) as exc:
+        raise ValueError(
+            '駐車領域の計算環境に問題があります（Shapely / NumPyの読み込み失敗）。'
+            '駐車枠の描き直しは不要です。Studio実行PythonへNumPy対応版Shapelyを導入し、'
+            'Studioを再起動してください。手順: tools/app/README.md「Shapely / NumPyの互換性エラー」'
+        ) from exc
 
     def poly(points):
         if any(len(p) != 2 or not all(math.isfinite(v) for v in p) for p in points):

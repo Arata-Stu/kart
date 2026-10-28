@@ -143,3 +143,18 @@ def test_derived_open_bound_orientation():
     s=surface(d,[])
     assert s.contains(Point(2,0))
     assert not s.contains(Point(2,2))
+
+
+def test_shapely_import_error_is_actionable(monkeypatch):
+    import builtins
+    from kart_hdmap.parking_space import surface
+    original = builtins.__import__
+
+    def broken(name, *args, **kwargs):
+        if name.startswith('shapely'):
+            raise ImportError('numpy.core.multiarray failed to import')
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, '__import__', broken)
+    with pytest.raises(ValueError, match='描き直しは不要'):
+        surface({}, [])
