@@ -86,3 +86,8 @@ export function isPartition(rows, total) {
   return rows.length > 0 && rows[0].start === 0 && rows.at(-1).end === total &&
     rows.every((r, i) => r.start < r.end && (i === 0 || r.start === rows[i - 1].end));
 }
+
+// Remove only the selected speed override; do not extend adjacent overrides.
+export function deleteSection(rows, index) {
+  return rows.filter((_, i) => i !== index).map(r => ({...r}));
+}

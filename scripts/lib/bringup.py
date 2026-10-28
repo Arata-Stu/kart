@@ -295,26 +295,27 @@ def main():
                 "lane / 追従ライン", options, lambda x: " / ".join(x)
             )
             vslam_only = args.mode == "eval" and args.eval_localization == "vslam"
-            args.map_dir = args.map_dir or str(
-                choose(
-                    "VSLAM地図（HDMapと同じ座標系）" if vslam_only else "同じ座標系のVSLAM/VGL bundle（HDMapとは別に選択）",
-                    discover(args.map_root, "vslam" if vslam_only else "bundle"),
-                )
-            )
+            if not args.map_dir:
+                from bringup_assets import paired_maps, paired_models, select_related
+                candidates=discover(args.map_root, "vslam" if vslam_only else "bundle")
+                args.map_dir=str(select_related("対応するVSLAM地図" if vslam_only else "対応するVGL bundle",
+                    candidates, paired_maps(args.map_file,candidates,args.map_root),choose))
             models = sorted(
                 set(
                     discover(args.model_root, "models")
                     + discover(args.map_root, "models")
                 )
             )
-            args.model_dir = "" if vslam_only else args.model_dir or str(
-                choose("VGLモデル（実行GPU用engine）", models)
-            )
+            if vslam_only: args.model_dir=""
+            elif not args.model_dir:
+                from bringup_assets import paired_models, select_related
+                args.model_dir=str(select_related("VGLモデル（実行GPU用engine）",models,
+                    paired_models(args.map_dir,models),choose))
         if args.mode == "drive" and args.tuning is None:
             import yaml
             default_tuning = yaml.safe_load((config / "hdmap/hdmap.yaml").read_text())["/**/hdmap_server"]["ros__parameters"]["tuning_enabled"]
             args.tuning = choose("Map Studio 動的調整", [False, True],
-                                 lambda enabled: "有効（HDMap・自己位置表示、停止中に編集を適用）" if enabled else "無効（通常走行）",
+                                 lambda enabled: "有効（HDMap・自己位置表示、走行中もライン調整可）" if enabled else "無効（通常走行）",
                                  default=int(default_tuning))
         if args.mode in ("e2e", "e2e-latency"):
             candidates = sorted(

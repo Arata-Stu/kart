@@ -146,6 +146,10 @@ def normalize(doc, frame_id="map", root=None):
                             "Profile does not match line geometry/distances/speed"
                         )
                 line["profile"] = profile
+            mode=raw.get("line_speed_modes", {}).get(kind,"profile") if exported else data[kind].get("speed_mode","profile")
+            if mode not in ("profile","step") or (mode=="step" and kind!="customline"):
+                raise ValueError("Invalid line speed mode")
+            if mode=="step": line["speed_mode"]=mode
             lane["lines"][kind] = line
         if (
             exported

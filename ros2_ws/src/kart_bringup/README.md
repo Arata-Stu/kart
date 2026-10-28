@@ -1477,3 +1477,7 @@ MPCの全設定は上記YAMLにあり、予測時間1秒・追従重み10・滑�
 詳細と範囲は[kart_control](../kart_control/README.md#横制御の選択とmpc)。
 録画profileに`/control/lateral_diagnostics`（diagnostic_msgs/msg/DiagnosticArray）を追加し、方式・計算時間・反復数を記録する。
 ROS/Jetson/実車での動作・計算時間は対象環境での確認が必要。
+
+bringup.shのVGL候補選択はHDMapに同梱したcuVSLAM内容識別子、モデルはbundleのONNX SHA256で
+絞り込む。一致候補が1つのときだけ自動採用し、複数／未判定は選択を残す。
+明示CLI指定と最終localization.resolve検証を維持する。新しいROS parameterはない。

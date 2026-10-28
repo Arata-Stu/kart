@@ -56,5 +56,16 @@ int main(){
  auto stopped_line=straight;stopped_line[20].speed=0;
  auto braking=lateral_mpc(stopped_line,false,{1,0,0},c,m,1,0,1./30,100);
  assert(braking.command.valid && braking.command.speed<=std::sqrt(2*c.deceleration));
+ // Step references switch at the boundary, not across the preceding segment.
+ auto step_line=straight;for(auto& point:step_line)point.speed=point.x<2?2:.5;
+ c.step_speed=true;
+ for(double x:{1.95,2.,2.05}) {
+   auto pp=pursue(step_line,false,{x,0,0},c);
+   auto mp=lateral_mpc(step_line,false,{x,0,0},c,m,1,0,1./30,100);
+   assert(pp.valid && mp.command.valid);
+   assert(pp.speed==(x<2?2:.5));assert(mp.command.speed==(x<2?2:.5));
+ }
+ c.step_speed=false;
+ assert(pursue(step_line,false,{1.95,0,0},c).speed<2);
  std::cout<<"MPC closed-loop tests passed\n";
 }

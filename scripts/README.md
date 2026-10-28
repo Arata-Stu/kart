@@ -476,3 +476,10 @@ collect/environment/drive/e2eで同じ検証を使用する。profile引数だ�
 固定AUTO throttleは併用不可。駐車の起動・goal・停止ラッチの詳細は
 [kart_parking README](../ros2_ws/src/kart_parking/README.md)を参照。
 レース終了判定は自動化しない。`/parking/start`の明示要求後に順方向のコースから駐車へ向かう。
+
+bringupのVGL選択は、選択HDMapの親ディレクトリにあるcuVSLAM地図の内容識別子から
+対応bundleへ候補を絞る。一致が1つなら自動選択、複数なら一致候補だけを提示する。
+対応を判定できない場合は従来の全候補から明示選択する。
+VGLモデルもbundleのONNX SHA256と一致する候補を絞り、1つなら自動選択する。
+明示の--map-dir/--model-dirを優先し、GPU engine・地図・入力shape等の最終検証は省略しない。
+前回の選択を無条件再利用せず、自動採用したパスはログに表示する。

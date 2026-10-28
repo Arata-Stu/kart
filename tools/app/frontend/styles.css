@@ -1439,3 +1439,5 @@ summary {
 #parking-editor textarea { width: 100%; font-family: monospace; resize: vertical; }
 #parking-editor summary { cursor: pointer; font-weight: 600; }
 #parking-warning { color: #965b00; }
+
+.speed-row-actions { display: flex; flex-wrap: wrap; gap: 4px; }

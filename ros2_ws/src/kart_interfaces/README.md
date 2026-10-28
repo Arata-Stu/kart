@@ -125,3 +125,8 @@ Pure Pursuitが実際に選んだ追従点の観測用メッセージ。
 section selector → E2E decoderへ送信する。headerは判定対象画像と同じ時刻、
 `valid`、`section_id`、`head_id`、0始まり`head_index`、`routing_sha256`、`reason`を持つ。
 未局在・曖昧・時刻不整合はvalid=false、head_index=-1。位置そのものや操作指令ではない。
+
+`ReferenceLine.step_speed`（bool、既定false）を追加。trueはCustomlineの各点から次点まで
+始点の目標速度を保持し、境界で即時切替する指定。通常の速度補間・境界先行減速を省くが、
+走行側の上限と開路終点停止は維持する。publisherはkart_hdmap、consumerはkart_control。
+独自parameter追加なし。型変更時は関連workspaceを再ビルド・source・ノード再起動する。

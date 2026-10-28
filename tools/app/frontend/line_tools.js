@@ -8,7 +8,7 @@ import {
   selectSpeedRow,
 } from "./waypoint_sections.js";
 import { $, state, api, action, toast, emit, remember, on } from "./api.js";
-import { partitionSections, splitSection, mergeSection, isPartition } from "./custom_model.js";
+import { partitionSections, splitSection, mergeSection, deleteSection, isPartition } from "./custom_model.js";
 import { save, loadMap } from "./maps.js";
 
 function length() {
@@ -48,7 +48,7 @@ function addRow(
     input.dataset.key = key;
     input.setAttribute(
       "aria-label",
-      { start: "開始距離", end: "終了距離", speed: "速度上限" }[key],
+      { start: "開始距離", end: "終了距離", speed: "区間速度 m/s" }[key],
     );
     input.addEventListener("input", renderWaypointPicker);
     row.append(input);
@@ -62,7 +62,17 @@ function addRow(
       rebuildRows(mergeSection(speedRows(), [...$("speed-rows").children].indexOf(row)));
     } else { row.remove(); renderWaypointPicker(); }
   };
-  row.append(remove);
+  const buttons=document.createElement("div");
+  buttons.className="speed-row-actions";
+  if ($("speed-mode").value === "split") buttons.append(remove);
+  const erase=document.createElement("button");erase.type="button";erase.textContent="削除";
+  erase.setAttribute("aria-label","この区間の速度指定を削除");
+  erase.title="この区間の速度上限を解除します。隣の区間は変更しません";
+  erase.onclick=()=>{
+    const remaining=deleteSection(speedRows(),[...$("speed-rows").children].indexOf(row));
+    $("speed-mode").value="ranges";configureMode(remaining,false);
+  };
+  buttons.append(erase);row.append(buttons);
   $("speed-rows").append(row);
   row.addEventListener("focusin", event => {
     if (event.target.dataset.key === "speed") selectSpeedRow(row);
@@ -79,7 +89,7 @@ function configureMode(rows, partition = true) {
   const splitting = $("speed-mode").value === "split";
   $("speed-add").hidden = splitting;
   $("speed-mode-help").textContent = splitting
-    ? "線上をクリックすると、その場所が区切りになります。全体を重複のない区間に分け、行ごとに速度を設定します。"
+    ? "WPをクリックして区切ります。線上クリックも最寄りWPに合わせます。全体を重複のない区間に分け、行ごとに速度を設定します。"
     : "開始・終了を個別指定します。既存区間はすべて色分け表示。閉路の始点跨ぎや重複も指定できます。";
   setSectionSplit(splitting ? station => {
     try { rebuildRows(splitSection(speedRows(), station)); }
@@ -101,6 +111,7 @@ action("custom-speeds-open", () => {
   if (state.lane.custom.length < (state.lane.closed ? 3 : 2))
     throw Error("先にCustomlineの点を描いてください");
   $("speed-length").textContent = `全長 ${length().toFixed(2)} m / ${state.lane.custom.length} 編集点`;
+  $("custom-speed-mode").value=state.lane.custom_speed_mode || "profile";
   const rows = state.lane.custom_speeds || [];
   // Existing ranges retain their exact distances and overlap until explicitly converted.
   const partition = isPartition(rows, length());
@@ -110,6 +121,9 @@ action("custom-speeds-open", () => {
   renderWaypointPicker();
 });
 action("speed-add", () => addRow());
+action("speed-clear", () => {
+  $("speed-mode").value="ranges";configureMode([],false);
+});
 $("speed-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const limits = speedRows();
@@ -125,6 +139,7 @@ $("speed-form").addEventListener("submit", async (event) => {
     );
   remember();
   state.lane.custom_speeds = limits;
+  state.lane.custom_speed_mode = $("custom-speed-mode").value;
   delete state.lane.lines.customline;
   state.dirty = true;
   $("speed-dialog").close();

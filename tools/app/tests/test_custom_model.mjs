@@ -54,3 +54,11 @@ clearCustom(deleted);
 assert.deepEqual(deleted.custom,[]);assert.deepEqual(deleted.custom_speeds,[]);
 assert.ok(!deleted.lines.customline);assert.deepEqual(deleted.lines.raceline,retained);assert.ok(deleted.lines.centerline);
 console.log('Arc-length downsampling: counts, vertices, endpoints, sparse/zero cases, source isolation and scoped deletion passed');
+
+const {deleteSection}=await import('../frontend/custom_model.js');
+const originalSections=[{start:0,end:2,speed:1},{start:2,end:4,speed:.5},{start:4,end:6,speed:2}];
+const removed=deleteSection(originalSections,1);
+assert.deepEqual(removed,[{start:0,end:2,speed:1},{start:4,end:6,speed:2}]);
+assert.equal(originalSections.length,3);
+assert.deepEqual(deleteSection([originalSections[0]],0),[]);
+removed[0].speed=9;assert.equal(originalSections[0].speed,1);

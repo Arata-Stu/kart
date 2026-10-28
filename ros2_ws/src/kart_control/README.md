@@ -472,3 +472,9 @@ Pure Pursuitの操舵計算用先読み点ではない。MPC時のlookahead_mは
 舵角速度制約、終点、入力異常・期限超過を検査する。理想自転車モデルによる検証であり、
 速度PID込みの実車応答やJetsonでの10 ms達成を保証しない。ROS parameter serviceテストは
 ROSがない環境ではskipする。実車では従来設定を保存し、同じRaceline・速度で比較する。
+
+Customlineの`ReferenceLine.step_speed=true`では、Pure Pursuit/MPCとも最近傍経路区間の
+始点速度を保持し、境界で即時切替する。速度補間と区間境界への先行減速は行わない。
+共有max_speed_mps、速度PIDの上限、開路終点の減速・停止は維持する。
+新しいROS parameterはない。step_speedはcustomlineだけ許可し、他のline_typeでは参照を無効化する。
+実速度の即時変化を保証しない。速度PIDの出力制限と車両応答は変わらない。

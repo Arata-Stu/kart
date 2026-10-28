@@ -89,6 +89,7 @@ def reference_message(lane, kind, centerline_speed, frame, stamp):
     if lane and kind in lane["lines"]:
         line = lane["lines"][kind]
         msg.closed = lane["closed"]
+        msg.step_speed = line.get("speed_mode", "profile") == "step"
         msg.points = [Point(x=float(x), y=float(y), z=0.0) for x, y in line["points"]]
         msg.speeds = (
             [float(centerline_speed)] * len(msg.points)

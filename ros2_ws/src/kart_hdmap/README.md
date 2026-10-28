@@ -301,3 +301,8 @@ HDMap v2は任意の`parking_areas`（P1/P2/P3）と`parking_drivable`を保持�
 `mpc_smoothness_weight`(1.0)、`mpc_steering_rate_rad_s`(1.5 rad/s)を公開する。
 方式はSTOP・停車中、MPC数値は新鮮なAUTO/MANUAL/STOPで変更可能。ノード側で範囲・状態を検証する。
 既存parameter bridgeを使い、HDMap自身のROS parameter/topic追加はない。
+
+Customlineの生成属性`speed_mode: step`を`ReferenceLine.step_speed`へ反映する。
+保存map.jsonと書き出しHDMapの`line_speed_modes`から正規化し、動的snapshot適用でも維持する。
+省略は従来のprofile方式。stepはcustomline以外では拒否する。既存の速度override/上限は維持する。
+ROS parameter追加なし。ReferenceLine型変更のためpublisher/subscriberを同じ版で再ビルドする。

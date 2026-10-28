@@ -7,3 +7,7 @@ bool closed
 geometry_msgs/Point[] points
 # One nonnegative speed in m/s per point. Zero is a stop target.
 float64[] speeds
+
+# True: hold segment-start speed; no boundary interpolation/anticipatory braking.
+# Reserved for customline. End-of-open-path stopping and controller speed caps remain.
+bool step_speed

@@ -57,7 +57,7 @@ def curvature(a, b, c):
     )
 
 
-def profile(line, closed, p, limits=()):
+def profile(line, closed, p, limits=(), step=False):
     n = len(line)
     k = [
         curvature(line[(i - 1) % n], line[i], line[(i + 1) % n])
@@ -66,19 +66,25 @@ def profile(line, closed, p, limits=()):
         for i in range(n)
     ]
     v = [
-        min(p["max_speed"], math.sqrt(p["lateral_accel"] / max(abs(c), 1e-8)))
+        p["max_speed"] if step else min(p["max_speed"], math.sqrt(p["lateral_accel"] / max(abs(c), 1e-8)))
         for c in k
     ]
     station = 0.0
     for i in range(n):
-        v[i] = min(v[i], speed_cap(station, limits, p["max_speed"]))
+        if step:
+            # Half-open intervals: the new target takes effect at its boundary.
+            hits=[r["speed"] for r in limits if (r["start"] <= station+1e-8 < r["end"] if r["start"]<r["end"] else station+1e-8>=r["start"] or station+1e-8<r["end"])]
+            v[i]=min(hits) if hits else p["max_speed"]
+        else:
+            v[i] = min(v[i], speed_cap(station, limits, p["max_speed"]))
         if i < n - 1:
             station += math.dist(line[i], line[i + 1])
     if not closed:
-        v[0] = v[-1] = 0.0
+        v[-1] = 0.0
+        if not step: v[0] = 0.0
     es = edges(line, closed)
     # Propagate squared-speed upper bounds around a closed loop until converged.
-    for _ in range(n + 1 if closed else 2):
+    for _ in range(0 if step else n + 1 if closed else 2):
         old = v[:]
         for i, (a, b) in enumerate(es):
             j = (i + 1) % n
@@ -215,7 +221,8 @@ def generate(document, kind, raw, check=lambda: None):
     else:
         raise ValueError("未対応のラインです")
     corridor.validate(line, clearance)
-    rows = profile(line, closed, p, limits)
+    step = kind == "customline" and document.get("custom_speed_mode", "profile") == "step"
+    rows = profile(line, closed, p, limits, step)
     footprint.validate_line(
         line,
         closed,
@@ -232,6 +239,7 @@ def generate(document, kind, raw, check=lambda: None):
         settings=p,
         method=method,
         speed_sections=limits,
+        speed_mode="step" if step else "profile",
         optimizer_info=optimizer_info,
         reference_info=reference_info,
     )

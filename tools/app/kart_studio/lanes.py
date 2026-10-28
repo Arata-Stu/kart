@@ -6,7 +6,7 @@ from .geometry import points, number
 from .speed_sections import sections
 from .storage import name
 
-FIELDS = ("closed", "left", "right", "custom", "custom_speeds", "centerline_speed_mps", "lines")
+FIELDS = ("closed", "left", "right", "custom", "custom_speeds", "custom_speed_mode", "centerline_speed_mps", "lines")
 
 
 def empty(lane_id="lane_001"):
@@ -67,6 +67,9 @@ def validate(raw, existing):
         lane["custom_speeds"] = sections(
             row.get("custom_speeds", []), lane["custom"], closed
         )
+        mode=row.get("custom_speed_mode", "profile")
+        if mode not in ("profile", "step"): raise ValueError("未知のCustom速度方式です")
+        lane["custom_speed_mode"]=mode
         old = previous.get(lane_id, empty(lane_id))
         speed = row.get("centerline_speed_mps", old.get("centerline_speed_mps", 1.5))
         if isinstance(speed, bool):
@@ -76,7 +79,7 @@ def validate(raw, existing):
         lane["lines"] = copy.deepcopy(old["lines"])
         if any(lane[k] != old[k] for k in ("left", "right", "closed")):
             lane["lines"] = {}
-        elif any(lane[k] != old.get(k, []) for k in ("custom", "custom_speeds")):
+        elif lane["custom_speed_mode"] != old.get("custom_speed_mode", "profile") or any(lane[k] != old.get(k, []) for k in ("custom", "custom_speeds")):
             lane["lines"].pop("customline", None)
         result.append(lane)
     return result

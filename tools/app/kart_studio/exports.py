@@ -77,6 +77,7 @@ def export_map(folder, doc):
                     centerline=lane["lines"]["centerline"]["points"],
                     centerline_speed_mps=lane.get("centerline_speed_mps", 1.5),
                     offline_lines=files,
+                    line_speed_modes={k: v.get("speed_mode", "profile") for k,v in lane["lines"].items()},
                 )
             )
             metadata[lane["id"]] = dict(

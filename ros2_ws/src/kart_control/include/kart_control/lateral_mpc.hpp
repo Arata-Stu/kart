@@ -54,7 +54,7 @@ inline MpcResult lateral_mpc(const std::vector<Point>& line, bool closed, Pose p
     s=closed?std::fmod(std::fmod(s,arc.back())+arc.back(),arc.back()):std::clamp(s,0.,arc.back());
     size_t i=std::min(segments-1,size_t(std::upper_bound(arc.begin(),arc.end(),s)-arc.begin()-1));
     double t=(s-arc[i])/(arc[i+1]-arc[i]);auto a=line[i],b=line[(i+1)%line.size()];
-    return Point{a.x+t*(b.x-a.x),a.y+t*(b.y-a.y),a.speed+t*(b.speed-a.speed)};
+    return Point{a.x+t*(b.x-a.x),a.y+t*(b.y-a.y),(c.step_speed ? (t>=1.-1e-8?b.speed:a.speed) : a.speed+t*(b.speed-a.speed))};
   };
   auto heading=[&](double s) {if(!closed)s=std::clamp(s,0.,arc.back());auto a=sample(s-.05),b=sample(s+.05);return std::atan2(b.y-a.y,b.x-a.x);};
   auto ref=sample(origin);double yaw=heading(origin);
@@ -65,7 +65,7 @@ inline MpcResult lateral_mpc(const std::vector<Point>& line, bool closed, Pose p
   // Keep longitudinal PID unchanged. Reference speed uses the nearest point and
   // forward braking envelope; unlike PP it does not depend on a lookahead knob.
   double target=std::min(c.max_speed,ref.speed);
-  for(size_t i=0;i<line.size();++i) {
+  for(size_t i=0;!c.step_speed && i<line.size();++i) {
     double d=arc[i]-origin;
     if(closed && d<0) d+=arc.back();
     if(d>=0) target=std::min(target,std::sqrt(line[i].speed*line[i].speed+2*c.deceleration*d));

@@ -1082,6 +1082,8 @@
           <button type="button" data-close="speed-dialog">×</button>
         </div>
         <p id="speed-length" class="help"></p>
+        <label>速度の扱い<select id="custom-speed-mode"><option value="profile">上限（曲率・加減速から生成）</option><option value="step">区間目標を即時切替</option></select></label>
+        <p class="help">即時切替は区間内の指定速度を目標にし、曲率減速・境界手前の減速を使いません。実速度はPIDと車体応答に従います。走行側の速度上限と開路終点の停止は維持します。</p>
         <label>区間の作り方<select id="speed-mode"><option value="split">境界をクリックして分割</option><option value="ranges">開始・終了を指定（詳細）</option></select></label>
         <p id="speed-mode-help" class="help"></p>
         <svg
@@ -1092,15 +1094,17 @@
         <p id="speed-pick-status" class="help"></p>
         <p id="speed-overlap" class="help" role="status"></p>
         <div class="speed-columns">
-          <span>区間</span><span>開始</span><span>終了</span><span>上限 m/s</span
+          <span>区間</span><span>開始</span><span>終了</span><span>速度 m/s</span
           ><span></span>
         </div>
         <div id="speed-rows" class="scroll"></div>
         <button id="speed-add" type="button" class="quiet">
           ＋ 区間を追加
         </button>
+        <button id="speed-clear" type="button" class="quiet">すべての区間速度を解除</button>
         <p class="help">
-          同じ色の線と行が同じ区間です。「結合」は隣の区間と低い方の速度でまとめます。詳細指定では開始・終了欄を選んで図の点をクリックします。区間の前から減速します。点列の編集後は区間を確認し、適用後にCustomlineを再生成してください。
+          「上限」方式では曲率・加減速制約によって速度が下がります。「即時切替」方式では区間の指定値を使います。「削除」はその区間の速度指定を解除し、隣の区間は維持します。未指定部分は生成設定の最高速度・曲率・加減速制約を使います。
+          同じ色の線と行が同じ区間です。「結合」は隣の区間と低い方の速度でまとめます。詳細指定では開始・終了欄を選んで図の点をクリックします。上限方式では区間の前から減速します。点列の編集後は区間を確認し、適用後にCustomlineを再生成してください。
         </p>
         <button type="submit" class="primary full">区間設定を適用</button>
       </form>

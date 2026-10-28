@@ -159,6 +159,8 @@ public:
             }
             line_.push_back({m->points[i].x, m->points[i].y, m->speeds[i]});
           }
+          if(m->step_speed && m->line_type!="customline") {line_.clear();return;}
+          c_.step_speed=m->step_speed;
           closed_ = m->closed;
           parking_ = m->line_type == "parking";
         });

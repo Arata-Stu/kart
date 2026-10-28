@@ -15,6 +15,7 @@ struct Pose {
 struct Settings {
   double wheelbase, steering_limit, lookahead, max_speed, max_error,
       goal_tolerance, deceleration;
+  bool step_speed{false};
 };
 struct Result {
   double steering{}, speed{}, target_x{}, target_y{};
@@ -72,6 +73,7 @@ inline Result pursue(const std::vector<Point> &line, bool closed, Pose pose,
       line[nearest].speed +
       (line[(nearest + 1) % line.size()].speed - line[nearest].speed) *
           fraction;
+  if(c.step_speed) requested=line[fraction>=1.-1e-8 ? (nearest+1)%line.size() : nearest].speed;
   for (size_t step = 0; step <= count; ++step) {
     double available = lengths[segment] * (1 - start);
     const auto &a = line[segment];
@@ -91,7 +93,7 @@ inline Result pursue(const std::vector<Point> &line, bool closed, Pose pose,
       // Anticipate lower speed targets, including explicit zeros, without
       // skipping them.
       double travelled = lengths[nearest] * (1 - fraction);
-      for (size_t n = 0, j = nearest; n < count && travelled <= c.lookahead;
+      for (size_t n = 0, j = nearest; !c.step_speed && n < count && travelled <= c.lookahead;
            n++, j = (j + 1) % count) {
         speed =
             std::min(speed, std::sqrt(line[(j + 1) % line.size()].speed *

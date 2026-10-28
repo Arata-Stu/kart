@@ -213,7 +213,7 @@ class Maps:
         result["source_fingerprint"] = fingerprint(
             {
                 k: lane.get(k, [])
-                for k in ("left", "right", "closed", "custom", "custom_speeds")
+                for k in ("left", "right", "closed", "custom", "custom_speeds", "custom_speed_mode")
             }
         )
         lane["lines"][kind] = result
