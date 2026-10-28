@@ -9,7 +9,7 @@ async function reset() {
   pause();
   const serial=++requestSerial;sim=null;
   const mpc=$("simulation-controller").value==="mpc";
-  $("simulation-lookahead").parentElement.hidden=mpc;
+  $("simulation-lookahead").hidden=mpc;
   for(const input of dialog.querySelectorAll("[data-mpc]")) input.parentElement.hidden=!mpc;
   for (const input of dialog.querySelectorAll("input")) if (!input.checkValidity()) throw Error("試走設定の範囲を確認してください");
   const kind=$("simulation-line").value;
@@ -17,7 +17,7 @@ async function reset() {
     controller:$("simulation-controller").value,
     horizon:Number($("simulation-horizon").value),tracking:Number($("simulation-tracking").value),
     smoothness:Number($("simulation-smoothness").value),steeringRate:Number($("simulation-rate").value),
-    speed:Number($("simulation-speed").value), lookahead:Number($("simulation-lookahead").value),
+    speed:Number($("simulation-speed").value),
     wheelbase:Number($("simulation-wheelbase").value), maxSteer:Number($("simulation-steer").value)*Math.PI/180,
   };
   $("simulation-metrics").textContent="実車と共通の制御計算で試走を計算中…（初回はコンパイル）";
@@ -56,7 +56,7 @@ function draw() {
   ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(tx,ty);ctx.stroke();ctx.setLineDash([]);
   ctx.beginPath();ctx.arc(tx,ty,6,0,Math.PI*2);ctx.fillStyle="#fff";ctx.fill();ctx.lineWidth=2;ctx.stroke();
   ctx.fillStyle="#b51f5a";ctx.font="12px sans-serif";ctx.fillText("先読み点",tx+10,ty-10);ctx.restore();
-  $("simulation-metrics").textContent=`${c.reason || (running?"試走中":"停止中")} · ${c.time.toFixed(1)} s · ${c.speed.toFixed(2)} m/s · 目標 ${c.targetSpeed.toFixed(2)} m/s · 計算 ${c.solverMs.toFixed(2)} ms · 舵角 ${(c.steering*180/Math.PI).toFixed(1)}° · 誤差 ${c.error.toFixed(2)} m / 最大 ${c.maxError.toFixed(2)} m`;
+  $("simulation-metrics").textContent=`${c.reason || (running?"試走中":"停止中")} · ${c.time.toFixed(1)} s · ${c.speed.toFixed(2)} m/s${sim.cfg.controller==="pure_pursuit"?` · 先読み ${c.lookahead.toFixed(2)} m`:""} · 目標 ${c.targetSpeed.toFixed(2)} m/s · 計算 ${c.solverMs.toFixed(2)} ms · 舵角 ${(c.steering*180/Math.PI).toFixed(1)}° · 誤差 ${c.error.toFixed(2)} m / 最大 ${c.maxError.toFixed(2)} m`;
 }
 function tick(now){
   if(!running)return;
@@ -76,7 +76,7 @@ action("simulation-open",async()=>{
 });
 action("simulation-play",async()=>{if(!sim)await reset();if(running){pause();draw();return;}if(!sim)return;if(sim.car.done)await reset();if(!sim)return;running=true;last=performance.now();accumulator=0;$("simulation-play").textContent="一時停止";raf=requestAnimationFrame(tick);});
 action("simulation-reset",reset);
-for(const id of ["simulation-controller","simulation-horizon","simulation-tracking","simulation-smoothness","simulation-rate","simulation-line","simulation-speed","simulation-lookahead","simulation-wheelbase","simulation-steer"]){
+for(const id of ["simulation-controller","simulation-horizon","simulation-tracking","simulation-smoothness","simulation-rate","simulation-line","simulation-speed","simulation-wheelbase","simulation-steer"]){
   $(id).addEventListener("change",async()=>{try{await reset();}catch(e){pause();sim=null;$("simulation-metrics").textContent=e.message;toast(e.message,true);}});
 }
 dialog.addEventListener("close",()=>{requestSerial++;pause();});

@@ -1441,3 +1441,9 @@ summary {
 #parking-warning { color: #965b00; }
 
 .speed-row-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.parking-step { margin: 10px 0; padding: 8px; border-left: 3px solid #238457; background: #f4f7f6; }
+.parking-step:nth-of-type(2) { border-color: #00bddd; }
+.parking-step:nth-of-type(3) { border-color: #bb4499; }
+.parking-step:nth-of-type(4) { border-color: #9c8abb; }
+#parking-pick-note { position: sticky; bottom: 0; background: #fff4d8; padding: 8px; }
+#parking-progress { line-height: 1.8; }

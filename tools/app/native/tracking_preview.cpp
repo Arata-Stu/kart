@@ -1,11 +1,12 @@
 #include "kart_control/lateral_mpc.hpp"
+#include "kart_control/lookahead.hpp"
 #include <iostream>
 #include <iomanip>
 using namespace kart_control;
 int main(){
  size_t n;int closed,mpc,step;
  Settings c{.257,.384,.8,1.5,2.,.04,2.5};MpcSettings m;
- if(!(std::cin>>n>>closed>>mpc>>step>>c.max_speed>>c.lookahead>>c.wheelbase>>c.steering_limit>>m.horizon>>m.tracking>>m.smoothness>>m.steering_rate)||n<2||n>5000)return 2;
+ if(!(std::cin>>n>>closed>>mpc>>step>>c.max_speed>>c.wheelbase>>c.steering_limit>>m.horizon>>m.tracking>>m.smoothness>>m.steering_rate)||n<2||n>5000)return 2;
  const bool stopped=c.max_speed==0;
  if(stopped)c.max_speed=.001;
  c.step_speed=step;
@@ -17,7 +18,10 @@ int main(){
  for(int tick=0;tick<9000;++tick){
    Result cmd;double ms=0;
    if(mpc){auto result=lateral_mpc(line,closed,p,c,m,v,steer,dt);cmd=result.command;ms=result.elapsed_ms;if(!cmd.valid){std::cout<<"END "<<result.reason<<"\n";return 0;}}
-   else cmd=pursue(line,closed,p,c);
+   else {
+     c.lookahead=*lookahead_distance(.8,v,LookaheadSettings{});
+     cmd=pursue(line,closed,p,c);
+   }
    if(!cmd.valid){std::cout<<"END invalid_geometry_or_off_path\n";return 0;}
    if(stopped)cmd.speed=0;
    double error=1e20;
@@ -25,7 +29,7 @@ int main(){
      double f=std::clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/std::max(1e-12,dx*dx+dy*dy),0.,1.);
      error=std::min(error,std::hypot(p.x-a.x-f*dx,p.y-a.y-f*dy));}
    maxerror=std::max(error,maxerror);
-   std::cout<<tick*dt<<' '<<p.x<<' '<<p.y<<' '<<p.yaw<<' '<<v<<' '<<cmd.steering<<' '<<error<<' '<<maxerror<<' '<<cmd.target_x<<' '<<cmd.target_y<<' '<<ms<<' '<<cmd.speed<<'\n';
+   std::cout<<tick*dt<<' '<<p.x<<' '<<p.y<<' '<<p.yaw<<' '<<v<<' '<<cmd.steering<<' '<<error<<' '<<maxerror<<' '<<cmd.target_x<<' '<<cmd.target_y<<' '<<ms<<' '<<cmd.speed<<' '<<(mpc?0:c.lookahead)<<'\n';
    if((closed&&travel>=total)||(!closed&&std::hypot(p.x-line.back().x,p.y-line.back().y)<c.goal_tolerance)){std::cout<<"END completed\n";return 0;}
    still=v<.01?still+dt:0;if(still>=5){std::cout<<"END stopped_target\n";return 0;}
    steer=cmd.steering;v+=std::clamp(cmd.speed-v,-2.5*dt,1.5*dt);

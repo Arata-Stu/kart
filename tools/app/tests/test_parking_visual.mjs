@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {nearestEdge,moveVertex,vehicleShape,hitHandle} from '../frontend/parking_visual.js';
+const square=[[0,0],[2,0],[2,1],[0,1]];
+assert.equal(nearestEdge(square,[1,-.01],.1),0);
+assert.equal(nearestEdge(square,[10,10],.1),null);
+const moved=moveVertex(square,[[.5,0],[1.5,0]],1,[3,1]);
+assert.deepEqual(moved.entrance,[[.75,.25],[2.25,.75]]);
+assert.deepEqual(square,[[0,0],[2,0],[2,1],[0,1]]);
+const shape=vehicleShape([0,0,Math.PI/2],{vehicle_length:1,vehicle_width:.4,rear_axle_to_rear:.2});
+assert.ok(Math.abs(shape.corners[0][0]-.2)<1e-10);
+assert.ok(Math.abs(shape.corners[0][1]+.2)<1e-10);
+assert.equal(hitHandle({polygon:square,goal_pose:[1,.5,0]},[1,.5],.1).field,'goal');
+assert.equal(hitHandle({polygon:square,goal_pose:[1,.5,0]},[1.5,.5],.1).field,'heading');
+assert.equal(hitHandle({polygon:square},[0,0],.1).field,'polygon');

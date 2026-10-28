@@ -1,3 +1,4 @@
+import { vehicleShape, handles, hitHandle } from './parking_visual.js';
 import { paintTuning } from "./tuning.js";
 import { lineVisible } from "./line_visibility.js";
 import { lineSpeedScale, paintSpeedLine } from "./line_speed.js";
@@ -308,21 +309,46 @@ export function draw() {
           ctx.fillText(o.id, p[0] + 8, p[1] - 8);
         }
       }
+      const parkingOpen=$('parking-editor').open;
+      const vehicleSettings=d.lines.customline?.settings||d.lines.raceline?.settings||d.lines.centerline?.settings||{};
+      if(parkingOpen && d.left.length>=2 && d.right.length>=2) {
+        ctx.save();ctx.beginPath();
+        const ring=pts=>{pts.forEach((p,i)=>{const q=project(p);i?ctx.lineTo(...q):ctx.moveTo(...q);});ctx.closePath();};
+        if(d.closed){ring(d.left);ring(d.right);}else ring([...d.left,...[...d.right].reverse()]);
+        ctx.fillStyle='#328ccb18';ctx.fill('evenodd');ctx.restore();
+      }
       const parking = [...(state.doc.parking_areas || []).filter(a => a.id !== state.parkingDraft?.id), ...(state.parkingDraft ? [state.parkingDraft] : [])];
       line(state.doc.parking_drivable, '#607d8b', true, true, 1);
+      const fillParking=(points,color)=>{if(!points || points.length<3)return;ctx.save();ctx.beginPath();points.forEach((p,i)=>{const q=project(p);i?ctx.lineTo(...q):ctx.moveTo(...q);});ctx.closePath();ctx.fillStyle=color;ctx.fill();ctx.restore();};
       for (const a of parking) {
+        fillParking(a.maneuver,'#9c8abb22');fillParking(a.polygon,'#23845733');
         line(a.maneuver, '#9c8abb', true, true, 1);
         line(a.polygon, '#238457', true, true, 2);
         line(a.entrance, '#00bddd', false, false, 5);
         if (a.polygon?.length) { const p=project(a.polygon[0]); ctx.fillStyle='#238457'; ctx.fillText(a.id,p[0]+6,p[1]-8); }
         if (a.goal_pose) {
           const [x,y,yaw]=a.goal_pose;
-          const tip=[x+.35*Math.cos(yaw),y+.35*Math.sin(yaw)];
+          const shape=vehicleShape(a.goal_pose,vehicleSettings);
+          fillParking(shape.corners,'#bb449955');line(shape.corners,'#bb4499',true,false,2);
+          const tip=shape.tip;
           line([[x,y],tip], '#bb4499', false, false, 3);
           for (const sign of [-1,1]) line([tip,[tip[0]-.12*Math.cos(yaw+sign*.5),tip[1]-.12*Math.sin(yaw+sign*.5)]], '#bb4499');
           const p=project([x,y]);ctx.beginPath();ctx.arc(...p,4,0,Math.PI*2);ctx.fillStyle='#bb4499';ctx.fill();
         }
+        if(parkingOpen && Number.isFinite(a.forward_yaw) && a.entrance?.length===2){
+          const mid=a.entrance[0].map((v,i)=>(v+a.entrance[1][i])/2);
+          const tip=[mid[0]+.65*Math.cos(a.forward_yaw),mid[1]+.65*Math.sin(a.forward_yaw)];
+          line([mid,tip],'#d18400',false,false,3);
+          for(const sign of [-1,1])line([tip,[tip[0]-.13*Math.cos(a.forward_yaw+sign*.5),tip[1]-.13*Math.sin(a.forward_yaw+sign*.5)]],'#d18400');
+          const q=project(tip);ctx.fillStyle='#996000';ctx.fillText('コース順方向',q[0]+7,q[1]);
+        }
+        if(parkingOpen && a.id===$('parking-id').value) for(const h of handles(a,vehicleSettings)) {
+          const q=project(h.point);ctx.beginPath();ctx.arc(...q,6,0,2*Math.PI);
+          ctx.fillStyle='white';ctx.fill();ctx.strokeStyle=h.field==='polygon'?'#238457':h.field==='maneuver'?'#9c8abb':'#bb4499';ctx.lineWidth=2;ctx.stroke();
+          ctx.fillStyle=ctx.strokeStyle;ctx.fillText(h.field==='heading'?'向き':h.field==='goal'?'後輪軸':String(h.index+1),q[0]+8,q[1]-7);
+        }
       }
+      if(parkingOpen && state.parkingDirectionStart){const q=project(state.parkingDirectionStart);ctx.beginPath();ctx.arc(...q,6,0,Math.PI*2);ctx.fillStyle='#d18400';ctx.fill();ctx.fillText('ここから順方向へ次の点',q[0]+8,q[1]);}
       line(d.left, colors.left, d.closed);
       line(d.right, colors.right, d.closed);
       const speedScale = state.showLineSpeeds
@@ -459,6 +485,18 @@ canvas.addEventListener("pointerdown", (e) => {
   if (e.button !== 0 && e.button !== 1 && e.button !== 2) return;
   const [x, y] = local(e);
   canvas.focus();
+  if ($('parking-editor').open && state.doc && state.doc.snapshot_status!=='pending' && e.button === 0 && !e.altKey) {
+    canvas.setPointerCapture(e.pointerId);
+    const lane=state.lane;
+    const settings=lane?.lines.customline?.settings||lane?.lines.raceline?.settings||lane?.lines.centerline?.settings||{};
+    const handle=hitHandle(state.parkingDraft,world(x,y),10/scale,settings);
+    // Explicit placement modes take precedence; polygon modes still allow vertex correction.
+    if(handle && (!state.parkingPick || ['polygon','maneuver'].includes(state.parkingPick))){drag={mode:'parking',handle};return;}
+    state.parkingTolerance=14/scale;
+    if(state.parkingPick)emit("parking-click",world(x,y));
+    else drag={mode:'pan',x,y,origin:[...origin]};
+    return;
+  }
   if (state.parkingPick && state.doc && e.button === 0 && !e.altKey) {
     emit("parking-click", world(x,y));
     return;
@@ -491,6 +529,7 @@ canvas.addEventListener("pointermove", (e) => {
     draw();
     return;
   }
+  if(drag.mode==="parking") {emit("parking-drag",{handle:drag.handle,p});return;}
   if (drag.mode === "pan") {
     origin = [
       drag.origin[0] - (x - drag.x) / scale,
@@ -542,6 +581,11 @@ canvas.addEventListener("pointercancel", () => {
   draw();
 });
 canvas.addEventListener("keydown", (e) => {
+  if($('parking-editor').open) {
+    if(e.key==='Escape'){state.parkingPick=null;emit('parking-end');}
+    // Parking drafts are applied as one document change; never delete lane points here.
+    if(['Delete','Backspace'].includes(e.key)){e.preventDefault();return;}
+  }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
     e.preventDefault();
     undo(e.shiftKey);

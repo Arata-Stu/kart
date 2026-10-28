@@ -31,7 +31,7 @@ def _preview(body):
     if type(closed) is not bool or not (3 if closed else 2)<=len(points)<=5000: raise ValueError('試走ラインの点数が不正です')
     method=cfg.get('controller','pure_pursuit')
     if method not in ('pure_pursuit','mpc'): raise ValueError('未知の試走方式です')
-    keys=[('speed',0,20),('lookahead',.05,10),('wheelbase',.05,2),('maxSteer',.01,1.2),('horizon',.3,2),('tracking',.1,100),('smoothness',.1,100),('steeringRate',.1,5)]
+    keys=[('speed',0,20),('wheelbase',.05,2),('maxSteer',.01,1.2),('horizon',.3,2),('tracking',.1,100),('smoothness',.1,100),('steeringRate',.1,5)]
     values=[]
     for key,low,high in keys:
         v=cfg[key]
@@ -53,7 +53,7 @@ def _preview(body):
         if row.startswith('END '): reason=row[4:]
         else:
             frame=list(map(float,row.split()))
-            if len(frame)!=12 or not all(math.isfinite(v) for v in frame): raise ValueError('試走出力が不正です')
+            if len(frame)!=13 or not all(math.isfinite(v) for v in frame): raise ValueError('試走出力が不正です')
             frames.append(frame)
     if not frames: raise ValueError('試走開始に失敗: '+reason)
     return dict(frames=frames,reason=reason,controller=method)

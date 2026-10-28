@@ -31,3 +31,22 @@ def test_step_profile():
     result=preview(body)
     assert result['reason']=='completed'
     assert set(row[11] for row in result['frames'])=={.5,1.}
+
+
+def test_adaptive_lookahead_uses_current_speed():
+    body=request('pure_pursuit')
+    body['closed']=False
+    body['line']={'points':[[0,0],[200,0]]}
+    body['options']['speed']=6
+    body['options'].pop('lookahead')
+    result=preview(body)
+    frames=result['frames']
+    assert frames[0][12]==.8  # Target is 6 m/s but vehicle starts stationary.
+    assert any(row[4]>=5 for row in frames)
+    assert any(1<row[4]<5 for row in frames)
+    for row in frames:
+        expected=.8+2.2*min(1,max(0,(abs(row[4])-1)/4))
+        assert row[12]==pytest.approx(expected)
+        # On a straight path the actual reference point must use that distance.
+        if row[1]+expected<200:
+            assert row[8]-row[1]==pytest.approx(expected,abs=1e-8)

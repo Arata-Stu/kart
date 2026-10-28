@@ -135,20 +135,33 @@
         <div id="inspector-body" class="scroll">
           <details id="parking-editor">
             <summary>駐車 P1・P2・P3 <span id="parking-defined">未定義</span></summary>
-            <p class="help">区画の輪郭は壁ではありません。奥壁・側壁は「走行不可能領域」で厚みを持たせて描き、コース側の入口を開けてください。</p>
-            <label>区画<select id="parking-id"><option>P1</option><option>P2</option><option>P3</option></select></label>
-            <label>駐車area（各行 x y、m）<textarea id="parking-polygon" rows="4"></textarea></label><button id="parking-pick-polygon">地図でareaの頂点を追加</button>
-            <label>入口（同じ辺上の2点）<textarea id="parking-entrance" rows="2"></textarea></label><button id="parking-pick-entrance">地図で入口の2点を指定</button>
-            <label>goal X m<input id="parking-goal-x" type="number" step="0.01"></label>
-            <label>goal Y m<input id="parking-goal-y" type="number" step="0.01"></label>
-            <label>goal yaw rad<input id="parking-goal-yaw" type="number" step="0.01"></label>
-            <button id="parking-pick-goal">地図でgoal位置</button><button id="parking-pick-heading">地図でgoalの向き</button>
-            <p class="help">goalは後輪軸中心です。区画内で車体全体と余裕が収まる位置に置いてください。</p>
-            <label>進入可能範囲（各行 x y、m）<textarea id="parking-maneuver" rows="4"></textarea></label><button id="parking-pick-maneuver">地図で進入範囲を追加</button>
-            <label>入口付近のコース進行方向 rad<input id="parking-forward" type="number" step="0.01"></label><button id="parking-pick-forward">地図で進行方向の2点を指定</button>
-            <p class="help">走行可能領域はleft/right boundから自動生成します。進入範囲はコースと重ね、入口の両側とgoalを含めて描いてください。全周の外周入力は不要です。</p>
-            <details><summary>旧データ用の外周指定（通常は空欄）</summary><label>走行可能外周の上書き<textarea id="parking-drivable" rows="4"></textarea></label><button id="parking-pick-drivable">地図で外周の頂点を追加</button>
-            <p class="help">空欄ならboundから自動生成。旧外周を消して「区画を適用」すると自動生成へ切り替わります。</p></details>
+            <p class="help">地図上で作ります。緑＝車を収める枠、水色＝入口、紫＝コースから枠まで通れる範囲、ピンク＝停車時の車体。赤い領域は実際の壁・障害物です。</p>
+            <label>編集する区画<select id="parking-id"><option>P1</option><option>P2</option><option>P3</option></select></label>
+            <section class="parking-step"><strong>1 · 駐車枠を描く</strong>
+            <p class="help">壁の内側に沿って角を順番にクリック。コの字の開口側も結んで、車体を収める閉じた枠にします。丸い頂点はドラッグで修正できます。</p>
+            <button id="parking-pick-polygon">枠の頂点を追加</button><button id="parking-clear-polygon">枠を描き直す</button></section>
+            <section class="parking-step"><strong>2 · 入口を選ぶ</strong>
+            <p class="help">コースに面する枠の辺をクリック。その辺全体を入口にします。部分的な入口は詳細設定で指定できます。</p>
+            <button id="parking-pick-entrance">入口の辺を選ぶ</button></section>
+            <section class="parking-step"><strong>3 · 停車する車体を置く</strong>
+            <p class="help">枠内をクリックして車体を置き、前方をクリックして向きを決めます。中心の点は後輪軸中心。点をドラッグで移動、矢印の先をドラッグで回転できます。</p>
+            <button id="parking-pick-goal">停車位置を置く</button><button id="parking-pick-heading">車の前方を指定</button>
+            <p class="help">車体表示は生成ラインの寸法（未設定は長さ0.35 m・幅0.19 m）の目安です。plannerの車両寸法と照合してください。</p></section>
+            <section class="parking-step"><strong>4 · コースと枠をつなぐ</strong>
+            <p class="help">紫の範囲をコースと重ね、入口の両側と停車位置を含めます。ここだけ通常ラインを離れて駐車へ向かいます。壁の向こうへ広げないでください。コース全周はleft/rightから自動生成します。</p>
+            <button id="parking-pick-maneuver">進入範囲の頂点を追加</button><button id="parking-clear-maneuver">進入範囲を描き直す</button>
+            <p class="help">逆走を防ぐため、入口付近のコース上を走行順に2点クリックしてください。</p><button id="parking-pick-forward">コースの順方向を指定</button></section>
+            <section class="parking-step"><strong>5 · 実際の壁を確認</strong><p class="help">緑の枠は物理的な壁ではありません。奥・左右の壁は境界編集の「走行不可能領域」で厚みを持たせて描き、入口は開けます。既に赤く描かれた壁は追加不要です。</p></section>
+            <p id="parking-progress" class="help" role="status"></p>
+            <details><summary>詳細設定 · 座標を直接編集</summary>
+            <label>駐車枠（各行 x y、m）<textarea id="parking-polygon" rows="4"></textarea></label>
+            <label>入口（同じ辺上の2点）<textarea id="parking-entrance" rows="2"></textarea></label>
+            <label>後輪軸 X m<input id="parking-goal-x" type="number" step="0.01"></label>
+            <label>後輪軸 Y m<input id="parking-goal-y" type="number" step="0.01"></label>
+            <label>車体 yaw rad<input id="parking-goal-yaw" type="number" step="0.01"></label>
+            <label>進入範囲（各行 x y、m）<textarea id="parking-maneuver" rows="4"></textarea></label>
+            <label>コース順方向 rad<input id="parking-forward" type="number" step="0.01"></label>
+            <details><summary>旧データ用の外周指定（通常は空欄）</summary><label>走行可能外周の上書き<textarea id="parking-drivable" rows="4"></textarea></label><button id="parking-pick-drivable">地図で外周の頂点を追加</button><p class="help">空欄ならleft/rightから自動生成します。</p></details></details>
             <p id="parking-pick-note" class="help"></p><button id="parking-pick-end">入力終了</button>
             <button id="parking-apply" class="primary">区画を適用</button><button id="parking-reload">適用済みの値に戻す</button><button id="parking-remove">区画を削除</button>
           </details>
@@ -1299,15 +1312,7 @@
             step="0.1"
             value="1.5"
         /></label>
-        <label
-          >先読み m<input
-            id="simulation-lookahead"
-            type="number"
-            min="0.05"
-            max="10"
-            step="0.05"
-            value="0.8"
-        /></label>
+        <p id="simulation-lookahead" class="small">先読み：速度連動（1 m/s以下で0.8 m、5 m/s以上で3.0 m、中間は線形補間）</p>
         <label
           >軸距 m<input
             id="simulation-wheelbase"
