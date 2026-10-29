@@ -184,27 +184,29 @@ bagでの初期localization/継続照合/遅延補正/平面制約/Reset/再loca
 
 既存offline評価に`--eval-localization fixed`を追加。
 対話操作は`bash scripts/bringup.sh` →「オフライン解析」→
-「固定mapでlocalization（NVIDIAコピー・特徴点群・軌跡）」→ VO/VIO →
-HDMap・ライン・対応VSLAM地図・bagを選ぶ。
+「固定map VSLAM＋VGL（準備済みbundle）」→ VO/VIO →
+HDMap・ライン・対応VGL bundle・実行GPU用VGLモデル・bagを選ぶ。
 
 ```bash
 bash scripts/bringup.sh --mode eval --eval-localization fixed --interactive
 ```
 
 非対話では`--map-file /absolute/hdmap.json --lane-id <lane> --line-type <line>`と
-`--map-dir /absolute/map_bundle --bag /absolute/bag --tracking-mode 0`を指定する。
+`--map-dir /absolute/map_bundle --model-dir /absolute/models --bag /absolute/bag --tracking-mode 0`を指定する。
 既存evaluation.launch.pyを使い、RVizで固定参照landmark、観測特徴点、LC点群、
 VO/SLAM path、Odometry、pose graph、HDMapを表示する。
 `enable_slam_visualization/enable_landmarks_view/enable_observations_view=true`を
 offline実行時だけ上書きし、通常運用YAMLは変えない。
 入力は左右Infra・CameraInfo・tf_static、VIO時のみIMU。古い動的TFや推定出力は再生しない。
-clockをbagに合わせ、購読準備後に再生を開始する。センサ実機・制御・VGLは起動しない。
+VSLAMとVGLのclockをbagに合わせ、両ノードの購読準備後に再生を開始する。
+VGLは既存構成と同じ別containerで起動し、初期姿勢と再要求topicで接続する。センサ実機・制御は起動しない。
 固定版はlocalize_on_startup=false、enable_request_hint=trueをYAMLから維持する。
-別起動のVGLから/localization/pose_hintを受けて初期localizationする。
-VGLもbagのclockと同じbase/map frameを使用する。offlineのbase_frame既定はcamera_link。
+同時に起動するVGLから/localization/pose_hintを受けて初期localizationする。
+両ノードは同じbase/map frameを使用する。offlineのbase_frame既定はcamera_link。
 初期localization前の一時地図と、成功後の固定参照地図を区別する。
 
-直接launchする場合は`evaluation.launch.py vslam_backend:=fixed enable_vgl:=false`。
+直接launchする場合は`evaluation.launch.py vslam_backend:=fixed enable_vgl:=true`。
+CLIのfixedはVGL付き。低位launchのenable_vgl=falseによる単体評価は別用途として残す。
 既定`vslam_backend:=apt`は従来どおり。固定版でも上流Component classを保持し、
 選択した一方だけをVSLAM containerへロードする。同一containerへ両方を混載しない。
 package/private coreのビルドが必要。portable確認とROS/CUDA/RViz実行確認は別で、後者は未確認。

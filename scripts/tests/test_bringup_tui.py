@@ -193,10 +193,12 @@ class FreshDiagnosticTests(unittest.TestCase):
             (maps / 'map.mdb').write_text('fixture')
             output = io.StringIO()
             argv = ['bringup.py', '--mode', 'eval', '--eval-localization', 'fixed',
-                    '--bag', str(bag), '--map-dir', str(maps), '--map-file', '/hdmap.json',
+                    '--model-dir', '/models', '--bag', str(bag), '--map-dir', str(maps), '--map-file', '/hdmap.json',
                     '--lane-id', 'lane', '--line-type', 'centerline', '--tracking-mode', '0', '--dry-run']
-            with patch.object(sys, 'argv', argv), patch.object(sys.stdin, 'isatty', return_value=False), patch('kart_bringup.mission.hdmap_choices', return_value=[('lane', 'centerline')]), redirect_stdout(output):
+            with patch.object(sys, 'argv', argv), patch.object(sys.stdin, 'isatty', return_value=False), patch('kart_bringup.mission.hdmap_choices', return_value=[('lane', 'centerline')]), patch('kart_bringup.localization.resolve', return_value=({'cuvslam': {'tracking_mode': 0}}, {}, {}, {'input_shape': [1, 3, 240, 424]})) as resolved, patch('kart_bringup.replay.validate_bag_shape', return_value={}), redirect_stdout(output):
                 module.main()
+                self.assertTrue(resolved.call_args.kwargs["enable_vgl"])
+                self.assertEqual(resolved.call_args.kwargs["vslam_backend"], "fixed")
             prompts = []
             def choose_fixed(title, values, *args, **kwargs):
                 prompts.append(title)
@@ -208,14 +210,16 @@ class FreshDiagnosticTests(unittest.TestCase):
             i = interactive_argv.index('--bag')
             del interactive_argv[i:i+2]
             interactive_argv.append('--interactive')
-            with patch.object(sys, 'argv', interactive_argv), patch.object(sys.stdin, 'isatty', return_value=True), patch.object(module, 'choose', side_effect=choose_fixed), patch('kart_bringup.mission.hdmap_choices', return_value=[('lane', 'centerline')]), patch('kart_bringup.mission.discover', return_value=[bag]), redirect_stdout(output):
+            with patch.object(sys, 'argv', interactive_argv), patch.object(sys.stdin, 'isatty', return_value=True), patch.object(module, 'choose', side_effect=choose_fixed), patch('kart_bringup.mission.hdmap_choices', return_value=[('lane', 'centerline')]), patch('kart_bringup.mission.discover', return_value=[bag]), patch('kart_bringup.localization.resolve', return_value=({'cuvslam': {'tracking_mode': 0}}, {}, {}, {'input_shape': [1, 3, 240, 424]})) as resolved, patch('kart_bringup.replay.validate_bag_shape', return_value={}), redirect_stdout(output):
                 module.main()
+                self.assertTrue(resolved.call_args.kwargs["enable_vgl"])
+                self.assertEqual(resolved.call_args.kwargs["vslam_backend"], "fixed")
             self.assertIn('再生rosbag', prompts)
             self.assertNotIn('用途', prompts)
             text = output.getvalue()
             self.assertIn('evaluation.launch.py', text)
             self.assertIn('vslam_backend:=fixed', text)
-            self.assertIn('enable_vgl:=false', text)
+            self.assertIn('enable_vgl:=true', text)
             self.assertIn('tracking_mode:=0', text)
 
     def test_interactive_fourth_mode_skips_maps_and_models(self):

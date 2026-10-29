@@ -107,6 +107,18 @@ class LocalizationTest(unittest.TestCase):
             run=run or self.run_official,
         )
 
+    def test_fixed_and_apt_vgl_have_identical_parameters_and_wiring(self):
+        self.prepare()
+        options = dict(overrides={'use_sim_time': True, 'base_frame': 'camera_link'},
+                       inspect=lambda *_: None, enable_vgl=True)
+        apt = resolve(CONFIG, self.output, self.models, **options)
+        fixed = resolve(CONFIG, self.output, self.models, vslam_backend='fixed', **options)
+        self.assertEqual(fixed, apt)
+        self.assertFalse(fixed[0]['cuvslam']['localize_on_startup'])
+        self.assertTrue(fixed[0]['cuvslam']['enable_request_hint'])
+        self.assertTrue(fixed[0]['vgl']['use_sim_time'])
+        self.assertFalse(fixed[0]['vgl']['publish_map_to_odom_tf'])
+
     def test_prepare_resolve_and_pose_only_contract(self):
         self.prepare()
         params, remaps, _, profile = resolve(

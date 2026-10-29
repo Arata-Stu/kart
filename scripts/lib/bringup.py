@@ -113,9 +113,9 @@ def validate_mode_options(args):
         args.mode == "eval" or (args.mode == "e2e-latency" and args.eval_localization == "e2e_latency")
     ):
         raise ValueError("--eval-localizationはeval専用です")
-    if (args.mode == "eval" and args.eval_localization not in ("vgl", "fresh")
+    if (args.mode == "eval" and args.eval_localization not in ("vgl", "fixed", "fresh")
             and args.model_dir):
-        raise ValueError("VSLAM単独評価では--model-dirを使用しません（VGLは--eval-localization vgl）")
+        raise ValueError("VSLAM単独評価では--model-dirを使用しません（VGLは--eval-localization vgl または fixed）")
 
 
 def main():
@@ -263,7 +263,7 @@ def main():
             args.eval_localization = choose(
                 "オフライン解析", (["vslam_vio"] if args.tracking_mode == "1" else ["vslam"] if args.tracking_mode == "0" else ["vslam", "vslam_vio"]) + ["fixed", "vgl"] +
                 (["fresh_vio" if args.tracking_mode == "1" else "fresh_vo"] if args.tracking_mode else ["fresh_vo", "fresh_vio"]) + ["e2e_latency"],
-                lambda v: {"fixed": "固定mapでlocalization（NVIDIAコピー・特徴点群・軌跡）", "e2e_latency": "E2E latency（RGB bag → TensorRT → 制御topic、車両出力なし）", "vslam": "保存mapでVO localization", "vslam_vio": "保存mapでVIO localization（左右画像＋IMU）", "vgl": "VSLAM＋VGL（準備済みbundle）",
+                lambda v: {"fixed": "固定map VSLAM＋VGL（準備済みbundle）", "e2e_latency": "E2E latency（RGB bag → TensorRT → 制御topic、車両出力なし）", "vslam": "保存mapでVO localization", "vslam_vio": "保存mapでVIO localization（左右画像＋IMU）", "vgl": "VSLAM＋VGL（準備済みbundle）",
                            "fresh_vo": "mapなしVO評価（左右画像・特徴点群・軌跡）",
                            "fresh_vio": "mapなしVIO評価（左右画像＋IMU・特徴点群・軌跡）"}[v])
             if args.eval_localization == "vslam_vio":
@@ -298,7 +298,7 @@ def main():
             args.lane_id, args.line_type = choose(
                 "lane / 追従ライン", options, lambda x: " / ".join(x)
             )
-            vslam_only = args.mode == "eval" and args.eval_localization in ("vslam", "fixed")
+            vslam_only = args.mode == "eval" and args.eval_localization == "vslam"
             if not args.map_dir:
                 from bringup_assets import paired_maps, paired_models, select_related
                 candidates=discover(args.map_root, "vslam" if vslam_only else "bundle")
@@ -439,7 +439,7 @@ def main():
     if args.mode in ("drive", "eval") and not fresh:
         if args.mode == "drive" and not sensors["enable_infra1"]:
             raise ValueError("VSLAM/VGLにはInfraが必要です（なしは選択できません）")
-        vslam_only = args.mode == "eval" and args.eval_localization != "vgl"
+        vslam_only = args.mode == "eval" and args.eval_localization not in ("vgl", "fixed")
         required = ['map_file', 'map_dir'] + ([] if vslam_only else ['model_dir'])
         missing = ['--' + key.replace('_', '-') for key in required if not getattr(args, key)]
         if missing:
@@ -595,7 +595,7 @@ def main():
                   "multicam_mode": args.multicam_mode,
                   "visualize": "true", "rviz": "true"}
     elif args.mode == "eval":
-        values["enable_vgl"] = str(args.eval_localization == "vgl").lower()
+        values["enable_vgl"] = str(args.eval_localization in ("vgl", "fixed")).lower()
         values["vslam_backend"] = "fixed" if args.eval_localization == "fixed" else "apt"
     command = ["ros2", "launch", "kart_bringup", launch] + [
         f"{k}:={v}" for k, v in values.items() if v is not None and v != ""

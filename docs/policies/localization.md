@@ -72,7 +72,8 @@ apt版との同時起動や同一containerへの混載はしない。単体proce
 
 固定マップのoffline評価も既存evaluation/replay/RVizを再利用する。
 `vslam_backend=apt|fixed`は起動pkgの選択だけを担い、同一VSLAM containerには一方のみをロードする。
-CLI/TUIの`--eval-localization fixed`はVGLなしの固定参照評価へ接続する。
+CLI/TUIの`--eval-localization fixed`は既存VSLAM＋VGL評価へ接続し、VSLAM pkgだけ固定参照版に差し替える。
+VGL bundle/model検証、両ノードの再生待ち合わせ、TF所有・hint接続・RVizを既存構成と共通化する。
 特徴点群の可視化は既存visualize引数の実行時overrideで有効化し、通常のノード既定を変更しない。
 
 固定版ではenable_vgl=falseは「このlaunchがVGLを起動しない」の意味であり、
