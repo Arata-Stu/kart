@@ -28,7 +28,6 @@ def add_localization(args: SimpleNamespace) -> list[lut.Action]:
         overrides,
         inspect_engines,
         enable_vgl=boolean(args.enable_vgl),
-        vslam_backend=getattr(args, "vslam_backend", "apt"),
     )
 
     if args.visualize != "":
@@ -73,7 +72,6 @@ def add_localization(args: SimpleNamespace) -> list[lut.Action]:
                     "container_name": targets[kind],
                     "parameters_json": json.dumps(parameters[key]),
                     "remappings_json": json.dumps(remaps[key]),
-                    **({"vslam_backend": getattr(args, "vslam_backend", "apt")} if kind == "vslam" else {}),
                 },
                 scoped=True,
                 forwarding=False,
@@ -85,7 +83,6 @@ def add_localization(args: SimpleNamespace) -> list[lut.Action]:
 def generate_launch_description() -> lut.LaunchDescription:
     """Expose runtime inputs; node tuning remains in bringup YAML."""
     args = LaunchArguments()
-    args.add_arg("vslam_backend", "apt", choices=["apt", "fixed"], cli=True)
     args.add_arg("enable_vgl", "true", cli=True)
     args.add_arg(
         "map_dir",

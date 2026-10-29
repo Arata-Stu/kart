@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import yaml
-from kart_bringup.localization import resolve, vslam_package
+from kart_bringup.localization import resolve
 from kart_bringup.prepare_vgl_map import build
 from kart_bringup.vgl_assets import CONFIG_FILES, validate_bundle
 
@@ -51,22 +51,6 @@ class LocalizationTest(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(value)
 
-    def test_fixed_backend_keeps_replay_contract(self):
-        apt = resolve(CONFIG, self.source, '', enable_vgl=False)
-        fixed = resolve(CONFIG, self.source, '', enable_vgl=False, vslam_backend='fixed')
-        self.assertFalse(fixed[0]['cuvslam']['localize_on_startup'])
-        self.assertTrue(fixed[0]['cuvslam']['enable_request_hint'])
-        self.assertTrue(apt[0]['cuvslam']['localize_on_startup'])
-        self.assertFalse(apt[0]['cuvslam']['enable_request_hint'])
-        self.assertEqual(fixed[1:], apt[1:])
-        original = dict(apt[0]['cuvslam'])
-        original.update(localize_on_startup=False, enable_request_hint=True)
-        self.assertEqual(fixed[0]['cuvslam'], original)
-        self.assertEqual(vslam_package('fixed'), 'kart_visual_localization')
-        self.assertEqual(vslam_package('apt'), 'isaac_ros_cuvslam')
-        with self.assertRaises(ValueError):
-            vslam_package('unknown')
-
     def run_official(self, command, **kwargs):
         if "--help" in command:
             return SimpleNamespace(
@@ -106,18 +90,6 @@ class LocalizationTest(unittest.TestCase):
             inspect=lambda engines, shape: self.inspected.append(shape),
             run=run or self.run_official,
         )
-
-    def test_fixed_and_apt_vgl_have_identical_parameters_and_wiring(self):
-        self.prepare()
-        options = dict(overrides={'use_sim_time': True, 'base_frame': 'camera_link'},
-                       inspect=lambda *_: None, enable_vgl=True)
-        apt = resolve(CONFIG, self.output, self.models, **options)
-        fixed = resolve(CONFIG, self.output, self.models, vslam_backend='fixed', **options)
-        self.assertEqual(fixed, apt)
-        self.assertFalse(fixed[0]['cuvslam']['localize_on_startup'])
-        self.assertTrue(fixed[0]['cuvslam']['enable_request_hint'])
-        self.assertTrue(fixed[0]['vgl']['use_sim_time'])
-        self.assertFalse(fixed[0]['vgl']['publish_map_to_odom_tf'])
 
     def test_prepare_resolve_and_pose_only_contract(self):
         self.prepare()

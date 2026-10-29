@@ -5,7 +5,6 @@ from types import SimpleNamespace
 
 import isaac_ros_launch_utils as lu
 from kart_bringup.launch_arguments import LaunchArguments
-from kart_bringup.localization import vslam_package
 import isaac_ros_launch_utils.all_types as lut
 
 
@@ -23,7 +22,7 @@ def load_component(args: SimpleNamespace) -> list[lut.Action]:
     )
     node = lut.ComposableNode(
         name="visual_slam",
-        package=vslam_package(getattr(args, "vslam_backend", "apt")),
+        package="isaac_ros_cuvslam",
         plugin="nvidia::isaac_ros::visual_slam::VisualSlamNode",
         parameters=[parameters],
         remappings=[tuple(pair) for pair in remappings],
@@ -34,7 +33,6 @@ def load_component(args: SimpleNamespace) -> list[lut.Action]:
 
 def generate_launch_description() -> lut.LaunchDescription:
     args = LaunchArguments()
-    args.add_arg("vslam_backend", "apt", choices=["apt", "fixed"], cli=True)
     args.add_arg(
         "container_name",
         description="Existing multithreaded component container",

@@ -178,50 +178,6 @@ class FzfTests(unittest.TestCase):
 
 
 class FreshDiagnosticTests(unittest.TestCase):
-    def test_fixed_map_offline_cli_uses_existing_evaluation(self):
-        config = module.ROOT / "ros2_ws/src/kart_bringup/config"
-        flow = json.loads((config / "localization/workflow.json").read_text())
-        topics = [flow[k] for k in ("left_image", "right_image", "left_info", "right_info")] + ["/tf_static"]
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            bag = root / 'bag'
-            bag.mkdir()
-            rows = [{"topic_metadata": {"name": t}, "message_count": 10} for t in topics]
-            (bag / 'metadata.yaml').write_text(yaml.safe_dump({"rosbag2_bagfile_information": {"topics_with_message_count": rows}}))
-            maps = root / 'map'
-            maps.mkdir()
-            (maps / 'map.mdb').write_text('fixture')
-            output = io.StringIO()
-            argv = ['bringup.py', '--mode', 'eval', '--eval-localization', 'fixed',
-                    '--model-dir', '/models', '--bag', str(bag), '--map-dir', str(maps), '--map-file', '/hdmap.json',
-                    '--lane-id', 'lane', '--line-type', 'centerline', '--tracking-mode', '0', '--dry-run']
-            with patch.object(sys, 'argv', argv), patch.object(sys.stdin, 'isatty', return_value=False), patch('kart_bringup.mission.hdmap_choices', return_value=[('lane', 'centerline')]), patch('kart_bringup.localization.resolve', return_value=({'cuvslam': {'tracking_mode': 0}}, {}, {}, {'input_shape': [1, 3, 240, 424]})) as resolved, patch('kart_bringup.replay.validate_bag_shape', return_value={}), redirect_stdout(output):
-                module.main()
-                self.assertTrue(resolved.call_args.kwargs["enable_vgl"])
-                self.assertEqual(resolved.call_args.kwargs["vslam_backend"], "fixed")
-            prompts = []
-            def choose_fixed(title, values, *args, **kwargs):
-                prompts.append(title)
-                if title == 'VSLAM速度・精度': return '1'
-                if title == 'lane / 追従ライン': return ('lane', 'centerline')
-                if title == '再生rosbag': return bag
-                self.fail(f'Unexpected selection: {title}')
-            interactive_argv = [v for v in argv]
-            i = interactive_argv.index('--bag')
-            del interactive_argv[i:i+2]
-            interactive_argv.append('--interactive')
-            with patch.object(sys, 'argv', interactive_argv), patch.object(sys.stdin, 'isatty', return_value=True), patch.object(module, 'choose', side_effect=choose_fixed), patch('kart_bringup.mission.hdmap_choices', return_value=[('lane', 'centerline')]), patch('kart_bringup.mission.discover', return_value=[bag]), patch('kart_bringup.localization.resolve', return_value=({'cuvslam': {'tracking_mode': 0}}, {}, {}, {'input_shape': [1, 3, 240, 424]})) as resolved, patch('kart_bringup.replay.validate_bag_shape', return_value={}), redirect_stdout(output):
-                module.main()
-                self.assertTrue(resolved.call_args.kwargs["enable_vgl"])
-                self.assertEqual(resolved.call_args.kwargs["vslam_backend"], "fixed")
-            self.assertIn('再生rosbag', prompts)
-            self.assertNotIn('用途', prompts)
-            text = output.getvalue()
-            self.assertIn('evaluation.launch.py', text)
-            self.assertIn('vslam_backend:=fixed', text)
-            self.assertIn('enable_vgl:=true', text)
-            self.assertIn('tracking_mode:=0', text)
-
     def test_interactive_fourth_mode_skips_maps_and_models(self):
         config = module.ROOT / "ros2_ws/src/kart_bringup/config"
         flow = json.loads((config / "localization/workflow.json").read_text())

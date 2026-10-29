@@ -522,11 +522,3 @@ engine再利用時も欠けたYAMLを生成し、既存YAMLは検証して再利
 `bringup.sh`のE2Eでは`--evs-tensor-config`未指定時にモデル内のYAMLを自動選択する。
 明示指定を優先し、選択後はモデルとの整合性を検証する。YAMLがなければ準備コマンドを案内して停止する。
 直接ROS launchする場合の`evs_tensor_config`指定は引き続き必要。ノード・topic・parameterの変更なし。
-
-固定マップ版のoffline評価は`bash scripts/bringup.sh --mode eval --eval-localization fixed --interactive`。
-対話メニューにも固定mapを追加。既存のVSLAM＋VGL構成を使い、VSLAMだけ固定map版へ差し替える。
-VGL bundle・実行GPU用モデル・bagを選び、HDMap・RVizで特徴点群・軌跡・Odometryを表示する。
-`kart_visual_localization`のビルドが必要。従来の`vslam`/`vgl`/`fresh`は変更しない。
-
-`--mode`指定は従来どおり非対話。指定した用途のまま不足項目を一覧選択するには
-`--interactive`を追加する。TTYが必要。`--mode`未指定時は従来どおり用途から対話選択する。

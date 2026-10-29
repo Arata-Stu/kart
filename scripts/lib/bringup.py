@@ -113,9 +113,9 @@ def validate_mode_options(args):
         args.mode == "eval" or (args.mode == "e2e-latency" and args.eval_localization == "e2e_latency")
     ):
         raise ValueError("--eval-localizationはeval専用です")
-    if (args.mode == "eval" and args.eval_localization not in ("vgl", "fixed", "fresh")
+    if (args.mode == "eval" and args.eval_localization not in ("vgl", "fresh")
             and args.model_dir):
-        raise ValueError("VSLAM単独評価では--model-dirを使用しません（VGLは--eval-localization vgl または fixed）")
+        raise ValueError("VSLAM単独評価では--model-dirを使用しません（VGLは--eval-localization vgl）")
 
 
 def main():
@@ -152,7 +152,6 @@ def main():
     parser.add_argument("--evs-bias-file", default="", help=".bias path; @defaultでカメラ既定")
     parser.add_argument("--bias-root", type=Path, default=ROOT / "bias/evs")
     parser.add_argument("--foxglove", action="store_true")
-    parser.add_argument("--interactive", action="store_true", help="--mode指定時も未指定項目を対話選択")
     parser.add_argument("--no-bridge", action="store_true", help="車両基板なしの確認用")
     parser.add_argument(
         "--dry-run", action="store_true", help="選択・検証とコマンド表示のみ"
@@ -168,7 +167,7 @@ def main():
                         help="自動復帰: off / infra_imu / rgb_imu / evs_assisted（未指定はYAML）")
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--e2e-model-dir", default="")
-    parser.add_argument("--eval-localization", choices=("vslam", "fixed", "vgl", "fresh", "e2e_latency"), default=None)
+    parser.add_argument("--eval-localization", choices=("vslam", "vgl", "fresh", "e2e_latency"), default=None)
     parser.add_argument("--multicam-mode", choices=("0","1","2"), default="", help="速度・精度: 0=Moderate / 1=Performance / 2=Precision")
     parser.add_argument("--tracking-mode", choices=("0", "1"), default="", help="offline評価: 0=stereo VO / 1=VIO")
     parser.add_argument("--base-frame", default="", help="offline評価の基準TF frame（例: camera_link）")
@@ -188,12 +187,12 @@ def main():
         args.evs_backend = "cuda_async"
     from kart_bringup.mission import discover, hdmap_choices, sensor_parameters, camera_config, recording_config
 
-    interactive = args.interactive or args.mode is None
+    interactive = args.mode is None
     if interactive and not sys.stdin.isatty():
         parser.error("TUIには端末が必要です。非対話では--modeを指定してください")
     config = ROOT / "ros2_ws/src/kart_bringup/config"
     if interactive:
-        args.mode = args.mode or choose(
+        args.mode = choose(
             "用途",
             ["collect", "environment", "drive", "e2e", "eval"],
             lambda m: {
@@ -261,9 +260,9 @@ def main():
             )
         if args.mode == "eval" and args.eval_localization is None:
             args.eval_localization = choose(
-                "オフライン解析", (["vslam_vio"] if args.tracking_mode == "1" else ["vslam"] if args.tracking_mode == "0" else ["vslam", "vslam_vio"]) + ["fixed", "vgl"] +
+                "オフライン解析", (["vslam_vio"] if args.tracking_mode == "1" else ["vslam"] if args.tracking_mode == "0" else ["vslam", "vslam_vio"]) + ["vgl"] +
                 (["fresh_vio" if args.tracking_mode == "1" else "fresh_vo"] if args.tracking_mode else ["fresh_vo", "fresh_vio"]) + ["e2e_latency"],
-                lambda v: {"fixed": "固定map VSLAM＋VGL（準備済みbundle）", "e2e_latency": "E2E latency（RGB bag → TensorRT → 制御topic、車両出力なし）", "vslam": "保存mapでVO localization", "vslam_vio": "保存mapでVIO localization（左右画像＋IMU）", "vgl": "VSLAM＋VGL（準備済みbundle）",
+                lambda v: {"e2e_latency": "E2E latency（RGB bag → TensorRT → 制御topic、車両出力なし）", "vslam": "保存mapでVO localization", "vslam_vio": "保存mapでVIO localization（左右画像＋IMU）", "vgl": "VSLAM＋VGL（準備済みbundle）",
                            "fresh_vo": "mapなしVO評価（左右画像・特徴点群・軌跡）",
                            "fresh_vio": "mapなしVIO評価（左右画像＋IMU・特徴点群・軌跡）"}[v])
             if args.eval_localization == "vslam_vio":
@@ -276,7 +275,7 @@ def main():
                 args.eval_localization = "fresh"
         if args.mode == "eval" and args.eval_localization == "e2e_latency":
             args.mode = "e2e-latency"
-        if args.mode == "eval" and args.eval_localization in ("fresh", "vgl", "fixed") and not args.tracking_mode:
+        if args.mode == "eval" and args.eval_localization in ("fresh", "vgl") and not args.tracking_mode:
             args.tracking_mode = choose("追跡方式", ["0", "1"], lambda v: "stereo VO（IMUなし）" if v == "0" else "VIO（IMUあり）")
         if args.mode in ("drive","eval") and not args.multicam_mode:
             import yaml
@@ -439,12 +438,11 @@ def main():
     if args.mode in ("drive", "eval") and not fresh:
         if args.mode == "drive" and not sensors["enable_infra1"]:
             raise ValueError("VSLAM/VGLにはInfraが必要です（なしは選択できません）")
-        vslam_only = args.mode == "eval" and args.eval_localization not in ("vgl", "fixed")
-        required = ['map_file', 'map_dir'] + ([] if vslam_only else ['model_dir'])
-        missing = ['--' + key.replace('_', '-') for key in required if not getattr(args, key)]
-        if missing:
-            raise ValueError('不足引数: ' + ' / '.join(missing) +
-                             '。一覧選択する場合は--interactiveを追加してください')
+        vslam_only = args.mode == "eval" and args.eval_localization != "vgl"
+        if not args.map_file or not args.map_dir or (not vslam_only and not args.model_dir):
+            raise ValueError(
+                "drive/evalには--map-file / --map-dir / --model-dirが必要です（TUIなら一覧選択）"
+            )
         if (args.lane_id, args.line_type) not in hdmap_choices(args.map_file):
             raise ValueError("HDMapに存在する--lane-id / --line-typeを選んでください")
         from kart_bringup.localization import resolve
@@ -456,8 +454,7 @@ def main():
             overrides.update({'base_frame':base,'use_sim_time':True})
             overrides.update({k:getattr(args,k) for k in ('tracking_mode','imu_frame') if getattr(args,k)})
         parameters, _, _, profile = resolve(
-            config / "localization", args.map_dir, args.model_dir, overrides=overrides, enable_vgl=not vslam_only,
-            vslam_backend="fixed" if args.eval_localization == "fixed" else "apt"
+            config / "localization", args.map_dir, args.model_dir, overrides=overrides, enable_vgl=not vslam_only
         )
         if args.mode == "drive":
             from kart_bringup.mission import validate_localization_imu
@@ -595,8 +592,7 @@ def main():
                   "multicam_mode": args.multicam_mode,
                   "visualize": "true", "rviz": "true"}
     elif args.mode == "eval":
-        values["enable_vgl"] = str(args.eval_localization in ("vgl", "fixed")).lower()
-        values["vslam_backend"] = "fixed" if args.eval_localization == "fixed" else "apt"
+        values["enable_vgl"] = str(args.eval_localization == "vgl").lower()
     command = ["ros2", "launch", "kart_bringup", launch] + [
         f"{k}:={v}" for k, v in values.items() if v is not None and v != ""
     ]

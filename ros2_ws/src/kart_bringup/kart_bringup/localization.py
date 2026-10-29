@@ -8,20 +8,11 @@ from .vgl_assets import validate_bundle
 from .multicam import multicam_value
 
 
-def vslam_package(backend):
-    """Select one implementation; never load both into the same container."""
-    packages = {"apt": "isaac_ros_cuvslam", "fixed": "kart_visual_localization"}
-    if backend not in packages:
-        raise ValueError("vslam_backend must be apt or fixed")
-    return packages[backend]
-
-
 def resolve(
-    config_dir, map_dir, model_dir, overrides=None, inspect=None, enable_vgl=True, vslam_backend="apt"
+    config_dir, map_dir, model_dir, overrides=None, inspect=None, enable_vgl=True
 ):
     import yaml
 
-    vslam_package(vslam_backend)
     config = Path(config_dir)
     workflow = json.loads((config / "workflow.json").read_text())
     required = {
@@ -46,8 +37,7 @@ def resolve(
         ("cuvslam", "visual_slam"),
         ("vgl", "visual_global_localization"),
     ):
-        filename = "fixed_localization" if name == "cuvslam" and vslam_backend == "fixed" else name
-        params[name] = yaml.safe_load((config / f"{filename}.yaml").read_text())[
+        params[name] = yaml.safe_load((config / f"{name}.yaml").read_text())[
             f"/**/{node}"
         ]["ros__parameters"]
     overrides = overrides or {}
@@ -112,11 +102,8 @@ def resolve(
         ):
             raise ValueError("VSLAM地図が空です")
         slam["load_map_folder_path"] = str(root)
-        # Not launching VGL here does not mean no external VGL is running.
-        # Fixed-map localization keeps the YAML's initial-pose/hint contract.
-        if vslam_backend == "apt":
-            slam["enable_request_hint"] = False
-            slam["localize_on_startup"] = True
+        slam["enable_request_hint"] = False
+        slam["localize_on_startup"] = True
         profile = {"input_shape": None}
     mappings = {}
     for kind, prefix in (("cuvslam", "visual_slam"), ("vgl", "visual_localization")):

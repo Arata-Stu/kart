@@ -30,7 +30,6 @@
   <exec_depend>kart_parking</exec_depend>
   <exec_depend>kart_control</exec_depend>
   <exec_depend>kart_recovery</exec_depend>
-  <exec_depend>kart_visual_localization</exec_depend>
   <exec_depend>kart_e2e</exec_depend>
   <exec_depend>isaac_ros_dnn_image_encoder</exec_depend>
   <exec_depend>isaac_ros_image_proc</exec_depend>
