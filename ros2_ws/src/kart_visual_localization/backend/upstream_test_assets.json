@@ -1,0 +1,35 @@
+{
+  "repository": "https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_visual_slam",
+  "revision": "e4dc8f59816dfca387bcb92364ecaf9207216475",
+  "package": "isaac_ros_cuvslam",
+  "excluded_assets": [
+    {
+      "path": "test/test_cases/rosbags/r2b_galileo/cuvslam_map/data.mdb",
+      "lfs_oid": "sha256:6262353ca8ebc65670fa651b6a432b6dd3d434b6658add4d212101c4e09afb7c",
+      "size": 45056
+    },
+    {
+      "path": "test/test_cases/rosbags/r2b_galileo/metadata.yaml",
+      "lfs_oid": "sha256:ec4184ade720a91f52fdc90ae4b16120bca1c09aa742a594ec0c0ef1f5afdf42",
+      "size": 5429
+    },
+    {
+      "path": "test/test_cases/rosbags/r2b_galileo/nova/calibration/isaac_calibration.urdf"
+    },
+    {
+      "path": "test/test_cases/rosbags/r2b_galileo/r2b_galileo_0.mcap",
+      "lfs_oid": "sha256:9b70c0b936c2b4d0da553b9156a33ca9d2613acf31e933b386343635377995f7",
+      "size": 492911372
+    },
+    {
+      "path": "test/test_cases/rosbags/rgbd_static/metadata.yaml",
+      "lfs_oid": "sha256:618f92619ecd82d1139883e3a5f43982b17079c49b958ff4c32f9f5b0d1115c0",
+      "size": 4066
+    },
+    {
+      "path": "test/test_cases/rosbags/rgbd_static/rosbag2_rs455_rgbd.mcap",
+      "lfs_oid": "sha256:a14709ebe4ceef84c92439ce4f86370d6a0bdd56c5c0280150d2190db3d0ef94",
+      "size": 106100098
+    }
+  ]
+}

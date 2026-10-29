@@ -3,6 +3,9 @@ import argparse
 from pathlib import Path
 import subprocess
 
+# Optional NVIDIA sample bags/maps are fetched in a separate upstream checkout.
+EXCLUDED_PREFIX = 'isaac_ros_cuvslam/test/test_cases/'
+
 REVISION = 'e4dc8f59816dfca387bcb92364ecaf9207216475'
 
 
@@ -13,6 +16,7 @@ def verify(checkout):
         prefix = 'isaac_ros_cuvslam/' + directory + '/'
         names = subprocess.check_output(
             ['git', '-C', checkout, 'ls-tree', '-r', '--name-only', REVISION, prefix], text=True).splitlines()
+        names = [name for name in names if not name.startswith(EXCLUDED_PREFIX)]
         expected = {name.removeprefix('isaac_ros_cuvslam/') for name in names}
         actual = {str(p.relative_to(package)) for p in (package / directory).rglob('*')
                   if p.is_file() and '__pycache__' not in p.parts}

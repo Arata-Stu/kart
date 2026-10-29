@@ -8,7 +8,7 @@ NVIDIA Isaac ROSのROS側実装をそのままコピーし、cuVSLAMの参照地
 
 - ROS: [release-5.0 / e4dc8f5](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_visual_slam/tree/e4dc8f59816dfca387bcb92364ecaf9207216475)
 - cuVSLAM: 同ROSが指定する[33da606](https://github.com/nvidia-isaac/cuVSLAM/tree/33da60662b27c0c5b63e0597bd778066af2731ed)（15.0）
-- `src/`、`include/`、`test/`、`launch/`、`rviz/`は55ファイルすべて上流とバイト一致。
+- `src/`、`include/`、`test/`、`launch/`、`rviz/`はサンプルデータ`test/test_cases/`を除く49ファイルが上流とバイト一致。
   C++ namespace、Component class、node名も変更していない。
 - package名は`kart_visual_localization`。ROS共有libは`libkart_visual_slam_node.so`、
   coreは`libkart_fixed_cuvslam.so`として分離。aptファイルを上書きしない。
@@ -170,7 +170,7 @@ python3 ros2_ws/src/kart_visual_localization/backend/verify_upstream.py /path/to
 python3 ros2_ws/src/kart_visual_localization/backend/prepare.py /path/to/cuVSLAM /tmp/fresh-fixed-source
 ```
 
-2026-10-29: 55ファイルのバイト一致、固定commitへのパッチ適用、変更AsyncSlamの実ヘッダを
+2026-10-29: サンプルデータ除外後の49ファイルのバイト一致、固定commitへのパッチ適用、変更AsyncSlamの実ヘッダを
 使った非CUDA C++構文検査を確認。これらはリンクや実行の確認ではない。
 上流ROS launchテストは保持しただけで実行していない。
 core全776ファイルも照合し、差分は上記2ファイルとライブラリ名指定のCMakeだけと確認。
@@ -209,3 +209,13 @@ clockをbagに合わせ、購読準備後に再生を開始する。センサ実
 既定`vslam_backend:=apt`は従来どおり。固定版でも上流Component classを保持し、
 選択した一方だけをVSLAM containerへロードする。同一containerへ両方を混載しない。
 package/private coreのビルドが必要。portable確認とROS/CUDA/RViz実行確認は別で、後者は未確認。
+
+## 開発コンテナ起動時のLFS検査
+
+上流`test/test_cases/`のサンプルbag・mapは通常のbuild/起動で使用しないため同梱しない。
+ポインタだけをコピーすると`isaac-ros activate`のLFS検査でコンテナ起動前に停止する。
+除外した6ファイルの出典とLFS OIDは`backend/upstream_test_assets.json`に記録する。
+ROSノードのsrc/include、テストコード、実際に使用するbag/地図は変更していない。
+この問題の解消にkart側で`git lfs pull`をする必要はない。
+上流launchテストを実行する場合は、別の上流checkoutで対象commitとLFS実体を取得し、
+対象package名を含めテスト環境を準備する。これらのテストは本pkgの通常buildには登録していない。
