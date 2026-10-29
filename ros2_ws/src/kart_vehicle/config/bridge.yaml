@@ -11,3 +11,4 @@
     throttle_trim_limit: 0.1
     command_timeout: 0.15
     status_timeout: 0.2
+    diagnostics_rate_hz: 1.0  # Periodic diagnostics; ESC model transitions also emit immediately

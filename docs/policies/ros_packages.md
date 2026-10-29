@@ -442,3 +442,17 @@ grouped GPUは受信callbackを有界RAW queueへの所有権移譲に限定し�
 RAWサイズとrun数の上限を事前確保し、欠落・逆順・queue/stale/上限/error時は履歴を破棄して再取得する。
 イベント内の小逆転許容と圧縮packetの連続性を区別し、入力欠落をhistogramへ黙って混在させない。
 独立benchmarkのTensor一致・速度と、ROS/USB/推論併走/Orinでの検証を別々に記録する。
+
+### UIによるESC信号列試験
+
+ESC信号列は既存kart_control packageの専用試験ノードで実行し、通常走行・Joy managerと
+同時起動しない。UIからの明示開始をAUTO要求の根拠とする。地図・自己位置・Joyには依存しない。
+Web側は段階と時間を一括送信し、車体側monotonic timerが実行する。
+負入力は既存ControlCommandのreverseで表現し、通常bridgeの出力・制御権管理を通す。
+試験中はJoy用の正パルス等を暗黙挿入しない。開始前のHOST handshake用中立は明示する。
+
+終了・UI STOPは中立化であり制動完了ではない。STOPは通常要求キューと独立に受付け、
+待機開始と旧世代の遅延開始を取り消す。UUID単位で一度だけ実行し自動再送・再開しない。
+UI heartbeat断、基板/モード/指令鮮度、制御権喪失、publisher競合、時計逆行・実行周期超過で中断する。
+Web STOPと物理非常停止は区別する。UIには送信要求、基板報告PWM/経路、指令由来のESC推定を
+同じ受信時間軸で表示・記録し、推定を実車の動作確認とは呼ばない。

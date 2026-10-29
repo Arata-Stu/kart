@@ -1,14 +1,15 @@
+import { paintTrailSpeed } from './trail_speed.js';
 import { renderVehicle } from './vehicle_status.js';
 import { $, state, api, action, on, emit, toast } from './api.js';
 
 export const tuning = {connected:false, busy:false, epoch:0, received:0, status:null,
-  active:null, preview:null, trail:[], timer:null, id:null, error:''};
+  poseStream:null, poseCursor:0, active:null, preview:null, trail:[], timer:null, id:null, error:''};
 const fresh = () => tuning.connected && Date.now() - tuning.received < 3000;
 function invalidatePreview() { tuning.preview=null; render(); }
 function stop() {
   tuning.epoch++;
   tuning.connected=false; tuning.received=0;
-  tuning.status=null; tuning.active=null; tuning.preview=null; tuning.trail=[];
+  tuning.poseStream=null; tuning.poseCursor=0; tuning.status=null; tuning.active=null; tuning.preview=null; tuning.trail=[];
   clearTimeout(tuning.timer); tuning.timer=null;
   render(); emit('tuning');
 }
@@ -16,12 +17,23 @@ export function parameterConnectionReady() { return fresh() && tuning.id===state
 export function parameterRequest(action, extra={}) { return request(action,extra); }
 function request(action, extra={}) {
   return api('tuning/'+action, {id:tuning.id, connection:state.config.connection,
-    known_revision:tuning.status?.revision, ...extra});
+    known_revision:tuning.status?.revision, pose_stream:tuning.poseStream, pose_after:tuning.poseCursor, ...extra});
 }
 function update(result) {
   if(result.revision !== tuning.status?.revision) tuning.active=result.active || null;
   tuning.status=result; tuning.received=Date.now(); tuning.error='';
-  if(result.pose && result.localized) {
+  if(Array.isArray(result.pose_samples)) {
+    const sameStream=result.pose_stream===tuning.poseStream;
+    const after=sameStream ? tuning.poseCursor : 0;
+    if(!sameStream || (result.pose_reset && result.pose_cursor>after)) tuning.trail=[];
+    for(const point of result.pose_samples) {
+      if(point.seq<=after) continue;
+      if(point.break_before && tuning.trail.length) tuning.trail.push(null);
+      tuning.trail.push([point.x,point.y,point.speed_mps]);
+    }
+    tuning.poseStream=result.pose_stream; tuning.poseCursor=Math.max(after,result.pose_cursor);
+    if(tuning.trail.length>12000) tuning.trail.splice(0,tuning.trail.length-12000);
+  } else if(result.pose && result.localized) {
     tuning.trail.push([result.pose.x,result.pose.y]);
     if(tuning.trail.length>1200) tuning.trail.shift();
   }
@@ -154,7 +166,8 @@ export function paintTuning(ctx, project, line) {
     ctx.restore();
   }
   if(!s?.pose || !s.localized)return;
-  line(tuning.trail,'#e78228',false,false,2);
+  const scale=Number($('tuning-trail-max').value);
+  paintTrailSpeed(ctx,tuning.trail,project,Number.isFinite(scale)&&scale>0?scale:3);
   const p=project([s.pose.x,s.pose.y]), end=project([s.pose.x+Math.cos(s.pose.yaw),s.pose.y+Math.sin(s.pose.yaw)]);
   const yaw=Math.atan2(end[1]-p[1],end[0]-p[0]);
   ctx.save();ctx.translate(...p);ctx.rotate(yaw);
@@ -174,3 +187,5 @@ for(const [id,kind] of [['tuning-parking-start','parking_start'],['tuning-parkin
     toast(result.message);
   } finally {tuning.busy=false;render();}
 });
+
+$('tuning-trail-max').addEventListener('input',()=>emit('tuning'));

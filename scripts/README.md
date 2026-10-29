@@ -1,5 +1,10 @@
 # scripts
 
+TUIの用途は「データ記録」「地図走行」「E2E」「オフライン評価」「ESC信号列試験」。
+「データ記録」では続けて「走行データ」または「環境記録（Depth付き）」を選ぶ。
+走行データは従来の`collect`、環境記録は`environment`に対応し、
+CLIの`--mode collect|environment`と各モードのセンサ・録画設定は変更しない。
+
 ## センサ・E2E・制御遅延のオフライン時系列解析
 
 ```bash
@@ -401,7 +406,7 @@ bash scripts/bringup.sh --mode environment
 # カメラを手持ちで記録する場合は --no-bridge を追加可能
 ```
 
-対話起動の「環境記録」でも選択できる。RGB=1280×720×30、左右InfraとDepth=848×480×30、
+対話起動の「データ記録」→「記録内容」→「環境記録」でも選択できる。RGB=1280×720×30、左右InfraとDepth=848×480×30、
 加速度=250Hz・gyro=200Hz、統合IMU=線形補間を既定とする。
 RGB・左右Infra・Z16 Depth・各camera_info・IMU・TFをMCAPへ記録する。
 Infraを有効にしてprofileを変更すると、同じセンサのDepthも同じprofileになる。
@@ -428,15 +433,23 @@ CLIでは通常のdrive引数へ`--tuning`を追加（`--no-tuning`で無効化�
 詳しいoffline pose生成→section dataset→混合バッチ学習の手順は
 [kart_e2e README](../ros2_ws/src/kart_e2e/README.md#section別head共有backbone同時学習)を参照。
 
-### VGL併用のoffline VO/VIO選択
+### オフライン評価の選択順序
 
-`bash scripts/bringup.sh` → offline bag評価 → VSLAM＋VGL → 追跡方式で
-VO（左右画像のみ）／VIO（左右画像＋IMU）を選択できる。既定候補はVO。
+`bash scripts/bringup.sh` →「オフライン評価」→ 評価方式 → 追跡方式の順に選ぶ。
+評価方式は以下の4つ。VO/VIOの組合せを評価方式の一覧へ重複させない。
+
+- VSLAM（保存地図で自己位置推定）
+- VSLAM＋VGL（準備済みbundleで自己位置推定）
+- VSLAM（保存地図なし・新規SLAM）
+- E2E遅延（RGB bag → 推論 → 制御topic）
+
+最初の3方式は、続けて共通の「追跡方式」でVO（左右画像のみ）／VIO（左右画像＋IMU）を選ぶ。
+既定候補はVO。E2E遅延には追跡方式やVSLAM速度・精度を表示しない。
 `--tracking-mode 0|1`を明示した場合は追跡方式の選択を省略する。
-非対話は`--mode eval --eval-localization vgl --tracking-mode 0|1`を使用する。
+非対話CLIは従来どおり`--mode eval --eval-localization vslam|vgl|fresh --tracking-mode 0|1`。
 VIOではbag内の`/realsense/imu`が必須で、不足時は起動前に停止する。
-地図・モデル・HDMap等の選択と平面制約の既定ONは既存設定に従う。
-TUIからlaunchへの引数とIMU不足の拒否をportable testで確認。ROS/GPU・実bagの推定精度は未検証。
+保存地図なしではHDMap・保存地図・VGLモデルを選択しない。
+TUIからlaunchへの引数とIMU不足の拒否はportable testで検証し、ROS/GPU・実bagの推定精度とは区別する。
 
 ### bringupのIMU選択
 
@@ -477,12 +490,28 @@ collect/environment/drive/e2eで同じ検証を使用する。profile引数だ�
 [kart_parking README](../ros2_ws/src/kart_parking/README.md)を参照。
 レース終了判定は自動化しない。`/parking/start`の明示要求後に順方向のコースから駐車へ向かう。
 
-bringupのVGL選択は、選択HDMapの親ディレクトリにあるcuVSLAM地図の内容識別子から
-対応bundleへ候補を絞る。一致が1つなら自動選択、複数なら一致候補だけを提示する。
-対応を判定できない場合は従来の全候補から明示選択する。
-VGLモデルもbundleのONNX SHA256と一致する候補を絞り、1つなら自動選択する。
-明示の--map-dir/--model-dirを優先し、GPU engine・地図・入力shape等の最終検証は省略しない。
-前回の選択を無条件再利用せず、自動採用したパスはログに表示する。
+### 地図走行の地図・モデル選択
+
+地図走行のTUIではHDMapファイル一覧の代わりに「地図フォルダー」を選択する。
+HDMapの上位に`cuvslam_map/`がある場合はそのフォルダーを単位とし、
+ない場合はHDMapの親フォルダーを表示する。保存済みファイルの移動は不要。
+
+- フォルダー内のHDMapが1つなら自動採用。複数ならHDMapを選ぶ。
+- lane／追従ラインの候補が1つなら自動採用。複数なら選ぶ。
+- cuVSLAM地図の内容ハッシュが一致するVGL bundleを探し、地図走行では
+  選択済みInfraの幅・高さと`vgl_profile.json`の入力shapeが一致する候補を優先する。
+  一致候補が1つなら自動採用。FPSはモデルの入力shape選択に使わない。
+- bundleのONNXハッシュに一致するモデルのうち`runtime_models`を優先する。
+  一致するruntimeが1つなら自動採用。選択が必要な場合もruntimeを先頭候補にする。
+  `source_models`しかない構成は引き続き利用できる。
+
+対応候補が複数ならその候補だけを提示する。対応が判定できなければ明示選択へ戻る。
+解像度一致だけで別地図・別ONNXを自動採用しない。
+明示の`--map-file` / `--map-dir` / `--model-dir`を優先し、
+地図・モデル・入力shapeの最終検証は省略しない。自動採用したパスはログに表示する。
+同条件の候補を前回の選択だけで無条件に再利用しない。
+portable testで1回の地図フォルダー選択からlaunch引数への伝播を確認。
+実際の転送データ、Jetson GPU engine、ROS・実車の動作は別途確認する。
 
 ## JetsonのWi-Fiホットスポット
 

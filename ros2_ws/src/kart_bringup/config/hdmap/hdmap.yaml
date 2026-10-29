@@ -3,6 +3,7 @@
     tuning_parking_enabled: false  # Parking start/reset UI; disables map/parameter mutations
     tuning_enabled: false  # Optional loopback tuning endpoint, TCP 8782
     tuning_map_dir: ""  # Same bundle root used for localization
+    tuning_pose_rate_hz: 0.0  # 0 follows new TF stamps; positive caps display sampling Hz, runtime mutable
     tuning_tracking_frame: rear_axle  # Vehicle pose frame, no TF publication
     map_file: ""  # Required absolute map.json or exported hd_map.yaml
     frame_id: map  # Must match file. Never relabel or transform coordinates.

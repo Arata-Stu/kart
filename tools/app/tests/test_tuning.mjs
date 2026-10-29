@@ -24,13 +24,15 @@ const calls=[];
 globalThis.fetch=async(url, options)=> {
   calls.push([url,JSON.parse(options.body)]);
   const result=url.endsWith('/prepare') ? {revision:'preview',document:structuredClone(state.doc),lane_id:'main',line_type:'customline',centerline_speed_mps:JSON.parse(options.body).centerline_speed_mps}
-    : {map_id:'map-a',revision:url.endsWith('/apply')?'r2':'r1',mode:1,speed_mps:2,stop_issue:'STOP required',localized:true,pose:{x:1,y:2,yaw:0},active,apply_issue:'',can_rollback:true};
+    : {map_id:'map-a',revision:url.endsWith('/apply')?'r2':'r1',mode:1,speed_mps:2,stop_issue:'STOP required',localized:true,pose:{x:1,y:2,yaw:0},active,pose_stream:'test-stream',pose_cursor:90,pose_reset:false,
+       pose_samples:Array.from({length:90},(_,i)=>({seq:i+1,stamp_ns:String(1000000000+i*11111112),x:i/90,y:(i/90)**2,yaw:0,break_before:i===0||i===45})),apply_issue:'',can_rollback:true};
   return {ok:true,json:async()=>result};
 };
 emit('ready'); await flush();
 assert.match(element('tuning-target').textContent,/kart@192.168.1.2:2222/);
 await element('tuning-connect').click(); await flush();
 assert.equal(tuning.connected,true);
+assert.equal(tuning.trail.filter(Boolean).length,90,'all 90 TF samples reach the trail in one HTTP response');
 assert.equal(calls[0][1].connection.port,2222);
 await element('tuning-preview').click(); await flush();
 assert.equal(element('tuning-apply').disabled,false);
@@ -64,6 +66,9 @@ await element('tuning-preview').click(); await flush();
 await element('tuning-apply').click(); await flush();
 assert.equal(tuning.status.revision,'r2');
 assert.equal(tuning.status.mode,1,'apply does not require stopping or switch mode');
+assert.equal(tuning.trail.filter(Boolean).length,90,'repeated batches do not duplicate the trail');
+assert.equal(calls.at(-1)[1].pose_after,90);
+assert.equal(calls.at(-1)[1].pose_stream,'test-stream');
 assert.equal(calls.at(-1)[1].expected_revision,'r1');
 assert.equal(calls.at(-1)[0],'/api/tuning/apply');
 emit('connection'); await flush();

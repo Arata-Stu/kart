@@ -27,6 +27,7 @@ public:
     if(!std::isfinite(offset_) || std::abs(offset_)>0.5) {throw std::invalid_argument("Invalid steering_offset");}
     command_timeout_=number(*this,"command_timeout",0.15,0.02,0.2);
     status_timeout_=number(*this,"status_timeout",0.2,0.05,0.5);
+    diagnostics_rate_=number(*this,"diagnostics_rate_hz",1.0,1.0,100.0);
     steering_trim_limit_=number(*this,"steering_trim_limit",0.25,0,0.5);
     throttle_trim_limit_=number(*this,"throttle_trim_limit",0.1,0,0.5);
     trim_.steering=number(*this,"initial_steering_trim",0,-steering_trim_limit_,steering_trim_limit_);
@@ -129,6 +130,7 @@ private:
     if(session_.esc().state()!=last_esc_state_) {
       RCLCPP_INFO(get_logger(),"ESC command model: %s (not ESC feedback or measured motion)",session_.esc().name());
       last_esc_state_=session_.esc().state();
+      diagnostics(); last_diag_=t;
     }
     if(session_.esc().brake_rejected()) {
       RCLCPP_WARN_THROTTLE(get_logger(),*get_clock(),3000,
@@ -138,7 +140,7 @@ private:
       kart_interfaces::msg::ControlTrim msg; msg.header.stamp=now();
       msg.steering=trim_.steering; msg.throttle=trim_.throttle; trim_pub_->publish(msg); last_trim_publish_=t;
     }
-    if(t-last_diag_>=1) {diagnostics(); last_diag_=t;}
+    if(t-last_diag_>=1.0/diagnostics_rate_) {diagnostics(); last_diag_=t;}
   }
   void on_status(const std::string & line) {
     auto parsed=parse_status(line);
@@ -182,7 +184,7 @@ private:
     if(status_) {add("fault_bits",std::to_string(status_->fault_bits)); add("selector",std::to_string(static_cast<int>(status_->selector)));}
     array.status.push_back(s); diag_pub_->publish(array);
   }
-  std::string device_,error_{"waiting_for_usb"}; double scale_,offset_,command_timeout_,status_timeout_;
+  std::string device_,error_{"waiting_for_usb"}; double scale_,offset_,command_timeout_,status_timeout_,diagnostics_rate_;
   double retry_at_{0},opened_at_{0},status_at_{NEVER},last_request_{NEVER},last_propo_{NEVER},last_diag_{NEVER};
   double mode_stamp_{0},mode_received_{NEVER}; uint8_t observed_mode_{255};
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_callback_;

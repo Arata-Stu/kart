@@ -42,9 +42,11 @@ class TuningBackendTests(unittest.TestCase):
         with patch('kart_studio.tuning.remote') as send:
             identity = candidate['map_id']
             send.return_value = dict(map_id=identity,revision='r2')
-            self.tuning.request({**self.body,'known_revision':'r1'},'status')
+            self.tuning.request({**self.body,'known_revision':'r1','pose_stream':'session','pose_after':90},'status')
             payload = send.call_args.args[2]
             self.assertEqual(payload['known_revision'],'r1')
+            self.assertEqual(payload['pose_stream'],'session')
+            self.assertEqual(payload['pose_after'],90)
             self.assertNotIn('snapshot',payload)
             self.doc['revision']=2
             atomic_json(self.maps.folder('course')/'map.json',self.doc)
@@ -52,6 +54,14 @@ class TuningBackendTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.tuning.request({**self.body,'snapshot':candidate,'expected_revision':'r1'},'apply')
             send.assert_not_called()
+
+    def test_esc_transport_is_mapless_and_uses_separate_loopback_port(self):
+        result = subprocess.CompletedProcess([], 0, b'{"stop_requested":true}', b'')
+        with patch('kart_studio.tuning.subprocess.run', return_value=result) as run:
+            response = remote(CONNECTION, 'esc_stop', {})
+            self.assertTrue(response['stop_requested'])
+            self.assertIn('127.0.0.1:8783/stop', run.call_args.args[0][-1])
+            self.assertEqual(run.call_count, 1)
 
     def test_transport_uses_existing_port_fixed_endpoint_and_no_retry(self):
         result=subprocess.CompletedProcess([],0,b'{"map_id":"x"}',b'')

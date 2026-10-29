@@ -20,11 +20,13 @@ _protocol = importlib.import_module('_kart_tuning_protocol.tuning')
 
 
 def remote(connection, action, payload):
-    if action not in ('status', 'apply', 'rollback', 'parameters_get', 'parameters_set', 'parking_start', 'parking_reset'):
+    if action not in ('status', 'apply', 'rollback', 'parameters_get', 'parameters_set', 'parking_start', 'parking_reset', 'esc_status', 'esc_start', 'esc_stop'):
         raise ValueError('Unknown tuning action')
     p = profile(connection)
+    port = 8783 if action.startswith('esc_') else 8782
+    endpoint = action[4:] if action.startswith('esc_') else action
     script = """import sys,urllib.request,urllib.error
-req=urllib.request.Request('http://127.0.0.1:8782/""" + action + """',data=sys.stdin.buffer.read(),headers={'Content-Type':'application/json'})
+req=urllib.request.Request('http://127.0.0.1:""" + str(port) + """/""" + endpoint + """',data=sys.stdin.buffer.read(),headers={'Content-Type':'application/json'})
 try:
     with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req,timeout=6) as r: print(r.read().decode())
 except urllib.error.HTTPError as e: print(e.read().decode())
@@ -46,7 +48,7 @@ except urllib.error.HTTPError as e: print(e.read().decode())
     except subprocess.TimeoutExpired as exc:
         raise ValueError('Jetsonの応答がありません。適用結果は未確認です。自動再送は行いません') from exc
     if result.returncode:
-        raise ValueError('SSH接続またはJetsonの調整窓口(8782)を確認してください: ' + result.stderr.decode(errors='replace')[-400:])
+        raise ValueError('SSH接続またはJetsonの調整窓口を確認してください: ' + result.stderr.decode(errors='replace')[-400:])
     try:
         response = json.loads(result.stdout)
     except ValueError as exc:
@@ -87,7 +89,8 @@ class Tuning:
 
     def request(self, body, action):
         identity = self.identity(body['id'])
-        payload = dict(map_id=identity, known_revision=body.get('known_revision'))
+        payload = dict(map_id=identity, known_revision=body.get('known_revision'),
+                       pose_stream=body.get('pose_stream'), pose_after=body.get('pose_after', 0))
         if action == 'apply':
             candidate = body['snapshot']
             _protocol.validate(candidate, identity)

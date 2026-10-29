@@ -478,3 +478,79 @@ Customlineの`ReferenceLine.step_speed=true`では、Pure Pursuit/MPCとも最�
 共有max_speed_mps、速度PIDの上限、開路終点の減速・停止は維持する。
 新しいROS parameterはない。step_speedはcustomlineだけ許可し、他のline_typeでは参照を無効化する。
 実速度の即時変化を保証しない。速度PIDの出力制限と車両応答は変わらない。
+
+## UIからのESC信号列試験（地図・Joy不要）
+
+`esc_trial`実行ファイル／ノードは既存kart_control内の独立した試験用ノード。
+Pythonのloopback HTTP処理と有界キューを使用するため、通常のC++制御Componentとは
+別プロセスで起動する。`ament_cmake_auto` + `ament_cmake_python`でインストールする。
+通常走行・fixed_command・Joy managerと併用せず、専用の
+`ros2 launch kart_bringup esc_trial.launch.py`を使う。
+カメラ・VSLAM・HDMap・Odometryを必要としない。
+
+Studio「ESC試験」→「試験ノードに接続」→各行の出力・秒数を編集→「信号列を開始」。
+開始操作は新鮮なSTOPと正常な基板HOST選択、AUTO/vehicle/mode publisherの排他を確認し、
+UIからAUTOを要求する。最初の中立配信とHOST handshakeを経て再生する（最低0.3秒、2秒でtimeout）。
+JoyでAUTOを保持する必要はない。通常のJoyブレーキ用正パルスは挿入しない。
+正規化された正入力は`throttle`、負入力の絶対値は`reverse`へ格納し、`brake=0`。
+既存bridgeが負入力を制動／後退として扱う。値はm/sでも生PWMでもない。
+ステアは0要求で既存bridgeの校正を通す。AUTOではスロットルtrimを適用しない。
+
+1〜32段階、各0.02〜20秒、合計60秒以内。既定上限±0.3。
+例: +0.3を1秒、−0.3を1秒、0を0.5秒、−0.3を1秒、終了中立。
+100 Hz timerで車体側が実行し、時間はmonotonic clockで計る。
+段階の境界はtimer周期に量子化され、遅れたcallbackで短い中立区間を飛ばさない。
+100 ms超の制御間隔・時計逆行・基板/モード鮮度切れ・publisher競合・制御権喪失は中断。
+UIから同じrun IDのheartbeatが3秒（既定）途絶えた場合も中立とSTOPを要求する。
+
+**「STOP（即時中立）」は次の処理周期で中立化しSTOPを要求するWeb操作で、物理非常停止ではない。**
+通常のstatus/start待ちと独立して送信し、待機中の開始要求も取り消す。
+STOPで世代を更新し、遅れて到着した旧開始要求を拒否する。
+開始はUUIDごとに一度のみ、再送・再接続による自動再開なし。中断・終了は制動ではなく中立。
+通信断やプロセス停止時は既存mux/bridgeのwatchdogも維持する。
+
+### 入出力（すべて相対topic、namespaceなしで以下の名前）
+
+|方向|既定topic|型|QoS/用途|
+|---|---|---|---|
+|出力|`/auto/control_cmd`|`kart_interfaces/msg/ControlCommand`|reliable/volatile/depth1、100 Hz、試験外は中立|
+|出力|`/operation_mode/request`|`kart_interfaces/msg/OperationModeRequest`|reliable/volatile/depth10、明示開始AUTO・中断終了STOP|
+|出力|`/control/esc_trial_events`|`std_msgs/msg/String`|reliable/volatile/depth100、JSONイベント・20 Hz sample|
+|入力|`/operation_mode/state`|`kart_interfaces/msg/OperationModeState`|reliable/volatile/depth10、モードと元stamp（0.3秒以内）|
+|入力|`/diagnostics`|`diagnostic_msgs/msg/DiagnosticArray`|reliable/volatile/depth100、kart_bridgeを選別（0.3秒以内）|
+|入力|`/vehicle/output_channels`|`std_msgs/msg/Int32MultiArray`|reliable/volatile/depth100、基板報告servo/ESC PWM µs（受信0.2秒以内）|
+|入力|`/vehicle/active_path`|`std_msgs/msg/UInt8`|reliable/volatile/depth100、0 disabled/1 propo/2 HOST/3 failsafe（受信0.2秒以内）|
+
+ROS標準parameter service、`/rosout`、`/parameter_events`を除き独自ROS service/actionなし。
+loopback `127.0.0.1:8783`のPOST `/status`、`/start`、`/stop`をStudioがSSH経由で利用する。
+`/start`には直前statusのstream/generation、UUID run_id、`steps:[{output,seconds}]`が必要。
+`/status`の同じrun_idのみleaseを更新する。別viewerはleaseを延命しない。
+`/stop`の応答は要求受付であり、中立出力・停止完了確認とは別。
+履歴は最大6000イベント、seq cursor付きでまとめて取得。欠落・ノード再起動はresetを返す。
+時刻は試験ノードの生成／受信時刻であり、ESCの実受信時刻ではない。
+
+|パラメータ|既定値|意味|
+|---|---|---|
+|`use_sim_time`|false|実時計必須、trueへの変更拒否|
+|`max_output`|0.3|起動時固定、絶対出力上限、0より大きく1以下|
+|`ui_timeout_s`|3.0|起動時固定、run heartbeat期限、1〜5秒|
+|`http_port`|8783|起動時固定、1024〜65535。Studio接続は8783を使用|
+
+実運用設定は`kart_bringup/config/tuning/esc_trial.yaml`。
+基板の出力PWM・制御経路は受信確認値、ESC状態は指令履歴からの推定。
+実車の前進・制動・後退や実測PWMを観測したという意味ではない。
+`test/test_esc_trial.py`はportable model/adapter試験であり、ROS結合・基板・実車確認とは別。
+
+ESC試験は通常の入口からも起動できる（リポジトリ直下・ROS開発コンテナ内）：
+
+```bash
+bash scripts/bringup.sh --mode esc-trial
+# コマンド表示のみ
+bash scripts/bringup.sh --mode esc-trial --dry-run
+# 必要な場合だけシリアルポートを上書き
+bash scripts/bringup.sh --mode esc-trial --device /dev/ttyACM0
+```
+
+引数なしの`bash scripts/bringup.sh`では「用途」→「ESC信号列試験」を選択する。
+カメラ・地図・録画の選択は行わない。CLIの対応オプションは`--device`と`--dry-run`。
+`esc_trial.launch.py`の`device` launch引数は既定空文字で、空なら試験YAMLの値を保持する。

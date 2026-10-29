@@ -13,6 +13,7 @@ TUIからデータ収集／地図走行／E2E／bagでlocalization確認を選�
 RGB・Infraは30/60/90Hz/なし、地図・lane・center/race/custom・モデル・bagは一覧選択。
 録画先は日付/起動時刻/run_name（最初の録画開始時に作成）。offline確認はRVizを既定起動。
 `bash scripts/bringup.sh --dry-run`で起動せず選択内容を確認できる。
+ESC信号列試験は`bash scripts/bringup.sh --mode esc-trial`、または用途メニューの「ESC信号列試験」。地図・自己位置・Joyは不要で、開始・中立STOPはStudioの「ESC試験」から操作する。
 録画はL1開始／R1停止。起動時にAUTOへ切り替えない。
 [構成・引数・検証範囲](ros2_ws/src/kart_bringup/README.md#用途別起動tui)を参照。
 

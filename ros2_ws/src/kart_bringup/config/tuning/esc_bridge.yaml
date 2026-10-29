@@ -1,0 +1,15 @@
+# ESC trial profile: complete bridge config, diagnostics at 20 Hz.
+/**/kart_bridge:
+  ros__parameters:
+    use_sim_time: false
+    device: /dev/ttyACM0  # Default board; no device selection in the TUI
+    steering_scale: -1.0
+    # fresh STOP中のみ動的変更可能。倍率適用後。再起動でこの値に戻る。
+    steering_offset: 0.0
+    initial_steering_trim: -0.043
+    initial_throttle_trim: 0.0
+    steering_trim_limit: 0.25
+    throttle_trim_limit: 0.1
+    command_timeout: 0.15
+    status_timeout: 0.2
+    diagnostics_rate_hz: 20.0  # Periodic diagnostics; ESC model transitions also emit immediately

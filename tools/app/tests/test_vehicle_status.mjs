@@ -4,7 +4,13 @@ globalThis.document={getElementById(id){if(!elements.has(id))elements.set(id,{da
 const {renderVehicle}=await import('../frontend/vehicle_status.js');
 const el=id=>elements.get('vehicle-'+id);
 const status={mode:1,vehicle:{bridge:{availability:'fresh',level:2,message:'USB serial disconnected',values:{host_active:'false',steering_offset:'0.01',steering_trim:'-0.043'}},recovery:{availability:'fresh',state:'suspect',reason:'low_flow',attempts:1}}};
+status.vehicle.bridge.values.esc_command_state='neutral_after_forward';
+status.vehicle.bridge.values.esc_negative_action='brake';
+status.vehicle.bridge.values.esc_brake_rejected='true';
 renderVehicle(status);
+assert.match(el('esc').textContent,/前進後の中立/);
+assert.match(el('esc').textContent,/次の負入力: ブレーキ/);
+assert.equal(el('esc').dataset.tone,'warn');
 assert.equal(el('mode').textContent,'AUTO');
 assert.match(el('host').textContent,/無効/);
 assert.match(el('recovery').textContent,/疑い/);

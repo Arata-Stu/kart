@@ -5,12 +5,13 @@
   <maintainer email="carbuncle01@users.noreply.github.com">carbuncle01</maintainer>
   <license>Apache-2.0</license>
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend>
   <depend>rclcpp</depend><depend>rclcpp_components</depend><depend>rcl_interfaces</depend>
   <depend>kart_interfaces</depend><depend>nav_msgs</depend><depend>geometry_msgs</depend>
   <depend>ackermann_msgs</depend><depend>std_msgs</depend><depend>diagnostic_msgs</depend>
   <depend>visualization_msgs</depend>
   <depend>tf2</depend><depend>tf2_ros</depend>
   <test_depend>ament_cmake_pytest</test_depend>
-  <test_depend>rclpy</test_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>

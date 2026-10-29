@@ -45,7 +45,7 @@ class VehicleStatus:
         values = {v.key: v.value for v in status.values}
         fields = {k: str(values[k])[:200] for k in (
             'host_active', 'host_phase', 'command_fresh', 'fault_bits', 'selector',
-            'esc_command_state', 'steering_trim', 'steering_offset', 'steering_scale') if k in values}
+            'esc_command_state', 'esc_negative_action', 'esc_brake_rejected', 'steering_trim', 'steering_offset', 'steering_scale') if k in values}
         self.samples['bridge'] = (stamp, time.monotonic(), dict(
             level=level, message=status.message[:200], values=fields))
 

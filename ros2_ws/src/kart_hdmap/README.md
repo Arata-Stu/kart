@@ -169,12 +169,13 @@ ros2 topic pub --once /hdmap/select_line std_msgs/msg/String '{data: centerline}
 表示・編集・ライン生成はNotebookのMap Studio、JetsonはROS状態の取得・snapshot検証と
 既存`/planning/reference_line`等の配信を担当する。TFの発行や車両モード要求は行わない。
 
-| 起動時固定parameter | 既定値 | 意味 |
+| parameter | 既定値 | 意味 |
 | --- | --- | --- |
 | tuning_parking_enabled | false | 起動時固定。駐車service操作を有効化し、地図・parameter変更は拒否。parking構成のbringupがtrueへ上書き |
 | tuning_enabled | false | loopback TCP 8782の調整窓口を有効化 |
 | tuning_map_dir | 空文字 | 自己位置推定に使用する転送bundleの絶対パス。map_fileはこの配下に限定 |
-| tuning_tracking_frame | rear_axle | mapから取得する車両のTF frame |
+| tuning_tracking_frame | rear_axle | 起動時固定。mapから取得する車両のTF frame |
+| tuning_pose_rate_hz | 0.0 | 表示軌跡の取得上限Hz。0はTFの新しい時刻へ追従、正値は上限（最大1000）。実行中変更可 |
 
 有効時のみ追加される入力（namespace/remapは通常の相対topic規則に従う）:
 
@@ -188,7 +189,27 @@ ros2 topic pub --once /hdmap/select_line std_msgs/msg/String '{data: centerline}
 出力topic・既存serviceは上記の表と同じ。追加ROS service/actionなし。
 HTTP `POST /status`・`/apply`・`/rollback`は127.0.0.1:8782固定、Originなし・JSONのみ、
 3 MiB＋request envelope上限。Notebookから既存SSH接続設定で呼ぶ。Dockerはhost networkingが必要。
-状態監視は10 Hz、HTTP取得は約1 Hz。状態変更はHTTPスレッドで行わずexecutorで一括処理する。
+位置はTF Bufferへの動的transform挿入後に取得し、同じTF時刻を重複登録しない。
+既定のtuning_pose_rate_hz=0.0は実際のmap→tracking frameのTF更新へ追従する。
+Infra/VSLAMが90 Hzでも、そのTF chainの更新が遅ければ表示用取得もその時刻に制限される。
+正値はROS stamp差で取得を間引く上限。時計巻戻しでは履歴streamを更新する。
+状態監視・HTTP要求処理は従来の10 Hz、HTTP取得は約1 Hz。
+状態変更はHTTPスレッドで行わずexecutorで一括処理する。
+
+位置履歴は最大12,000点。HTTP要求のpose_stream/pose_afterに対し、pose_samplesに
+seq、stamp_ns（精度保持用文字列）、x/y/yaw、break_beforeを含む未送信分を返す。
+pose_cursorは応答末尾のsequence。複数クライアントで履歴を消費せず共有する。
+バッファ超過・bridge再起動・時計巻戻しはpose_resetで通知し、Webの軌跡をリセットする。
+無効姿勢・localization途絶・TF時刻の0.5秒超の欠落は区切りを付け、直線で接続しない。
+TF鮮度、localization判定、モードや速度の安全判定は従来のまま。
+
+```bash
+ros2 param set /hdmap_server tuning_pose_rate_hz 0.0  # TFへ自動追従（既定）
+ros2 param set /hdmap_server tuning_pose_rate_hz 30.0 # 最大30 Hzへ間引き
+```
+
+変更は表示取得だけへ即時反映し、車両制御・参照ライン出版の頻度は変えない。
+永続設定はkart_bringup/config/hdmap/hdmap.yaml。実行中のsetは再起動でYAMLへ戻る。
 
 ライン適用・rollbackは最新AUTO/MANUALと有限の速度情報があれば走行中も可能。
 STOPの場合は速度推定の絶対値0.05 m/s未満が1秒以上継続する従来条件を使う。参照ライン配信元が
@@ -319,3 +340,13 @@ ROS parameter追加なし。ReferenceLine型変更のためpublisher/subscriber�
 planner側の自己位置・経路・停止条件もそのまま適用する。タイムアウト時は結果不明と表示して再送しない。
 駐車構成では地図適用・巻戻し・parameter書込みを禁止する。status/parameter読み取りは可能。
 AUTO切替・STOP操作・録画開始はこの窓口から行わない。
+
+### 自己位置軌跡の速度表示とESC診断
+
+自己位置の接続線はOdometryの推定速度の大きさ（m/s）で青→赤のグラデーション表示をする。
+TF採取時に最後に受信した有効なOdometryとのstamp差が100 ms以内なら速度を付与し、
+対応する速度がなければ灰色とする。符号付き前後速度や実測車速、目標速度ではない。
+Webの色上限は既定3 m/sで変更可能（表示のみ、永続化なし）。軌跡の欠落区間は結ばない。
+ESC表示には指令履歴の状態、次の負入力の解釈、ブレーキ指令の拒否を表示する。
+これらは送信指令からの推定であり、ESCからの状態フィードバックや実車の動作確認ではない。
+前進・ブレーキ・後退の制御ロジックや保持時間は、この表示変更では変更しない。

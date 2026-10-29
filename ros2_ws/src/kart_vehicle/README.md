@@ -173,3 +173,11 @@ neutral_after_brake、neutral_after_reverseを区別する。中立時間で履�
 復帰処理で必要な後退→正パルス→制動はkart_recoveryが生成する。
 
 MANUALの○では上流のJoy managerが短い正パルス→brake=1.0を生成する。vehicle自身は保持時間を生成しない。詳細は[kart_system README](../kart_system/README.md)。
+
+### ESC試験の診断取得
+
+`diagnostics_rate_hz`（double、既定1.0、1〜100 Hz、起動時固定）で`/diagnostics`
+（`diagnostic_msgs/msg/DiagnosticArray`）の定期出版周期を設定する。
+加えてESC指令モデルの状態遷移時には即時に同じ診断を出版する。
+試験用の`kart_bringup/config/tuning/esc_bridge.yaml`は全設定を保持し、定期診断を20 Hzにする。
+通常構成は1 Hzのまま。推定状態の出版はESC feedbackや物理的な停止確認ではない。

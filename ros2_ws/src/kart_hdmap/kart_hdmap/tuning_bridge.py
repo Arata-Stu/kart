@@ -7,6 +7,8 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from .pose_history import PoseHistory
+
 from .tuning import MAX_BYTES, StopGate, digest, encoded, map_identity, validate
 
 
@@ -37,11 +39,20 @@ class TuningBridge:
         self.vehicle = VehicleStatus()
         self.previous = None
         self.pose = None
+        self.display_speed = None
         self.tracking = None
         self.localized = False
         self.localized_at = float('-inf')
         self.requests = queue.Queue(maxsize=4)
-        self.buffer = Buffer()
+        self.pose_history = PoseHistory()
+        bridge = self
+
+        class DisplayBuffer(Buffer):
+            def set_transform(self, transform, authority):
+                super().set_transform(transform, authority)
+                bridge.capture_pose()
+
+        self.buffer = DisplayBuffer()
         self.listener = TransformListener(self.buffer, node)
         self.subscriptions = [
             node.create_subscription(String, 'recovery/status', lambda m: self.vehicle.recovery(m.data), 1),
@@ -107,6 +118,8 @@ class TuningBridge:
         v = msg.twist.twist.linear
         speed = math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z) if self.fresh(msg.header.stamp, .5) else None
         self.gate.update_speed(speed)
+        stamp = msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nanosec
+        self.display_speed = (stamp, speed) if speed is not None and math.isfinite(speed) else None
 
     def reference(self, msg):
         self.tracking = None
@@ -155,7 +168,7 @@ class TuningBridge:
             return '参照ラインの配信元が競合しています'
         return self.gate.issue(allow_running=True)
 
-    def status(self, known):
+    def status(self, known, pose_stream=None, pose_after=0):
         now = time.monotonic()
         revision = self.revision()
         result = dict(map_id=self.identity, revision=revision,
@@ -164,6 +177,8 @@ class TuningBridge:
                       pose=self.pose, tracking_reference=self.tracking_status(), localized=self.localized and now - self.localized_at <= 1.5,
                       apply_issue=self.issue(), stop_issue=self.gate.issue(),
                       can_rollback=self.previous is not None)
+        if hasattr(self, 'pose_history'):
+            result.update(self.pose_history.batch(pose_stream, pose_after))
         if hasattr(self, 'parking'): result['parking']=self.parking.view()
         if hasattr(self, 'vehicle'):
             result['vehicle'] = self.vehicle.view(self.node.get_clock().now().nanoseconds / 1e9,
@@ -194,10 +209,8 @@ class TuningBridge:
         n.runtime_centerline_speed = candidate['centerline_speed_mps']
         n.publish()
 
-    def tick(self):
+    def capture_pose(self):
         from rclpy.time import Time
-        self.parameters.tick()
-        self.parking.tick()
         n = self.node
         self.pose = None
         try:
@@ -208,6 +221,20 @@ class TuningBridge:
                 self.pose = dict(x=t.x, y=t.y, yaw=math.atan2(2*(q.w*q.z+q.x*q.y), 1-2*(q.y*q.y+q.z*q.z)))
         except Exception:
             pass
+        valid = self.pose is not None and self.localized and time.monotonic() - self.localized_at <= 1.5
+        stamp = Time.from_msg(tf.header.stamp).nanoseconds if self.pose is not None else 0
+        point = dict(self.pose or {})
+        velocity = self.display_speed
+        matched = velocity is not None and abs(stamp - velocity[0]) <= 100_000_000
+        point.update(speed_mps=velocity[1] if matched else None,
+                     speed_stamp_ns=str(velocity[0]) if matched else None)
+        self.pose_history.add(stamp, point, valid, self.node.settings['tuning_pose_rate_hz'])
+
+    def tick(self):
+        self.parameters.tick()
+        self.parking.tick()
+        # Also expire the displayed pose when TF stops arriving.
+        self.capture_pose()
         try:
             action, body, reply, deadline = self.requests.get_nowait()
         except queue.Empty:
@@ -258,7 +285,7 @@ class TuningBridge:
                     self.replace(old)
                     raise
                 self.previous = old
-            return self.status(body.get('known_revision'))
+            return self.status(body.get('known_revision'), body.get('pose_stream'), body.get('pose_after', 0))
         except Exception as exc:
             return {'error': str(exc)}
 

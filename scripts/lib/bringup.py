@@ -86,6 +86,26 @@ def latency_entry(args, config, interactive):
     os.execvp(command[0], command)
 
 
+def esc_trial_entry(args, parser, interactive):
+    """Dedicated mapless trial; never silently accept normal driving options."""
+    for key, value in vars(args).items():
+        if key not in ('mode', 'dry_run', 'device') and value != parser.get_default(key):
+            raise ValueError(f'ESC試験では--{key.replace("_", "-")}を使用しません。--deviceと--dry-runのみ指定できます')
+    command = ['ros2', 'launch', 'kart_bringup', 'esc_trial.launch.py']
+    if args.device:
+        command.append('device:=' + args.device)
+    print('ESC試験: 地図・自己位置・カメラ・Joyなし。通常bringupとは同時起動しないでください。')
+    print('Studio「ESC試験」から開始。起動時はSTOP、試験終了・STOPボタンは中立出力です。')
+    print(shlex.join(command))
+    if args.dry_run:
+        return
+    if interactive:
+        choose('この構成を起動', [True, False], lambda v: '起動' if v else '終了') or sys.exit(0)
+    if not shutil.which('ros2'):
+        raise ValueError('ROS開発コンテナでビルドしてから起動してください')
+    os.execvp(command[0], command)
+
+
 def validate_mode_options(args):
     """Reject runtime selections that would otherwise disappear from argv."""
     offline = args.mode in ("eval", "e2e-latency")
@@ -120,9 +140,9 @@ def validate_mode_options(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="kart: 収集 / 地図走行 / E2E / offline評価。--mode指定時は非対話。"
+        description="kart: 収集 / 地図走行 / E2E / offline評価 / ESC試験。--mode指定時は非対話。"
     )
-    parser.add_argument("--mode", choices=("collect", "environment", "drive", "e2e", "eval", "e2e-latency"))
+    parser.add_argument("--mode", choices=("collect", "environment", "drive", "e2e", "eval", "e2e-latency", "esc-trial"))
     parser.add_argument("--map-root", type=Path, default=ROOT / "map")
     parser.add_argument("--model-root", type=Path, default=ROOT / "models")
     parser.add_argument("--rgb-fps", choices=("0", "30", "60", "90"))
@@ -191,18 +211,30 @@ def main():
     if interactive and not sys.stdin.isatty():
         parser.error("TUIには端末が必要です。非対話では--modeを指定してください")
     config = ROOT / "ros2_ws/src/kart_bringup/config"
+    if args.mode == "esc-trial":
+        return esc_trial_entry(args, parser, interactive)
     if interactive:
         args.mode = choose(
             "用途",
-            ["collect", "environment", "drive", "e2e", "eval"],
+            ["record", "drive", "e2e", "eval", "esc-trial"],
             lambda m: {
-                "collect": "データ収集 → 後でoffline mapping",
-                "environment": "環境記録（高解像度RGB・左右Infra・Depth・IMU）",
+                "esc-trial": "ESC信号列試験（UI操作・地図／自己位置／Joy不要）",
+                "record": "データ記録",
                 "drive": "地図走行（VSLAM + VGL + ライン追従）",
                 "e2e": "E2E（TensorRT、localizationなし）",
-                "eval": "offline bag評価（VO / VIO / 保存map localization・RViz）",
+                "eval": "オフライン評価（記録bagを再生）",
             }[m],
         )
+        if args.mode == "record":
+            args.mode = choose(
+                "記録内容", ["collect", "environment"],
+                lambda m: {
+                    "collect": "走行データ（通常のセンサ・操作記録）",
+                    "environment": "環境記録（Depth付き・高解像度RGB・左右Infra・IMU）",
+                }[m],
+            )
+        if args.mode == "esc-trial":
+            return esc_trial_entry(args, parser, interactive)
         if args.mode != "eval":
             sensor = sensor_parameters(camera_config(config, args.mode))
             for kind, key in (
@@ -260,22 +292,17 @@ def main():
             )
         if args.mode == "eval" and args.eval_localization is None:
             args.eval_localization = choose(
-                "オフライン解析", (["vslam_vio"] if args.tracking_mode == "1" else ["vslam"] if args.tracking_mode == "0" else ["vslam", "vslam_vio"]) + ["vgl"] +
-                (["fresh_vio" if args.tracking_mode == "1" else "fresh_vo"] if args.tracking_mode else ["fresh_vo", "fresh_vio"]) + ["e2e_latency"],
-                lambda v: {"e2e_latency": "E2E latency（RGB bag → TensorRT → 制御topic、車両出力なし）", "vslam": "保存mapでVO localization", "vslam_vio": "保存mapでVIO localization（左右画像＋IMU）", "vgl": "VSLAM＋VGL（準備済みbundle）",
-                           "fresh_vo": "mapなしVO評価（左右画像・特徴点群・軌跡）",
-                           "fresh_vio": "mapなしVIO評価（左右画像＋IMU・特徴点群・軌跡）"}[v])
-            if args.eval_localization == "vslam_vio":
-                args.tracking_mode="1"
-                args.eval_localization="vslam"
-            elif args.eval_localization == "vslam" and not args.tracking_mode:
-                args.tracking_mode="0"
-            if args.eval_localization in ("fresh_vo", "fresh_vio"):
-                args.tracking_mode = "1" if args.eval_localization == "fresh_vio" else "0"
-                args.eval_localization = "fresh"
+                "オフライン解析", ["vslam", "vgl", "fresh", "e2e_latency"],
+                lambda v: {
+                    "vslam": "VSLAM（保存地図で自己位置推定）",
+                    "vgl": "VSLAM＋VGL（準備済みbundleで自己位置推定）",
+                    "fresh": "VSLAM（保存地図なし・新規SLAM）",
+                    "e2e_latency": "E2E遅延（RGB bag → 推論 → 制御topic）",
+                }[v],
+            )
         if args.mode == "eval" and args.eval_localization == "e2e_latency":
             args.mode = "e2e-latency"
-        if args.mode == "eval" and args.eval_localization in ("fresh", "vgl") and not args.tracking_mode:
+        if args.mode == "eval" and args.eval_localization in ("vslam", "vgl", "fresh") and not args.tracking_mode:
             args.tracking_mode = choose("追跡方式", ["0", "1"], lambda v: "stereo VO（IMUなし）" if v == "0" else "VIO（IMUあり）")
         if args.mode in ("drive","eval") and not args.multicam_mode:
             import yaml
@@ -284,9 +311,13 @@ def main():
             default=str(yaml.safe_load((config/preset).read_text())['/**/visual_slam']['ros__parameters']['multicam_mode'])
             args.multicam_mode=choose("VSLAM速度・精度",list(MULTICAM_LABELS),lambda v:MULTICAM_LABELS[v],default=list(MULTICAM_LABELS).index(default))
         if args.mode == "drive" or (args.mode == "eval" and args.eval_localization != "fresh"):
-            args.map_file = args.map_file or str(
-                choose("HDMap", discover(args.map_root, "hdmap"))
-            )
+            if not args.map_file:
+                if args.mode == "drive":
+                    from bringup_assets import select_map_directory
+                    args.map_file = str(select_map_directory(
+                        discover(args.map_root, "hdmap"), args.map_root, choose))
+                else:
+                    args.map_file = str(choose("HDMap", discover(args.map_root, "hdmap")))
             options = hdmap_choices(args.map_file)
             options = [
                 x
@@ -294,15 +325,26 @@ def main():
                 if (not args.lane_id or x[0] == args.lane_id)
                 and (not args.line_type or x[1] == args.line_type)
             ]
-            args.lane_id, args.line_type = choose(
-                "lane / 追従ライン", options, lambda x: " / ".join(x)
-            )
+            if len(options) == 1:
+                args.lane_id, args.line_type = options[0]
+                print("lane / 追従ライン:", " / ".join(options[0]), "（候補が1つのため自動選択）")
+            else:
+                args.lane_id, args.line_type = choose(
+                    "lane / 追従ライン", options, lambda x: " / ".join(x)
+                )
             vslam_only = args.mode == "eval" and args.eval_localization == "vslam"
             if not args.map_dir:
                 from bringup_assets import paired_maps, paired_models, select_related
                 candidates=discover(args.map_root, "vslam" if vslam_only else "bundle")
+                matched = paired_maps(args.map_file, candidates, args.map_root)
+                if args.mode == "drive" and matched:
+                    from bringup_assets import matching_resolution
+                    infra = args.infra_profile or sensor["depth_module.infra_profile"]
+                    compatible = matching_resolution(matched, infra)
+                    if compatible:
+                        matched = compatible
                 args.map_dir=str(select_related("対応するVSLAM地図" if vslam_only else "対応するVGL bundle",
-                    candidates, paired_maps(args.map_file,candidates,args.map_root),choose))
+                    candidates, matched, choose))
             models = sorted(
                 set(
                     discover(args.model_root, "models")
@@ -311,9 +353,8 @@ def main():
             )
             if vslam_only: args.model_dir=""
             elif not args.model_dir:
-                from bringup_assets import paired_models, select_related
-                args.model_dir=str(select_related("VGLモデル（実行GPU用engine）",models,
-                    paired_models(args.map_dir,models),choose))
+                from bringup_assets import select_runtime_model
+                args.model_dir = str(select_runtime_model(args.map_dir, models, choose))
         if args.mode == "drive" and args.tuning is None:
             import yaml
             default_tuning = yaml.safe_load((config / "hdmap/hdmap.yaml").read_text())["/**/hdmap_server"]["ros__parameters"]["tuning_enabled"]

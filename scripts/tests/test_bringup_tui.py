@@ -64,6 +64,10 @@ class FzfTests(unittest.TestCase):
         for mode in ("collect", "environment"):
             def choose(title, values, *args, **kwargs):
                 if title == "用途":
+                    self.assertEqual(values, ["record", "drive", "e2e", "eval", "esc-trial"])
+                    return "record"
+                if title == "記録内容":
+                    self.assertEqual(values, ["collect", "environment"])
                     return mode
                 if "解像度 × FPS" in title:
                     if title.startswith("RGB"):
@@ -78,6 +82,8 @@ class FzfTests(unittest.TestCase):
                   patch.object(sys.stdin, "isatty", return_value=True),
                   patch.object(module, "choose", side_effect=choose), redirect_stdout(output)):
                 module.main()
+            self.assertIn(f"mode:={mode}", output.getvalue())
+            self.assertNotIn("mode:=record", output.getvalue())
             self.assertIn("rgb_profile:=640x480x60", output.getvalue())
             self.assertIn("infra_profile:=640x480x90", output.getvalue())
 
@@ -89,6 +95,10 @@ class FzfTests(unittest.TestCase):
                     selected = []
                     def choose(title, values, *args, **kwargs):
                         if title == "用途":
+                            self.assertEqual(values, ["record", "drive", "e2e", "eval", "esc-trial"])
+                            return "record"
+                        if title == "記録内容":
+                            self.assertEqual(values, ["collect", "environment"])
                             return mode
                         if "解像度 × FPS" in title:
                             self.assertTrue(expected.issubset(set(values)))
@@ -111,7 +121,8 @@ class FzfTests(unittest.TestCase):
 
     def test_848_by_100_is_infra_only_in_tui(self):
         def choose(title, values, *args, **kwargs):
-            if title == '用途': return 'collect'
+            if title == '用途': return 'record'
+            if title == '記録内容': return 'collect'
             if '解像度 × FPS' in title:
                 if title.startswith('RGB'):
                     self.assertNotIn('848x100x100', values)
@@ -132,6 +143,10 @@ class FzfTests(unittest.TestCase):
             for profile in ("low", "high", "off"):
                 def choose(title, values, *args, **kwargs):
                     if title == "用途":
+                        self.assertEqual(values, ["record", "drive", "e2e", "eval", "esc-trial"])
+                        return "record"
+                    if title == "記録内容":
+                        self.assertEqual(values, ["collect", "environment"])
                         return mode
                     if title == "IMU 取得レート":
                         self.assertEqual(values[kwargs["default"]], "high")
@@ -192,8 +207,8 @@ class FreshDiagnosticTests(unittest.TestCase):
                 titles.append(title)
                 if title == "用途": return "eval"
                 if title == "オフライン解析":
-                    self.assertIn("fresh_vio",values)
-                    return "fresh_vo"
+                    self.assertEqual(values, ["vslam", "vgl", "fresh", "e2e_latency"])
+                    return "fresh"
                 if title == "追跡方式": return "0"
                 if title == "VSLAM速度・精度":
                     self.assertEqual(values,['0','1','2'])
@@ -211,7 +226,7 @@ class FreshDiagnosticTests(unittest.TestCase):
             self.assertIn("rviz:=true", text)
             self.assertIn("tracking_mode:=0", text)
             self.assertNotIn("map_dir:=", text)
-            self.assertEqual(titles, ["用途", "オフライン解析", "VSLAM速度・精度", "再生rosbag"])
+            self.assertEqual(titles, ["用途", "オフライン解析", "追跡方式", "VSLAM速度・精度", "再生rosbag"])
             self.assertIn('multicam_mode:=2',text)
             with patch.object(sys, "argv", ["bringup.py", "--mode", "eval", "--eval-localization", "fresh", "--bag", str(bag), "--tracking-mode", "1", "--dry-run"]):
                 with self.assertRaisesRegex(ValueError, "/realsense/imu"):
@@ -227,8 +242,9 @@ class FreshDiagnosticTests(unittest.TestCase):
             def choose(title,values,*args,**kwargs):
                 if title=='用途':return 'eval'
                 if title=='オフライン解析':
-                    self.assertIn('fresh_vio',values)
-                    return 'fresh_vio'
+                    self.assertIn('fresh',values)
+                    return 'fresh'
+                if title=='追跡方式':return '1'
                 if title=='VSLAM速度・精度':return '1'
                 if title=='再生rosbag':return values[0]
                 self.fail(f'Unexpected selection: {title}')
@@ -245,11 +261,15 @@ class FreshDiagnosticTests(unittest.TestCase):
             self.assertNotIn('map_dir:=',text)
             self.assertNotIn('enable_vgl:=true',text)
 
-    def test_vgl_tracking_selection_and_explicit_override(self):
+    def test_saved_map_tracking_selection_and_explicit_override(self):
         from kart_bringup import mission, localization
-        for mode, explicit, has_imu in [('0', False, False), ('1', False, True),
-                                        ('1', True, True), ('1', False, False)]:
-            with self.subTest(mode=mode, explicit=explicit, has_imu=has_imu), tempfile.TemporaryDirectory() as folder:
+        for localization_kind, mode, explicit, has_imu in (
+            (kind, mode, explicit, has_imu)
+            for kind in ('vslam', 'vgl')
+            for mode, explicit, has_imu in [('0', False, False), ('1', False, True),
+                                           ('0', True, False), ('1', True, True), ('1', False, False)]
+        ):
+            with self.subTest(localization=localization_kind, mode=mode, explicit=explicit, has_imu=has_imu), tempfile.TemporaryDirectory() as folder:
                 bag = Path(folder) / 'bag'
                 bag.mkdir()
                 topics = ['/realsense/infra1/image_rect_raw', '/realsense/infra2/image_rect_raw',
@@ -262,7 +282,9 @@ class FreshDiagnosticTests(unittest.TestCase):
                 def choose(title, values, *args, **kwargs):
                     titles.append(title)
                     if title == '用途': return 'eval'
-                    if title == 'オフライン解析': return 'vgl'
+                    if title == 'オフライン解析':
+                        self.assertEqual(values, ['vslam', 'vgl', 'fresh', 'e2e_latency'])
+                        return localization_kind
                     if title == '追跡方式': return mode
                     return values[0]
                 def discover(root, kind):
@@ -279,9 +301,12 @@ class FreshDiagnosticTests(unittest.TestCase):
                     module.main()
                 self.assertEqual('追跡方式' in titles, not explicit)
                 self.assertEqual(resolve.call_args.kwargs['overrides']['tracking_mode'], mode)
-                self.assertTrue(resolve.call_args.kwargs['enable_vgl'])
-                shape_check.assert_called_once_with(module.ROOT / 'ros2_ws/src/kart_bringup/config', str(bag), [1, 3, 360, 640])
-                self.assertIn('enable_vgl:=true', output.getvalue())
+                self.assertEqual(resolve.call_args.kwargs['enable_vgl'], localization_kind == 'vgl')
+                if localization_kind == 'vgl':
+                    shape_check.assert_called_once_with(module.ROOT / 'ros2_ws/src/kart_bringup/config', str(bag), [1, 3, 360, 640])
+                else:
+                    shape_check.assert_not_called()
+                self.assertIn(f'enable_vgl:={str(localization_kind == "vgl").lower()}', output.getvalue())
                 self.assertIn(f'tracking_mode:={mode}', output.getvalue())
 
     def test_saved_map_vio_selects_map_and_replays_imu(self):
@@ -292,7 +317,8 @@ class FreshDiagnosticTests(unittest.TestCase):
             def choose(title,values,*args,**kwargs):
                 if title=='用途':return 'eval'
                 if title=='オフライン解析':
-                    self.assertIn('vslam_vio',values);return 'vslam_vio'
+                    self.assertIn('vslam',values);return 'vslam'
+                if title=='追跡方式':return '1'
                 return values[0]
             def discover(root,kind):
                 return [bag] if kind=='bag' else [Path('/map/hdmap.yaml')] if kind=='hdmap' else [Path('/map/course')]

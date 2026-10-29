@@ -1,0 +1,6 @@
+/**/esc_trial:
+  ros__parameters:
+    use_sim_time: false
+    max_output: 0.3  # Absolute signed ESC demand limit, 0 < value <= 1; not m/s
+    ui_timeout_s: 3.0  # Matching run heartbeat loss -> neutral + STOP; 1..5 s
+    http_port: 8783  # Loopback only, SSH transport; startup-only

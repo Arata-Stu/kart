@@ -15,6 +15,7 @@ from std_msgs.msg import String
 from std_srvs.srv import Trigger
 from visualization_msgs.msg import MarkerArray
 
+from .pose_history import validate_rate
 from .speed import validate_speed_override, override_speeds, centerline_speed
 from .document import KINDS, load, select
 from .messages import markers, path_message, reference_message
@@ -29,6 +30,7 @@ class HDMapNode(Node):
             "tuning_parking_enabled": False,
             "tuning_map_dir": "",
             "tuning_tracking_frame": "rear_axle",
+            "tuning_pose_rate_hz": 0.0,
             "frame_id": "map",
             "lane_id": "",
             "line_type": "centerline",
@@ -42,9 +44,10 @@ class HDMapNode(Node):
         }
         for key, value in defaults.items():
             self.declare_parameter(
-                key, value, ParameterDescriptor(read_only=key not in ("line_type", "speed_override_mps", "centerline_speed_mps"))
+                key, value, ParameterDescriptor(read_only=key not in ("tuning_pose_rate_hz", "line_type", "speed_override_mps", "centerline_speed_mps"))
             )
         self.settings = {k: self.get_parameter(k).value for k in defaults}
+        validate_rate(self.settings["tuning_pose_rate_hz"])
         for key in ("publish_rate_hz", "line_width_m", "label_height_m"):
             if not math.isfinite(self.settings[key]) or self.settings[key] <= 0:
                 raise ValueError(key + " must be finite and positive")
@@ -107,6 +110,13 @@ class HDMapNode(Node):
             if issue:
                 return SetParametersResult(successful=False, reason=issue)
         for parameter in parameters:
+            if parameter.name == "tuning_pose_rate_hz":
+                try:
+                    if parameter.type_ != Parameter.Type.DOUBLE:
+                        raise ValueError("tuning_pose_rate_hz requires a double")
+                    validate_rate(parameter.value)
+                except ValueError as exc:
+                    return SetParametersResult(successful=False, reason=str(exc))
             if parameter.name == "centerline_speed_mps" and (
                     parameter.type_ != Parameter.Type.DOUBLE or
                     not math.isfinite(parameter.value) or (parameter.value != -1 and parameter.value < 0)):
@@ -134,6 +144,8 @@ class HDMapNode(Node):
         # Apply only after the entire parameter transaction has committed.
         changed = False
         for parameter in parameters:
+            if parameter.name == "tuning_pose_rate_hz":
+                self.settings[parameter.name] = parameter.value
             if parameter.name in ("line_type", "speed_override_mps", "centerline_speed_mps"):
                 self.settings[parameter.name] = parameter.value
                 changed = True

@@ -50,3 +50,10 @@ evaluation.launch.pyはsensor/vehicle/controlを起動せず、左右画像・Ca
 /clockでlocalization/HDMap/RVizの時間を統一し、入力購読準備後に1倍速開始。
 過去の/tf（動的TF）は使わずVSLAMがTFを所有する。校正TFが必要。
 Notebookのみvisualize=true。RVizは公式cuVSLAM設定をベースとする。正解軌跡なしに精度値は主張しない。
+
+## Studioへの自己位置表示
+
+表示用pose取得は実TFの新しい時刻へ追従することを既定とし、Infraの公称FPSを固定値として仮定しない。
+取得上限Hzは実行中変更可能なparameterとし、制御・状態要求処理タイマーと分離する。
+Web通信間に受けた位置は時刻とsequence付きの有界履歴から差分バッチとして送る。
+欠落・無効区間を補間で隠さず、時計巻戻し・履歴超過・bridge再起動は表示側へ通知する。

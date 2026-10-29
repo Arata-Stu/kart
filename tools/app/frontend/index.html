@@ -15,10 +15,30 @@
         ><button class="nav" id="nav-transfer">転送</button
         ><button class="nav" id="nav-learning">学習</button
         ><button class="nav" id="nav-audit">解析</button>
+        <button class="nav" id="nav-esc">ESC試験</button>
       </nav>
       <span class="local-tag"><i></i> Notebook · Local</span
       ><button class="quiet" id="connection-open">接続設定</button>
     </header>
+    <section id="esc-page" hidden>
+      <div class="actions esc-actions">
+        <h2>ESC信号列の試験</h2>
+        <button id="esc-connect">試験ノードに接続</button>
+        <button id="esc-start" class="primary" disabled>信号列を開始</button>
+        <button id="esc-stop">STOP（即時中立）</button>
+        <button id="esc-export">履歴JSONを保存</button>
+      </div>
+      <p>地図・自己位置・Joyは不要。開始で試験用AUTOへ切り替えます。正＝前進入力、負＝ブレーキ／後退入力、0＝中立。終了は中立です。</p>
+      <p>STOPはWeb通信経由の中立要求です（物理非常停止ではありません）。通信途絶時は車体側の監視で中立化します。ESCの実動作は車体で確認してください。</p>
+      <table><thead><tr><th>順番</th><th>ESC入力（正規化値）</th><th>時間（秒）</th><th></th></tr></thead><tbody id="esc-steps"></tbody></table>
+      <button id="esc-add">段階を追加</button>
+      <p id="esc-message" role="status">未接続。接続設定のSSH先で esc_trial.launch.py を起動してください。</p>
+      <p id="esc-current"></p>
+      <canvas id="esc-chart" width="1100" height="260" aria-label="要求出力と基板報告ESC PWMの時系列"></canvas>
+      <p class="small">青＝要求入力（左軸）、橙＝基板報告PWM（右軸、µs）。時刻は試験ノードでの受信・生成時刻。PWMは基板の報告値であり実測波形ではありません。</p>
+      <p class="small">ESC状態は送信指令からの推定です。状態遷移表のmode・board_path・pwmは受信した値、bridgeのesc_command_stateは推定値です。全受信履歴はJSONに保存できます。</p>
+      <div class="esc-events-wrap"><table><thead><tr><th>相対時刻（秒）</th><th>種類</th><th>状態／遷移</th></tr></thead><tbody id="esc-events"></tbody></table></div>
+    </section>
     <main id="map-page">
       <aside class="library">
         <div class="section-title">
@@ -66,6 +86,7 @@
           <div class="tuning-controls">
             <span id="tuning-target" class="small"></span>
             <button id="tuning-connect" disabled>自己位置を接続</button>
+            <label>軌跡の推定速度 <span style="display:inline-block;width:70px;height:10px;background:linear-gradient(to right,hsl(225,75%,43%),hsl(112,75%,43%),hsl(0,75%,43%))"></span> 0〜<input id="tuning-trail-max" type="number" min="0.1" step="0.5" value="3" style="width:55px" aria-label="軌跡速度の色上限 m/s" /> m/s（不明は灰）</label>
             <select id="tuning-line" aria-label="適用するライン"><option value="centerline">Center</option><option value="raceline">Race</option><option value="customline">Custom</option></select>
             <label>Center速度 <input id="tuning-speed" type="number" min="0" step="0.05" value="1.5" aria-label="Center速度 m/s" /> m/s</label>
             <button id="tuning-line-switch" disabled>実車ラインを切替</button>
@@ -78,6 +99,7 @@
           <section class="vehicle-state" aria-label="車両状態" aria-live="polite">
             <strong id="vehicle-mode">モード不明</strong><span id="vehicle-host">HOST: 未受信</span>
             <span id="vehicle-recovery">復帰: 未受信</span>
+            <div id="vehicle-esc" class="small"></div>
             <div id="vehicle-health" class="small"></div>
             <div id="vehicle-calibration" class="small"></div>
           </section>

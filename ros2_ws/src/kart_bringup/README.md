@@ -1505,3 +1505,47 @@ engine再利用時も欠けたYAMLを生成し、既存YAMLは検証して再利
 `bringup.sh`のE2Eでは`--evs-tensor-config`未指定時にモデル内のYAMLを自動選択する。
 明示指定を優先し、選択後はモデルとの整合性を検証する。YAMLがなければ準備コマンドを案内して停止する。
 直接ROS launchする場合の`evs_tensor_config`指定は引き続き必要。ノード・topic・parameterの変更なし。
+
+### Map Studioの自己位置取得頻度
+
+`config/hdmap/hdmap.yaml`の`hdmap_server.tuning_pose_rate_hz`は既定0.0で実TF更新へ追従する。
+正値は表示用取得上限Hz（最大1000）、実行中のROS parameter変更に対応。
+Webへは前回以降の時刻付き位置をまとめて送り、約1 Hz通信の間の軌跡を保持する。
+詳細はkart_hdmap README。制御周期とHTTP要求処理周期は変更しない。
+
+## 地図・JoyなしのESC試験
+
+通常bringupを終了した状態で、既存ROS依存が入った開発コンテナ内から実行する。
+
+```bash
+cd ros2_ws  # リポジトリのルートから
+colcon build --symlink-install --packages-select kart_system kart_vehicle kart_control kart_bringup
+source install/setup.bash
+ros2 launch kart_bringup esc_trial.launch.py
+```
+
+`esc_trial.launch.py`はoperation_mode_manager、command_mux、kart_bridge、esc_trialだけを起動する。
+カメラ・VSLAM・HDMap・Joyは起動しない。通常走行や他の指令publisherとは併用しない。
+起動だけではAUTOにしない。Studioの「ESC試験」タブで接続し、信号列を編集して開始する。
+「STOP（即時中立）」で中断、完了時も中立。停止要求は制動完了を意味しない。
+
+実運用設定: `config/tuning/esc_trial.yaml`（ノード名esc_trial、max_output=0.3、
+ui_timeout_s=3.0、http_port=8783、use_sim_time=false）、
+`config/tuning/esc_bridge.yaml`（通常bridgeの全設定を明示、diagnostics_rate_hz=20.0）。
+muxは`config/system/command_mux.yaml`を使用しauto_use_teleop=false。
+UIのSSH接続先からコンテナのloopback 8783へ到達するネットワーク構成が必要。
+入出力topicと試験の検証境界は[kart_control README](../kart_control/README.md#uiからのesc信号列試験地図joy不要)参照。
+
+ESC試験は通常の入口からも起動できる（リポジトリ直下・ROS開発コンテナ内）：
+
+```bash
+bash scripts/bringup.sh --mode esc-trial
+# コマンド表示のみ
+bash scripts/bringup.sh --mode esc-trial --dry-run
+# 必要な場合だけシリアルポートを上書き
+bash scripts/bringup.sh --mode esc-trial --device /dev/ttyACM0
+```
+
+引数なしの`bash scripts/bringup.sh`では「用途」→「ESC信号列試験」を選択する。
+カメラ・地図・録画の選択は行わない。CLIの対応オプションは`--device`と`--dry-run`。
+`esc_trial.launch.py`の`device` launch引数は既定空文字で、空なら試験YAMLの値を保持する。

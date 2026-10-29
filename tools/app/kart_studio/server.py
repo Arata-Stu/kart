@@ -19,7 +19,7 @@ from .mapping import Mapping, local_records
 from .maps import Maps
 from .storage import atomic_json, name, read_json, within
 from .transfers import Transfers, profile
-from .tuning import Tuning
+from .tuning import Tuning, remote
 from .audit import Audit, FILES as AUDIT_FILES
 
 
@@ -147,6 +147,9 @@ class Studio:
             return self.jobs.start('走行記録の時刻解析: ' + plan['bag_key'],
                                    ['read:record:' + plan['bag_key'], 'audit-output:' + plan['key']],
                                    Task('audit', [plan]))
+        if path in ("/api/esc/status", "/api/esc/start", "/api/esc/stop"):
+            payload = {k: b[k] for k in ("run_id", "steps", "stream", "after", "generation") if k in b}
+            return remote(b["connection"], "esc_" + path.rsplit("/", 1)[1], payload)
         if path == "/api/tuning/prepare":
             return self.tuning.prepare(b)
         if path in ("/api/tuning/status", "/api/tuning/apply", "/api/tuning/rollback", "/api/tuning/parameters_get", "/api/tuning/parameters_set", "/api/tuning/parking_start", "/api/tuning/parking_reset"):
