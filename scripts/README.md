@@ -483,3 +483,32 @@ bringupのVGL選択は、選択HDMapの親ディレクトリにあるcuVSLAM地�
 VGLモデルもbundleのONNX SHA256と一致する候補を絞り、1つなら自動選択する。
 明示の--map-dir/--model-dirを優先し、GPU engine・地図・入力shape等の最終検証は省略しない。
 前回の選択を無条件再利用せず、自動採用したパスはログに表示する。
+
+## JetsonのWi-Fiホットスポット
+
+Jetsonホストで既存の `Hotspot-Internal-5GHz` を操作する（Docker内では実行しない）。
+interfaceは `wlP1p1s0`、UUIDは `d2c82d15-9fd1-4174-9f30-aac3c61e76c2`。
+設定名は5GHzだが、ユーザーが2.4 GHz/channel 6へ変更して起動成功を確認したprofileを使う。
+スクリプトはSSID・password・帯域・自動接続設定を変更せず、別profileを新規作成しない。
+対象UUIDが存在しない、interfaceやAP modeが異なる場合はエラーで中止する。
+
+```bash
+sudo bash scripts/hotspot.sh start    # 既存profileを起動
+bash scripts/hotspot.sh status        # 保存設定・現在の接続・IP
+sudo bash scripts/hotspot.sh diagnose # AP対応・rfkill・規制情報・チャンネル・NMログ
+sudo bash scripts/hotspot.sh stop     # 対象APのみ停止
+```
+
+自動起動は既存profileの `connection.autoconnect yes` によりNetworkManagerが行うため、
+このスクリプトを起動時に追加実行する必要はない。stopは保存済み自動起動設定を無効化しない。
+Wi-Fi無線がOFFなら利用者が有効化する。スクリプトは無線全体やNetworkManagerを再起動しない。
+start/stopは対象Wi-Fi経由のSSHを切断し得るため、ローカル端末または別interface経由で操作する。
+通常Wi-Fiへの自動復帰は行わない。statusのIPv4がJetsonへの接続先。
+
+5 GHz/channel 36では、対象phyのself-managed country 00・no IRとAP生成タイムアウトを確認した。
+2.4 GHz/channel 6で起動成功。再起動後の自動起動は別途実機で確認する。
+診断ログを共有する際はSSID・MAC等を必要に応じて伏せる。
+既存の別profile `kart-hotspot-wlP1p1s0` があっても削除・変更しない。
+
+仕様出典: [NetworkManager nmcli](https://networkmanager.pages.freedesktop.org/NetworkManager/NetworkManager/nmcli.html)。
+構文・mockテストとJetsonでのスクリプト実行確認は別。
