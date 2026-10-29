@@ -54,7 +54,14 @@ class LocalizationTest(unittest.TestCase):
     def test_fixed_backend_keeps_replay_contract(self):
         apt = resolve(CONFIG, self.source, '', enable_vgl=False)
         fixed = resolve(CONFIG, self.source, '', enable_vgl=False, vslam_backend='fixed')
-        self.assertEqual(fixed, apt)
+        self.assertFalse(fixed[0]['cuvslam']['localize_on_startup'])
+        self.assertTrue(fixed[0]['cuvslam']['enable_request_hint'])
+        self.assertTrue(apt[0]['cuvslam']['localize_on_startup'])
+        self.assertFalse(apt[0]['cuvslam']['enable_request_hint'])
+        self.assertEqual(fixed[1:], apt[1:])
+        original = dict(apt[0]['cuvslam'])
+        original.update(localize_on_startup=False, enable_request_hint=True)
+        self.assertEqual(fixed[0]['cuvslam'], original)
         self.assertEqual(vslam_package('fixed'), 'kart_visual_localization')
         self.assertEqual(vslam_package('apt'), 'isaac_ros_cuvslam')
         with self.assertRaises(ValueError):

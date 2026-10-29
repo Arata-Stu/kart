@@ -152,6 +152,7 @@ def main():
     parser.add_argument("--evs-bias-file", default="", help=".bias path; @defaultでカメラ既定")
     parser.add_argument("--bias-root", type=Path, default=ROOT / "bias/evs")
     parser.add_argument("--foxglove", action="store_true")
+    parser.add_argument("--interactive", action="store_true", help="--mode指定時も未指定項目を対話選択")
     parser.add_argument("--no-bridge", action="store_true", help="車両基板なしの確認用")
     parser.add_argument(
         "--dry-run", action="store_true", help="選択・検証とコマンド表示のみ"
@@ -187,12 +188,12 @@ def main():
         args.evs_backend = "cuda_async"
     from kart_bringup.mission import discover, hdmap_choices, sensor_parameters, camera_config, recording_config
 
-    interactive = args.mode is None
+    interactive = args.interactive or args.mode is None
     if interactive and not sys.stdin.isatty():
         parser.error("TUIには端末が必要です。非対話では--modeを指定してください")
     config = ROOT / "ros2_ws/src/kart_bringup/config"
     if interactive:
-        args.mode = choose(
+        args.mode = args.mode or choose(
             "用途",
             ["collect", "environment", "drive", "e2e", "eval"],
             lambda m: {
@@ -439,10 +440,11 @@ def main():
         if args.mode == "drive" and not sensors["enable_infra1"]:
             raise ValueError("VSLAM/VGLにはInfraが必要です（なしは選択できません）")
         vslam_only = args.mode == "eval" and args.eval_localization != "vgl"
-        if not args.map_file or not args.map_dir or (not vslam_only and not args.model_dir):
-            raise ValueError(
-                "drive/evalには--map-file / --map-dir / --model-dirが必要です（TUIなら一覧選択）"
-            )
+        required = ['map_file', 'map_dir'] + ([] if vslam_only else ['model_dir'])
+        missing = ['--' + key.replace('_', '-') for key in required if not getattr(args, key)]
+        if missing:
+            raise ValueError('不足引数: ' + ' / '.join(missing) +
+                             '。一覧選択する場合は--interactiveを追加してください')
         if (args.lane_id, args.line_type) not in hdmap_choices(args.map_file):
             raise ValueError("HDMapに存在する--lane-id / --line-typeを選んでください")
         from kart_bringup.localization import resolve

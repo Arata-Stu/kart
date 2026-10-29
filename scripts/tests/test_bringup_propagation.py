@@ -110,7 +110,7 @@ class PropagationTests(unittest.TestCase):
         with patch.object(argparse.ArgumentParser, 'parse_args', parse):
             self.run_cli('--mode', 'collect')
         # Search roots and dry_run are local selector behavior, not ROS parameters.
-        selector = {'help', 'map_root', 'model_root', 'bias_root', 'dry_run'}
+        selector = {'help', 'map_root', 'model_root', 'bias_root', 'dry_run', 'interactive'}
         forwarded = {'mode', 'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'imu_profile',
                      'device', 'map_file', 'map_dir', 'model_dir', 'lane_id', 'line_type',
                      'tuning', 'record_dir', 'evs', 'no_evs', 'evs_backend', 'evs_aggregation',

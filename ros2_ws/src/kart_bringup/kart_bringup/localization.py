@@ -112,8 +112,11 @@ def resolve(
         ):
             raise ValueError("VSLAM地図が空です")
         slam["load_map_folder_path"] = str(root)
-        slam["enable_request_hint"] = False
-        slam["localize_on_startup"] = True
+        # Not launching VGL here does not mean no external VGL is running.
+        # Fixed-map localization keeps the YAML's initial-pose/hint contract.
+        if vslam_backend == "apt":
+            slam["enable_request_hint"] = False
+            slam["localize_on_startup"] = True
         profile = {"input_shape": None}
     mappings = {}
     for kind, prefix in (("cuvslam", "visual_slam"), ("vgl", "visual_localization")):

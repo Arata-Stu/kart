@@ -197,6 +197,21 @@ class FreshDiagnosticTests(unittest.TestCase):
                     '--lane-id', 'lane', '--line-type', 'centerline', '--tracking-mode', '0', '--dry-run']
             with patch.object(sys, 'argv', argv), patch.object(sys.stdin, 'isatty', return_value=False), patch('kart_bringup.mission.hdmap_choices', return_value=[('lane', 'centerline')]), redirect_stdout(output):
                 module.main()
+            prompts = []
+            def choose_fixed(title, values, *args, **kwargs):
+                prompts.append(title)
+                if title == 'VSLAM速度・精度': return '1'
+                if title == 'lane / 追従ライン': return ('lane', 'centerline')
+                if title == '再生rosbag': return bag
+                self.fail(f'Unexpected selection: {title}')
+            interactive_argv = [v for v in argv]
+            i = interactive_argv.index('--bag')
+            del interactive_argv[i:i+2]
+            interactive_argv.append('--interactive')
+            with patch.object(sys, 'argv', interactive_argv), patch.object(sys.stdin, 'isatty', return_value=True), patch.object(module, 'choose', side_effect=choose_fixed), patch('kart_bringup.mission.hdmap_choices', return_value=[('lane', 'centerline')]), patch('kart_bringup.mission.discover', return_value=[bag]), redirect_stdout(output):
+                module.main()
+            self.assertIn('再生rosbag', prompts)
+            self.assertNotIn('用途', prompts)
             text = output.getvalue()
             self.assertIn('evaluation.launch.py', text)
             self.assertIn('vslam_backend:=fixed', text)

@@ -73,9 +73,6 @@ bringupのinstall更新も必要。既存のbuild手順で`kart_bringup`をbuild
 
 ```bash
 ros2 launch kart_bringup fixed_localization.launch.py map_dir:=/absolute/map_bundle
-# 地図原点付近から上流の起動時localizationを使う場合:
-ros2 launch kart_bringup fixed_localization.launch.py \
-  map_dir:=/absolute/map_bundle localize_on_startup:=true
 ```
 
 通常は上流の`visual_slam/initial_pose`（bringupでは`/localization/pose_hint`）または
@@ -191,7 +188,7 @@ bagでの初期localization/継続照合/遅延補正/平面制約/Reset/再loca
 HDMap・ライン・対応VSLAM地図・bagを選ぶ。
 
 ```bash
-bash scripts/bringup.sh --mode eval --eval-localization fixed
+bash scripts/bringup.sh --mode eval --eval-localization fixed --interactive
 ```
 
 非対話では`--map-file /absolute/hdmap.json --lane-id <lane> --line-type <line>`と
@@ -202,8 +199,10 @@ VO/SLAM path、Odometry、pose graph、HDMapを表示する。
 offline実行時だけ上書きし、通常運用YAMLは変えない。
 入力は左右Infra・CameraInfo・tf_static、VIO時のみIMU。古い動的TFや推定出力は再生しない。
 clockをbagに合わせ、購読準備後に再生を開始する。センサ実機・制御・VGLは起動しない。
-初期探索は既存VSLAM単独offlineと同じ原点付近。地図とbagの開始位置が離れる場合は
-初期姿勢指定が必要。初期localization前の一時地図と、成功後の固定参照地図を区別する。
+固定版はlocalize_on_startup=false、enable_request_hint=trueをYAMLから維持する。
+別起動のVGLから/localization/pose_hintを受けて初期localizationする。
+VGLもbagのclockと同じbase/map frameを使用する。offlineのbase_frame既定はcamera_link。
+初期localization前の一時地図と、成功後の固定参照地図を区別する。
 
 直接launchする場合は`evaluation.launch.py vslam_backend:=fixed enable_vgl:=false`。
 既定`vslam_backend:=apt`は従来どおり。固定版でも上流Component classを保持し、

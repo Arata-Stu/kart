@@ -74,3 +74,8 @@ apt版との同時起動や同一containerへの混載はしない。単体proce
 `vslam_backend=apt|fixed`は起動pkgの選択だけを担い、同一VSLAM containerには一方のみをロードする。
 CLI/TUIの`--eval-localization fixed`はVGLなしの固定参照評価へ接続する。
 特徴点群の可視化は既存visualize引数の実行時overrideで有効化し、通常のノード既定を変更しない。
+
+固定版ではenable_vgl=falseは「このlaunchがVGLを起動しない」の意味であり、
+別起動VGLの不在とは解釈しない。localize_on_startup=false、enable_request_hint=trueを
+YAMLから維持する。原点からの自動初期探索へ暗黙に変更しない。
+別起動VGLとはuse_sim_time、map/base frame、画像topic、hint/request remapを一致させる。

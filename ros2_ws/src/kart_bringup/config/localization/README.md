@@ -327,7 +327,8 @@ bringup.shのdrive/offline evalで説明付きの選択、または--multicam-mo
 `ros2 launch kart_bringup fixed_localization.launch.py map_dir:=/absolute/map`で
 NVIDIA ROSノードのコピー（pkg/executable=`kart_visual_localization`、node=`visual_slam`）を起動する。
 センサ・制御・VGLは起動しない。初期位置入力は上流と同じで、既存workflow.jsonのremapを使う。
-初期位置が地図原点付近なら明示`localize_on_startup:=true`も利用できる。
+固定版は別起動のVGLを使用する。`localize_on_startup=false`、`enable_request_hint=true`を維持し、
+VGLを同時起動しない場合もこれらを上書きしない。
 TF・診断・Odometry・平面制約は既存設定を維持するため、apt版を停止してから起動する。
 上流との一致範囲、固定マップ差分、ビルド方法は
 [pkg README](../../../kart_visual_localization/README.md)を参照。ROS/CUDA/実機検証は未完了。
