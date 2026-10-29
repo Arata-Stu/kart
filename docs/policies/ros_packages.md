@@ -403,7 +403,7 @@ bash scripts/bringup.sh --mode collect --auto-fixed-throttle 0.10 --run-name aut
 
 CLI/launchの旧`manual_fixed_throttle`は`auto_fixed_throttle`へ変更した。
 実運用設定はkart_bringup/config/input/joy_manager.yaml、未指定ならYAMLを保持する。
-TUIの「AUTOスロットル」で通常／固定を選ぶ。collect/driveで利用可能。E2Eでは収集用の固定設定を無効化し、モデルのステア＋E2E専用固定スロットルを使用する。
+TUIの「AUTOスロットル」で通常／固定を選ぶ。collect/driveで利用可能。E2Eでは収集用の固定設定を無効化し、モデルのステア＋E2E専用の固定／モデル出力スロットルを使用する（`--e2e-throttle-mode fixed|model`、既定fixed）。
 RGB/EVS教師抽出はbag内の固定AUTO有効設定を自動検出する。固定収集bagでは固定AUTOだけを採用し、MANUALの復帰・調整区間を全て除外する。通常bagは従来どおりMANUALだけを採用する。
 ROS結合・実車動作は未確認。portable testで固定出力、直接切替、異常ラッチ、HOST handshakeを検証する。
 

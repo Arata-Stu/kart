@@ -122,13 +122,19 @@ AUTO連続観測のentry_neutral_s以内を除外する。未知・不正設定�
 ## 収集用固定スロットルとE2E走行の分離
 
 - collect/driveの`--auto-fixed-throttle`（Joy parameter `auto_fixed_throttle`）は手動ステア収集用。
-- `--mode e2e`はAUTOでモデルのステア＋固定スロットル。収集用Joy固定は必ず-1へ上書きし、
+- `--mode e2e`はAUTOでモデルのステア＋選択したスロットル制御。収集用Joy固定は必ず-1へ上書きし、
   muxの`auto_use_teleop=false`で`/auto/control_cmd`を車両へ通す。MANUALは通常の手動操作。
 - E2E専用CLI `--e2e-fixed-throttle`／mission引数 `e2e_fixed_throttle` は未指定なら
   metadataのruntime.fixed_throttleを使い、明示時は0..runtime.max_throttleの有限値に限る。
   TUIもE2E専用の入力欄を使い、収集用の固定選択を表示しない。
-- missionはRGB/EVSの双方に`use_fixed_throttle=true`を渡す。モデルがsteer_throttleでも
-  ステアだけを操舵に用い、駆動量は固定値。モデルの出力数・形式は書き換えない。
+- `--e2e-throttle-mode fixed|model`／mission引数`e2e_throttle_mode`（空欄・未指定は`fixed`）で選択する。
+  TUIでは「E2Eスロットル」を選び、固定時だけ数値を入力する。明示した`--e2e-fixed-throttle`は既存どおり固定を選ぶ。
+- `fixed`はRGB/EVS双方へ`use_fixed_throttle=true`を渡す。`model`はfalseを渡し、
+  `steer_throttle`モデルのスロットル出力を`runtime.max_throttle`で制限して使う。
+  値は正規化スロットル（車速m/sではない）。`steer_only`でのmodel指定、modelと固定値の併用は起動前に拒否する。
+  選択は今回の起動だけに適用し、モデルmetadata・出力形式は変更しない。
+  可変の例: `bash scripts/bringup.sh --mode e2e --e2e-model-dir /workspaces/models/policy --e2e-throttle-mode model`。
+  EVSでは加えて`--evs --evs-tensor-config /workspaces/models/policy/openeb_tensor.yaml`を指定する。
 - decoderの新しい起動時parameter `use_fixed_throttle` はbool、ノード/YAML既定false。
   単独launchにも同名の任意引数を提供する。既存topic・QoS・watchdog・STOP処理は同じ。
 
@@ -324,3 +330,13 @@ Tiny特徴蒸留は別工程のepoch・目的関数を保持する。
 サイズ優先比較は同じfreeze/finetune内でS/B/Tinyを比べ、Tinyは共通の本番蒸留encoderから独立に開始する。
 初期重みの由来を表示し、蒸留Tinyと公式S/Bの差を純粋なarchitectureの効果と断定しない。
 サイズ比・MSE比は成功した同じ更新範囲の基準モデルだけから計算する。
+
+### EVSモデルのYAML自動準備
+
+`scripts/e2e_trt.sh <model_dir>`はEVSの`openeb_tensor.yaml`も自動生成・検証する。
+基底はbringupのtensor pipeline設定で選ばれたbackendの全設定YAML。
+engine再利用時も欠けたYAMLを生成し、既存YAMLは検証して再利用する。不整合時は停止し、
+`--force`でも既存YAMLを上書きしない。RGBでは生成しない。
+`bringup.sh`のE2Eでは`--evs-tensor-config`未指定時にモデル内のYAMLを自動選択する。
+明示指定を優先し、選択後はモデルとの整合性を検証する。YAMLがなければ準備コマンドを案内して停止する。
+直接ROS launchする場合の`evs_tensor_config`指定は引き続き必要。ノード・topic・parameterの変更なし。

@@ -21,6 +21,7 @@ def add_evaluation(args):
         args.model_dir,
         overrides,
         enable_vgl=boolean(args.enable_vgl),
+        vslam_backend=getattr(args, "vslam_backend", "apt"),
     )
     mode=parameters['cuvslam']['tracking_mode']
     playback(root,args.bag,args.rate,extra_topics=imu_topics(root,mode))
@@ -48,6 +49,7 @@ def add_evaluation(args):
                 "visualize": "true",
                 "base_frame": base_frame,
                 "enable_vgl": args.enable_vgl,
+                "vslam_backend": getattr(args, "vslam_backend", "apt"),
                 "tracking_mode": str(mode),
                 "imu_frame": args.imu_frame,
                 "multicam_mode": args.multicam_mode,
@@ -81,6 +83,7 @@ def add_evaluation(args):
 
 def generate_launch_description():
     args = LaunchArguments()
+    args.add_arg("vslam_backend", "apt", choices=["apt", "fixed"], cli=True)
     for key in ("bag", "map_dir", "map_file", "lane_id", "line_type"):
         args.add_arg(key, cli=True)
     args.add_arg("model_dir", "", cli=True)

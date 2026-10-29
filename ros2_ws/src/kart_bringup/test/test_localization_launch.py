@@ -47,6 +47,7 @@ class LocalizationLaunchTest(unittest.TestCase):
         self.assertEqual(
             [a.name for a in arguments],
             [
+                "vslam_backend",
                 "enable_vgl",
                 "map_dir",
                 "model_dir",
@@ -63,7 +64,7 @@ class LocalizationLaunchTest(unittest.TestCase):
             ],
         )
         self.assertIsNotNone(arguments[0].default_value)
-        self.assertIsNone(arguments[1].default_value)
+        self.assertIsNone(arguments[2].default_value)
         self.assertEqual(sum(isinstance(a, OpaqueFunction) for a in entities), 1)
 
     def fixture(self):

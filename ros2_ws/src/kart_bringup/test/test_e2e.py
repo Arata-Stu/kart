@@ -10,6 +10,17 @@ ROOT = Path(__file__).resolve().parents[1] / "config/e2e"
 
 
 class E2EConfigTests(unittest.TestCase):
+    def test_throttle_selection_rejects_missing_output_and_conflicts(self):
+        from kart_bringup.e2e import throttle_selection
+        self.assertTrue(throttle_selection('', 'steer_only'))
+        self.assertTrue(throttle_selection('fixed', 'steer_throttle', 0.0))
+        self.assertFalse(throttle_selection('model', 'steer_throttle'))
+        for selection, mode, fixed in [('model', 'steer_only', None),
+                                        ('model', 'steer_throttle', 0.0),
+                                        ('invalid', 'steer_throttle', None)]:
+            with self.subTest(selection=selection, mode=mode, fixed=fixed), self.assertRaises(ValueError):
+                throttle_selection(selection, mode, fixed)
+
     def test_container_ownership_and_false_override(self):
         config = container_config(ROOT / "launch.json", {})
         self.assertTrue(config["create_container"])

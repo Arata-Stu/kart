@@ -106,9 +106,11 @@ def add_mission(args):
             validate_evs_tensor(args.evs_tensor_config, args.e2e_model_dir)
         elif not params["enable_color"]:
             raise ValueError("RGB E2E requires RGB (rgb_fps > 0)")
-        model_contract(args.e2e_model_dir)
+        _, output_mode = model_contract(args.e2e_model_dir)
         runtime = runtime_settings(args.e2e_model_dir)
         fixed_override = getattr(args, 'e2e_fixed_throttle', '')
+        from kart_bringup.e2e import throttle_selection
+        use_fixed = throttle_selection(getattr(args, 'e2e_throttle_mode', ''), output_mode, fixed_override)
         if fixed_override != '':
             validate_runtime(dict(runtime, fixed_throttle=float(fixed_override)))
         from kart_e2e.engine_cache import require_engine
@@ -206,7 +208,7 @@ def add_mission(args):
                     'model_dir': args.e2e_model_dir,
                     'recovery': recovery,
                     'drive_enabled': str(cfg['e2e_drive_enabled']).lower(),
-                    'use_fixed_throttle': 'true',
+                    'use_fixed_throttle': str(use_fixed).lower(),
                     'fixed_throttle': getattr(args, 'e2e_fixed_throttle', ''),
                 },
             )
@@ -230,6 +232,7 @@ def generate_launch_description():
         "parking_slot",
         "e2e_model_dir",
         "e2e_fixed_throttle",
+        "e2e_throttle_mode",
         "evs_backend",
         "evs_serial",
         "evs_bias_file",

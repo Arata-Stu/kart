@@ -1,0 +1,6 @@
+{
+  "ros_revision": "e4dc8f59816dfca387bcb92364ecaf9207216475",
+  "cuvslam_revision": "33da60662b27c0c5b63e0597bd778066af2731ed",
+  "ros_repository": "https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_visual_slam",
+  "cuvslam_repository": "https://github.com/nvidia-isaac/cuVSLAM"
+}

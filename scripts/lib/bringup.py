@@ -92,6 +92,7 @@ def validate_mode_options(args):
     groups = [
         (("rgb_fps", "infra_fps", "rgb_profile", "infra_profile", "imu_profile", "device", "run_name"), not offline),
         (("bag", "rate"), offline),
+        (("e2e_throttle_mode",), args.mode == "e2e"),
         (("e2e_model_dir",), args.mode in ("e2e", "e2e-latency")),
         (("multicam_mode",), args.mode in ("drive", "eval")),
         (("base_frame", "imu_frame", "tracking_mode"), args.mode == "eval"),
@@ -147,7 +148,7 @@ def main():
     parser.add_argument("--evs-image", action=argparse.BooleanOptionalAction, default=None,
                         help="イベント可視化画像の生成をON/OFF。未指定はYAMLを保持")
     parser.add_argument("--evs-serial", default="")
-    parser.add_argument("--evs-tensor-config", default="", help="Model-derived full OpenEB tensor YAML")
+    parser.add_argument("--evs-tensor-config", default="", help="Full OpenEB tensor YAML; E2E defaults to model_dir/openeb_tensor.yaml")
     parser.add_argument("--evs-bias-file", default="", help=".bias path; @defaultでカメラ既定")
     parser.add_argument("--bias-root", type=Path, default=ROOT / "bias/evs")
     parser.add_argument("--foxglove", action="store_true")
@@ -157,6 +158,8 @@ def main():
     )
     parser.add_argument("--auto-fixed-throttle", type=float, default=None,
                         help="Collection AUTO throttle, manual steering (collect/drive): -1 normal, 0..speed_scale fixed (not vehicle speed)")
+    parser.add_argument("--e2e-throttle-mode", choices=("fixed", "model"), default="",
+                        help="E2E throttle: fixed (default) or model (requires steer_throttle)")
     parser.add_argument("--e2e-fixed-throttle", type=float, default=None,
                         help="E2E model steering + fixed throttle; defaults to model runtime metadata")
     from kart_bringup.recovery import CHOICES, LABELS as RECOVERY_LABELS, configuration as recovery_configuration, validate_inputs
@@ -164,7 +167,7 @@ def main():
                         help="自動復帰: off / infra_imu / rgb_imu / evs_assisted（未指定はYAML）")
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--e2e-model-dir", default="")
-    parser.add_argument("--eval-localization", choices=("vslam", "vgl", "fresh", "e2e_latency"), default=None)
+    parser.add_argument("--eval-localization", choices=("vslam", "fixed", "vgl", "fresh", "e2e_latency"), default=None)
     parser.add_argument("--multicam-mode", choices=("0","1","2"), default="", help="速度・精度: 0=Moderate / 1=Performance / 2=Precision")
     parser.add_argument("--tracking-mode", choices=("0", "1"), default="", help="offline評価: 0=stereo VO / 1=VIO")
     parser.add_argument("--base-frame", default="", help="offline評価の基準TF frame（例: camera_link）")
@@ -257,9 +260,9 @@ def main():
             )
         if args.mode == "eval" and args.eval_localization is None:
             args.eval_localization = choose(
-                "オフライン解析", (["vslam_vio"] if args.tracking_mode == "1" else ["vslam"] if args.tracking_mode == "0" else ["vslam", "vslam_vio"]) + ["vgl"] +
+                "オフライン解析", (["vslam_vio"] if args.tracking_mode == "1" else ["vslam"] if args.tracking_mode == "0" else ["vslam", "vslam_vio"]) + ["fixed", "vgl"] +
                 (["fresh_vio" if args.tracking_mode == "1" else "fresh_vo"] if args.tracking_mode else ["fresh_vo", "fresh_vio"]) + ["e2e_latency"],
-                lambda v: {"e2e_latency": "E2E latency（RGB bag → TensorRT → 制御topic、車両出力なし）", "vslam": "保存mapでVO localization", "vslam_vio": "保存mapでVIO localization（左右画像＋IMU）", "vgl": "VSLAM＋VGL（準備済みbundle）",
+                lambda v: {"fixed": "固定mapでlocalization（NVIDIAコピー・特徴点群・軌跡）", "e2e_latency": "E2E latency（RGB bag → TensorRT → 制御topic、車両出力なし）", "vslam": "保存mapでVO localization", "vslam_vio": "保存mapでVIO localization（左右画像＋IMU）", "vgl": "VSLAM＋VGL（準備済みbundle）",
                            "fresh_vo": "mapなしVO評価（左右画像・特徴点群・軌跡）",
                            "fresh_vio": "mapなしVIO評価（左右画像＋IMU・特徴点群・軌跡）"}[v])
             if args.eval_localization == "vslam_vio":
@@ -272,7 +275,7 @@ def main():
                 args.eval_localization = "fresh"
         if args.mode == "eval" and args.eval_localization == "e2e_latency":
             args.mode = "e2e-latency"
-        if args.mode == "eval" and args.eval_localization in ("fresh", "vgl") and not args.tracking_mode:
+        if args.mode == "eval" and args.eval_localization in ("fresh", "vgl", "fixed") and not args.tracking_mode:
             args.tracking_mode = choose("追跡方式", ["0", "1"], lambda v: "stereo VO（IMUなし）" if v == "0" else "VIO（IMUあり）")
         if args.mode in ("drive","eval") and not args.multicam_mode:
             import yaml
@@ -294,7 +297,7 @@ def main():
             args.lane_id, args.line_type = choose(
                 "lane / 追従ライン", options, lambda x: " / ".join(x)
             )
-            vslam_only = args.mode == "eval" and args.eval_localization == "vslam"
+            vslam_only = args.mode == "eval" and args.eval_localization in ("vslam", "fixed")
             if not args.map_dir:
                 from bringup_assets import paired_maps, paired_models, select_related
                 candidates=discover(args.map_root, "vslam" if vslam_only else "bundle")
@@ -408,6 +411,11 @@ def main():
         raise ValueError("evalでは実EVSを起動しません")
     if args.imu_profile and args.mode in ("eval", "e2e-latency"):
         raise ValueError("--imu-profileは実機のcollect/environment/drive/e2eで使用してください")
+    if args.mode == 'e2e' and args.evs:
+        from kart_e2e.contract import input_contract
+        if input_contract(args.e2e_model_dir)[0] == 'evs':
+            from kart_bringup.e2e import select_evs_tensor
+            args.evs_tensor_config = select_evs_tensor(args.e2e_model_dir, args.evs_tensor_config)
     if args.evs:
         paths, overrides = pipeline_configuration(config / "sensors", args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config, args.evs_aggregation, "" if args.evs_image is None else str(args.evs_image).lower())
         if args.evs_bias_file and args.evs_bias_file != DEFAULT_BIAS:
@@ -446,7 +454,8 @@ def main():
             overrides.update({'base_frame':base,'use_sim_time':True})
             overrides.update({k:getattr(args,k) for k in ('tracking_mode','imu_frame') if getattr(args,k)})
         parameters, _, _, profile = resolve(
-            config / "localization", args.map_dir, args.model_dir, overrides=overrides, enable_vgl=not vslam_only
+            config / "localization", args.map_dir, args.model_dir, overrides=overrides, enable_vgl=not vslam_only,
+            vslam_backend="fixed" if args.eval_localization == "fixed" else "apt"
         )
         if args.mode == "drive":
             from kart_bringup.mission import validate_localization_imu
@@ -492,14 +501,24 @@ def main():
             raise ValueError("RGB E2EにはRGBが必要です")
         _, mode = model_contract(args.e2e_model_dir)
         runtime = runtime_settings(args.e2e_model_dir)
-        import math
-        if interactive and args.e2e_fixed_throttle is None:
+        from kart_bringup.e2e import throttle_selection
+        if interactive and not args.e2e_throttle_mode and args.e2e_fixed_throttle is None:
+            args.e2e_throttle_mode = choose(
+                'E2Eスロットル', ['fixed', 'model'] if mode == 'steer_throttle' else ['fixed'],
+                lambda value: '固定スロットル' if value == 'fixed' else 'モデル出力（可変スロットル）')
+        args.e2e_throttle_mode = args.e2e_throttle_mode or 'fixed'
+        use_fixed = throttle_selection(args.e2e_throttle_mode, mode, args.e2e_fixed_throttle)
+        if use_fixed and interactive and args.e2e_fixed_throttle is None:
             raw = input(f'E2E固定スロットル 0..{runtime["max_throttle"]} [{runtime["fixed_throttle"]}] > ').strip()
             args.e2e_fixed_throttle = float(raw) if raw else runtime['fixed_throttle']
-        fixed = runtime['fixed_throttle'] if args.e2e_fixed_throttle is None else args.e2e_fixed_throttle
-        if not math.isfinite(fixed) or not 0 <= fixed <= runtime['max_throttle']:
-            raise ValueError('E2E固定スロットルは有限値で0..モデルのmax_throttle以内にしてください')
-        print(f"E2E AUTO: モデルのステア + 固定スロットル {fixed}; max={runtime['max_throttle']}; model={mode}")
+        if use_fixed:
+            from kart_e2e.contract import validate_runtime
+            fixed = runtime['fixed_throttle'] if args.e2e_fixed_throttle is None else args.e2e_fixed_throttle
+            validate_runtime(dict(runtime, fixed_throttle=fixed))
+            throttle_label = f'固定スロットル {fixed}'
+        else:
+            throttle_label = 'モデルの可変スロットル'
+        print(f"E2E AUTO: モデルのステア + {throttle_label}; max={runtime['max_throttle']}; model={mode}")
     if args.mode != "eval":
         from kart_bag_manager.recorder import Settings
 
@@ -514,6 +533,7 @@ def main():
         "mode": args.mode,
         "recovery": args.recovery,
         "auto_fixed_throttle": None if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle),
+        "e2e_throttle_mode": args.e2e_throttle_mode,
         "e2e_fixed_throttle": None if args.e2e_fixed_throttle is None else str(args.e2e_fixed_throttle),
         "rgb_profile": args.rgb_profile,
         "infra_profile": args.infra_profile,
@@ -574,6 +594,7 @@ def main():
                   "visualize": "true", "rviz": "true"}
     elif args.mode == "eval":
         values["enable_vgl"] = str(args.eval_localization == "vgl").lower()
+        values["vslam_backend"] = "fixed" if args.eval_localization == "fixed" else "apt"
     command = ["ros2", "launch", "kart_bringup", launch] + [
         f"{k}:={v}" for k, v in values.items() if v is not None and v != ""
     ]

@@ -512,3 +512,17 @@ start/stopは対象Wi-Fi経由のSSHを切断し得るため、ローカル端�
 
 仕様出典: [NetworkManager nmcli](https://networkmanager.pages.freedesktop.org/NetworkManager/NetworkManager/nmcli.html)。
 構文・mockテストとJetsonでのスクリプト実行確認は別。
+
+### EVSモデルのYAML自動準備
+
+`scripts/e2e_trt.sh <model_dir>`はEVSの`openeb_tensor.yaml`も自動生成・検証する。
+基底はbringupのtensor pipeline設定で選ばれたbackendの全設定YAML。
+engine再利用時も欠けたYAMLを生成し、既存YAMLは検証して再利用する。不整合時は停止し、
+`--force`でも既存YAMLを上書きしない。RGBでは生成しない。
+`bringup.sh`のE2Eでは`--evs-tensor-config`未指定時にモデル内のYAMLを自動選択する。
+明示指定を優先し、選択後はモデルとの整合性を検証する。YAMLがなければ準備コマンドを案内して停止する。
+直接ROS launchする場合の`evs_tensor_config`指定は引き続き必要。ノード・topic・parameterの変更なし。
+
+固定マップ版のoffline評価は`bash scripts/bringup.sh --mode eval --eval-localization fixed`。
+対話メニューにも固定mapを追加。既存のbag選択・HDMap・RVizを使用し、特徴点群・軌跡・Odometryを表示する。
+`kart_visual_localization`のビルドが必要。従来の`vslam`/`vgl`/`fresh`は変更しない。

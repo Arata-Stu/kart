@@ -53,7 +53,8 @@ def test_model_then_precision_and_command(tmp_path,requested,selected):
     validate.assert_called_once()
 
 
-def test_explicit_precision_reuses_only_matching_engine(tmp_path):
+@pytest.mark.parametrize('modality', ['rgb', 'evs'])
+def test_explicit_precision_reuses_only_matching_engine(tmp_path, modality):
     (tmp_path/'metadata.json').write_text('{}')
     engine=tmp_path/'model.plan';engine.write_bytes(b'old')
     engine.with_suffix('.json').write_text('{"precision":"fp16"}')
@@ -62,13 +63,17 @@ def test_explicit_precision_reuses_only_matching_engine(tmp_path):
     with patch.object(sys,'argv',['e2e_trt.py',str(tmp_path),'--fp16']), \
          patch.object(module,'model_contract',return_value=(paths,'steer_only')), \
          patch.object(module,'runtime_settings'), \
+         patch.object(module,'input_contract',return_value=(modality,'image',[1,3,120,212])), \
          patch.object(module,'fingerprint',return_value={'tensorrt':'10.7'}), \
          patch.object(module,'reusable',return_value=True), \
          patch.object(module,'choose') as choose, \
+         patch('kart_bringup.e2e.prepare_evs_tensor', return_value=tmp_path/'openeb_tensor.yaml') as prepare, \
          patch.object(module.shutil,'which',return_value=str(binary)), \
          patch.object(module.subprocess,'Popen') as process:
         module.main()
     choose.assert_not_called();process.assert_not_called()
+
+    assert prepare.call_count == (1 if modality == 'evs' else 0)
 
 
 def test_precision_change_rebuild_failure_preserves_previous_engine(tmp_path):
@@ -80,6 +85,7 @@ def test_precision_change_rebuild_failure_preserves_previous_engine(tmp_path):
     with patch.object(sys,'argv',['e2e_trt.py',str(tmp_path),'--fp32']), \
          patch.object(module,'model_contract',return_value=(paths,'steer_only')), \
          patch.object(module,'runtime_settings'), \
+         patch.object(module,'input_contract',return_value=('rgb','image',[1,3,120,212])), \
          patch.object(module,'fingerprint',return_value={'tensorrt':'10.7'}), \
          patch.object(module,'reusable',return_value=True), \
          patch.object(module.shutil,'which',return_value=str(binary)), \

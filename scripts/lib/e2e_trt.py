@@ -72,6 +72,12 @@ def main():
         raise ValueError("trtexecがありません。kart Docker内で実行してください")
     with engine.with_suffix(".lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if input_contract(model)[0] == 'evs':
+            from kart_bringup.e2e import prepare_evs_tensor
+            from kart_bringup.evs import pipeline_configuration
+            configs, _ = pipeline_configuration(ROOT / 'ros2_ws/src/kart_bringup/config/sensors')
+            tensor_config = prepare_evs_tensor(model, configs[1])
+            print(f'EVS tensor設定（生成／検証済み）: {tensor_config}')
         report_path = engine.with_suffix(".json")
         if (
             not args.force

@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import yaml
-from kart_bringup.localization import resolve
+from kart_bringup.localization import resolve, vslam_package
 from kart_bringup.prepare_vgl_map import build
 from kart_bringup.vgl_assets import CONFIG_FILES, validate_bundle
 
@@ -50,6 +50,15 @@ class LocalizationTest(unittest.TestCase):
     def write(self, path, value):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(value)
+
+    def test_fixed_backend_keeps_replay_contract(self):
+        apt = resolve(CONFIG, self.source, '', enable_vgl=False)
+        fixed = resolve(CONFIG, self.source, '', enable_vgl=False, vslam_backend='fixed')
+        self.assertEqual(fixed, apt)
+        self.assertEqual(vslam_package('fixed'), 'kart_visual_localization')
+        self.assertEqual(vslam_package('apt'), 'isaac_ros_cuvslam')
+        with self.assertRaises(ValueError):
+            vslam_package('unknown')
 
     def run_official(self, command, **kwargs):
         if "--help" in command:

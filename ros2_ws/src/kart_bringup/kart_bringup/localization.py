@@ -8,11 +8,20 @@ from .vgl_assets import validate_bundle
 from .multicam import multicam_value
 
 
+def vslam_package(backend):
+    """Select one implementation; never load both into the same container."""
+    packages = {"apt": "isaac_ros_cuvslam", "fixed": "kart_visual_localization"}
+    if backend not in packages:
+        raise ValueError("vslam_backend must be apt or fixed")
+    return packages[backend]
+
+
 def resolve(
-    config_dir, map_dir, model_dir, overrides=None, inspect=None, enable_vgl=True
+    config_dir, map_dir, model_dir, overrides=None, inspect=None, enable_vgl=True, vslam_backend="apt"
 ):
     import yaml
 
+    vslam_package(vslam_backend)
     config = Path(config_dir)
     workflow = json.loads((config / "workflow.json").read_text())
     required = {
@@ -37,7 +46,8 @@ def resolve(
         ("cuvslam", "visual_slam"),
         ("vgl", "visual_global_localization"),
     ):
-        params[name] = yaml.safe_load((config / f"{name}.yaml").read_text())[
+        filename = "fixed_localization" if name == "cuvslam" and vslam_backend == "fixed" else name
+        params[name] = yaml.safe_load((config / f"{filename}.yaml").read_text())[
             f"/**/{node}"
         ]["ros__parameters"]
     overrides = overrides or {}

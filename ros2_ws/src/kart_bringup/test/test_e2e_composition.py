@@ -115,10 +115,15 @@ class CompositionTests(unittest.TestCase):
         args.mode='e2e';args.recovery='off';args.enable_bridge='false'
         with (patch('kart_e2e.contract.routing_settings',return_value=routing),
               patch('kart_e2e.contract.input_contract',return_value=('rgb','image',[1,3,120,212])),
-              patch('kart_e2e.sections.validate_maps'),patch('kart_e2e.contract.model_contract'),
+              patch('kart_e2e.sections.validate_maps'),patch('kart_e2e.contract.model_contract', return_value=({}, 'steer_throttle')),
               patch('kart_e2e.contract.runtime_settings'),patch('kart_e2e.engine_cache.require_engine'),
               patch.object(module,'load_transforms'),patch.object(module,'resolve',return_value=({'cuvslam':{'tracking_mode':0}}, {}, {}, {'input_shape':None}))):
-            module.add_mission(args)
+            for selection, expected in [('', 'true'), ('fixed', 'true'), ('model', 'false')]:
+                args.e2e_throttle_mode = selection
+                lu.include.reset_mock()
+                module.add_mission(args)
+                selected = {call.args[1]:call.kwargs['launch_arguments'] for call in lu.include.call_args_list}
+                self.assertEqual(selected['launch/e2e.launch.py']['use_fixed_throttle'], expected)
         calls={call.args[1]:call.kwargs['launch_arguments'] for call in lu.include.call_args_list}
         self.assertIn('launch/localization.launch.py',calls)
         self.assertNotIn('launch/tracking.launch.py',calls)

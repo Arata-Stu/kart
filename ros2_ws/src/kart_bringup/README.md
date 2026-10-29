@@ -3,6 +3,14 @@
 平坦路を走行するRCカー向けに、`enable_ground_constraint_in_odometry`と
 `enable_ground_constraint_in_slam`はともに既定`true`（平面制約ON）。
 
+固定地図版は`fixed_localization.launch.py`で別processとして起動する。
+NVIDIA ROS側C++ソースをそのまま保持した`kart_visual_localization`を使い、
+`config/localization/fixed_localization.yaml`は既存cuvslam設定と同値にする。
+`map_dir`・`use_sim_time`・`localize_on_startup`は明示時だけ上書きする。
+TF・topic・service・診断は上流と同じ。既存apt版を停止してから切り替える。
+固定参照取得後のsave_mapは失敗を返す。詳細と検証範囲は
+[kart_visual_localization README](../kart_visual_localization/README.md)を参照。
+
 ## 車両特性の手動記録
 
 `fixed_command:=true throttle:=0.10 steering:=0.0`を追加すると、
@@ -837,7 +845,7 @@ ROSノード・topic・launch引数の追加はない。詳細はconfig/mapping/
 RAW dataset・制御head学習・ONNX・TensorRT buildを記載。
 missionのe2eはONNX metadataのmodalityでRGB/EVSを選ぶ。
 EVSにはenable_evs=trueと、モデルから生成した全OpenEB YAMLのevs_tensor_configが必須。
-CLI追加`--evs-tensor-config`、mission追加`evs_tensor_config`は既定空（通常のsensor YAML保持）。
+CLI `--evs-tensor-config`は既定空。E2Eではモデル内の`openeb_tensor.yaml`を選択し、他用途では通常のsensor YAMLを保持する。mission引数`evs_tensor_config`は既定空。
 collectでも指定でき、EVSを有効化してsensor moduleへ渡す。
 
 ```bash
@@ -905,20 +913,26 @@ bash scripts/bringup.sh --mode collect --auto-fixed-throttle 0.10 --run-name aut
 
 CLI/launchの旧`manual_fixed_throttle`は`auto_fixed_throttle`へ変更した。
 実運用設定はkart_bringup/config/input/joy_manager.yaml、未指定ならYAMLを保持する。
-TUIの「AUTOスロットル」で通常／固定を選ぶ。collect/driveで利用可能。E2Eでは収集用の固定設定を無効化し、モデルのステア＋E2E専用固定スロットルを使用する。
+TUIの「AUTOスロットル」で通常／固定を選ぶ。collect/driveで利用可能。E2Eでは収集用の固定設定を無効化し、モデルのステア＋E2E専用の固定／モデル出力スロットルを使用する。
 RGB/EVS教師抽出はbag内の固定AUTO有効設定を自動検出する。固定収集bagでは固定AUTOだけを採用し、MANUALの復帰・調整区間を全て除外する。通常bagは従来どおりMANUALだけを採用する。
 ROS結合・実車動作は未確認。portable testで固定出力、直接切替、異常ラッチ、HOST handshakeを検証する。
 
 ## 収集用固定スロットルとE2E走行の分離
 
 - collect/driveの`--auto-fixed-throttle`（Joy parameter `auto_fixed_throttle`）は手動ステア収集用。
-- `--mode e2e`はAUTOでモデルのステア＋固定スロットル。収集用Joy固定は必ず-1へ上書きし、
+- `--mode e2e`はAUTOでモデルのステア＋選択したスロットル制御。収集用Joy固定は必ず-1へ上書きし、
   muxの`auto_use_teleop=false`で`/auto/control_cmd`を車両へ通す。MANUALは通常の手動操作。
 - E2E専用CLI `--e2e-fixed-throttle`／mission引数 `e2e_fixed_throttle` は未指定なら
   metadataのruntime.fixed_throttleを使い、明示時は0..runtime.max_throttleの有限値に限る。
   TUIもE2E専用の入力欄を使い、収集用の固定選択を表示しない。
-- missionはRGB/EVSの双方に`use_fixed_throttle=true`を渡す。モデルがsteer_throttleでも
-  ステアだけを操舵に用い、駆動量は固定値。モデルの出力数・形式は書き換えない。
+- `--e2e-throttle-mode fixed|model`／mission引数`e2e_throttle_mode`（空欄・未指定は`fixed`）で選択する。
+  TUIでは「E2Eスロットル」を選び、固定時だけ数値を入力する。明示した`--e2e-fixed-throttle`は既存どおり固定を選ぶ。
+- `fixed`はRGB/EVS双方へ`use_fixed_throttle=true`を渡す。`model`はfalseを渡し、
+  `steer_throttle`モデルのスロットル出力を`runtime.max_throttle`で制限して使う。
+  値は正規化スロットル（車速m/sではない）。`steer_only`でのmodel指定、modelと固定値の併用は起動前に拒否する。
+  選択は今回の起動だけに適用し、モデルmetadata・出力形式は変更しない。
+  可変の例: `bash scripts/bringup.sh --mode e2e --e2e-model-dir /workspaces/models/policy --e2e-throttle-mode model`。
+  EVSでは加えて`--evs --evs-tensor-config /workspaces/models/policy/openeb_tensor.yaml`を指定する。
 - decoderの新しい起動時parameter `use_fixed_throttle` はbool、ノード/YAML既定false。
   単独launchにも同名の任意引数を提供する。既存topic・QoS・watchdog・STOP処理は同じ。
 
@@ -1489,3 +1503,40 @@ ROS/Jetson/実車での動作・計算時間は対象環境での確認が必要
 bringup.shのVGL候補選択はHDMapに同梱したcuVSLAM内容識別子、モデルはbundleのONNX SHA256で
 絞り込む。一致候補が1つのときだけ自動採用し、複数／未判定は選択を残す。
 明示CLI指定と最終localization.resolve検証を維持する。新しいROS parameterはない。
+
+### EVSモデルのYAML自動準備
+
+`scripts/e2e_trt.sh <model_dir>`はEVSの`openeb_tensor.yaml`も自動生成・検証する。
+基底はbringupのtensor pipeline設定で選ばれたbackendの全設定YAML。
+engine再利用時も欠けたYAMLを生成し、既存YAMLは検証して再利用する。不整合時は停止し、
+`--force`でも既存YAMLを上書きしない。RGBでは生成しない。
+`bringup.sh`のE2Eでは`--evs-tensor-config`未指定時にモデル内のYAMLを自動選択する。
+明示指定を優先し、選択後はモデルとの整合性を検証する。YAMLがなければ準備コマンドを案内して停止する。
+直接ROS launchする場合の`evs_tensor_config`指定は引き続き必要。ノード・topic・parameterの変更なし。
+
+## 固定マップ版のoffline可視化
+
+既存offline評価に`--eval-localization fixed`を追加。
+対話操作は`bash scripts/bringup.sh` →「オフライン解析」→
+「固定mapでlocalization（NVIDIAコピー・特徴点群・軌跡）」→ VO/VIO →
+HDMap・ライン・対応VSLAM地図・bagを選ぶ。
+
+```bash
+bash scripts/bringup.sh --mode eval --eval-localization fixed
+```
+
+非対話では`--map-file /absolute/hdmap.json --lane-id <lane> --line-type <line>`と
+`--map-dir /absolute/map_bundle --bag /absolute/bag --tracking-mode 0`を指定する。
+既存evaluation.launch.pyを使い、RVizで固定参照landmark、観測特徴点、LC点群、
+VO/SLAM path、Odometry、pose graph、HDMapを表示する。
+`enable_slam_visualization/enable_landmarks_view/enable_observations_view=true`を
+offline実行時だけ上書きし、通常運用YAMLは変えない。
+入力は左右Infra・CameraInfo・tf_static、VIO時のみIMU。古い動的TFや推定出力は再生しない。
+clockをbagに合わせ、購読準備後に再生を開始する。センサ実機・制御・VGLは起動しない。
+初期探索は既存VSLAM単独offlineと同じ原点付近。地図とbagの開始位置が離れる場合は
+初期姿勢指定が必要。初期localization前の一時地図と、成功後の固定参照地図を区別する。
+
+直接launchする場合は`evaluation.launch.py vslam_backend:=fixed enable_vgl:=false`。
+既定`vslam_backend:=apt`は従来どおり。固定版でも上流Component classを保持し、
+選択した一方だけをVSLAM containerへロードする。同一containerへ両方を混載しない。
+package/private coreのビルドが必要。portable確認とROS/CUDA/RViz実行確認は別で、後者は未確認。

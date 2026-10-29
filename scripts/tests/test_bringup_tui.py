@@ -178,6 +178,31 @@ class FzfTests(unittest.TestCase):
 
 
 class FreshDiagnosticTests(unittest.TestCase):
+    def test_fixed_map_offline_cli_uses_existing_evaluation(self):
+        config = module.ROOT / "ros2_ws/src/kart_bringup/config"
+        flow = json.loads((config / "localization/workflow.json").read_text())
+        topics = [flow[k] for k in ("left_image", "right_image", "left_info", "right_info")] + ["/tf_static"]
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            bag = root / 'bag'
+            bag.mkdir()
+            rows = [{"topic_metadata": {"name": t}, "message_count": 10} for t in topics]
+            (bag / 'metadata.yaml').write_text(yaml.safe_dump({"rosbag2_bagfile_information": {"topics_with_message_count": rows}}))
+            maps = root / 'map'
+            maps.mkdir()
+            (maps / 'map.mdb').write_text('fixture')
+            output = io.StringIO()
+            argv = ['bringup.py', '--mode', 'eval', '--eval-localization', 'fixed',
+                    '--bag', str(bag), '--map-dir', str(maps), '--map-file', '/hdmap.json',
+                    '--lane-id', 'lane', '--line-type', 'centerline', '--tracking-mode', '0', '--dry-run']
+            with patch.object(sys, 'argv', argv), patch.object(sys.stdin, 'isatty', return_value=False), patch('kart_bringup.mission.hdmap_choices', return_value=[('lane', 'centerline')]), redirect_stdout(output):
+                module.main()
+            text = output.getvalue()
+            self.assertIn('evaluation.launch.py', text)
+            self.assertIn('vslam_backend:=fixed', text)
+            self.assertIn('enable_vgl:=false', text)
+            self.assertIn('tracking_mode:=0', text)
+
     def test_interactive_fourth_mode_skips_maps_and_models(self):
         config = module.ROOT / "ros2_ws/src/kart_bringup/config"
         flow = json.loads((config / "localization/workflow.json").read_text())

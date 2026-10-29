@@ -50,3 +50,27 @@ evaluation.launch.pyはsensor/vehicle/controlを起動せず、左右画像・Ca
 /clockでlocalization/HDMap/RVizの時間を統一し、入力購読準備後に1倍速開始。
 過去の/tf（動的TF）は使わずVSLAMがTFを所有する。校正TFが必要。
 Notebookのみvisualize=true。RVizは公式cuVSLAM設定をベースとする。正解軌跡なしに精度値は主張しない。
+
+## 固定参照地図の独立localization
+
+`kart_visual_localization`はNVIDIA Isaac ROS release-5.0のコピーを基準とする。
+ROS側のsrc/includeは上流commitとバイト一致を維持する。独自Pythonノード、照合周期、
+有効期限、補正上限、診断、速度推定、センサ同期を追加しない。
+変更は固定参照地図に不可欠なcuVSLAM内部パッチと別pkg/libとしてのビルド分離に限定する。
+上流commit、パッチ、照合手順をpackageに保持し、差分を監査できるようにする。
+
+標準LocalizeInMap成功後、読み取り専用の参照地図を保持し、ライブ軌跡とのUnionWithをしない。
+以後の照合対象・地図可視化はその参照地図。参照へのキーフレーム追加、統計更新、PGOを禁止する。
+VO内部とライブ軌跡グラフは上流どおり更新する。初期localization前は上流の一時SLAM動作を保つ。
+地図照合の解をライブ軌跡へ適用し、平面制約・tailによる現在時刻への伝播を維持する。
+固定参照取得後のsave_mapは失敗を返す。Resetは上流同様に初期状態へ戻る。
+
+apt版を上書きしない。同じC++ namespace、node/topic/service名を保持するため、
+apt版との同時起動や同一containerへの混載はしない。単体processで切り替える。
+運用parameterは既存cuvslam.yamlと同値のfixed_localization.yamlを使う。
+ソース一致と構文確認、ROS/CUDA結合、bagでの地図不変性・精度、実車確認を区別する。
+
+固定マップのoffline評価も既存evaluation/replay/RVizを再利用する。
+`vslam_backend=apt|fixed`は起動pkgの選択だけを担い、同一VSLAM containerには一方のみをロードする。
+CLI/TUIの`--eval-localization fixed`はVGLなしの固定参照評価へ接続する。
+特徴点群の可視化は既存visualize引数の実行時overrideで有効化し、通常のノード既定を変更しない。

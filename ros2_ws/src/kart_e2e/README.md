@@ -435,16 +435,12 @@ Torch、DINOv3 Pythonソース、encoder.ptは推論には不要。
 # 実行先GPUで明示build。binding名・FP32・形状・hash・GPU/TRT版を検証する。
 bash scripts/e2e_trt.sh /workspaces/models/evs_control_v1
 
-# 実行時の全OpenEB設定をモデルから作成。選ぶbackendのbaseを使う。
-python -m kart_e2e.evs_contract \
-  --model-json /workspaces/models/evs_control_v1/metadata.json \
-  --base-config /workspaces/ros2_ws/src/kart_bringup/config/sensors/openeb_tensor_cuda_async.yaml \
-  --output /workspaces/models/evs_control_v1/openeb_tensor.yaml
+# EVSでは上のe2e_trt.shがopeneb_tensor.yamlも自動生成・検証する。
+# 検証済みengineを再利用する場合も、欠けているYAMLを生成する。
 
 # 実車AUTO muxへ接続するmission。起動ではAUTOも録画も開始しない。
 bash scripts/bringup.sh --mode e2e --evs \
   --e2e-model-dir /workspaces/models/evs_control_v1 \
-  --evs-tensor-config /workspaces/models/evs_control_v1/openeb_tensor.yaml \
   --rgb-fps 0 --infra-fps 0
 ```
 
@@ -960,9 +956,8 @@ python -m kart_e2e.train --modality evs --architecture simple_cnn --initializati
   --repo /workspaces/python_ws/dinov3 --output /workspaces/runs/evs_cnn --device cuda
 python -m kart_e2e.export_onnx /workspaces/runs/evs_cnn/best.pt /workspaces/models/evs_cnn \
   --repo /workspaces/python_ws/dinov3
-python -m kart_e2e.evs_contract --model-json /workspaces/models/evs_cnn/metadata.json \
-  --base-config /workspaces/ros2_ws/src/kart_bringup/config/sensors/openeb_tensor_cuda_async.yaml \
-  --output /workspaces/models/evs_cnn/openeb_tensor.yaml
+# 以下は実行先Jetsonで実行。TensorRT engineとEVS YAMLを準備する。
+bash scripts/e2e_trt.sh /workspaces/models/evs_cnn
 ```
 
 ONNXは`input_tensor=[1,20,120,160]`、出力`control=[1,1|2]`（Multi-headはhead数倍）。
@@ -1500,3 +1495,15 @@ source時刻が未来・無効ならsource ageは空欄。時計の飛びによ�
 正常終了時には残りをdrainし、dropがあればstderrにも累計を出す。disk障害はstderrへ通知して記録を停止する。
 強制終了時には未書き出し行を失う可能性がある。portable C++ testはCSV内容・drain・既存file拒否を確認する。
 ROS/CUDA結合・header伝搬・RGB/EVS実機の時刻精度と負荷はターゲットで確認が必要。
+
+### EVS実行設定の自動準備
+
+`e2e_trt.sh`はEVSモデルの`metadata.json`から`openeb_tensor.yaml`を生成する。
+全設定の基底はbringupの`config/sensors/openeb_tensor_pipeline.yaml`で選ばれたbackendのYAML。
+生成後はモデル入力との整合性を検証して公開する。既存ファイルは検証して再利用し、
+不整合はエラーにする（`--force`でもYAMLは上書きしない）。RGBには生成しない。
+`bringup.sh --mode e2e --evs --e2e-model-dir <dir>`は同梱YAMLを自動選択・検証する。
+`--evs-tensor-config <path>`は明示指定を優先する。独自backend基底が必要な場合は、
+従来の`python -m kart_e2e.evs_contract --model-json ... --base-config ... --output ...`も使用できる。
+ROSノード・topic・parameterの追加なし。自動選択はCLI層で行い、直接ROS launchする場合は
+従来どおり`evs_tensor_config`を指定する。

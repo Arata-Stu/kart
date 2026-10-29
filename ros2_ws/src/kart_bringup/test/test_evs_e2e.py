@@ -112,16 +112,23 @@ class EvsE2ETests(unittest.TestCase):
                         onnx_sha256=hashlib.sha256(b'metadata fixture').hexdigest())
             (model / 'metadata.json').write_text(json.dumps(data))
             config = model / 'openeb_tensor.yaml'
-            subprocess.run([sys.executable, '-m', 'kart_e2e.evs_contract',
-                            '--model-json', str(model / 'metadata.json'),
-                            '--base-config', str(PACKAGE / 'config/sensors/openeb_tensor_cuda_async.yaml'),
-                            '--output', str(config)], check=True, capture_output=True, text=True)
+            from kart_bringup.e2e import prepare_evs_tensor, select_evs_tensor
+            base = PACKAGE / 'config/sensors/openeb_tensor_cuda_async.yaml'
+            with self.assertRaisesRegex(ValueError, 'e2e_trt.sh'):
+                select_evs_tensor(model)
+            self.assertEqual(prepare_evs_tensor(model, base), config)
+            original_bytes = config.read_bytes()
+            self.assertEqual(prepare_evs_tensor(model, base), config)
+            self.assertEqual(config.read_bytes(), original_bytes)
+            explicit = model / 'custom.yaml'
+            explicit.write_bytes(original_bytes)
+            self.assertEqual(select_evs_tensor(model, str(explicit)), str(explicit))
             generated = validate_evs_tensor(config, model)
             original = yaml.safe_load((PACKAGE / 'config/sensors/openeb_tensor_cuda_async.yaml').read_text())['/**/event_tensor']['ros__parameters']
             self.assertEqual(set(generated), set(original))
             result = subprocess.run([sys.executable, str(ROOT / 'scripts/lib/bringup.py'),
                                      '--mode', 'e2e', '--evs', '--no-bridge', '--dry-run',
-                                     '--e2e-model-dir', str(model), '--evs-tensor-config', str(config),
+                                     '--e2e-model-dir', str(model),
                                      '--rgb-fps', '0', '--infra-fps', '0'], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('evs_tensor_config:=', result.stdout)
@@ -140,3 +147,12 @@ class EvsE2ETests(unittest.TestCase):
             invalid = subprocess.run(command+['--auto-fixed-throttle', '0.1'], capture_output=True, text=True)
             self.assertNotEqual(invalid.returncode, 0)
             self.assertIn('--e2e-fixed-throttle', invalid.stderr)
+
+            invalid_yaml = yaml.safe_load(config.read_text())
+            invalid_yaml['/**/event_tensor']['ros__parameters']['width'] = 999
+            config.write_text(yaml.safe_dump(invalid_yaml))
+            before = config.read_bytes()
+            with self.assertRaises(ValueError):
+                prepare_evs_tensor(model, base)
+            self.assertEqual(config.read_bytes(), before)
+            self.assertEqual(select_evs_tensor(model, str(explicit)), str(explicit))

@@ -24,29 +24,35 @@ def validate_metadata(meta):
     return h,w
 
 
-def main():
-    p=argparse.ArgumentParser(description='Generate full OpenEB config from encoder metadata')
-    p.add_argument('--model-json',type=Path,required=True)
-    p.add_argument('--base-config',type=Path,required=True)
-    p.add_argument('--output',type=Path,required=True)
-    a=p.parse_args()
+def generate_config(model_json, base_config, output):
+    """Generate a full driver YAML without replacing an existing file."""
+    model_json, base_config, output = map(Path, (model_json, base_config, output))
     import yaml
-    meta=json.loads(a.model_json.read_text())
+    meta=json.loads(model_json.read_text())
     meta=meta.get("evs_metadata", meta)
     from .contract import evs_spec
     evs_spec(meta)
     h,w=validate_metadata(meta)
-    config=yaml.safe_load(a.base_config.read_text())
+    config=yaml.safe_load(base_config.read_text())
     params=config['/**/event_tensor']['ros__parameters']
     params.update(width=w,height=h,bins=10,window_ms=40.0,stride_ms=4.0,output_rate_hz=250.0,
                   temporal_interpolation='none',polarity_mode='separate',polarity_layout='polarity_major',
                   channel_mean=[0.0],channel_stddev=[1.0],tensor_name='input_tensor')
     # Driver emits raw counts. Padding/normalization belong to encoder preprocessing.
-    a.output.parent.mkdir(parents=True,exist_ok=True)
-    with a.output.open('x') as f:
-        f.write('# Generated from '+str(a.model_json)+'; raw histogram counts, normalization in model.\n')
+    output.parent.mkdir(parents=True,exist_ok=True)
+    with output.open('x') as f:
+        f.write('# Generated from '+str(model_json)+'; raw histogram counts, normalization in model.\n')
         yaml.safe_dump(config,f,sort_keys=False)
-    print(a.output)
+    return output
+
+
+def main():
+    p = argparse.ArgumentParser(description='Generate full OpenEB config from encoder metadata')
+    p.add_argument('--model-json', type=Path, required=True)
+    p.add_argument('--base-config', type=Path, required=True)
+    p.add_argument('--output', type=Path, required=True)
+    a = p.parse_args()
+    print(generate_config(a.model_json, a.base_config, a.output))
 
 
 if __name__=='__main__':

@@ -121,3 +121,48 @@ def validate_evs_tensor(path, model_dir):
         if values.get(key) != value:
             raise ValueError(f'OpenEB {key} does not match EVS policy: expected {value}')
     return values
+
+
+def throttle_selection(selection, output_mode, fixed_override=None):
+    """Resolve mission throttle ownership; preserve fixed mode when unspecified."""
+    selection = selection or 'fixed'
+    if selection not in ('fixed', 'model'):
+        raise ValueError('e2e_throttle_mode must be fixed or model')
+    if selection == 'model':
+        if output_mode != 'steer_throttle':
+            raise ValueError('モデルの可変スロットルにはsteer_throttleモデルが必要です')
+        if fixed_override is not None and fixed_override != '':
+            raise ValueError('modelモードではe2e_fixed_throttleを指定できません')
+    return selection == 'fixed'
+
+
+def prepare_evs_tensor(model_dir, base_config):
+    """Create or validate the model's driver YAML; never overwrite existing tuning."""
+    import os
+    import tempfile
+    from pathlib import Path
+    from kart_e2e.evs_contract import generate_config
+
+    model = Path(model_dir)
+    target = model / 'openeb_tensor.yaml'
+    if not target.exists():
+        with tempfile.TemporaryDirectory(prefix='.evs-config-', dir=model) as directory:
+            temporary = Path(directory) / target.name
+            generate_config(model / 'metadata.json', base_config, temporary)
+            validate_evs_tensor(temporary, model)
+            try:
+                os.link(temporary, target)
+            except FileExistsError:
+                pass  # Another preparer published first; validate that file below.
+    validate_evs_tensor(target, model)
+    return target
+
+
+def select_evs_tensor(model_dir, explicit=''):
+    """Explicit config wins; otherwise use the config prepared alongside the engine."""
+    from pathlib import Path
+    path = Path(explicit).expanduser() if explicit else Path(model_dir) / 'openeb_tensor.yaml'
+    if not path.is_file():
+        raise ValueError(f'EVS tensor YAMLがありません: {path}。scripts/e2e_trt.shでモデルを準備してください')
+    validate_evs_tensor(path, model_dir)
+    return str(path)
