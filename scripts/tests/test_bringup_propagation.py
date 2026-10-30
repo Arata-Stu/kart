@@ -42,8 +42,11 @@ class PropagationTests(unittest.TestCase):
 
     def test_e2e_tui_model_mode_does_not_prompt_fixed_value(self):
         prompts = []
+        edits = iter(["control", "start"])
         def choose(title, values, label=str, default=0):
             prompts.append(title)
+            if title.startswith('設定一覧'):
+                return next(edits)
             if title == '用途':
                 return 'e2e'
             if title == 'E2Eスロットル':

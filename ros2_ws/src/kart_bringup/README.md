@@ -1,5 +1,10 @@
 # kart_bringup
 
+対話起動は「用途 → 地図／モデル／bag → 設定一覧」。必要な項目だけ編集して検証・起動する。
+手順は[scriptsの設定一覧](../../../scripts/README.md#bringupの設定一覧)を参照。
+CLI・launch引数・ノード・topic・ROS parameterは従来どおり。
+
+
 平坦路を走行するRCカー向けに、`enable_ground_constraint_in_odometry`と
 `enable_ground_constraint_in_slam`はともに既定`true`（平面制約ON）。
 
@@ -473,7 +478,7 @@ EVSモデルのTensorRT接続・制御decoder統合は別途必要。
 
 ### EVS起動時選択
 
-`bash scripts/bringup.sh`のTUIでEVS有効/無効、Tensor処理方式（CPU同期処理 / GPU同期処理 / 非同期処理）、
+`bash scripts/bringup.sh`の「設定一覧」→「EVS詳細」で、必要時だけEVS有効/無効、Tensor処理方式（CPU同期処理 / GPU同期処理 / 非同期処理）、
 `bias/evs/`の.bias一覧またはカメラ既定を選択する。packet topicは既定OFF。
 CLIは`--evs`、`--no-evs`、`--evs-backend`、`--evs-serial`、`--evs-bias-file`、
 `--bias-root`。backend/serial/biasの明示指定はEVSを有効にする。evalではEVS指定を拒否する。
@@ -515,7 +520,7 @@ E2E launchは有効なmanifestとハッシュ・ハードウェア一致、お�
 
 ## VSLAM地図だけでbag評価
 
-bringup.shのevalでは「保存mapでVO localization」（既定）、「保存mapでVIO localization」、「VSLAM＋VGL」を選択する。VSLAMのみはMap Studio出力の`cuvslam_map/*.mdb`が非空の地図を探索し、VGLモデル・vgl_profile.jsonを要求しない。VGL併用は従来通りprepare_vgl_map済みbundleと実行GPU用モデルが必要。非対話CLIは`--eval-localization vslam|vgl|fresh`。
+bringup.shのevalでは評価方式（保存地図VSLAM／VSLAM＋VGL／新規SLAM／E2E遅延）を選び、VSLAMを使う方式では続けてVO／VIOを選択する。VSLAMのみはMap Studio出力の`cuvslam_map/*.mdb`が非空の地図を探索し、VGLモデル・vgl_profile.jsonを要求しない。VGL併用は従来通りprepare_vgl_map済みbundleと実行GPU用モデルが必要。非対話CLIは`--eval-localization vslam|vgl|fresh`。
 
 4番目の用途（offline bag評価）では「mapなしVO評価」と「mapなしVIO評価」を直接選べる。地図・HDMap・VGLモデルを選ばずbagだけ選ぶ。実機/simのbagを同じ入口で再実行し、VIOは`/realsense/imu`も必須入力として検査・再生する。両方ともVGLは起動せず、`sim_vslam.launch.py`で可視化・RVizを有効にする。
 `sim_vslam.launch.py`で既存mapを読まず新規SLAMを開始し、RVizに左右画像・観測点群・ランドマーク・軌跡を表示する。
@@ -754,13 +759,13 @@ bash scripts/bringup.sh --mode eval --eval-localization fresh --tracking-mode 1 
 IMU frame名はbagのheaderと記録TFを確認して指定する。上のframe間TFの存在は
 対象bagで別途確認する。既定configの変更、ROS topicの変更はない。
 
-保存mapでのoffline VIO評価をTUIから直接選べる。保存地図・HDMap・lane/line・bagを
+保存mapでのoffline VIO評価をTUIの評価方式→追跡方式で選べる。保存地図・HDMap・lane/line・bagを
 選択し、evaluation.launch.pyへtracking_mode=1を渡す。VGLを選択しなければ
 モデル探索やVGL起動は行わない。VIOはIMUが必須で、bag不足を起動前に拒否する。
 frame overrideはmapなし/保存mapのどちらのevalでも利用できる。
 
 ```bash
-# TUIで「保存mapでVIO localization」を選ぶ（今回の旧実機bagのframe）
+# TUIで「VSLAM（保存地図）」→「VIO」を選ぶ（今回の旧実機bagのframe）
 bash scripts/bringup.sh --base-frame camera_link --imu-frame camera_imu_optical_frame
 
 # 非対話: 既存の保存map評価へ--tracking-mode 1を追加
@@ -905,7 +910,7 @@ bash scripts/bringup.sh --mode collect --auto-fixed-throttle 0.10 --run-name aut
 
 CLI/launchの旧`manual_fixed_throttle`は`auto_fixed_throttle`へ変更した。
 実運用設定はkart_bringup/config/input/joy_manager.yaml、未指定ならYAMLを保持する。
-TUIの「AUTOスロットル」で通常／固定を選ぶ。collect/driveで利用可能。E2Eでは収集用の固定設定を無効化し、モデルのステア＋E2E専用の固定／モデル出力スロットルを使用する。
+TUIの「設定一覧」→「制御 / AUTO」で必要時だけ通常／固定を変更する。collect/driveで利用可能。E2Eでは収集用の固定設定を無効化し、モデルのステア＋E2E専用の固定／モデル出力スロットルを使用する。
 RGB/EVS教師抽出はbag内の固定AUTO有効設定を自動検出する。固定収集bagでは固定AUTOだけを採用し、MANUALの復帰・調整区間を全て除外する。通常bagは従来どおりMANUALだけを採用する。
 ROS結合・実車動作は未確認。portable testで固定出力、直接切替、異常ラッチ、HOST handshakeを検証する。
 
@@ -918,7 +923,7 @@ ROS結合・実車動作は未確認。portable testで固定出力、直接切�
   metadataのruntime.fixed_throttleを使い、明示時は0..runtime.max_throttleの有限値に限る。
   TUIもE2E専用の入力欄を使い、収集用の固定選択を表示しない。
 - `--e2e-throttle-mode fixed|model`／mission引数`e2e_throttle_mode`（空欄・未指定は`fixed`）で選択する。
-  TUIでは「E2Eスロットル」を選び、固定時だけ数値を入力する。明示した`--e2e-fixed-throttle`は既存どおり固定を選ぶ。
+  TUIでは「設定一覧」→「制御 / AUTO」から「E2Eスロットル」を変更し、固定を選んだ場合だけ数値を入力する。未編集ならモデルの既定固定値を保持する。明示した`--e2e-fixed-throttle`は既存どおり固定を選ぶ。
 - `fixed`はRGB/EVS双方へ`use_fixed_throttle=true`を渡す。`model`はfalseを渡し、
   `steer_throttle`モデルのスロットル出力を`runtime.max_throttle`で制限して使う。
   値は正規化スロットル（車速m/sではない）。`steer_only`でのmodel指定、modelと固定値の併用は起動前に拒否する。
@@ -1055,7 +1060,7 @@ bash scripts/bringup.sh --mode collect --rgb-profile 1280x720x30 --infra-profile
 
 ### 環境記録専用 `environment`
 
-`bash scripts/bringup.sh --mode environment`、または対話の「環境記録」で選択する。
+`bash scripts/bringup.sh --mode environment`、または対話の「データ記録」→「環境記録」で選択する。
 `mission.launch.py mode:=environment`も同じ構成。localization / tracking / E2Eは起動しない。
 車両・Joy・記録操作はcollectと同じ。`--no-bridge`で基板を使わない記録も可能。
 
@@ -1088,8 +1093,8 @@ ROS結合・USB3帯域・全topicの実記録は未確認。
 
 ### Map Studioからの現場調整
 
-`bash scripts/bringup.sh`で`drive`を選び、通常どおりHDMap・自己位置推定地図・モデルを
-選択した後、「Map Studio 動的調整」で有効／無効を選べる。既定の選択は
+`bash scripts/bringup.sh`で`drive`を選び、地図を選択した後、
+「設定一覧」→「補助 / Studio調整」で有効／無効を変更できる。未編集時は
 `config/hdmap/hdmap.yaml`の`tuning_enabled`（標準false）。YAMLの手編集は不要。
 HDMapを含む転送フォルダーを自動検出し、選択した自己位置推定地図の内容hashと照合して
 `tuning_map_dir`を設定する。転送先`vgl/<bundle>`内にある同内容の地図にも対応する。
@@ -1286,7 +1291,7 @@ TUIからlaunchへの引数とIMU不足の拒否をportable testで確認。ROS/
 
 ### bringupのIMU選択
 
-対話bringupではRGB/Infraの後にIMU取得レートを選択する。
+対話bringupでは「設定一覧」→「センサ / IMU」で必要時だけ取得レートを変更する。
 低Hzは加速度100Hz・ジャイロ200Hz、高Hzは加速度200Hz・ジャイロ400Hz、
 なしは`enable_accel=false`・`enable_gyro=false`。有効時の`unite_imu_method=2`は線形補間。
 現在のYAMLに対応する候補を既定とし、「設定を保持（YAML）」でも起動できる。

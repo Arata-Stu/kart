@@ -61,7 +61,7 @@ def choose(title, values, label=str, default=0):
     return rows[selected]
 
 
-def latency_entry(args, config, interactive):
+def latency_entry(args, config):
     from kart_bringup.e2e_latency import plan
     from datetime import datetime
     if args.evs or args.recovery or args.auto_fixed_throttle is not None or args.e2e_fixed_throttle is not None:
@@ -77,16 +77,10 @@ def latency_entry(args, config, interactive):
     print('全pipelineの購読準備後に再生開始。完了／Ctrl-CでCSV・JSON・時系列HTMLを保存。')
     print('保存先:', run['output_dir'])
     print(shlex.join(command))
-    if args.dry_run:
-        return
-    if interactive:
-        choose('この構成を起動', [True, False], lambda v: '起動' if v else '終了') or sys.exit(0)
-    if not shutil.which('ros2'):
-        raise ValueError('ROSコンテナ内でscripts/build.shを実行してから起動してください')
-    os.execvp(command[0], command)
+    return command
 
 
-def esc_trial_entry(args, parser, interactive):
+def esc_trial_entry(args, parser):
     """Dedicated mapless trial; never silently accept normal driving options."""
     for key, value in vars(args).items():
         if key not in ('mode', 'dry_run', 'device') and value != parser.get_default(key):
@@ -97,13 +91,7 @@ def esc_trial_entry(args, parser, interactive):
     print('ESC試験: 地図・自己位置・カメラ・Joyなし。通常bringupとは同時起動しないでください。')
     print('Studio「ESC試験」から開始。起動時はSTOP、試験終了・STOPボタンは中立出力です。')
     print(shlex.join(command))
-    if args.dry_run:
-        return
-    if interactive:
-        choose('この構成を起動', [True, False], lambda v: '起動' if v else '終了') or sys.exit(0)
-    if not shutil.which('ros2'):
-        raise ValueError('ROS開発コンテナでビルドしてから起動してください')
-    os.execvp(command[0], command)
+    return command
 
 
 def validate_mode_options(args):
@@ -138,7 +126,7 @@ def validate_mode_options(args):
         raise ValueError("VSLAM単独評価では--model-dirを使用しません（VGLは--eval-localization vgl）")
 
 
-def main():
+def argument_parser():
     parser = argparse.ArgumentParser(
         description="kart: 収集 / 地図走行 / E2E / offline評価 / ESC試験。--mode指定時は非対話。"
     )
@@ -182,7 +170,7 @@ def main():
                         help="E2E throttle: fixed (default) or model (requires steer_throttle)")
     parser.add_argument("--e2e-fixed-throttle", type=float, default=None,
                         help="E2E model steering + fixed throttle; defaults to model runtime metadata")
-    from kart_bringup.recovery import CHOICES, LABELS as RECOVERY_LABELS, configuration as recovery_configuration, validate_inputs
+    from kart_bringup.recovery import CHOICES
     parser.add_argument("--recovery", choices=CHOICES, default="",
                         help="自動復帰: off / infra_imu / rgb_imu / evs_assisted（未指定はYAML）")
     parser.add_argument("--run-name", default=None)
@@ -195,202 +183,25 @@ def main():
     parser.add_argument("--latency-output", default="", help="E2E offline latencyの新規保存先（既定analysis/e2e_latency/日時）")
     parser.add_argument("--bag", default="")
     parser.add_argument("--rate", default="")
-    args = parser.parse_args()
-    from kart_bringup.evs import BACKENDS, BACKEND_LABELS, AGGREGATIONS, AGGREGATION_LABELS, DEFAULT_BIAS, bias_files, bias_selection, pipeline_configuration
-    selected_evs = args.evs or any((args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config, args.evs_aggregation, args.evs_image is not None))
-    if args.no_evs and selected_evs:
-        raise ValueError("--no-evsとEVS指定は併用できません")
-    args.evs = selected_evs
-    if args.evs_aggregation:
-        if args.evs_backend and args.evs_backend != "cuda_async":
-            raise ValueError("--evs-aggregationは--evs-backend cuda_asyncと組み合わせてください")
-        args.evs_backend = "cuda_async"
-    from kart_bringup.mission import discover, hdmap_choices, sensor_parameters, camera_config, recording_config
+    return parser
 
-    interactive = args.mode is None
-    if interactive and not sys.stdin.isatty():
-        parser.error("TUIには端末が必要です。非対話では--modeを指定してください")
-    config = ROOT / "ros2_ws/src/kart_bringup/config"
-    if args.mode == "esc-trial":
-        return esc_trial_entry(args, parser, interactive)
-    if interactive:
-        args.mode = choose(
-            "用途",
-            ["record", "drive", "e2e", "eval", "esc-trial"],
-            lambda m: {
-                "esc-trial": "ESC信号列試験（UI操作・地図／自己位置／Joy不要）",
-                "record": "データ記録",
-                "drive": "地図走行（VSLAM + VGL + ライン追従）",
-                "e2e": "E2E（TensorRT、localizationなし）",
-                "eval": "オフライン評価（記録bagを再生）",
-            }[m],
-        )
-        if args.mode == "record":
-            args.mode = choose(
-                "記録内容", ["collect", "environment"],
-                lambda m: {
-                    "collect": "走行データ（通常のセンサ・操作記録）",
-                    "environment": "環境記録（Depth付き・高解像度RGB・左右Infra・IMU）",
-                }[m],
-            )
-        if args.mode == "esc-trial":
-            return esc_trial_entry(args, parser, interactive)
-        if args.mode != "eval":
-            sensor = sensor_parameters(camera_config(config, args.mode))
-            for kind, key in (
-                ("rgb", "rgb_camera.color_profile"),
-                ("infra", "depth_module.infra_profile"),
-            ):
-                if getattr(args, kind + "_fps") is None and not getattr(args, kind + "_profile"):
-                    from kart_bringup.mission import CAMERA_PROFILES
-                    profiles = list(dict.fromkeys([sensor[key], *CAMERA_PROFILES["RGB" if kind == "rgb" else "Infra"], "0"]))
-                    enabled = sensor["enable_color" if kind == "rgb" else "enable_infra1"]
-                    setattr(args, kind + "_profile", choose(
-                        ("Infra（有効時はDepthも同じprofile）" if kind == "infra" and args.mode == "environment" else kind.upper()) + " 解像度 × FPS（USB3 D455候補）",
-                        profiles,
-                        label=lambda v: "なし" if v == "0" else v.replace("x", " × ") + ("（実験・左右Y8要確認）" if v == "848x100x100" else ""),
-                        default=profiles.index(sensor[key] if enabled else "0"),
-                    ))
-            if not args.imu_profile:
-                current = ("off" if not sensor["enable_accel"] and not sensor["enable_gyro"] else
-                           "low" if (sensor["accel_fps"], sensor["gyro_fps"]) == (100, 200) else
-                           "high" if (sensor["accel_fps"], sensor["gyro_fps"]) == (200, 400) else "")
-                choices = ["", "low", "high", "off"]
-                args.imu_profile = choose("IMU 取得レート", choices,
-                    label=lambda v: {"": "設定を保持（YAML）", "low": "低Hz（加速度100 / ジャイロ200Hz）",
-                                     "high": "高Hz（加速度200 / ジャイロ400Hz）", "off": "なし"}[v],
-                    default=choices.index(current))
-            if args.mode == "drive" and (args.infra_fps == "0" or args.infra_profile == "0"):
-                raise ValueError("VSLAM/VGLにはInfraが必要です（なしは選択できません）")
-            args.evs = not args.no_evs and (args.evs or choose(
-                "EVS（Tensor・画像・RAW記録）",
-                [False, True],
-                lambda v: "有効" if v else "無効",
-            ))
-            if args.evs:
-                if not args.evs_backend:
-                    import yaml
-                    default_backend = yaml.safe_load((config / "sensors/openeb_tensor_pipeline.yaml").read_text())["/**/tensor_pipeline"]["ros__parameters"]["tensor_backend"]
-                    args.evs_backend = choose("EVS Tensor処理方式", list(BACKENDS),
-                        label=lambda v: BACKEND_LABELS[v], default=BACKENDS.index(default_backend))
-                if args.evs_backend == "cuda_async" and not args.evs_aggregation:
-                    import yaml
-                    source = Path(args.evs_tensor_config).expanduser() if args.evs_tensor_config else config / "sensors/openeb_tensor_cuda_async.yaml"
-                    current = yaml.safe_load(source.read_text())["/**/event_tensor"]["ros__parameters"].get("event_aggregation", "events")
-                    args.evs_aggregation = choose("EVS 集計方式", list(AGGREGATIONS),
-                        label=lambda v: AGGREGATION_LABELS[v], default=AGGREGATIONS.index(current))
-                if args.evs_image is None:
-                    import yaml
-                    image_default = yaml.safe_load((config / "sensors/openeb_visualization.yaml").read_text())["/**/event_preprocessor"]["ros__parameters"]["event_image_enabled"]
-                    args.evs_image = choose("EVS event image可視化", [False, True],
-                        label=lambda v: "ON（画像生成あり）" if v else "OFF（画像生成なし・Tensorのみ）",
-                        default=int(image_default))
-                if not args.evs_bias_file:
-                    args.evs_bias_file = str(choose("EVS bias file", [DEFAULT_BIAS] + bias_files(args.bias_root), lambda p: "カメラ既定" if p == DEFAULT_BIAS else str(p)))
-            args.foxglove = args.foxglove or choose(
-                "Foxglove Bridge", [False, True], lambda v: "有効" if v else "無効"
-            )
-        if args.mode == "eval" and args.eval_localization is None:
-            args.eval_localization = choose(
-                "オフライン解析", ["vslam", "vgl", "fresh", "e2e_latency"],
-                lambda v: {
-                    "vslam": "VSLAM（保存地図で自己位置推定）",
-                    "vgl": "VSLAM＋VGL（準備済みbundleで自己位置推定）",
-                    "fresh": "VSLAM（保存地図なし・新規SLAM）",
-                    "e2e_latency": "E2E遅延（RGB bag → 推論 → 制御topic）",
-                }[v],
-            )
-        if args.mode == "eval" and args.eval_localization == "e2e_latency":
-            args.mode = "e2e-latency"
-        if args.mode == "eval" and args.eval_localization in ("vslam", "vgl", "fresh") and not args.tracking_mode:
-            args.tracking_mode = choose("追跡方式", ["0", "1"], lambda v: "stereo VO（IMUなし）" if v == "0" else "VIO（IMUあり）")
-        if args.mode in ("drive","eval") and not args.multicam_mode:
-            import yaml
-            from kart_bringup.multicam import LABELS as MULTICAM_LABELS
-            preset='sim/vslam.yaml' if args.mode=='eval' and args.eval_localization=='fresh' else 'localization/cuvslam.yaml'
-            default=str(yaml.safe_load((config/preset).read_text())['/**/visual_slam']['ros__parameters']['multicam_mode'])
-            args.multicam_mode=choose("VSLAM速度・精度",list(MULTICAM_LABELS),lambda v:MULTICAM_LABELS[v],default=list(MULTICAM_LABELS).index(default))
-        if args.mode == "drive" or (args.mode == "eval" and args.eval_localization != "fresh"):
-            if not args.map_file:
-                if args.mode == "drive":
-                    from bringup_assets import select_map_directory
-                    args.map_file = str(select_map_directory(
-                        discover(args.map_root, "hdmap"), args.map_root, choose))
-                else:
-                    args.map_file = str(choose("HDMap", discover(args.map_root, "hdmap")))
-            options = hdmap_choices(args.map_file)
-            options = [
-                x
-                for x in options
-                if (not args.lane_id or x[0] == args.lane_id)
-                and (not args.line_type or x[1] == args.line_type)
-            ]
-            if len(options) == 1:
-                args.lane_id, args.line_type = options[0]
-                print("lane / 追従ライン:", " / ".join(options[0]), "（候補が1つのため自動選択）")
-            else:
-                args.lane_id, args.line_type = choose(
-                    "lane / 追従ライン", options, lambda x: " / ".join(x)
-                )
-            vslam_only = args.mode == "eval" and args.eval_localization == "vslam"
-            if not args.map_dir:
-                from bringup_assets import paired_maps, paired_models, select_related
-                candidates=discover(args.map_root, "vslam" if vslam_only else "bundle")
-                matched = paired_maps(args.map_file, candidates, args.map_root)
-                if args.mode == "drive" and matched:
-                    from bringup_assets import matching_resolution
-                    infra = args.infra_profile or sensor["depth_module.infra_profile"]
-                    compatible = matching_resolution(matched, infra)
-                    if compatible:
-                        matched = compatible
-                args.map_dir=str(select_related("対応するVSLAM地図" if vslam_only else "対応するVGL bundle",
-                    candidates, matched, choose))
-            models = sorted(
-                set(
-                    discover(args.model_root, "models")
-                    + discover(args.map_root, "models")
-                )
-            )
-            if vslam_only: args.model_dir=""
-            elif not args.model_dir:
-                from bringup_assets import select_runtime_model
-                args.model_dir = str(select_runtime_model(args.map_dir, models, choose))
-        if args.mode == "drive" and args.tuning is None:
-            import yaml
-            default_tuning = yaml.safe_load((config / "hdmap/hdmap.yaml").read_text())["/**/hdmap_server"]["ros__parameters"]["tuning_enabled"]
-            args.tuning = choose("Map Studio 動的調整", [False, True],
-                                 lambda enabled: "有効（HDMap・自己位置表示、走行中もライン調整可）" if enabled else "無効（通常走行）",
-                                 default=int(default_tuning))
-        if args.mode in ("e2e", "e2e-latency"):
-            candidates = sorted(
-                set(
-                    discover(args.model_root, "e2e")
-                    + discover(ROOT / "e2e/models", "e2e")
-                )
-            )
-            args.e2e_model_dir = args.e2e_model_dir or str(
-                choose("E2E ONNXモデル（metadata付き）", candidates)
-            )
-        if args.mode in ("eval", "e2e-latency"):
-            args.bag = args.bag or str(
-                choose("再生rosbag", discover(args.record_dir, "bag"))
-            )
-        elif args.run_name is None:
-            args.run_name = input("run_name [run] > ").strip() or "run"
+
+def build_command(args, config):
+    """Resolve and validate a launch plan without interaction or process startup."""
+    from kart_bringup.mission import hdmap_choices, sensor_parameters, camera_config, recording_config
+    from kart_bringup.evs import pipeline_configuration, DEFAULT_BIAS, bias_selection
+    from kart_bringup.recovery import configuration as recovery_configuration, validate_inputs
     if args.mode == "eval" and args.eval_localization == "e2e_latency":
         args.mode = "e2e-latency"
     validate_mode_options(args)
     if args.mode == "e2e-latency":
-        return latency_entry(args, config, interactive)
+        return latency_entry(args, config)
     if args.latency_output:
         raise ValueError("--latency-outputはe2e-latency専用です")
     section_routing = None
     if args.mode == 'e2e':
         from kart_e2e.contract import routing_settings
         section_routing = routing_settings(args.e2e_model_dir)
-        if section_routing and interactive:
-            args.map_file = args.map_file or str(choose('sectionと同じHDMap', discover(args.map_root, 'hdmap')))
-            args.map_dir = args.map_dir or str(choose('sectionと同じVSLAM地図', discover(args.map_root, 'vslam')))
         if section_routing:
             from kart_e2e.sections import validate_maps
             validate_maps(section_routing, args.map_file, args.map_dir)
@@ -418,29 +229,8 @@ def main():
         raise ValueError('--auto-fixed-throttleは収集用（ステア手動）です。collect/environment/driveで指定してください。E2Eは--e2e-fixed-throttleを使用します')
     if args.e2e_fixed_throttle is not None and args.mode != 'e2e':
         raise ValueError('--e2e-fixed-throttleはe2e専用です')
-    if interactive and args.mode in ('collect', 'environment', 'drive') and args.auto_fixed_throttle is None:
-        from kart_bringup.configuration import load
-        _, modules = load(config / 'bringup.yaml')
-        fixed = modules['joy_manager']['effective']['auto_fixed_throttle']
-        limit = modules['joy_manager']['effective']['speed_scale']
-        selection = choose('AUTOスロットル', ['normal', 'fixed'],
-                           lambda v: '通常AUTO（既存制御）' if v == 'normal' else '固定値で収集（ステア手動）',
-                           default=int(fixed >= 0))
-        if selection == 'normal':
-            args.auto_fixed_throttle = -1.0
-        else:
-            default = fixed if fixed >= 0 else ''
-            raw = input(f'固定スロットル 0..{limit}' + (f' [{default}]' if default != '' else '') + ' > ').strip()
-            if not raw and default == '':
-                raise ValueError('固定スロットルの値を入力してください')
-            args.auto_fixed_throttle = float(raw or default)
     if args.recovery and args.mode not in ('drive', 'e2e'):
         raise ValueError('--recoveryはdrive/e2e専用です')
-    if interactive and args.mode in ('drive', 'e2e') and not args.recovery:
-        enabled, recovery_params = recovery_configuration(config / 'recovery')
-        default = recovery_params['sensor_profile'] if enabled else 'off'
-        args.recovery = choose('壁接触・スタック自動復帰', list(CHOICES),
-                               lambda v: RECOVERY_LABELS[v], default=CHOICES.index(default))
     if args.multicam_mode and args.mode not in ('drive','eval'):
         raise ValueError('--multicam-modeはVSLAMを使用するdrive/evalで指定してください')
     fresh = args.mode == "eval" and args.eval_localization == "fresh"
@@ -542,15 +332,8 @@ def main():
         _, mode = model_contract(args.e2e_model_dir)
         runtime = runtime_settings(args.e2e_model_dir)
         from kart_bringup.e2e import throttle_selection
-        if interactive and not args.e2e_throttle_mode and args.e2e_fixed_throttle is None:
-            args.e2e_throttle_mode = choose(
-                'E2Eスロットル', ['fixed', 'model'] if mode == 'steer_throttle' else ['fixed'],
-                lambda value: '固定スロットル' if value == 'fixed' else 'モデル出力（可変スロットル）')
         args.e2e_throttle_mode = args.e2e_throttle_mode or 'fixed'
         use_fixed = throttle_selection(args.e2e_throttle_mode, mode, args.e2e_fixed_throttle)
-        if use_fixed and interactive and args.e2e_fixed_throttle is None:
-            raw = input(f'E2E固定スロットル 0..{runtime["max_throttle"]} [{runtime["fixed_throttle"]}] > ').strip()
-            args.e2e_fixed_throttle = float(raw) if raw else runtime['fixed_throttle']
         if use_fixed:
             from kart_e2e.contract import validate_runtime
             fixed = runtime['fixed_throttle'] if args.e2e_fixed_throttle is None else args.e2e_fixed_throttle
@@ -673,16 +456,54 @@ def main():
         print(
             "車体→カメラTFは別途必要です。仮TFは配信しません。舵角・PIDの実車設定も確認してください。"
         )
+    return command
+
+
+def main():
+    from copy import deepcopy
+    import yaml
+    parser = argument_parser()
+    args = parser.parse_args()
+    selected_evs = args.evs or any((args.evs_backend, args.evs_serial, args.evs_bias_file,
+                                    args.evs_tensor_config, args.evs_aggregation, args.evs_image is not None))
+    if args.no_evs and selected_evs:
+        raise ValueError("--no-evsとEVS指定は併用できません")
+    args.evs = selected_evs
+    if args.evs_aggregation:
+        if args.evs_backend and args.evs_backend != "cuda_async":
+            raise ValueError("--evs-aggregationは--evs-backend cuda_asyncと組み合わせてください")
+        args.evs_backend = "cuda_async"
+    config = ROOT / "ros2_ws/src/kart_bringup/config"
+    interactive = args.mode is None
+    if interactive and not sys.stdin.isatty():
+        parser.error("TUIには端末が必要です。非対話では--modeを指定してください")
+    if interactive:
+        from bringup_tui import Editor, select_purpose
+        select_purpose(args, choose)
+    if args.mode == 'esc-trial':
+        command = esc_trial_entry(args, parser)
+        if interactive and not args.dry_run:
+            if not choose('この構成を起動', [True, False], lambda v: '起動' if v else '終了'):
+                return
+    elif interactive:
+        editor = Editor(args, config, ROOT, choose)
+        editor.prepare()
+        while editor.review():
+            try:
+                # Validation can normalize values. Keep the editable selection intact.
+                command = build_command(deepcopy(editor.args), config)
+            except (ValueError, OSError, KeyError, yaml.YAMLError) as error:
+                print(f'設定エラー: {error}\n項目を変更して再検証できます。', file=sys.stderr)
+                continue
+            break
+        else:
+            return
+    else:
+        command = build_command(args, config)
     if args.dry_run:
         return
-    if interactive:
-        choose(
-            "この構成を起動", [True, False], lambda v: "起動" if v else "終了"
-        ) or sys.exit(0)
-    if not shutil.which("ros2"):
-        raise ValueError(
-            "ros2がありません。scripts/dev.shでROSコンテナへ入り、scripts/build.shでビルドしてください"
-        )
+    if not shutil.which('ros2'):
+        raise ValueError('ROS開発コンテナでビルドしてから起動してください')
     os.execvp(command[0], command)
 
 

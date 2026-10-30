@@ -5,6 +5,48 @@ TUIの用途は「データ記録」「地図走行」「E2E」「オフライ�
 走行データは従来の`collect`、環境記録は`environment`に対応し、
 CLIの`--mode collect|environment`と各モードのセンサ・録画設定は変更しない。
 
+## bringupの設定一覧
+
+`bash scripts/bringup.sh`は用途を選び、必要な地図・モデル・bagを先に選択してから
+「設定一覧」を開く。センサや補助機能を毎回順番に質問することはしない。
+
+```text
+用途 → 地図／モデル／bag（必要な場合）→ 設定一覧
+  設定を検証して起動
+  地図・モデル／追従ライン
+  センサ：RGB、Infra、IMU、EVS詳細
+  制御：AUTOスロットル
+  補助：自動復帰、Foxglove、Studio調整
+  記録：保存先、記録名
+  車両基板／VSLAM速度・精度
+  終了
+```
+
+用途に関係する項目だけ表示する。項目を選ぶとその設定だけ編集し、一覧へ戻る。
+オフライン評価では再生bag・倍率・追跡方式・評価方式を編集できる。
+地図・モデルを選び直しても手動指定したセンサ設定は保持し、自動推定値だけ再計算する。
+VGL bundleの入力サイズからInfra解像度を推定し、既存FPSが対応する場合は保持する。
+対応しない場合だけFPSを含む候補を選ぶ。明示CLI指定は推定で上書きしない。
+E2Eモデルは入力種別を読み、EVSならEVSとモデルのTensor YAMLを準備する。
+`--no-evs`の明示は保持するため、EVSモデルとの矛盾は検証エラーになる。
+RGB E2Eは既存resizeを使い、モデル入力サイズをカメラ解像度へ直接置き換えない。
+
+EVS処理方式・集計方式・画像生成・biasは「EVS詳細」から必要な項目だけ変更する。
+固定スロットルも「制御 / AUTO」から明示変更する。採用値は一覧に表示する。
+記録名は既定`run`を保持し、「記録」で保存先と名前を変更できる。
+設定は今回の起動だけに適用し、YAMLや前回設定の保存ファイルを書き換えない。
+
+「設定を検証して起動」でCLIと共通の検証・コマンド生成を行う。
+不整合なら設定一覧へ戻り、変更済みの値を保持したまま修正できる。
+`--dry-run`は「設定を検証（起動なし）」となり、成功時はコマンド表示だけで終了する。
+Esc/Ctrl-Cまたは「終了」は起動せず終了する。ESC信号列試験は独立した簡潔な確認を維持する。
+
+実装は`lib/bringup_tui.py`（対話・編集）、`lib/bringup_assets.py`（候補対応付け）、
+`lib/bringup.py`（CLI・共通検証・コマンド生成・実行）に分担する。
+既存CLI・launch・ノード・topic・ROS parameterは変更しない。
+portable testで選択順序・再編集・エラー修正・引数伝播・キャンセルを検証する。
+実端末のfzf表示、ROS結合、Jetson・カメラ・実車動作は別途確認する。
+
 ## センサ・E2E・制御遅延のオフライン時系列解析
 
 ```bash
@@ -108,7 +150,7 @@ HEADが追従先の祖先であれば指定branchへ復帰します。別branch�
 Docker補助グループへ追加します。反映はコンテナ作成時のため、既存コンテナへのattachでは変わりません。
 
 fzfによる選択は上下キーで移動、文字入力で絞り込み、Enterで確定、Esc/Ctrl-Cで中止。
-既定候補を先頭に表示します。run_nameは自由入力です。
+既定候補を先頭に表示します。run_nameは設定一覧の「記録」から変更します。
 fzfはDockerfile.kartで導入します。既存コンテナでは一時的に
 `sudo apt-get install -y fzf`で追加可能。非対話の`--mode`指定ではfzfは不要です。
 
@@ -418,8 +460,8 @@ Jetson上の実際の解像度・Hz・Depth欠落は起動ログと`ros2 bag inf
 
 ### bringupのMap Studio動的調整
 
-`bash scripts/bringup.sh` → `drive` → 通常のHDMap・地図・モデル選択 →
-「Map Studio 動的調整」で有効／無効を選ぶ。地図は既存選択を再利用し、調整用の再選択は不要。
+`bash scripts/bringup.sh` → `drive` → 地図選択 →
+「設定一覧」の「補助 / Studio調整」で必要時だけ有効／無効を変更する。地図は既存選択を再利用し、調整用の再選択は不要。
 HDMapの転送フォルダーと選択したVSLAM/VGL地図の内容を照合し、調整用パスを自動設定する。
 CLIでは通常のdrive引数へ`--tuning`を追加（`--no-tuning`で無効化、未指定はhdmap.yamlの既定値）。
 `--dry-run`は接続せず、地図の一致・採用値と生成された起動コマンドを確認する。
@@ -453,7 +495,7 @@ TUIからlaunchへの引数とIMU不足の拒否はportable testで検証し、R
 
 ### bringupのIMU選択
 
-対話bringupではRGB/Infraの後にIMU取得レートを選択する。
+対話bringupでは「設定一覧」の「センサ / IMU」から必要時だけ取得レートを変更する。
 低Hzは加速度100Hz・ジャイロ200Hz、高Hzは加速度200Hz・ジャイロ400Hz、
 なしは`enable_accel=false`・`enable_gyro=false`。有効時の`unite_imu_method=2`は線形補間。
 現在のYAMLに対応する候補を既定とし、「設定を保持（YAML）」でも起動できる。
@@ -499,7 +541,7 @@ HDMapの上位に`cuvslam_map/`がある場合はそのフォルダーを単位�
 - フォルダー内のHDMapが1つなら自動採用。複数ならHDMapを選ぶ。
 - lane／追従ラインの候補が1つなら自動採用。複数なら選ぶ。
 - cuVSLAM地図の内容ハッシュが一致するVGL bundleを探し、地図走行では
-  選択済みInfraの幅・高さと`vgl_profile.json`の入力shapeが一致する候補を優先する。
+  既存または明示指定したInfraの幅・高さと`vgl_profile.json`の入力shapeが一致する候補を優先する。
   一致候補が1つなら自動採用。FPSはモデルの入力shape選択に使わない。
 - bundleのONNXハッシュに一致するモデルのうち`runtime_models`を優先する。
   一致するruntimeが1つなら自動採用。選択が必要な場合もruntimeを先頭候補にする。

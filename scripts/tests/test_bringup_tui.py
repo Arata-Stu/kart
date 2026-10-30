@@ -18,6 +18,17 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 
+def with_edits(choose, *actions):
+    actions = iter(actions)
+    def select(title, values, *args, **kwargs):
+        if title.startswith('設定一覧'):
+            action = next(actions)
+            assert action in values
+            return action
+        return choose(title, values, *args, **kwargs)
+    return select
+
+
 class FzfTests(unittest.TestCase):
     def test_drive_vslam_then_recovery_renders_each_profiles_labels(self):
         from kart_bringup.multicam import LABELS as multicam_labels
@@ -50,7 +61,7 @@ class FzfTests(unittest.TestCase):
                         '--map-dir', folder, '--model-dir', folder]
                 with (patch.object(sys, 'argv', argv),
                       patch.object(sys.stdin, 'isatty', return_value=True),
-                      patch.object(module, 'choose', side_effect=choose),
+                      patch.object(module, 'choose', side_effect=with_edits(choose, 'multicam', 'recovery', 'start')),
                       patch('kart_bringup.mission.hdmap_choices', return_value=[('lane_001', 'centerline')]),
                       patch('kart_bringup.localization.resolve', return_value=(
                           {'cuvslam': {'tracking_mode': 0}}, {}, {}, {'input_shape': [1, 3, 480, 640]})),
@@ -80,7 +91,7 @@ class FzfTests(unittest.TestCase):
             with (patch.object(sys, "argv", ["bringup.py", "--dry-run", "--no-bridge", "--no-evs",
                                              "--run-name", "vga_check", "--auto-fixed-throttle=-1"]),
                   patch.object(sys.stdin, "isatty", return_value=True),
-                  patch.object(module, "choose", side_effect=choose), redirect_stdout(output)):
+                  patch.object(module, "choose", side_effect=with_edits(choose, 'rgb', 'infra', 'start')), redirect_stdout(output)):
                 module.main()
             self.assertIn(f"mode:={mode}", output.getvalue())
             self.assertNotIn("mode:=record", output.getvalue())
@@ -113,7 +124,7 @@ class FzfTests(unittest.TestCase):
                     with (patch.object(sys, "argv", ["bringup.py", "--dry-run", "--no-bridge", "--no-evs",
                                                      "--run-name", "profile_check", "--auto-fixed-throttle=-1"]),
                           patch.object(sys.stdin, "isatty", return_value=True),
-                          patch.object(module, "choose", side_effect=choose), redirect_stdout(output)):
+                          patch.object(module, "choose", side_effect=with_edits(choose, 'rgb', 'infra', 'start')), redirect_stdout(output)):
                         module.main()
                     self.assertEqual(len(selected), 2)
                     for key in ("rgb_profile", "infra_profile"):
@@ -134,7 +145,7 @@ class FzfTests(unittest.TestCase):
         with (patch.object(sys, 'argv', ['bringup.py', '--dry-run', '--no-bridge', '--no-evs',
                                         '--run-name', 'narrow', '--auto-fixed-throttle=-1']),
               patch.object(sys.stdin, 'isatty', return_value=True),
-              patch.object(module, 'choose', side_effect=choose), redirect_stdout(output)):
+              patch.object(module, 'choose', side_effect=with_edits(choose, 'rgb', 'infra', 'start')), redirect_stdout(output)):
             module.main()
         self.assertIn('infra_profile:=848x100x100', output.getvalue())
 
@@ -149,14 +160,14 @@ class FzfTests(unittest.TestCase):
                         self.assertEqual(values, ["collect", "environment"])
                         return mode
                     if title == "IMU 取得レート":
-                        self.assertEqual(values[kwargs["default"]], "high")
+                        self.assertEqual(values[kwargs["default"]], "")
                         return profile
                     return values[0]
                 output = io.StringIO()
                 with (patch.object(sys, "argv", ["bringup.py", "--dry-run", "--no-bridge", "--no-evs",
                                                  "--run-name", "imu_check", "--auto-fixed-throttle=-1"]),
                       patch.object(sys.stdin, "isatty", return_value=True),
-                      patch.object(module, "choose", side_effect=choose), redirect_stdout(output)):
+                      patch.object(module, "choose", side_effect=with_edits(choose, 'imu', 'start')), redirect_stdout(output)):
                     module.main()
                 self.assertIn(f"imu_profile:={profile}", output.getvalue())
 
@@ -218,7 +229,7 @@ class FreshDiagnosticTests(unittest.TestCase):
                 if title == "再生rosbag": return values[0]
                 self.fail(f"Unexpected selection: {title}")
             output = io.StringIO()
-            with patch.object(sys, "argv", ["bringup.py", "--dry-run", "--record-dir", folder]), patch.object(sys.stdin, "isatty", return_value=True), patch.object(module, "choose", side_effect=choose), redirect_stdout(output):
+            with patch.object(sys, "argv", ["bringup.py", "--dry-run", "--record-dir", folder]), patch.object(sys.stdin, "isatty", return_value=True), patch.object(module, "choose", side_effect=with_edits(choose, 'multicam', 'start')), redirect_stdout(output):
                 module.main()
             text = output.getvalue()
             self.assertIn("sim_vslam.launch.py", text)
@@ -226,7 +237,7 @@ class FreshDiagnosticTests(unittest.TestCase):
             self.assertIn("rviz:=true", text)
             self.assertIn("tracking_mode:=0", text)
             self.assertNotIn("map_dir:=", text)
-            self.assertEqual(titles, ["用途", "オフライン解析", "追跡方式", "VSLAM速度・精度", "再生rosbag"])
+            self.assertEqual(titles, ["用途", "オフライン解析", "追跡方式", "再生rosbag", "VSLAM速度・精度"])
             self.assertIn('multicam_mode:=2',text)
             with patch.object(sys, "argv", ["bringup.py", "--mode", "eval", "--eval-localization", "fresh", "--bag", str(bag), "--tracking-mode", "1", "--dry-run"]):
                 with self.assertRaisesRegex(ValueError, "/realsense/imu"):
@@ -249,7 +260,7 @@ class FreshDiagnosticTests(unittest.TestCase):
                 if title=='再生rosbag':return values[0]
                 self.fail(f'Unexpected selection: {title}')
             output=io.StringIO()
-            with patch.object(sys,'argv',['bringup.py','--dry-run','--record-dir',folder,'--base-frame','camera_link','--imu-frame','camera_imu_optical_frame']),patch.object(sys.stdin,'isatty',return_value=True),patch.object(module,'choose',side_effect=choose),redirect_stdout(output):
+            with patch.object(sys,'argv',['bringup.py','--dry-run','--record-dir',folder,'--base-frame','camera_link','--imu-frame','camera_imu_optical_frame']),patch.object(sys.stdin,'isatty',return_value=True),patch.object(module,'choose',side_effect=with_edits(choose, 'multicam', 'start')),redirect_stdout(output):
                 module.main()
             text=output.getvalue()
             self.assertIn('sim_vslam.launch.py',text)
@@ -293,10 +304,13 @@ class FreshDiagnosticTests(unittest.TestCase):
                 if explicit:
                     argv += ['--tracking-mode', mode]
                 output = io.StringIO()
-                with patch.object(sys, 'argv', argv), patch.object(sys.stdin, 'isatty', return_value=True), patch.object(module, 'choose', side_effect=choose), patch.object(mission, 'discover', side_effect=discover), patch.object(mission, 'hdmap_choices', return_value=[('lane_001', 'centerline')]), patch.object(localization, 'resolve', return_value=({'cuvslam': {'tracking_mode': int(mode)}}, None, None, {'input_shape': [1, 3, 360, 640]})) as resolve, patch('kart_bringup.replay.validate_bag_shape', return_value={}) as shape_check, redirect_stdout(output):
+                with patch.object(sys, 'argv', argv), patch.object(sys.stdin, 'isatty', return_value=True), patch.object(module, 'choose', side_effect=with_edits(choose, 'start', 'cancel')), patch.object(mission, 'discover', side_effect=discover), patch.object(mission, 'hdmap_choices', return_value=[('lane_001', 'centerline')]), patch.object(localization, 'resolve', return_value=({'cuvslam': {'tracking_mode': int(mode)}}, None, None, {'input_shape': [1, 3, 360, 640]})) as resolve, patch('kart_bringup.replay.validate_bag_shape', return_value={}) as shape_check, redirect_stdout(output):
                     if mode == '1' and not has_imu:
-                        with self.assertRaisesRegex(ValueError, '/realsense/imu'):
+                        errors = io.StringIO()
+                        from contextlib import redirect_stderr
+                        with redirect_stderr(errors):
                             module.main()
+                        self.assertIn('/realsense/imu', errors.getvalue())
                         continue
                     module.main()
                 self.assertEqual('追跡方式' in titles, not explicit)
@@ -324,7 +338,7 @@ class FreshDiagnosticTests(unittest.TestCase):
                 return [bag] if kind=='bag' else [Path('/map/hdmap.yaml')] if kind=='hdmap' else [Path('/map/course')]
             from kart_bringup import mission,localization
             output=io.StringIO()
-            with patch.object(sys,'argv',['bringup.py','--dry-run','--record-dir',folder,'--imu-frame','camera_imu_optical_frame']),patch.object(sys.stdin,'isatty',return_value=True),patch.object(module,'choose',side_effect=choose),patch.object(mission,'discover',side_effect=discover),patch.object(mission,'hdmap_choices',return_value=[('lane_001','centerline')]),patch.object(localization,'resolve',return_value=({'cuvslam':{'tracking_mode':1}},None,None,{'input_shape':None})) as resolve,redirect_stdout(output):
+            with patch.object(sys,'argv',['bringup.py','--dry-run','--record-dir',folder,'--imu-frame','camera_imu_optical_frame']),patch.object(sys.stdin,'isatty',return_value=True),patch.object(module,'choose',side_effect=with_edits(choose, 'start')),patch.object(mission,'discover',side_effect=discover),patch.object(mission,'hdmap_choices',return_value=[('lane_001','centerline')]),patch.object(localization,'resolve',return_value=({'cuvslam':{'tracking_mode':1}},None,None,{'input_shape':None})) as resolve,redirect_stdout(output):
                 module.main()
             text=output.getvalue()
             self.assertIn('evaluation.launch.py',text)
@@ -333,8 +347,8 @@ class FreshDiagnosticTests(unittest.TestCase):
             self.assertIn('enable_vgl:=false',text)
             self.assertIn('imu_frame:=camera_imu_optical_frame',text)
             self.assertEqual(resolve.call_args.kwargs['overrides']['tracking_mode'],'1')
-            self.assertEqual(resolve.call_args.kwargs['overrides']['multicam_mode'],'0')
-            self.assertIn('multicam_mode:=0',text)
+            self.assertNotIn('multicam_mode', resolve.call_args.kwargs['overrides'])
+            self.assertNotIn('multicam_mode:=', text)
 
 
 if __name__ == "__main__":
