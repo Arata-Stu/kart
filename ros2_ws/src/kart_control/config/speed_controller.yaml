@@ -7,11 +7,11 @@
     mode_timeout_s: 0.3
     max_target_speed_mps: 10.0
     wall_timeout_s: 0.0  # Wall receive watchdog; 0 follows each data timeout
-    control_rate_hz: 50.0
+    control_rate_hz: 100.0  # Dynamic 10..100 Hz; fresh STOP and measured standstill required
     # Measured AUTO throttle / accepted steady-speed proxies, 2026-10-23.
     # Source: throttle_test; camera pose horizontal speed medians (not calibrated
     # rear-axle longitudinal truth). User accepted these as steady speeds.
-    # Lookup and rate limits are startup-only. Below 1.41 m/s uses assumed (0,0);
+    # Lookup is startup-only; throttle rise/fall rates are dynamic. Below 1.41 m/s uses assumed (0,0);
     # above 4.74 m/s the FF holds 0.375 (target ceiling remains independent).
     ff_speed_mps: [1.41, 1.90, 2.27, 2.67, 3.05, 3.35, 3.69, 3.83, 4.14, 4.34, 4.63, 4.74]
     ff_throttle: [0.100, 0.125, 0.150, 0.175, 0.200, 0.225, 0.250, 0.275, 0.300, 0.325, 0.350, 0.375]

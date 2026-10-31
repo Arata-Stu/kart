@@ -5,12 +5,12 @@ from .tuning import digest
 
 TARGETS = {
     'vehicle': ('kart_bridge', ('steering_offset', 'steering_scale', 'initial_steering_trim', 'steering_trim_limit')),
-    'tracking': ('pure_pursuit', ('lateral_controller', 'mpc_horizon_s', 'mpc_tracking_weight', 'mpc_smoothness_weight',
+    'tracking': ('pure_pursuit', ('control_rate_hz', 'lateral_controller', 'mpc_horizon_s', 'mpc_tracking_weight', 'mpc_smoothness_weight',
                                 'mpc_steering_rate_rad_s', 'lookahead_m', 'lookahead_mode', 'lookahead_low_speed_m',
                                 'lookahead_high_speed_m', 'max_speed_mps', 'max_cross_track_m',
                                 'goal_tolerance_m', 'deceleration_mps2', 'wheelbase_m', 'max_steering_rad')),
-    'speed': ('speed_controller', ('kp', 'ki', 'kd', 'kff', 'integral_limit', 'derivative_tau_s',
-                                 'throttle_limit', 'brake_limit', 'max_target_speed_mps')),
+    'speed': ('speed_controller', ('control_rate_hz', 'kp', 'ki', 'kd', 'kff', 'integral_limit', 'derivative_tau_s',
+                                 'throttle_limit', 'brake_limit', 'throttle_rise_rate', 'throttle_fall_rate', 'max_target_speed_mps')),
     'map': ('hdmap_server', ('line_type', 'centerline_speed_mps')),
     'recovery': ('recovery', (
         'history_span_s', 'history_offset_s', 'history_min_samples', 'history_max_gap_s',
@@ -25,6 +25,7 @@ TARGETS = {
 }
 
 LABELS = {
+    'control_rate_hz': '制御周期 (10〜100 Hz、STOP・停車中のみ)',
     'lateral_controller': '横制御方式（切替はSTOP・停車中）',
     'mpc_horizon_s': 'MPC 予測時間 (0.3..2 s)',
     'mpc_tracking_weight': 'MPC 追従の強さ (0.1..100)',
@@ -62,6 +63,8 @@ LABELS = {
     'max_recovery_attempts': '復帰試行回数上限', 'history_span_s': '舵角履歴の対象時間 (s)',
     'history_offset_s': '舵角履歴の時間オフセット (s)', 'startup_grace_s': '走行開始後の猶予 (s)',
     'kp': '比例ゲイン', 'ki': '積分ゲイン', 'kd': '微分ゲイン', 'kff': '速度比例FFゲイン',
+    'throttle_rise_rate': 'スロットル増加速度 (出力/s、0=制限なし)',
+    'throttle_fall_rate': 'スロットル減少速度 (出力/s、0=制限なし)',
     'throttle_limit': '前進出力上限 (0..1)', 'brake_limit': 'ブレーキ出力上限 (0..1)',
 }
 

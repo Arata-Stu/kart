@@ -16,6 +16,16 @@ def fields(key='tracking'):
 
 
 class PolicyTests(unittest.TestCase):
+    def test_live_speed_rates_and_old_readonly_nodes(self):
+        current = catalog('speed', fields('speed'))
+        changes = {'throttle_rise_rate': .2, 'throttle_fall_rate': 0.}
+        self.assertEqual(changes_for(current, changes, current['revision']), changes)
+        for row in current['fields']:
+            if row['name'] == 'throttle_rise_rate': row['read_only'] = True
+        current = catalog('speed', current['fields'])
+        with self.assertRaises(ValueError):
+            changes_for(current, changes, current['revision'])
+
     def test_type_readonly_revision_and_node_boundaries(self):
         current = catalog('tracking',fields())
         self.assertEqual(changes_for(current,{'lookahead_m':2},current['revision']),{'lookahead_m':2.})
@@ -104,6 +114,20 @@ class BridgeTests(unittest.TestCase):
             self.assertTrue(result['applied'] and result['readback_matches'])
             self.assertEqual(next(f['value'] for f in result['fields'] if f['name']=='lookahead_m'),.8)
             self.assertEqual(len(self.writes),1)
+
+    def test_rate_change_requires_stationary_gate_at_dispatch(self):
+        self.bridge.gate=NS(issue=lambda:'STOP and standstill required')
+        with patch('kart_hdmap.parameter_bridge.time.monotonic',return_value=10.):
+            reply=self.begin('/parameters_get');self.manager.tick();current=reply.get_nowait()
+            reply=self.begin('/parameters_set',expected_revision=current['revision'],changes={'control_rate_hz':50.})
+            self.manager.tick()
+            self.assertIn('standstill',reply.get_nowait()['error'])
+            self.assertEqual(self.writes,[])
+            self.bridge.gate.issue=lambda:''
+            reply=self.begin('/parameters_set',expected_revision=current['revision'],changes={'control_rate_hz':50.})
+            self.manager.tick();self.manager.tick();self.manager.tick()
+            self.assertTrue(reply.get_nowait()['readback_matches'])
+            self.assertEqual(self.values['control_rate_hz'],50.)
 
     def test_unavailable_stale_and_stop_rejections_do_not_write(self):
         with patch('kart_hdmap.parameter_bridge.time.monotonic',return_value=10.):

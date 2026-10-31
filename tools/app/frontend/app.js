@@ -13,6 +13,7 @@ import "./tuning.js";
 import "./esc_trial.js";
 import "./bringup.js";
 import "./tuning_parameters.js";
+import "./tuning_speed.js";
 import "./lanes.js";
 import "./obstacles.js";
 import "./parking.js";

@@ -1498,3 +1498,8 @@ header .local-tag { white-space: nowrap; }
 #bringup-existing:empty { display: none; }
 
 #recording-card code { overflow-wrap: anywhere; }
+
+#tuning-speed-panel { flex: none; }
+#tuning-speed-panel[hidden] { display: none; }
+#tuning-speed-chart { width: 100%; height: clamp(100px, 20vh, 170px); display: block; }
+#tuning-speed-values { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 12px; }

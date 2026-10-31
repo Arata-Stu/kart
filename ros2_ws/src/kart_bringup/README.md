@@ -281,7 +281,7 @@ tracking.launch.pyは同じcontainerへ`kart_control::SpeedControllerNode`もloa
 `ff_throttle=[0.100,0.125,0.150,0.175,0.200,0.225,0.250,0.275,0.300,0.325,0.350,0.375]`。
 ユーザーが定常速度として採用したcamera pose水平速度の中央値であり、実測校正済み値ではない。
 表は起動時固定、低速側は仮定の(0,0)から補間、高速側は末尾値を保持する。
-`throttle_rise_rate=0.10` / `throttle_fall_rate=0.20`（正規化出力/s、起動時固定、暫定）、
+`throttle_rise_rate=0.10` / `throttle_fall_rate=0.20`（正規化出力/s、動的変更可、暫定）、
 `kp=0.02`、`ki=kd=kff=0`、`throttle_limit=0.4`、`max_target_speed_mps=10.0`。
 表使用中はkffを使わない。目標0・異常・brake時は増減制限を迂回してthrottle=0。
 詳細とノード単独既定値は[kart_control](../kart_control/README.md#速度pid-component)を参照。
@@ -1586,3 +1586,6 @@ Studio「Jetson起動」の録画開始・停止ボタンとJoy（運用設定R1
 同じ`kart_bag_manager`を操作する。走行モードとは独立し、追加launch引数はない。
 更新後はbag managerを再ビルドしてbringupを再起動する。
 [サービスと状態](../kart_bag_manager/README.md)、[UI手順](../../../../tools/app/README.md)を参照。
+
+Pure Pursuit / MPCと速度PIDの`control_rate_hz`は、実機・simとも原則100.0 Hz（10 ms）。
+起動後はSTOP・計測停車中に10〜100 Hzで動的変更可能。診断配信周期やセンサー周期とは独立で、実効100 Hzはターゲット上で確認する。

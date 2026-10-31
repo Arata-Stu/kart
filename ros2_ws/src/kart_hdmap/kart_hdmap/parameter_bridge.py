@@ -126,6 +126,10 @@ class ParameterBridge:
             if issue:
                 raise ValueError(issue)
             changes = changes_for(snapshot, pending['body']['changes'], pending['body']['expected_revision'])
+            if 'control_rate_hz' in changes:
+                issue = self.bridge.gate.issue()
+                if issue:
+                    raise ValueError(issue)
             if time.monotonic() + .3 >= pending['deadline']:
                 raise ValueError('適用の応答待ち時間が不足しています。再取得してください')
             from rclpy.parameter import Parameter

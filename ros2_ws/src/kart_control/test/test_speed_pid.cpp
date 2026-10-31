@@ -120,6 +120,28 @@ int main() {
     assert(threw);
   }
 
+  // Live slew changes preserve output but immediately use the new rate.
+  PidSettings live;
+  live.kff = .3; live.throttle_limit = .8;
+  live.throttle_rise_rate = .1; live.throttle_fall_rate = .2;
+  pid.reset();
+  r = pid.step(1, 1, .1, live);
+  assert(std::abs(r.throttle - .01) < 1e-12);
+  live.throttle_rise_rate = .5;
+  pid.reset(true);
+  r = pid.step(1, 1, .1, live);
+  assert(std::abs(r.throttle - .06) < 1e-12);
+  live.throttle_fall_rate = .1;
+  pid.reset(true);
+  r = pid.step(.01, .01, .1, live);
+  assert(std::abs(r.throttle - .05) < 1e-12);
+  live.throttle_rise_rate = live.throttle_fall_rate = 0;
+  pid.reset(true);
+  r = pid.step(1, 1, .1, live);
+  assert(std::abs(r.throttle - .3) < 1e-12);
+  r = pid.step(.01, .01, .1, live);
+  assert(std::abs(r.throttle - .003) < 1e-12);
+
   // Closed-loop synthetic first-order plant, not a vehicle calibration.
   PidSettings sim;
   sim.kp = 0.8;

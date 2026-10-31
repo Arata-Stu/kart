@@ -4,6 +4,9 @@ import { tuning, parameterConnectionReady, parameterRequest } from './tuning.js'
 let snapshot=null, busy=false, serial=0, epoch=tuning.epoch;
 const inputs=new Map();
 function parameterIssue() {
+  const rate=inputs.get('control_rate_hz');
+  if(rate && Number(rate.input.value)!==rate.field.value && tuning.status?.stop_issue)
+    return tuning.status.stop_issue;
   const method=inputs.get('lateral_controller');
   if(method && method.input.value!==String(method.field.value) && tuning.status?.stop_issue)
     return tuning.status.stop_issue;
@@ -39,6 +42,16 @@ function render(result) {
     label.textContent=field.label;
     const code=document.createElement('code');code.textContent=field.name;label.append(code);
     if(field.description){const help=document.createElement('small');help.textContent=field.description;label.append(help);}
+    if(field.name==='control_rate_hz'){
+      const help=document.createElement('small');
+      help.textContent='STOP・1秒停車中に変更。横制御と速度PIDへ個別に適用します。読戻しは受付値で、実効Hzではありません。';
+      label.append(help);
+    }
+    if(['throttle_rise_rate','throttle_fall_rate'].includes(field.name)){
+      const help=document.createElement('small');
+      help.textContent='非負。値が大きいほど速く変化。変化時間の目安 = 出力差 ÷ 設定値（例：0.10→0.30、0.10/sなら2秒）。0は制限なし。停止・制動時はこの制限を迂回します。';
+      label.append(help);
+    }
     current.textContent=field.value==null?'未対応':field.name==='lookahead_mode'
       ? ({fixed:'固定距離',speed_interpolated:'速度に合わせる'}[field.value] || String(field.value))
       : String(field.value);
@@ -57,6 +70,7 @@ function render(result) {
       } else {input.type='number';input.step=field.type===2?'1':'any';input.required=true;}
       input.value=String(field.value);input.setAttribute('aria-label',field.name);
       inputs.set(field.name,{input,field,row});edit.append(input);
+      if(field.name==='control_rate_hz'){input.min='10';input.max='100';input.addEventListener('input',controls);}
       if(field.name==='lateral_controller') input.addEventListener('change',controls);
       if(field.name==='lookahead_mode') {
         input.addEventListener('change',controls);

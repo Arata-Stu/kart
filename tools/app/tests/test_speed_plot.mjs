@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {speedPlot} from '../frontend/speed_plot.js';
+const p=(t,target=2,measured=1)=>({t,target,measured});
+let plot=speedPlot([p(0),p(1),p(1.1),p(1.2,null,null),p(1.3),p(2)],61);
+assert.equal((plot.target.match(/M/g)||[]).length,3);
+assert.equal((plot.target.match(/L/g)||[]).length,1);
+assert.ok(!plot.target.includes('NaN'));
+plot=speedPlot([p(10,1,-.5)],10);
+assert.ok(plot.min<=-.5);
+assert.ok(plot.max>=1);
+assert.equal(speedPlot([p(0)],61).target,'');
+assert.equal(speedPlot([p(1,Infinity,0)],1).target,'');

@@ -16,6 +16,14 @@ int main() {
   assert(receive_limit(.15, 0) == .15); // Physical defaults are unchanged.
   assert(receive_limit(.15, 5) == 5);
 
+  // A committed rate change starts a fresh dt baseline, without integrating
+  // the elapsed interval spent rebuilding the timer (also valid at paused time).
+  clock = ControlTime{};
+  assert(!clock.advance(10).advanced);
+  assert(!clock.advance(10).advanced);
+  auto changed = clock.advance(10.01);
+  assert(changed.advanced && std::abs(changed.dt-.01)<1e-9);
+
   // Identical simulated measurements at 1x and 25x slower host execution.
   // Host delay must not inflate PID integration or change derivative response.
   ControlTime normal, slow;

@@ -98,10 +98,10 @@ AUTO/MANUALの指令選択は既存muxが担当し、このpackageからAUTOへ�
 | 入力 | /visual_slam/tracking/odometry | nav_msgs/msg/Odometry | best effort/volatile/depth5、観測時刻・入力継続の監視、速度連動先読み時はtwistも使用 |
 | 入力 | /localization/vslam/diagnostics | diagnostic_msgs/msg/DiagnosticArray | reliable/volatile/depth10、VSLAM再局在状態 |
 | 入力 | /tf, /tf_static | tf2_msgs/msg/TFMessage | tf2標準、map→tracking_frameを取得 |
-| 出力 | /control/tracking_cmd | ackermann_msgs/msg/AckermannDriveStamped | reliable/volatile/depth1、30 Hz、舵角rad左正・速度m/s前進のみ |
-| 出力 | /control/tracking_status | std_msgs/msg/String | reliable/volatile/depth1、30 Hz、trackingまたは無効理由 |
+| 出力 | /control/tracking_cmd | ackermann_msgs/msg/AckermannDriveStamped | reliable/volatile/depth1、100 Hz、舵角rad左正・速度m/s前進のみ |
+| 出力 | /control/tracking_status | std_msgs/msg/String | reliable/volatile/depth1、100 Hz、trackingまたは無効理由 |
 | 出力 | /control/lookahead | geometry_msgs/msg/PointStamped | reliable/volatile/depth1、計算成功時、map座標の追従点 |
-| 出力 | /control/tracking_reference | kart_interfaces/msg/TrackingReference | reliable/volatile/depth1、30 Hzとwatchdog無効通知。実参照点・計測時の車両位置・設定lookahead・直線距離・valid |
+| 出力 | /control/tracking_reference | kart_interfaces/msg/TrackingReference | reliable/volatile/depth1、100 Hzとwatchdog無効通知。実参照点・計測時の車両位置・設定lookahead・直線距離・valid |
 | 出力 | /control/tracking_markers | visualization_msgs/msg/MarkerArray | reliable/volatile/depth1、同周期。参照点・車両→参照点の矢印・L/pathと直線距離dのラベル |
 
 Pure Pursuit基準は**後輪軸中心**。既定`rear_axle`へ校正済みTFが必要。
@@ -170,7 +170,7 @@ package configは単独起動用。use_sim_timeのみROS共通。
 | line_timeout_s | 2.5 | reference stamp/受信の期限。HDMap既定1Hz |
 | localization_timeout_s | 2.5 | 再局在診断stamp/受信の期限 |
 | wall_timeout_s | 0.0 | 受信の実時間監視。0は各入力期限を使用、正値は独立したsteady秒の期限 |
-| control_rate_hz | 30.0 | 正値。sim time有効時はROS timer、無効時はwall timer |
+| control_rate_hz | 100.0 | 10〜100 Hz、STOP・計測停車中のみ動的変更可。sim time有効時はROS timer、無効時はwall timer |
 | use_sim_time | false | bagではtrue、clockを供給 |
 
 ## 起動・container
@@ -234,7 +234,7 @@ trackingを維持し、TF配信を止めるとtf_unavailableになることを�
 | 入力 | /visual_slam/tracking/odometry | nav_msgs/msg/Odometry | best effort/volatile/depth5、実測twist |
 | 入力 | /operation_mode/state | kart_interfaces/msg/OperationModeState | reliable/volatile/depth1、AUTO許可とheartbeat |
 | 入力 | /tf, /tf_static | tf2_msgs/msg/TFMessage | TF標準、odom child→rear_axleの剛体変換 |
-| 出力 | /auto/control_cmd | kart_interfaces/msg/ControlCommand | reliable/volatile/depth1、50Hz、正規化指令。reverseは常に0 |
+| 出力 | /auto/control_cmd | kart_interfaces/msg/ControlCommand | reliable/volatile/depth1、100Hz、正規化指令。reverseは常に0 |
 | 出力 | /operation_mode/request | kart_interfaces/msg/OperationModeRequest | reliable/volatile/depth10、AUTO中の異常時STOPを最大10Hz |
 | 出力 | /control/speed_diagnostics | diagnostic_msgs/msg/DiagnosticArray | reliable/volatile/depth1、最大10Hz、状態・target/measured/error・P/I/D/FF・throttle/brake |
 
@@ -296,8 +296,8 @@ simは表なし・変化率制限なしで従来のgainを使う。
 | kff | 0.0 | 可 | 表が空の場合の速度比例FF、出力/(m/s) |
 | ff_speed_mps | [] | 不可 | FF表の速度[m/s]。YAMLは上記12点 |
 | ff_throttle | [] | 不可 | 各速度の定常要求値[0,1]。YAMLは上記12点 |
-| throttle_rise_rate | 0.0 | 不可 | 増加上限[正規化出力/s]、0で無効。YAMLは0.10（暫定） |
-| throttle_fall_rate | 0.0 | 不可 | 減少上限[正規化出力/s]、0で無効。YAMLは0.20（暫定） |
+| throttle_rise_rate | 0.0 | 可 | 増加上限[正規化出力/s]、0で無効。YAMLは0.10（暫定） |
+| throttle_fall_rate | 0.0 | 可 | 減少上限[正規化出力/s]、0で無効。YAMLは0.20（暫定） |
 | integral_limit | 0.2 | 可 | I項の出力上限、0..1 |
 | derivative_tau_s | 0.1 | 可 | D項一次フィルタ時定数、非負。0でフィルタなし |
 | throttle_limit | 0.2 | 可 | 前進出力上限、0..1 |
@@ -308,7 +308,7 @@ simは表なし・変化率制限なしで従来のgainを使う。
 | mode_timeout_s | 0.3 | 不可 | ROS時刻でのmode stamp期限。wall_timeout_s=0なら受信期限にも使用 |
 | max_target_speed_mps | 10.0 | 不可 | 超過目標は異常としてSTOP要求 |
 | wall_timeout_s | 0.0 | 不可 | 受信の実時間監視。0はinput/modeの期限、正値は独立したsteady秒の期限 |
-| control_rate_hz | 50.0 | 不可 | sim time有効時はROS timer、無効時はwall timer周波数 |
+| control_rate_hz | 100.0 | STOP・計測停車中のみ | sim time有効時はROS timer、無効時はwall timer周波数 |
 | use_sim_time | false | ROS共通 | bag時true。実車bridgeはfalse |
 
 gainは有限・非負のみ受理する。不正変更は拒否。
@@ -554,3 +554,26 @@ bash scripts/bringup.sh --mode esc-trial --device /dev/ttyACM0
 引数なしの`bash scripts/bringup.sh`では「用途」→「ESC信号列試験」を選択する。
 カメラ・地図・録画の選択は行わない。CLIの対応オプションは`--device`と`--dry-run`。
 `esc_trial.launch.py`の`device` launch引数は既定空文字で、空なら試験YAMLの値を保持する。
+
+### スロットル変化速度の動的調整
+
+Map Studioの「速度PID」で`throttle_rise_rate`と`throttle_fall_rate`を変更できる。
+単位は正規化出力/s、有限の非負値、0は制限なし。ノード既定0.0、運用YAMLは増加0.10／減少0.20。
+既存の速度PIDと同じ鮮度・モード条件で一括適用し、読戻しで確認する。
+変更時は直前のスロットルを保持してI/D状態をリセットする。停止・fault・制動の迂回は維持する。
+変更は実行中のみでYAMLへ自動保存しない。新規ノード・topicはない。
+
+Pure Pursuit / MPCと速度PIDの制御周期は原則100 Hz（10 ms）。ノード既定・package YAML・
+bringup実機／sim YAMLで統一する。診断配信は約10 Hzのまま。設定周波数は実効周期の保証ではなく、
+TF待機（実機既定最大50 ms）やMPC計算時間、executor負荷、入力更新周期は実機で別途確認する。
+
+### 制御周期の動的変更
+
+Pure Pursuit / MPC、速度PIDの`control_rate_hz`は既定100.0、有限doubleの10〜100 Hz。
+新鮮なSTOPと後輪軸速度の絶対値0.03 m/s以下が必要で、ROS parameter serviceでも検査する。
+UIは追加で既存の1秒以上の停車ゲートを要求する。横制御／速度PIDそれぞれで適用する。
+検証callbackでは副作用を起こさず、確定値を次の制御tickまたは100 msのwall watchdogで反映する。
+タイマーを再生成し、PID状態・dt基準、MPCの前回時刻・操舵履歴をリセットする。
+sim clock停止中もwall watchdogで周期を反映するが、制御はROS clockに従い停止したまま。
+読戻しはパラメータの受付値であり、実効周期の測定ではない。ノードの再起動でYAML値に戻る。
+新規topicなし。`test_control_rate_parameters.py`はROS環境で受付・拒否と出力周期を検証する。

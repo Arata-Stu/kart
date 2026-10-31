@@ -350,3 +350,27 @@ Webの色上限は既定3 m/sで変更可能（表示のみ、永続化なし）
 ESC表示には指令履歴の状態、次の負入力の解釈、ブレーキ指令の拒否を表示する。
 これらは送信指令からの推定であり、ESCからの状態フィードバックや実車の動作確認ではない。
 前進・ブレーキ・後退の制御ロジックや保持時間は、この表示変更では変更しない。
+
+### スロットル変化速度の動的調整
+
+Map Studioの「速度PID」で`throttle_rise_rate`と`throttle_fall_rate`を変更できる。
+単位は正規化出力/s、有限の非負値、0は制限なし。ノード既定0.0、運用YAMLは増加0.10／減少0.20。
+既存の速度PIDと同じ鮮度・モード条件で一括適用し、読戻しで確認する。
+変更時は直前のスロットルを保持してI/D状態をリセットする。停止・fault・制動の迂回は維持する。
+変更は実行中のみでYAMLへ自動保存しない。新規ノード・topicはない。
+
+### 速度PIDのライブグラフ
+
+`tuning_bridge`は`/control/speed_diagnostics`（`diagnostic_msgs/msg/DiagnosticArray`、
+reliable/volatile/depth10）を購読する。speed_controller自身のtarget_mps・measured_mpsを
+受信単調時刻で直近60秒・最大650件保持し、既存status HTTPで返す。新規ROSパラメータ・出力topicなし。
+activeかつROS stampが0.5秒以内の有限値のみ描画対象。非active・不正値は欠測、時計巻戻りで履歴をリセットする。
+これは表示専用で制御・適用条件には使わない。
+
+### 制御周期の変更
+
+パラメータ調整の「横制御」と「速度PID」に`control_rate_hz`（既定100.0、10〜100 Hz）を表示する。
+STOP・1秒以上の計測停車中のみ適用可能で、他の走行中調整項目の条件は維持する。
+各ノードへ個別に適用し、両方を変更する場合はSTOPのまま双方の読戻しを確認する。
+反映は次の制御tickまたは100 msのwall watchdog。読戻しは受付値であり実効Hzの保証ではない。
+新規topic・HDMap自身のparameterはなく、既存parameter serviceを使う。YAMLへの自動保存はしない。

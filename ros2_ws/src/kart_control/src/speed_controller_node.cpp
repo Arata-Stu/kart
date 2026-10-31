@@ -37,7 +37,9 @@ public:
     timeout_ = fixed("input_timeout_s", 0.15);
     mode_timeout_ = fixed("mode_timeout_s", 0.3);
     max_speed_ = fixed("max_target_speed_mps", 10.0);
-    rate_ = fixed("control_rate_hz", 50.0);
+    rate_ = declare_parameter("control_rate_hz", 100.0);
+    if (!std::isfinite(rate_) || rate_<10 || rate_>100)
+      throw std::invalid_argument("control_rate_hz must be 10..100 Hz");
     for (double v : {timeout_, mode_timeout_, max_speed_, rate_})
       if (!std::isfinite(v) || v <= 0)
         throw std::invalid_argument("Positive parameters required");
@@ -56,8 +58,8 @@ public:
       declare_parameter(item.first, item.second);
     fixed<std::vector<double>>("ff_speed_mps", {});
     fixed<std::vector<double>>("ff_throttle", {});
-    fixed("throttle_rise_rate", 0.0);
-    fixed("throttle_fall_rate", 0.0);
+    declare_parameter("throttle_rise_rate", 0.0);
+    declare_parameter("throttle_fall_rate", 0.0);
     settings_ = read_settings();
     validate(settings_);
     parameter_callback_ = add_on_set_parameters_callback(
@@ -67,12 +69,26 @@ public:
           result.successful = true;
           try {
             for (const auto &p : values) {
-              if (p.get_name() == "kp")
+              if (p.get_name() == "control_rate_hz") {
+                const double rate=p.as_double();
+                if (!std::isfinite(rate) || rate<10 || rate>100)
+                  throw std::invalid_argument("control_rate_hz must be 10..100 Hz");
+                if (rate!=get_parameter("control_rate_hz").as_double() &&
+                    (mode_.mode!=Mode::STOP || !fresh(mode_.header.stamp,mode_received_,mode_timeout_) ||
+                     !measurement_ok_ || !fresh(measured_stamp_,measured_received_,timeout_) ||
+                     !std::isfinite(measured_) || std::abs(measured_)>.03))
+                  throw std::invalid_argument("Rate change requires fresh STOP and measured standstill");
+              }
+              else if (p.get_name() == "kp")
                 candidate.kp = p.as_double();
               else if (p.get_name() == "ki")
                 candidate.ki = p.as_double();
               else if (p.get_name() == "kd")
                 candidate.kd = p.as_double();
+              else if (p.get_name() == "throttle_rise_rate")
+                candidate.throttle_rise_rate = p.as_double();
+              else if (p.get_name() == "throttle_fall_rate")
+                candidate.throttle_fall_rate = p.as_double();
               else if (p.get_name() == "kff")
                 candidate.kff = p.as_double();
               else if (p.get_name() == "integral_limit")
@@ -128,14 +144,9 @@ public:
           if (recovery_active_) pid_.reset();
         });
     sim_time_ = get_parameter("use_sim_time").as_bool();
-    control_time_.advance(sim_time_ ? now().seconds() : steady());
-    if (sim_time_)
-      timer_ = rclcpp::create_timer(this, get_clock(),
-          rclcpp::Duration::from_seconds(1 / rate_), [this] { tick(); });
-    else
-      timer_ = create_wall_timer(std::chrono::duration<double>(1 / rate_),
-          [this] { tick(); });
+    refresh_control_timer();
     watchdog_ = create_wall_timer(std::chrono::milliseconds(100), [this] {
+      refresh_control_timer();
       // This remains active when /clock pauses or the simulator disappears.
       if (was_auto_ &&
           (steady() - mode_received_ > receive_limit(mode_timeout_, wall_timeout_) ||
@@ -268,7 +279,23 @@ private:
     }
     output(why);
   }
+  bool refresh_control_timer() {
+    const double rate=get_parameter("control_rate_hz").as_double();
+    if (timer_ && rate==rate_) return false;
+    rclcpp::TimerBase::SharedPtr replacement;
+    if (sim_time_)
+      replacement=rclcpp::create_timer(this,get_clock(),rclcpp::Duration::from_seconds(1/rate),[this]{tick();});
+    else
+      replacement=create_wall_timer(std::chrono::duration<double>(1/rate),[this]{tick();});
+    if (timer_) timer_->cancel();
+    timer_=replacement; rate_=rate;
+    pid_.reset(); control_time_=ControlTime{};
+    control_time_.advance(sim_time_ ? now().seconds() : steady());
+    control_dt_=0;
+    return true;
+  }
   void tick() {
+    if (refresh_control_timer()) return;
     const double time = sim_time_ ? now().seconds() : steady();
     const auto elapsed = control_time_.advance(time);
     if (elapsed.jumped) {

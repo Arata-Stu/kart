@@ -54,7 +54,9 @@ public:
     tf_wait_ = param("tf_lookup_timeout_s", 0.05);
     line_timeout_ = param("line_timeout_s", 2.5);
     localization_timeout_ = param("localization_timeout_s", 2.5);
-    double rate = param("control_rate_hz", 30.0);
+    double rate = param("control_rate_hz", 100.0);
+    if (!std::isfinite(rate) || rate < 10 || rate > 100)
+      throw std::invalid_argument("control_rate_hz must be 10..100 Hz");
     control_dt_=1/rate;
     if (frame_.empty() || map_.empty() || frame_[0] == '/' || map_[0] == '/' ||
         frame_ == map_)
@@ -109,6 +111,20 @@ public:
                    mode_ != kart_interfaces::msg::OperationModeState::MANUAL) ||
                   !fresh(mode_stamp_, mode_received_, 0.3))
                 throw std::invalid_argument("Fresh AUTO/MANUAL/STOP is required for tracking tuning");
+              if (p.get_name()=="control_rate_hz") {
+                const double rate=p.as_double();
+                if (!std::isfinite(rate) || rate<10 || rate>100)
+                  throw std::invalid_argument("control_rate_hz must be 10..100 Hz");
+                if (rate!=get_parameter("control_rate_hz").as_double()) {
+                  if (mode_!=kart_interfaces::msg::OperationModeState::STOP ||
+                      !fresh(pose_stamp_,pose_received_,pose_timeout_))
+                    throw std::invalid_argument("Rate change requires fresh STOP and measured standstill");
+                  const double speed=rear_axle_speed();
+                  if (!std::isfinite(speed) || std::abs(speed)>.03)
+                    throw std::invalid_argument("Rate change requires measured standstill");
+                }
+                continue;
+              }
               if (p.get_name()=="lateral_controller") {
                 if (p.as_string()!="pure_pursuit" && p.as_string()!="mpc")
                   throw std::invalid_argument("lateral_controller must be pure_pursuit or mpc");
@@ -191,13 +207,9 @@ public:
             diag_stamp_ = rclcpp::Time(m->header.stamp);
           }
         });
-    if (get_parameter("use_sim_time").as_bool())
-      timer_ = rclcpp::create_timer(this, get_clock(),
-          rclcpp::Duration::from_seconds(1 / rate), [this] { tick(); });
-    else
-      timer_ = create_wall_timer(std::chrono::duration<double>(1 / rate),
-          [this] { tick(); });
+    refresh_control_timer();
     watchdog_ = create_wall_timer(std::chrono::milliseconds(100), [this] {
+      refresh_control_timer();
       if (steady() - pose_received_ > receive_limit(pose_timeout_, wall_timeout_) ||
           steady() - line_received_ > receive_limit(line_timeout_, wall_timeout_) ||
           steady() - diag_received_ > receive_limit(localization_timeout_, wall_timeout_))
@@ -217,7 +229,7 @@ private:
     throw std::invalid_argument("lookahead_mode must be fixed or speed_interpolated");
   }
   static bool tunable(const std::string &name) {
-    return name == "lateral_controller" || name == "mpc_horizon_s" ||
+    return name == "control_rate_hz" || name == "lateral_controller" || name == "mpc_horizon_s" ||
            name == "mpc_tracking_weight" || name == "mpc_smoothness_weight" ||
            name == "mpc_steering_rate_rad_s" || name == "lookahead_m" || name == "max_speed_mps" ||
            name == "lookahead_mode" || name == "lookahead_low_speed_m" ||
@@ -362,7 +374,23 @@ private:
     tf2::Vector3 p(t.transform.translation.x, t.transform.translation.y, t.transform.translation.z);
     return (linear - angular.cross(p)).x();
   }
+  bool refresh_control_timer() {
+    const double rate=get_parameter("control_rate_hz").as_double();
+    if (timer_ && rate==applied_rate_) return false;
+    // Only committed parameters reach here, including while sim time is paused.
+    rclcpp::TimerBase::SharedPtr replacement;
+    if (get_parameter("use_sim_time").as_bool())
+      replacement=rclcpp::create_timer(this,get_clock(),rclcpp::Duration::from_seconds(1/rate),[this]{tick();});
+    else
+      replacement=create_wall_timer(std::chrono::duration<double>(1/rate),[this]{tick();});
+    if (timer_) timer_->cancel();
+    timer_=replacement;
+    applied_rate_=rate; control_dt_=1/rate;
+    last_mpc_tick_=0; previous_steering_=0;
+    return true;
+  }
   void tick() {
+    if (refresh_control_timer()) return;
     solver_ms_=0;solver_iterations_=0;
     // Read after the parameter transaction commits; never mutate control state
     // from a validation callback that a later validator could still reject.
@@ -452,7 +480,8 @@ private:
   rclcpp::Time mode_stamp_{0, 0, RCL_ROS_TIME};
   rclcpp::Subscription<kart_interfaces::msg::OperationModeState>::SharedPtr mode_sub_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_callback_;
-  double previous_steering_{0}, control_dt_{1./30}, last_mpc_tick_{0}, solver_ms_{0};
+  double applied_rate_{0};
+  double previous_steering_{0}, control_dt_{1./100}, last_mpc_tick_{0}, solver_ms_{0};
   int solver_iterations_{0};
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr mpc_diagnostics_;
   Settings c_;

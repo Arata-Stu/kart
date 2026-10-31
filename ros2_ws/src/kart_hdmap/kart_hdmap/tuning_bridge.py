@@ -8,6 +8,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .pose_history import PoseHistory
+from .speed_history import SpeedHistory
 
 from .tuning import MAX_BYTES, StopGate, digest, encoded, map_identity, validate
 
@@ -45,6 +46,7 @@ class TuningBridge:
         self.localized_at = float('-inf')
         self.requests = queue.Queue(maxsize=4)
         self.pose_history = PoseHistory()
+        self.speed_history = SpeedHistory()
         bridge = self
 
         class DisplayBuffer(Buffer):
@@ -56,6 +58,7 @@ class TuningBridge:
         self.listener = TransformListener(self.buffer, node)
         self.subscriptions = [
             node.create_subscription(String, 'recovery/status', lambda m: self.vehicle.recovery(m.data), 1),
+            node.create_subscription(DiagnosticArray, 'control/speed_diagnostics', self.speed_diagnostics, 10),
             node.create_subscription(DiagnosticArray, 'diagnostics', self.vehicle_diagnostics, 10),
             node.create_subscription(TrackingReference, 'control/tracking_reference', self.reference, 1),
             node.create_subscription(OperationModeState, 'operation_mode/state', self.mode, 1),
@@ -140,6 +143,10 @@ class TuningBridge:
                     target=[msg.target.x, msg.target.y], lookahead_m=msg.lookahead_m,
                     target_distance_m=msg.target_distance_m)
 
+    def speed_diagnostics(self, msg):
+        stamp = msg.header.stamp.sec + msg.header.stamp.nanosec / 1e9
+        self.speed_history.capture(stamp, msg.status, self.fresh(msg.header.stamp, .5))
+
     def vehicle_diagnostics(self, msg):
         stamp = msg.header.stamp.sec + msg.header.stamp.nanosec / 1e9
         self.vehicle.bridge(stamp, msg.status)
@@ -177,6 +184,8 @@ class TuningBridge:
                       pose=self.pose, tracking_reference=self.tracking_status(), localized=self.localized and now - self.localized_at <= 1.5,
                       apply_issue=self.issue(), stop_issue=self.gate.issue(),
                       can_rollback=self.previous is not None)
+        if hasattr(self, 'speed_history'):
+            result['speed_history'] = self.speed_history.view(now)
         if hasattr(self, 'pose_history'):
             result.update(self.pose_history.batch(pose_stream, pose_after))
         if hasattr(self, 'parking'): result['parking']=self.parking.view()

@@ -17,6 +17,7 @@ tuning.id='course';tuning.connected=true;tuning.received=Date.now();tuning.statu
 element('tuning-parameters-target').value='tracking';element('tuning-line').value='customline';
 const calls=[];
 let available=true, lookahead=.8, offset=0;
+const rates={control_rate_hz:100,throttle_rise_rate:.1,throttle_fall_rate:.2};
 const adaptive={lookahead_mode:'fixed',lookahead_low_speed_m:.8,lookahead_high_speed_m:2};
 globalThis.fetch=async(url,options)=> {
   const body=JSON.parse(options.body);calls.push({url,body});
@@ -29,6 +30,10 @@ globalThis.fetch=async(url,options)=> {
                       ...Object.entries(adaptive).map(([name,value])=>({name,label:name,type:typeof value==='string'?4:3,value,read_only:false}))]:[],
     line_choices:['centerline','customline'],applied:url.endsWith('parameters_set'),readback_matches:true};
   if(body.target==='vehicle')result.fields=[{name:'steering_offset',label:'offset',type:3,value:offset,read_only:false},{name:'steering_scale',label:'scale',type:3,value:-1,read_only:true}];
+  if(body.target==='speed'){
+    if(url.endsWith('parameters_set'))Object.assign(rates,body.changes);
+    result.fields=Object.entries(rates).map(([name,value])=>({name,label:name,type:3,value,read_only:false}));
+  }
   return {ok:true,json:async()=>result};
 };
 emit('status');await flush();
@@ -118,3 +123,25 @@ assert.equal(element('tuning-parameters-status').title,'ROSノード: pure_pursu
 const staged=byName('lateral_controller').children[2].children[0];
 staged.value='pure_pursuit';staged.change();
 assert.match(element('tuning-parameters-status').textContent,/適用済み: MPC/,'editing must not pretend the selection is applied');
+
+element('tuning-parameters-target').value='speed';
+await element('tuning-parameters-refresh').click();await flush();
+assert.match(byName('throttle_rise_rate').children[0].children[1].textContent,/0は制限なし/);
+fieldInput('throttle_rise_rate').value='0.2';
+fieldInput('throttle_fall_rate').value='0';
+await element('tuning-parameters-form').submit({preventDefault(){}});await flush();
+assert.deepEqual(calls.at(-1).body.changes,{throttle_rise_rate:.2,throttle_fall_rate:0});
+assert.equal(fieldInput('throttle_rise_rate').value,'0.2');
+assert.equal(fieldInput('throttle_fall_rate').value,'0');
+
+tuning.status.stop_issue='STOP required';emit('tuning');
+assert.equal(element('tuning-parameters-apply').disabled,false);
+fieldInput('control_rate_hz').value='50';fieldInput('control_rate_hz').input();
+assert.equal(element('tuning-parameters-apply').disabled,true);
+fieldInput('control_rate_hz').value='100';fieldInput('control_rate_hz').input();
+assert.equal(element('tuning-parameters-apply').disabled,false);
+fieldInput('control_rate_hz').value='50';
+tuning.status.stop_issue='';emit('tuning');
+await element('tuning-parameters-form').submit({preventDefault(){}});await flush();
+assert.deepEqual(calls.at(-1).body.changes,{control_rate_hz:50});
+assert.equal(fieldInput('control_rate_hz').value,'50');
