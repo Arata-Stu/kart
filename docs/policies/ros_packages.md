@@ -417,7 +417,7 @@ bringupの対話選択は解像度とFPSを組にした候補一覧とする。
 環境そのものの記録には`environment`モードを用意し、RGB・左右Infra・Depth・IMU・
 校正・TFを保存する。通常collectの負荷や記録対象を暗黙に変えず、環境用の完全な
 センサ／bag YAMLを選択する。DepthとInfraが有効なら同一センサのprofileを揃える。
-録画の開始・停止は従来のJoy操作とし、起動時に自動録画やAUTO遷移を行わない。
+録画の開始・停止はJoyとUIから同じmanagerに要求し、起動時に自動録画やAUTO遷移を行わない。
 
 ### ESC固有の信号列の生成
 
@@ -478,3 +478,7 @@ AUTO操舵を正解教師と扱わず、指令分布とVSLAM速度・軌跡曲�
 イベント時刻はユーザーが指定し、衝突後を直前評価へ混ぜない。分布支持は原因・安全性の証明ではない。
 未対応・品質不良はunknownとし、別bag座標を同一地点と仮定しない。
 公式offline pose工程とそのログを再利用・保持し、走行制御や学習設定を自動変更しない。
+
+UIの録画操作は`kart_bag_manager`の`bag/set_recording`（SetBool）を通してJoyと共通処理へ渡す。
+`bag/recording_status`（Trigger）で状態を取得し、要求受付とファイル終了完了を区別する。
+UI切断で自動停止・自動再開しない。操作timeout時は再送せず状態を再取得する。

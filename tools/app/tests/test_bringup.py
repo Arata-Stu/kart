@@ -51,3 +51,15 @@ class BringupTests(unittest.TestCase):
         with patch.object(bringup_host,'containers',return_value=[dict(id=ID,running=False)]), patch.object(bringup_host,'command') as run:
             bringup_host.dispatch(dict(action='container_start',container=ID))
             run.assert_called_once_with(['docker','start',ID])
+
+    def test_recording_transport_preserves_target_and_timeout(self):
+        with tempfile.TemporaryDirectory() as folder, patch('kart_studio.bringup.remote') as send:
+            Bringup(Path(folder)).request(dict(connection=CONNECTION, container=ID,
+                recording_service='/robot/bag/recording_status'), 'recording_stop')
+            self.assertEqual(send.call_args.args[1]['recording_service'], '/robot/bag/recording_status')
+        with patch('kart_studio.bringup.subprocess.run', return_value=subprocess.CompletedProcess([],0,'{}','')) as run:
+            remote(CONNECTION, dict(action='recording_status', container=ID))
+            self.assertEqual(run.call_args.kwargs['timeout'], 12)
+        with patch.object(bringup_host, 'containers', return_value=[dict(id=ID,running=True)]), patch.object(bringup_host, 'command', return_value='{}') as run:
+            bringup_host.dispatch(dict(action='recording_stop', container=ID, recording_service='/bag/recording_status'))
+            self.assertIn('recording_stop', run.call_args.kwargs['input'])

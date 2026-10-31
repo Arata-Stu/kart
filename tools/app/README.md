@@ -1499,7 +1499,7 @@ UI/Notebook/SSHが切れてもJetsonのtmuxでプロセスを保持する。
 「起動設定を保存」は接続先ごとの次回用設定をNotebookに保存するだけで、自動起動やYAML変更はしない。
 `--mode`を除くCLIパラメータを用途別フォームで指定できる。独自の任意shellコマンド欄はない。
 ROSノードの全YAML項目を編集する画面ではない。動作中の調整は既存の実車調整画面を使う。
-通常走行のモード・録画開始停止は既存Joy操作、ESC信号列の開始/STOPは既存ESC画面を使用する。
+通常走行のモードは既存Joy操作、録画開始停止はJoyまたは「Jetson起動」の録画ボタン、ESC信号列の開始/STOPは既存ESC画面を使用する。
 
 端末から復帰する場合は、画面の「端末からセッションへ復帰」に表示されるコマンドを、同じDockerの`admin`ユーザーで実行する。
 `/tmp`を共有する別Dockerとの混線を避けるため、コンテナごとの専用socketを使う。以下のID部分は画面の実値に置き換える:
@@ -1527,3 +1527,17 @@ Jetson SSH/Docker/ROS結合・カメラ/GPU・車両動作は別途実機確認�
 PYTHONPATH=scripts/lib:tools/app python3 -m pytest scripts/tests/test_bringup_remote.py tools/app/tests/test_bringup.py
 node tools/app/tests/test_bringup.mjs
 ```
+
+### JoyとUIからのrosbag録画
+
+「Jetson起動」で接続先・Dockerを選択すると、録画状態・保存先・RAW連携状態を取得する。
+「録画開始」「録画停止」はbringup運用のR1 START / L1 STOPと同じmanagerを操作する。
+R1で開始してUIで停止、その逆も可能。TUIから起動したmanagerにも接続できる。
+停止処理中はファイル終了待ちで、開始ボタンは無効。録画中表示はデータ受信・全topic保存の保証ではない。
+UIやSSHが切れても録画は継続し、再接続して状態取得・停止できる。操作は自動再送しない。
+複数managerを検出した場合は操作を拒否する。走行モードは変更しない。
+
+Jetson側では更新後に`colcon build --packages-select kart_bag_manager`を実行し、
+更新した環境をsourceしてbringupを再起動する必要がある。未更新の場合はmanager未検出になる。
+通信は既存SSH/Docker経由。追加公開ポートはなく、短命のROS clientが
+`bag/recording_status`（Trigger）と`bag/set_recording`（SetBool）を呼ぶ。

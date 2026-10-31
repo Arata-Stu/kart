@@ -5,7 +5,7 @@
 Notebook側で記録から地図を作成・編集してJetsonへ渡すローカルWebアプリ。
 画面は「地図」「転送」「学習」「解析」「分布解析」「ESC試験」「Jetson起動」。
 E2Eとbringup管理は独立したbackend/frontend moduleで実装する。
-Jetsonのbringup起動・終了をUIから扱う。通常走行のモード操作と録画開始停止は既存Joy契約を維持する。
+Jetsonのbringup起動・終了をUIから扱う。通常走行のモード操作は既存Joy契約を維持する。録画開始停止はJoyとUIから同じkart_bag_managerを操作する。
 学習画面はデータセット作成・学習・ONNX export・オフライン評価・特徴量確認・モデル転送を扱う。
 
 - 高さ付きVSLAM点群を背景に左右境界を編集し、centerline、raceline、customlineを生成する。

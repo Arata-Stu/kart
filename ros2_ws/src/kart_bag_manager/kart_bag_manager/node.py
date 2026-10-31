@@ -1,5 +1,6 @@
 """ROS adapter for the JetPilot-derived recorder lifecycle."""
 from dataclasses import fields
+import json
 import time
 import signal
 from threading import Event
@@ -12,12 +13,13 @@ from rclpy.parameter import Parameter
 from rclpy.signals import SignalHandlerOptions
 from rcl_interfaces.msg import ParameterDescriptor
 from rcl_interfaces.srv import SetParametersAtomically
-from std_srvs.srv import Trigger
+from std_srvs.srv import Trigger, SetBool
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from rclpy.task import Future
 from .raw_relay import RawRelay
 from kart_interfaces.msg import BagRequest, BagStatus
 from .recorder import Recorder, Settings
+from .control import set_recording, snapshot
 
 
 class BagManagerNode(Node):
@@ -40,6 +42,10 @@ class BagManagerNode(Node):
         self.recorder = Recorder(self.settings)
         self.request_sub = self.create_subscription(BagRequest, 'bag/request', self.handle_request, 10)
         self.status_pub = self.create_publisher(BagStatus, 'bag/status', 10)
+        self.recording_status_service = self.create_service(
+            Trigger, 'bag/recording_status', self.recording_status)
+        self.recording_control_service = self.create_service(
+            SetBool, 'bag/set_recording', self.recording_control)
         self.raw_pub = self.create_publisher(BagRequest, raw_topic, 10) if raw_topic else None
         self.raw_relay = None
         self.raw_clients = {}
@@ -66,18 +72,38 @@ class BagManagerNode(Node):
         self.get_logger().info(f'Recorder idle; output_dir={self.recorder.output_dir}; waiting for /bag/request')
 
     def handle_request(self, request):
+        accepted = True
         if request.command == BagRequest.START:
-            self.recorder.start(request.label)
+            accepted = set_recording(self.recorder, True, request.label)
         elif request.command == BagRequest.STOP:
-            self.recorder.stop()
+            accepted = set_recording(self.recorder, False)
         elif request.command == BagRequest.SPLIT:
             self.recorder.last_event = 'manual split ignored: use recording_split_duration_s'
         elif request.command == BagRequest.MARK:
             self.recorder.last_event = f'mark: {request.label}'
             self.send_raw(BagRequest.MARK, request.label)
         else:
+            accepted = False
             self.recorder.last_event = f'unknown request: {request.command}'
         self.update(force_status=True)
+        return accepted
+
+    def recording_status(self, _request, response):
+        self.update()
+        response.success = True
+        response.message = json.dumps(snapshot(self.recorder, self.settings, self.raw_relay))
+        return response
+
+    def recording_control(self, request, response):
+        # Same single-threaded callback path as Joy. No second recorder or mode changes.
+        command = BagRequest()
+        command.command = BagRequest.START if request.data else BagRequest.STOP
+        command.label = 'ui'
+        command.header.stamp = self.get_clock().now().to_msg()
+        command.header.frame_id = 'kart_studio'
+        response.success = self.handle_request(command)
+        response.message = json.dumps(snapshot(self.recorder, self.settings, self.raw_relay))
+        return response
 
     def submit_raw_service(self, operation, argument):
         client = self.raw_clients[operation]

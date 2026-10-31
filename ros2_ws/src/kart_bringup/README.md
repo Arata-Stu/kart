@@ -1579,3 +1579,10 @@ CLI/TUI/UIの排他とtmuxのログ・終了管理は`scripts/lib/bringup_runtim
 `bringup_remote.py`が担当する。直接`ros2 launch`は共通ロックを取得しないため、運用入口は
 `bringup.sh`またはStudioに統一する。
 [UI起動手順・検証境界](../../../tools/app/README.md#notebook-uiからjetsonのbringupを起動する)を参照。
+
+### Studioからの録画操作
+
+Studio「Jetson起動」の録画開始・停止ボタンとJoy（運用設定R1 START / L1 STOP）は
+同じ`kart_bag_manager`を操作する。走行モードとは独立し、追加launch引数はない。
+更新後はbag managerを再ビルドしてbringupを再起動する。
+[サービスと状態](../kart_bag_manager/README.md)、[UI手順](../../../../tools/app/README.md)を参照。

@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from kart_bag_manager.recorder import Recorder, Settings
+from kart_bag_manager.control import set_recording, snapshot
 
 # Own child process in a temporary directory; never invokes ros2 or records user data.
 CHILD = '''
@@ -84,6 +85,26 @@ class RecorderTest(unittest.TestCase):
         self.assertEqual(r.phase,'idle'); self.assertTrue((first/'metadata.yaml').exists())
         self.assertTrue(r.start('../../label')); self.assertNotEqual(r.current_uri,str(first))
         self.until(r,lambda:r.recording)
+
+    def test_shared_ui_and_joy_control(self):
+        r = self.make()
+        self.assertTrue(r.start('joy'))
+        self.until(r, lambda: r.recording)
+        pid = r.process.pid
+        self.assertFalse(set_recording(r, True, 'ui'))
+        self.assertEqual(r.process.pid, pid)
+        self.assertTrue(set_recording(r, False))
+        self.assertEqual(snapshot(r, self.settings)['phase'], 'stopping')
+        self.assertFalse(set_recording(r, True))
+        self.until(r, lambda: r.process is None)
+        self.assertEqual(snapshot(r, self.settings)['phase'], 'idle')
+        self.assertTrue(set_recording(r, True, 'ui'))
+        self.until(r, lambda: r.recording)
+        r.stop()  # Joy uses the same recorder.
+        self.until(r, lambda: r.process is None)
+        self.assertTrue((Path(r.current_uri) / 'metadata.yaml').exists())
+        self.settings.snapshot_mode = True
+        self.assertTrue(snapshot(r, self.settings)['writing_unverified'])
 
     def test_close_finalizes_child(self):
         r=self.make(); r.start(); self.until(r,lambda:r.recording)

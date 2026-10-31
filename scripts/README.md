@@ -230,7 +230,7 @@ macOS GUIにはvenvのmjpythonをSIM_PYTHONへ指定する。ROS起動のHz/TF�
 `fixed_axes`の既定は`both`、他に`steering`。非固定軸はJoy操作。
 別端末で`bash scripts/vehicle_tuning.sh control`を実行し、STOP中に固定対象・
 steering/throttle/brake/duration_sを一括変更する。再起動や録画停止は不要。
-AUTOへの移行と録画はJoyで操作する。変更はYAMLへ保存しない。
+AUTOへの移行はJoy、録画はJoyまたはStudioの録画ボタンで操作する。変更はYAMLへ保存しない。
 `teleop_timeout_s`の既定は0.15秒、片軸固定の入力途絶でSTOP要求。
 条件は`/control/fixed_config`（std_msgs/msg/String、JSON、1Hzと変更時）へ記録する。
 詳細と全parameterは[kart_control README](../ros2_ws/src/kart_control/README.md)。
@@ -603,4 +603,4 @@ UI起動はDocker内の`kart-bringup` tmuxで保持し、`tmux -L kart-bringup-C
 `bringup.sh`のCLI/TUIも実行中は`.kart-runtime/bringup.lock`を保持し、UIとの二重起動を防ぎます。
 Ctrl+C/TERM/HUPをROS launchのprocess groupへ転送し、終了までロックを保持します。
 `--dry-run`ではロック取得・起動をしません。直接`ros2 launch`は排他対象の入口ではないため、
-運用時は`bringup.sh`またはUIを使用してください。通常の走行・録画操作は既存Joy契約のままです。
+運用時は`bringup.sh`またはUIを使用してください。通常走行は既存Joy契約のままです。録画はJoyとStudioの録画ボタンから共通managerを操作できます。

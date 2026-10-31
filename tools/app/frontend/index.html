@@ -30,6 +30,15 @@
         <p id="bringup-status" role="status">未接続。上部「接続設定」でJetsonを指定してください。</p>
         <pre id="bringup-existing"></pre>
       </div>
+      <div class="bringup-card" id="recording-card">
+        <div class="actions"><h3>rosbag録画</h3><button id="recording-refresh" disabled>録画状態を再取得</button></div>
+        <p id="recording-state" role="status">JetsonとDockerを選択すると録画状態を取得します。</p>
+        <div class="actions"><button id="recording-start" class="primary" disabled>● 録画開始（R1と共通）</button><button id="recording-stop" disabled>■ 録画停止（L1と共通）</button></div>
+        <p class="small">R1で開始してUIで停止、UIで開始してL1で停止できます。走行モードは変更しません。UI・SSHが切れても録画は継続します。</p>
+        <p>保存先（現在／直近）: <code id="recording-uri">—</code></p>
+        <p id="recording-event" class="small"></p><p id="recording-raw" class="small"></p><p id="recording-warning" class="small"></p>
+        <p class="small">「録画中」はプロセスと保存先の確認です。メッセージ受信・記録内容の完全性は別途確認してください。</p>
+      </div>
       <div id="bringup-workspace" hidden>
         <div class="bringup-card">
           <h3>1. 用途と構成</h3>
@@ -43,7 +52,7 @@
           <div class="actions"><button id="bringup-save">起動設定を保存</button><button id="bringup-plan" class="primary">設定を検証</button></div>
           <h3>3. 設定を確認して起動</h3><pre id="bringup-review">設定を検証すると、採用される構成をここに表示します。</pre>
           <div class="actions"><button id="bringup-start" class="primary" disabled>この設定で起動</button><button id="bringup-stop" disabled>bringupを終了</button></div>
-          <p class="small">起動のみでは録画やAUTOを開始しません。ESC試験は「ESC試験」画面から操作できます。通常の走行モード・録画操作は既存のJoy操作を使用します。</p>
+          <p class="small">起動のみでは録画やAUTOを開始しません。ESC試験は「ESC試験」画面から操作できます。通常の走行モードはJoyで操作し、録画はR1/L1と上のボタンの両方で操作できます。</p>
           <p class="small">「bringupを終了」はCtrl+C相当の終了要求です。車両の物理非常停止ではありません。プロセス稼働中の表示はROSノードや実機の準備完了を意味しません。</p>
         </div>
         <div class="bringup-card"><h3>実行ログ</h3><pre id="bringup-log">ログはまだありません。</pre><details><summary>端末からセッションへ復帰</summary><p>選択中のDockerに入り、次のコマンドを実行できます。</p><code id="bringup-attach"></code></details></div>

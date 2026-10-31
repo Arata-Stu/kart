@@ -257,6 +257,9 @@ def worker(run):
 
 def dispatch(body):
     action = body.get('action')
+    if action in ('recording_status', 'recording_start', 'recording_stop'):
+        from recording_remote import request
+        return request(action, body.get('recording_service'))
     if action == 'catalog':
         return dict(modes=MODES, fields=fields(), status=status())
     if action == 'status':

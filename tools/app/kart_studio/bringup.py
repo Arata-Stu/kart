@@ -10,7 +10,8 @@ from .storage import atomic_json, read_json
 from .transfers import profile, SSH_OPTIONS
 
 HOST_AGENT = Path(__file__).with_name('bringup_host.py').read_text()
-ACTIONS = {'containers', 'container_start', 'catalog', 'status', 'assets', 'plan', 'start', 'stop'}
+ACTIONS = {'containers', 'container_start', 'catalog', 'status', 'assets', 'plan', 'start', 'stop',
+           'recording_status', 'recording_start', 'recording_stop'}
 
 
 def remote(connection, body):
@@ -20,9 +21,10 @@ def remote(connection, body):
     try:
         response = subprocess.run(['ssh', *SSH_OPTIONS, '-p', str(p['port']),
                                    f"{p['user']}@{p['host']}", 'python3 -c ' + shlex.quote(HOST_AGENT)],
-                                  input=json.dumps(body), text=True, capture_output=True, timeout=60)
+                                  input=json.dumps(body), text=True, capture_output=True,
+                                  timeout=12 if body['action'].startswith('recording_') else 60)
     except subprocess.TimeoutExpired as exc:
-        raise ValueError('接続がタイムアウトしました。起動・終了は自動再送しません。状態を再取得してください') from exc
+        raise ValueError('接続がタイムアウトしました。操作は自動再送しません。状態を再取得してください') from exc
     try:
         result = json.loads(response.stdout)
     except ValueError as exc:
@@ -51,7 +53,7 @@ class Bringup:
                     presets[key] = value
                     atomic_json(self.file, presets)
                 return dict(preset=presets.get(key))
-        payload = {k: body[k] for k in ('container', 'values', 'revision', 'run_id', 'selections') if k in body}
+        payload = {k: body[k] for k in ('container', 'values', 'revision', 'run_id', 'selections', 'recording_service') if k in body}
         if action != 'containers' and not re.fullmatch('[a-f0-9]{64}', str(payload.get('container', ''))):
             raise ValueError('対象Dockerを選択してください')
         return remote(p, dict(payload, action=action))

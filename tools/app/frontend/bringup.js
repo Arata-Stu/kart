@@ -1,4 +1,5 @@
 import { $, state, api, on, toast } from './api.js';
+import { connectRecording, disconnectRecording } from './recording.js';
 
 const ui = {connection:null, container:null, catalog:null, values:{mode:'esc-trial'},
   revision:null, snapshot:null, timer:null, epoch:0, busy:false, choices:[], assetBase:null};
@@ -110,6 +111,7 @@ async function guarded(fn) {
   } finally {if(epoch===ui.epoch){ui.busy=false;renderButtons();}}
 }
 function reset() {
+  disconnectRecording();
   ui.epoch++;clearTimeout(ui.timer);ui.catalog=null;ui.snapshot=null;ui.revision=null;
   ui.busy=false;ui.connection=null;ui.container=null;
   $('bringup-workspace').hidden=true;$('bringup-container-start').disabled=true;
@@ -131,10 +133,12 @@ async function loadContainer(epoch) {
   if(!ui.container) return;
   const data=await request('catalog');if(epoch!==ui.epoch)return;
   ui.catalog=data;$('bringup-workspace').hidden=false;
+  connectRecording({connection:ui.connection,container:ui.container});
   $('bringup-mode').replaceChildren(...Object.entries(data.modes).map(([v,l])=>new Option(l,v)));
   renderFields();renderStatus(data.status);schedule(epoch);
 }
 $('bringup-connect').onclick=()=>{
+  disconnectRecording();
   // A fresh epoch binds every response to this explicit connection selection.
   clearTimeout(ui.timer);ui.epoch++;ui.busy=false;
   guarded(async epoch=>{
@@ -154,6 +158,7 @@ $('bringup-connect').onclick=()=>{
   });
 };
 async function selectContainer(epoch) {
+  disconnectRecording();
   const selected=ui.containers?.find(c=>c.id===$('bringup-container').value);
   ui.container=selected?.id;ui.catalog=null;ui.snapshot=null;invalidate();
   $('bringup-workspace').hidden=true;

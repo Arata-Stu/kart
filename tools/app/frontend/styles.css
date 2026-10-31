@@ -1496,3 +1496,5 @@ header .local-tag { white-space: nowrap; }
 }
 
 #bringup-existing:empty { display: none; }
+
+#recording-card code { overflow-wrap: anywhere; }

@@ -31,9 +31,7 @@ managerのQoSはすべてreliable / volatile / keep-last depth 10。
 | --- | --- | --- | --- |
 | 入力 | `/bag/request` | `kart_interfaces/msg/BagRequest` | START=1、STOP=2、SPLIT=3、MARK=4 |
 | 出力 | `/bag/status` | `kart_interfaces/msg/BagStatus` | 既定1 Hz＋要求・イベント時。recording/current_uri/last_event/message |
-| 条件付き出力 | なし（無効） | `kart_interfaces/msg/BagRequest` | `raw_recording_driver_node` | `""` | OpenEB driverの絶対node名。空で標準サービス連携無効。例`/event_camera/event_camera_driver` |
-| `raw_recording_service_timeout_s` | `5.0` s | サービス利用可能待ち・応答待ちの各期限。正の有限値 |
-| `raw_recording_request_topic`設定時のみRAWレコーダへ要求を配信 |
+| 条件付き出力 | なし（無効） | `kart_interfaces/msg/BagRequest` | `raw_recording_request_topic`設定時のみRAWレコーダへ要求を配信 |
 | 子プロセス入力 | `topics`に列挙した名前、または全topic | 各topicの発見された型 | 実際のbag内容。QoSはrosbag2の適応設定またはoverrideファイル |
 
 既定topic一覧は[config/bag_manager.yaml](config/bag_manager.yaml)。走行指令・モード・Joy・基板状態・
@@ -46,7 +44,20 @@ no_discovery=falseなら録画開始後に現れた対象topicも発見対象と
 既定1 Hz。標準topicsにも含める。RAWサービスの成功応答・失敗・timeout・所有状態を報告する。
 `raw_recording_driver_node`が空の場合は配信しない。
 
-独自サービス・actionはない。RAW連携時だけdriverの標準サービスをclientとして使用する。
+UIとJoyは同じRecorderを操作する。追加parameter・actionはない。
+
+| サービス（namespaceに追従） | 型 | 内容 |
+| --- | --- | --- |
+| `/bag/recording_status` | `std_srvs/srv/Trigger` | 現在の録画状態を取得 |
+| `/bag/set_recording` | `std_srvs/srv/SetBool` | data=trueでSTART、falseでSTOP。走行モードは変更しない |
+
+応答messageはJSON（schema=`kart.recording.v1`）。`phase`、`recording`、`current_uri`、
+`last_event`、`writing_unverified`（pause/snapshot設定）、`raw`（state/last_event/last_error/owned_writer/pending）を返す。
+SetBoolのsuccessは要求受付であり、開始・保存完了の保証ではない。状態取得で完了を確認する。
+録画中・開始中・停止中のSTARTは拒否し、STOPは繰り返しても終了期限を延長しない。
+UI要求はサービスから共通処理へ入り、`/bag/request`には再配信しない。状態は`/bag/status`にも反映する。
+
+RAW連携時はdriverの標準サービスをclientとして使用する。
 `/event_camera/event_camera_driver/set_parameters_atomically`（rcl_interfaces/srv/SetParametersAtomically）で
 保存先を設定し、`/event_camera/{start,stop,split}_raw_recording`（std_srvs/srv/Trigger）を順序付きで呼ぶ。
 既定は連携無効。driverノード名を指定した場合、そのnamespaceからTrigger名を解決する。pause/snapshot等を有効にする場合は、子rosbag2 recorderのサービスを
@@ -54,9 +65,9 @@ no_discovery=falseなら録画開始後に現れた対象topicも発見対象と
 
 ## L1 / R1と状態
 
-`kart_joy_manager`のL1がSTART、R1がSTOPを発行する。走行モード・deadmanとは独立し、
+bringup運用設定はR1がSTART、L1がSTOP。個別pkgの基準設定はL1がSTART、R1がSTOP。走行モード・deadmanとは独立し、
 同時押しはSTOP優先。長押し・接続時に押されていたボタンでは繰り返し要求しない。
-**R1は録画停止であり、車両停止は×。** Joy切断で録画を自動停止しない。
+**録画停止と車両停止は別操作。車両停止は×。** Joy切断で録画を自動停止しない。
 
 状態`message`は`idle` → `starting` → `recording` → `stopping` → `idle`。
 失敗・異常終了は`error`となり、`last_event`に理由を示す。
@@ -94,6 +105,8 @@ managerのすべての設定は起動時固定（read-only）。独自parameter�
 
 | 名前 | 既定値 | 説明 |
 | --- | --- | --- |
+| `raw_recording_driver_node` | `""` | OpenEB driverの絶対node名。空で標準サービス連携無効 |
+| `raw_recording_service_timeout_s` | `5.0` s | サービス待ち・応答待ちの各期限 |
 | `output_dir` | `/workspaces/record` | 親ディレクトリ。空不可。起動時に作成 |
 | `session_layout` | false | 起動日時/date/time/name形式。bringup運用YAMLはtrue |
 | `recording_name` | `""` | 固定フォルダ名。単一名・120 bytes以内。空なら日時＋label |
@@ -136,7 +149,7 @@ cd /workspaces/ros2_ws
 rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install --packages-up-to kart_bringup
 source install/setup.bash
-# 全体起動: managerは既定で起動するが、録画はL1まで始めない
+# 全体起動: managerは既定で起動するが、録画は明示STARTまで始めない
 ros2 launch kart_bringup vehicle.launch.py
 # 単体起動
 ros2 launch kart_bag_manager bag.launch.py
