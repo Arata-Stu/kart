@@ -28,6 +28,14 @@ class ConfigurationTest(unittest.TestCase):
         self.assertEqual(modules['bag_manager']['effective']['output_dir'],'/data/my_bags')
         self.assertFalse(modules['bag_manager']['overrides'])
 
+    def test_joy_limit_override(self):
+        _, modules = load(self.path, {'joy_max_throttle': '0.5', 'auto_fixed_throttle': '0.4'})
+        self.assertEqual(modules['joy_manager']['overrides']['speed_scale'], 0.5)
+        self.assertEqual(modules['joy_manager']['effective']['speed_scale'], 0.5)
+        for value in ('nan', 'inf', '0', '1.1', '-0.1', True):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                load(self.path, {'joy_max_throttle': value})
+
     def test_explicit_overrides(self):
         settings, modules = load(self.path, {'container_name':'runtime', 'record_dir':'/data/run',
                                             'enable_bridge':'true', 'device':'/dev/test', 'namespace':'/kart'})

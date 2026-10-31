@@ -1,0 +1,8 @@
+{
+  "settings": {"steering_bin": 0.1, "speed_bin": 0.5, "curvature_bin": 0.1, "min_seconds": 1.0, "min_recordings": 2, "min_visits": 3},
+  "recordings": [
+    {"id": "teacher01", "role": "training", "mode": "manual", "bag": "/workspaces/record/DATE/TIME/teacher01", "dataset": "/workspaces/datasets/teacher01"},
+    {"id": "good01", "role": "reference", "mode": "manual", "bag": "/workspaces/record/DATE/TIME/good01"},
+    {"id": "evaluation01", "role": "evaluation", "mode": "auto", "bag": "/workspaces/record/DATE/TIME/evaluation01", "events": [{"name": "collision01", "stamp_ns": 1750000003000000000, "before_s": 3.0}]}
+  ]
+}

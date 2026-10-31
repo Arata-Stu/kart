@@ -118,7 +118,7 @@ class PropagationTests(unittest.TestCase):
                      'device', 'map_file', 'map_dir', 'model_dir', 'lane_id', 'line_type',
                      'tuning', 'record_dir', 'evs', 'no_evs', 'evs_backend', 'evs_aggregation',
                      'evs_image', 'evs_serial', 'evs_tensor_config', 'evs_bias_file', 'foxglove',
-                     'no_bridge', 'auto_fixed_throttle', 'e2e_fixed_throttle', 'e2e_throttle_mode', 'recovery',
+                     'no_bridge', 'joy_max_throttle', 'auto_fixed_throttle', 'e2e_fixed_throttle', 'e2e_throttle_mode', 'recovery',
                      'run_name', 'e2e_model_dir', 'eval_localization', 'multicam_mode', 'parking_site', 'parking_slot',
                      'tracking_mode', 'base_frame', 'imu_frame', 'latency_output', 'bag', 'rate'}
         actual = {action.dest for action in parsers[0]._actions}

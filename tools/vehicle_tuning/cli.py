@@ -93,6 +93,8 @@ def main(argv=None):
         source.add_argument('--normalized-json',type=Path,help='Portable extracted data/test fixture')
         p.add_argument('--offline-poses',type=Path,help='Official poses/odom_poses.tum; same recording clock as bag')
         p.add_argument('--pose-frame',help='Body frame of official TUM poses, explicitly verified')
+        if action == 'analyze':
+            p.add_argument('--coverage-max-throttle', type=float, help='使用予定の上限 (0,1]。分布診断のみ、走行指令ではない')
         if action == 'turn':
             p.add_argument('--wheelbase',required=True,type=float,help='Measured wheelbase in metres')
             p.add_argument('--max-speed',type=float,default=2.0)
@@ -113,6 +115,8 @@ def main(argv=None):
     try:
         if args.action=='tune': tune(args);return 0
         cfg=json.loads(args.config.read_text())
+        if args.action == 'analyze' and args.coverage_max_throttle is not None:
+            cfg['coverage_max_throttle'] = args.coverage_max_throttle
         if args.mode: cfg['allowed_modes']={'manual':[2],'auto':[1]}[args.mode]
         if args.action == 'turn':
             cfg['max_speed_mps']=args.max_speed
@@ -158,6 +162,7 @@ def main(argv=None):
             analysis_report(out,summary,rows,segments,bins)
         publish(args.output,save)
         print(f"Selected {summary['selected_samples']}/{summary['samples']} samples; {summary['segments']} segments; model usable={summary['model']['usable']}")
+        print(f"分布診断: 有効{summary['coverage']['valid_samples']}点 / 追加記録の目安{len(summary['coverage']['recommendations'])}件 (report.html / coverage.json)")
         return 0 if summary['selected_samples'] else 2
     except (ValueError,KeyError,FileNotFoundError,ImportError) as error:
         parser.exit(2,f'Error: {error}\n')

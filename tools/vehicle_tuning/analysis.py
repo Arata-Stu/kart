@@ -15,6 +15,8 @@ def validate_config(cfg):
             continue
         if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
             raise ValueError(f'{key}: must be finite and positive')
+    if cfg.get('coverage_max_throttle', 1) > 1:
+        raise ValueError('coverage_max_throttle must be in (0, 1]')
     if cfg['min_speed_mps'] >= cfg['max_speed_mps']:
         raise ValueError('min_speed_mps must be less than max_speed_mps')
     if len(set(cfg['topics'].values())) != len(cfg['topics']):
@@ -203,9 +205,11 @@ def analyze(data, cfg, turning=False):
                'target_mps': target,
                'imu_accel_norm_mps2': float(np.linalg.norm(imu['linear'])) if imu else None,
                'acceleration_mps2': None, 'smooth_speed_mps': None, 'segment': None,
-               'reason': '|'.join(reasons)}
+               'reason': '|'.join(reasons), 'quality_reason': '|'.join(reasons)}
         dropped.update(reasons)
         rows.append(row)
+
+    coverage_rows = [dict(row) for row in rows] if not turning else []
 
     # Contiguous, approximately constant commands. Compare to the segment anchor,
     # not the preceding sample, so slow command ramps cannot masquerade as plateaus.
@@ -305,6 +309,9 @@ def analyze(data, cfg, turning=False):
                'observed_trim': list(trims[0]) if trims else None,
                'auto_speed_rmse_mps': float(np.sqrt(np.mean(np.square(errors)))) if errors else None,
                'warnings': warnings, 'config': cfg}
+    if not turning:
+        from data_coverage import diagnose
+        summary['coverage'] = diagnose(coverage_rows, segments, cfg)
     return summary, rows, segments, table
 
 

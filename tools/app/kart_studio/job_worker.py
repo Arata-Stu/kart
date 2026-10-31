@@ -10,7 +10,7 @@ import time
 from .jobs import Job, Jobs, ACTIVE, Cancelled, process_identity, unpack
 from .storage import read_json
 
-ACTIONS = {'command', 'audit', 'learning', 'model_push', 'record_pull', 'map_push',
+ACTIONS = {'coverage', 'command', 'audit', 'learning', 'model_push', 'record_pull', 'map_push',
            'map_copy', 'line_generate', 'vgl', 'mesh_color', 'dense_step', 'capture', 'map_build'}
 
 
@@ -39,6 +39,9 @@ def execute(action, args, job, repo, base):
     maps, records = Maps(base / 'map'), base / 'record'
     studio = SimpleNamespace(repo=repo, records=records, maps=maps,
                              mapping=Mapping(repo, records, maps))
+    if action == 'coverage':
+        from .coverage import Coverage
+        return Coverage(repo, base, records).run(job, *args)
     if action == 'audit': return Audit(repo, base, records).run(job, *args)
     if action == 'learning': return Learning(repo, base, records, base / '.kart-studio').execute(job, *args)
     if action == 'model_push': return Learning(repo, base, records, base / '.kart-studio').push(job, *args)

@@ -1,6 +1,7 @@
 """Editable startup configuration. No ROS execution and no persistent defaults."""
 from copy import deepcopy
 import json
+import math
 from pathlib import Path
 
 import yaml
@@ -167,6 +168,9 @@ class Editor:
                         evs=f'センサ / EVS: {"有効" if a.evs else "無効"}（詳細設定）')
             if a.evs:
                 print('EVS詳細:', self.evs_summary())
+            if a.mode in ('collect', 'environment'):
+                limit = self.params('input/joy_manager.yaml', 'kart_joy_manager')['speed_scale'] if a.joy_max_throttle is None else a.joy_max_throttle
+                rows['joy_limit'] = f'制御 / Joy最大スロットル: {limit}'
             rows['control'] = '制御 / AUTO: ' + self.control_summary()
             if a.mode in ('drive', 'e2e'):
                 from kart_bringup.recovery import configuration, LABELS
@@ -290,6 +294,14 @@ class Editor:
                            'high': '高Hz（加速度200 / ジャイロ400Hz）', 'off': 'なし'}[v])
         elif action == 'evs':
             self.edit_evs()
+        elif action == 'joy_limit':
+            current = self.params('input/joy_manager.yaml', 'kart_joy_manager')['speed_scale'] if a.joy_max_throttle is None else a.joy_max_throttle
+            raw = input(f'Joy最大スロットル（前進・後退）0.01..1 [{current}] > ').strip()
+            if raw:
+                value = float(raw)
+                if not math.isfinite(value) or not 0.01 <= value <= 1:
+                    raise ValueError('Joy最大スロットルは0.01..1の有限値を指定してください')
+                a.joy_max_throttle = value
         elif action == 'control':
             self.edit_control()
         elif action == 'recovery':
@@ -321,7 +333,6 @@ class Editor:
         elif action == 'rate':
             value = input(f'再生倍率 [{a.rate or "YAML"}] > ').strip()
             if value:
-                import math
                 if not math.isfinite(float(value)) or float(value) <= 0:
                     raise ValueError('再生倍率は正の有限値を指定してください')
                 a.rate = value
@@ -350,6 +361,9 @@ class Editor:
                 a.e2e_fixed_throttle = float(input(f'E2E固定スロットル 0..{settings["max_throttle"]} [{current}] > ').strip() or current)
         else:
             settings = self.params('input/joy_manager.yaml', 'kart_joy_manager')
+            settings = dict(settings)
+            if a.joy_max_throttle is not None:
+                settings['speed_scale'] = a.joy_max_throttle
             value = settings['auto_fixed_throttle'] if a.auto_fixed_throttle is None else a.auto_fixed_throttle
             mode = self.pick('AUTOスロットル', ['normal', 'fixed'], 'fixed' if value >= 0 else 'normal',
                              lambda v: '通常AUTO' if v == 'normal' else '固定値で収集（ステア手動）')

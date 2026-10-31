@@ -1554,3 +1554,18 @@ bash scripts/bringup.sh --mode esc-trial --device /dev/ttyACM0
 引数なしの`bash scripts/bringup.sh`では「用途」→「ESC信号列試験」を選択する。
 カメラ・地図・録画の選択は行わない。CLIの対応オプションは`--device`と`--dry-run`。
 `esc_trial.launch.py`の`device` launch引数は既定空文字で、空なら試験YAMLの値を保持する。
+
+### データ記録時のJoy最大スロットル
+
+`bash scripts/bringup.sh`のデータ記録（走行データ／環境記録）で、設定一覧の
+「制御 / Joy最大スロットル」を選び、0.01..1の数値を直接入力できる。
+空入力は現在値を保持する。未指定では`input/joy_manager.yaml`の`speed_scale`（標準0.3）を保持する。
+CLIでは`--joy-max-throttle 0.5`、mission launchでは`joy_max_throttle:=0.5`を指定する。
+launch引数の既定は空文字（YAML保持）。Joy managerの既存`speed_scale`へ起動時だけ上書きし、
+YAMLは保存変更しない。前進・後退のトリガー倍率であり、車速や補正後PWMの上限ではない。
+収集用固定AUTOの許容上限にも反映する。PID/E2Eの出力上限は変更しない。
+独自ノード・topicは追加しない。採用値は起動前に表示する。
+
+```bash
+bash scripts/bringup.sh --mode collect --joy-max-throttle 0.5
+```

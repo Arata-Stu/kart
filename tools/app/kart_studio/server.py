@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlsplit, urlencode
 from . import capture, registration, vgl, dense, dense_steps, mesh_color
 from .copies import copy_map
 from .e2e import Learning
+from .coverage import Coverage
 from .jobs import Jobs, Task
 from .mapping import Mapping, local_records
 from .maps import Maps
@@ -45,6 +46,7 @@ class Studio:
         self.learning = Learning(repo, base, self.records, self.state)
         self.tuning = Tuning(self.maps)
         self.audit = Audit(repo, base, self.records)
+        self.coverage = Coverage(repo, base, self.records)
         self.profile_file = self.state / "connection.json"
 
     def connection_defaults(self):
@@ -93,6 +95,12 @@ class Studio:
             return dense.catalog(self.maps, key)
         if path == "/api/vgl":
             return vgl.catalog(self, key)
+        if path == "/api/coverage":
+            result = self.coverage.catalog()
+            result["running"] = [j for j in self.jobs.list() if j.get("status") in ("running", "orphaned") and any(r.startswith("coverage:") for r in j.get("resources", []))]
+            return result
+        if path == "/api/coverage/result":
+            return self.coverage.result(key)
         if path == "/api/e2e/loss":
             return self.learning.loss(key, q.get("kind", "runs"))
         if path == "/api/e2e/engine":
@@ -142,6 +150,9 @@ class Studio:
         raise KeyError("Not found")
 
     def post(self, path, b):
+        if path == "/api/coverage/run":
+            plan = self.coverage.prepare(b)
+            return self.jobs.start("E2Eデータ分布解析", plan["resources"], Task("coverage", [plan]))
         if path == '/api/audit/run':
             plan = self.audit.prepare(b)
             return self.jobs.start('走行記録の時刻解析: ' + plan['bag_key'],

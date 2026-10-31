@@ -1451,3 +1451,28 @@ bash scripts/bringup.sh --mode esc-trial --device /dev/ttyACM0
 引数なしの`bash scripts/bringup.sh`では「用途」→「ESC信号列試験」を選択する。
 カメラ・地図・録画の選択は行わない。CLIの対応オプションは`--device`と`--dry-run`。
 `esc_trial.launch.py`の`device` launch引数は既定空文字で、空なら試験YAMLの値を保持する。
+
+## E2Eデータ分布のUI解析
+
+上部「分布解析」で、教師dataset・良好な走行・評価走行のbagを追加し、「解析を開始」を押す。
+教師dataset選択時、出典に一致するbagが一覧にあれば自動選択する。MANUAL/AUTOは各記録に合わせる。
+イベントは評価走行だけに、bag開始からの秒数と直前区間秒数を入力する（任意）。
+元metadataの開始時刻へサーバー側で正確に加算する。これは同一ROS時計を前提とし、自動衝突検知ではない。
+
+poseがなければ既存公式offline VSLAMジョブを実行する。過去の分布解析で保存された同一bagのposeは
+プルダウンから再利用でき、元bagのパス・metadata hashが一致しないものは拒否する。
+解析は共通の永続ジョブとして実行・停止できる。ROS domainを予約し、車両制御は起動しない。
+処理一覧にジョブログが表示され、VSLAM詳細はジョブが示すvslam.logへ保存する。
+`KART_COVERAGE_PYTHON`が未指定ならStudioと同じPythonを使う（ROS/GPU依存が必要）。
+
+履歴から結果を開くと、操舵ヒストグラム、操舵×速度／曲率×速度ヒートマップ、評価走行の時系列を表示する。
+セルのクリックで秒数・bag数・滞在回数、時系列のクリックで正確なstamp_ns・速度・操舵・支持状態を確認できる。
+色帯は教師の曲率×速度分布との比較。指定イベントの集計は全サンプルで行い、時系列表示だけ最大約3000点へ間引く。
+時系列の相対秒は評価pose開始基準であり、入力欄のbag開始基準とは異なる。照合にはstamp_nsを使う。
+画像の見た目や衝突原因を判定せず、分布支持を「学習十分」と呼ばない。
+
+出力は`analysis/e2e_coverage/coverage_*/`。manifestをUIが生成し、CLI操作なしで解析できる。
+失敗・中止時も途中成果物を保持する。データ削除API・任意コマンド実行APIは追加しない。
+APIは`GET /api/coverage`、`GET /api/coverage/result?id=...`、`POST /api/coverage/run`。
+入力bagはrecord root、datasetは管理下e2e/datasets、再利用poseは解析rootに限定する。
+詳細な集計条件は[解析ツールREADME](../e2e_coverage/README.md)を参照。

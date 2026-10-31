@@ -211,3 +211,28 @@ def test_evaluation_can_switch_without_retaining_incompatible_options():
     assert not editor.args.map_file and not editor.args.map_dir and not editor.args.model_dir
     rows = editor.rows()
     assert 'assets' not in rows and 'rgb' not in rows and 'control' not in rows
+
+
+def test_record_joy_limit_input_reaches_launch():
+    out, err = run_tui([('用途', 'record'), ('記録内容', 'collect'),
+                        (REVIEW, 'joy_limit'), (REVIEW, 'start')], inputs=('0.5',))
+    assert not err
+    assert 'joy_max_throttle:=0.5' in out
+    assert 'Joy最大スロットル: 0.5' in out
+
+
+def test_record_joy_limit_blank_preserves_yaml():
+    out, err = run_tui([('用途', 'record'), ('記録内容', 'collect'),
+                        (REVIEW, 'joy_limit'), (REVIEW, 'start')], inputs=('',))
+    assert not err
+    assert 'joy_max_throttle:=' not in out
+    assert 'Joy最大スロットル: 0.3' in out
+
+
+@pytest.mark.parametrize('value', ['nan', 'inf', '0', '1.1', '-0.1'])
+def test_record_joy_limit_rejects_invalid_input(value):
+    out, err = run_tui([('用途', 'record'), ('記録内容', 'collect'),
+                        (REVIEW, 'joy_limit'), (REVIEW, 'start')], inputs=(value,))
+    assert not err
+    assert '変更できません' in out
+    assert 'joy_max_throttle:=' not in out

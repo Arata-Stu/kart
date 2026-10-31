@@ -63,6 +63,15 @@ def analysis_report(output, summary, rows, segments, bins):
     body+='<p>入力: '+html.escape(str(summary['source']))+'</p>'
     body+='<p>'+f"全{summary['samples']}点 / 解析採用{summary['selected_samples']}点 / {summary['segments']}区間"+'</p>'
     body+='<p><a href="summary.json">全設定・品質・結果 JSON</a> · <a href="samples.csv">時系列 CSV</a> · <a href="segments.csv">区間 CSV</a> · <a href="characteristics.csv">特性表 CSV</a></p>'
+    coverage = summary.get('coverage')
+    if coverage:
+        write_json(output/'coverage.json', coverage)
+        write_csv(output/'coverage_speed_throttle.csv', coverage['speed_throttle_bins'])
+        body += '<h2>データ分布と追加記録の目安</h2><p>一定入力区間の抽出前に、品質・直進条件を満たす非制動データを集計します。</p>'
+        body += '<p><a href="coverage.json">分布診断 JSON</a> · <a href="coverage_speed_throttle.csv">速度×スロットル分布 CSV</a></p>'
+        body += table(coverage['recommendations']) + table(coverage['throttle_bins'])
+        body += '<details><summary>速度×スロットル分布・診断の限界</summary>' + table(coverage['speed_throttle_bins'])
+        body += '<ul>' + ''.join('<li>'+html.escape(x)+'</li>' for x in coverage['limitations']) + '</ul></details>'
     kff=summary['kff_candidate'];model=summary['model']
     body+='<p><strong>kff候補: '+(f"{kff['value']:.4g}" if kff else 'データ不足')+' ／ モデル試算: '+('利用可能（別区間検証済み）' if model['usable'] else '利用不可')+'</strong></p>'
     body+='<details><summary>候補値・モデル・検証誤差の詳細</summary><pre>'+html.escape(json.dumps({'kff':kff,'model':model},ensure_ascii=False,indent=2))+'</pre></details>'

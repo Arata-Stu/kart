@@ -1458,3 +1458,13 @@ summary {
 #esc-page table { border-collapse:collapse; }
 #esc-page td, #esc-page th { padding:6px 10px; text-align:left; }
 #esc-page p { margin:12px 0; }
+
+.coverage-layout{padding:24px;max-width:1400px;margin:auto;display:grid;gap:20px;width:100%}
+#coverage-page{overflow:auto;display:block}#coverage-page[hidden]{display:none}
+.coverage-card{background:var(--panel,#fff);padding:20px;border:1px solid #ccd3da;border-radius:10px}
+.coverage-row{display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));gap:12px;padding:14px 0;border-bottom:1px solid #ccd3da;margin-bottom:12px}
+.coverage-row label{display:grid;gap:4px}.coverage-row select,.coverage-row input{width:100%;min-width:0}
+#coverage-chart,#coverage-timeline{display:block;width:100%;height:auto;background:#fafcff;border:1px solid #ccd3da;cursor:crosshair}
+.coverage-table{overflow:auto;max-height:380px}.coverage-table table{border-collapse:collapse;width:100%}.coverage-table td,.coverage-table th{padding:8px;border:1px solid #ccd3da;text-align:left}
+#coverage-history{display:flex;gap:10px;flex-wrap:wrap}#coverage-settings{white-space:pre-wrap}
+@media(max-width:800px){.coverage-row{grid-template-columns:1fr}.coverage-layout{padding:10px}}

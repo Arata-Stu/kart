@@ -1507,3 +1507,12 @@ ROS/CUDA結合・header伝搬・RGB/EVS実機の時刻精度と負荷はター�
 従来の`python -m kart_e2e.evs_contract --model-json ... --base-config ... --output ...`も使用できる。
 ROSノード・topic・parameterの追加なし。自動選択はCLI層で行い、直接ROS launchする場合は
 従来どおり`evs_tensor_config`を指定する。
+
+## 教師・評価走行のデータ分布比較
+
+[tools/e2e_coverage](../../../tools/e2e_coverage/README.md)で、抽出済みRGB/EVS教師datasetと
+良好な走行・評価走行のbagを比較できる。操舵、操舵×速度、軌跡曲率×速度の分布と
+ユーザー指定イベント直前の支持状態をHTML/JSON/CSVへ出力する。
+pose未指定bagは公式offline VSLAMを実行し、既存odom_poses.tumも明示指定で再利用可能。
+学習・推論ノード、topic、parameterの変更はない。学習splitは自動再現せず指定samples.jsonlを集計する。
+分布閾値の充足を学習十分性や衝突原因の証明とは扱わない。

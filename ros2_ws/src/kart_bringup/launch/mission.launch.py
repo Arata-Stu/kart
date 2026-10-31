@@ -42,6 +42,7 @@ def add_mission(args):
         "device": args.device,
         "record_dir": args.record_dir,
         "run_name": args.run_name,
+        "joy_max_throttle": getattr(args, "joy_max_throttle", ""),
         "auto_fixed_throttle": getattr(args, "auto_fixed_throttle", ""),
     }
     if args.mode == "environment" or cfg["enable_evs"]:
@@ -227,6 +228,7 @@ def generate_launch_description():
         "record_dir",
         "run_name",
         "auto_fixed_throttle",
+        "joy_max_throttle",
         "recovery",
         "parking_site",
         "parking_slot",

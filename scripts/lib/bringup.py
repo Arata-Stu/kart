@@ -164,6 +164,8 @@ def argument_parser():
     parser.add_argument(
         "--dry-run", action="store_true", help="選択・検証とコマンド表示のみ"
     )
+    parser.add_argument("--joy-max-throttle", type=float, default=None,
+                        help="データ記録のJoy最大スロットル 0.01..1（未指定はYAML）")
     parser.add_argument("--auto-fixed-throttle", type=float, default=None,
                         help="Collection AUTO throttle, manual steering (collect/drive): -1 normal, 0..speed_scale fixed (not vehicle speed)")
     parser.add_argument("--e2e-throttle-mode", choices=("fixed", "model"), default="",
@@ -225,6 +227,8 @@ def build_command(args, config):
             from kart_bringup.studio_tuning import map_root
             tuning_map_dir = map_root(args.map_file, args.map_dir)
         print('Map Studio 動的調整: ' + ('有効 / 地図: ' + tuning_map_dir if tuning_enabled else '無効'))
+    if args.joy_max_throttle is not None and args.mode not in ('collect', 'environment'):
+        raise ValueError('--joy-max-throttleはデータ記録専用です')
     if args.mode not in ('collect', 'environment', 'drive') and args.auto_fixed_throttle is not None:
         raise ValueError('--auto-fixed-throttleは収集用（ステア手動）です。collect/environment/driveで指定してください。E2Eは--e2e-fixed-throttleを使用します')
     if args.e2e_fixed_throttle is not None and args.mode != 'e2e':
@@ -305,10 +309,12 @@ def build_command(args, config):
 
         _, modules = load(config / "bringup.yaml", {
             "enable_bridge": str(not args.no_bridge).lower(), "device": args.device,
+            "joy_max_throttle": "" if args.joy_max_throttle is None else str(args.joy_max_throttle),
             "auto_fixed_throttle": '-1' if args.mode == 'e2e' else ('' if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle)),
         })
         if not args.no_bridge:
             print(f"車両基板: {modules['bridge']['effective']['device']}")
+        print(f"Joy最大スロットル: {modules['joy_manager']['effective']['speed_scale']}（前進・後退）")
         fixed = modules['joy_manager']['effective']['auto_fixed_throttle']
         if args.mode != 'e2e':
             print('AUTOスロットル: ' + ('通常AUTO（既存制御）、MANUALはR2/L2' if fixed < 0 else
@@ -355,6 +361,7 @@ def build_command(args, config):
         "parking_slot": parking_slot,
         "mode": args.mode,
         "recovery": args.recovery,
+        "joy_max_throttle": None if args.joy_max_throttle is None else str(args.joy_max_throttle),
         "auto_fixed_throttle": None if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle),
         "e2e_throttle_mode": args.e2e_throttle_mode,
         "e2e_fixed_throttle": None if args.e2e_fixed_throttle is None else str(args.e2e_fixed_throttle),
