@@ -1569,3 +1569,13 @@ YAMLは保存変更しない。前進・後退のトリガー倍率であり、�
 ```bash
 bash scripts/bringup.sh --mode collect --joy-max-throttle 0.5
 ```
+
+
+### Notebookからの起動管理
+
+Studioの「Jetson起動」は既存`bash scripts/bringup.sh --mode ...`をDocker内tmuxで実行する。
+設定検証・地図/model選択はTUIと共通。新しいROSノード・topic・parameterは追加しない。
+CLI/TUI/UIの排他とtmuxのログ・終了管理は`scripts/lib/bringup_runtime.py`と
+`bringup_remote.py`が担当する。直接`ros2 launch`は共通ロックを取得しないため、運用入口は
+`bringup.sh`またはStudioに統一する。
+[UI起動手順・検証境界](../../../tools/app/README.md#notebook-uiからjetsonのbringupを起動する)を参照。

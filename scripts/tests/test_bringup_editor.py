@@ -164,12 +164,12 @@ def test_launch_only_after_successful_validation():
           patch.object(entry, 'choose', side_effect=scripted(steps)),
           patch('builtins.input', return_value='fixed'),
           patch.object(entry.shutil, 'which', return_value='/usr/bin/ros2'),
-          patch.object(entry.os, 'execvp') as execute,
+          patch.object(entry, 'run_command') as execute,
           redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO())):
         entry.main()
     execute.assert_called_once()
-    assert execute.call_args.args[0] == 'ros2'
-    assert 'run_name:=fixed' in execute.call_args.args[1]
+    assert execute.call_args.args[0][0] == 'ros2'
+    assert 'run_name:=fixed' in execute.call_args.args[0]
 
 
 def test_explicit_no_evs_survives_model_input_inference():

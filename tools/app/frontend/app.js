@@ -11,6 +11,7 @@ import "./custom_editor.js";
 import "./simulation.js";
 import "./tuning.js";
 import "./esc_trial.js";
+import "./bringup.js";
 import "./tuning_parameters.js";
 import "./lanes.js";
 import "./obstacles.js";
@@ -20,7 +21,7 @@ import "./capture.js";
 import "./vgl.js";
 import "./mesh_view.js";
 function page(name) {
-  for (const p of ["map", "transfer", "learning", "audit", "coverage", "esc"]) {
+  for (const p of ["map", "transfer", "learning", "audit", "coverage", "esc", "bringup"]) {
     $(p + "-page").hidden = p !== name;
     $("nav-" + p).classList.toggle("active", p === name);
   }
@@ -39,6 +40,7 @@ action("nav-learning", () => page("learning"));
 action("nav-coverage", () => page("coverage"));
 action("nav-audit", () => page("audit"));
 action("nav-esc", () => page("esc"));
+action("nav-bringup", () => page("bringup"));
 try {
   state.config = await api("config");
   emit("ready");

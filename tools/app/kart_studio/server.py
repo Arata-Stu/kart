@@ -21,6 +21,7 @@ from .maps import Maps
 from .storage import atomic_json, name, read_json, within
 from .transfers import Transfers, profile
 from .tuning import Tuning, remote
+from .bringup import Bringup
 from .audit import Audit, FILES as AUDIT_FILES
 
 
@@ -45,6 +46,7 @@ class Studio:
         self.transfers = Transfers(self.records, self.maps)
         self.learning = Learning(repo, base, self.records, self.state)
         self.tuning = Tuning(self.maps)
+        self.bringup = Bringup(self.state)
         self.audit = Audit(repo, base, self.records)
         self.coverage = Coverage(repo, base, self.records)
         self.profile_file = self.state / "connection.json"
@@ -150,6 +152,8 @@ class Studio:
         raise KeyError("Not found")
 
     def post(self, path, b):
+        if path.startswith("/api/bringup/"):
+            return self.bringup.request(b, path.rsplit("/", 1)[1])
         if path == "/api/coverage/run":
             plan = self.coverage.prepare(b)
             return self.jobs.start("E2Eデータ分布解析", plan["resources"], Task("coverage", [plan]))

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Searchable fzf terminal selector; exec ROS directly so Ctrl-C reaches ros2 launch."""
+"""Shared launch validation and terminal selector with exclusive runtime ownership."""
 
 import argparse
 import os
@@ -8,6 +8,8 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from bringup_runtime import run_command
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [
@@ -466,11 +468,7 @@ def build_command(args, config):
     return command
 
 
-def main():
-    from copy import deepcopy
-    import yaml
-    parser = argument_parser()
-    args = parser.parse_args()
+def normalize_args(args):
     selected_evs = args.evs or any((args.evs_backend, args.evs_serial, args.evs_bias_file,
                                     args.evs_tensor_config, args.evs_aggregation, args.evs_image is not None))
     if args.no_evs and selected_evs:
@@ -480,6 +478,14 @@ def main():
         if args.evs_backend and args.evs_backend != "cuda_async":
             raise ValueError("--evs-aggregationは--evs-backend cuda_asyncと組み合わせてください")
         args.evs_backend = "cuda_async"
+
+
+def main():
+    from copy import deepcopy
+    import yaml
+    parser = argument_parser()
+    args = parser.parse_args()
+    normalize_args(args)
     config = ROOT / "ros2_ws/src/kart_bringup/config"
     interactive = args.mode is None
     if interactive and not sys.stdin.isatty():
@@ -511,12 +517,12 @@ def main():
         return
     if not shutil.which('ros2'):
         raise ValueError('ROS開発コンテナでビルドしてから起動してください')
-    os.execvp(command[0], command)
+    return run_command(command)
 
 
 if __name__ == "__main__":
     try:
-        main()
+        sys.exit(main())
     except (KeyboardInterrupt, EOFError):
         print("\n中止しました", file=sys.stderr)
         sys.exit(130)

@@ -593,3 +593,14 @@ engine再利用時も欠けたYAMLを生成し、既存YAMLは検証して再利
 `bringup.sh`のE2Eでは`--evs-tensor-config`未指定時にモデル内のYAMLを自動選択する。
 明示指定を優先し、選択後はモデルとの整合性を検証する。YAMLがなければ準備コマンドを案内して停止する。
 直接ROS launchする場合の`evs_tensor_config`指定は引き続き必要。ノード・topic・parameterの変更なし。
+
+
+### Studioからの遠隔bringup
+
+Notebookの「Jetson起動」から既存Jetson Dockerを選び、用途・設定・検証・起動・ログ・終了を操作できます。
+[手順と前提](../tools/app/README.md#notebook-uiからjetsonのbringupを起動する)を参照してください。
+UI起動はDocker内の`kart-bringup` tmuxで保持し、`tmux -L kart-bringup-CONTAINER_ID_FIRST12 attach -t kart-bringup`で復帰できます。
+`bringup.sh`のCLI/TUIも実行中は`.kart-runtime/bringup.lock`を保持し、UIとの二重起動を防ぎます。
+Ctrl+C/TERM/HUPをROS launchのprocess groupへ転送し、終了までロックを保持します。
+`--dry-run`ではロック取得・起動をしません。直接`ros2 launch`は排他対象の入口ではないため、
+運用時は`bringup.sh`またはUIを使用してください。通常の走行・録画操作は既存Joy契約のままです。

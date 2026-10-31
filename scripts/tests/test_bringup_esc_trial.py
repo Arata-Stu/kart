@@ -45,6 +45,6 @@ def test_unrelated_options_rejected(options):
 
 
 def test_cli_executes_only_dedicated_launch():
-    with patch.object(module.shutil,'which',return_value='/usr/bin/ros2'),patch.object(module.os,'execvp') as execute:
+    with patch.object(module.shutil,'which',return_value='/usr/bin/ros2'),patch.object(module,'run_command') as execute:
         run('--mode','esc-trial')
-    execute.assert_called_once_with('ros2',['ros2','launch','kart_bringup','esc_trial.launch.py'])
+    execute.assert_called_once_with(['ros2','launch','kart_bringup','esc_trial.launch.py'])

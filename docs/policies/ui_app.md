@@ -3,8 +3,9 @@
 ## 対象と画面
 
 Notebook側で記録から地図を作成・編集してJetsonへ渡すローカルWebアプリ。
-画面は「地図」「転送」「学習」「解析」の4つ。E2Eは独立したbackend/frontend moduleで実装する。
-Jetsonのbringup、車両操作、録画開始停止は対象に含めない。
+画面は「地図」「転送」「学習」「解析」「分布解析」「ESC試験」「Jetson起動」。
+E2Eとbringup管理は独立したbackend/frontend moduleで実装する。
+Jetsonのbringup起動・終了をUIから扱う。通常走行のモード操作と録画開始停止は既存Joy契約を維持する。
 学習画面はデータセット作成・学習・ONNX export・オフライン評価・特徴量確認・モデル転送を扱う。
 
 - 高さ付きVSLAM点群を背景に左右境界を編集し、centerline、raceline、customlineを生成する。
@@ -393,3 +394,32 @@ rosbagを選択するだけで実行でき、source topicとスパイク閾値�
 ROS domainの競合を防ぐ。中止・失敗の途中成果物は保持し、成功履歴だけを完成結果として開く。
 イベントはbag開始からの秒数をサーバーで整数nsへ変換する。分布・時系列はクリックで根拠値を表示し、
 描画の間引きと全サンプル集計を区別する。分布支持を原因推定や安全性の証明に置き換えない。
+
+
+## Jetsonのbringup管理
+
+- 接続は明示操作だけで開始し、既存SSH鍵・known_hosts・接続設定を共用する。
+  NotebookのHTTPサーバーはloopbackのまま。Jetsonに新しい待受ポートを作らない。
+- 既存kart Docker（`/workspaces`にcheckoutをbind）の一覧から選択し、停止済みコンテナの
+  `docker start`まで扱う。初回のSSH設定、Docker image構築・container作成、ROSビルドは環境構築として別途行う。
+  `run_dev.py`と同じ`admin`でexecし、端末と同じユーザーのtmuxを使う。
+- Jetsonは`/tmp`をhostと共有するため、専用socket名`kart-bringup-<container ID先頭12桁>`を
+  `tmux -L`へ渡し、別containerのserverへ接続しない。復帰コマンドをUIに表示する。
+- 専用セッション名は`kart-bringup`。プロセス・ログの正本はJetson側に置き、Notebook/SSH切断で終了しない。
+  終了した実行を再接続で自動再開しない。Docker停止・再作成やJetson再起動を越えた実行保持は保証しない。
+- TUI/CLI/UIは同じ`argument_parser`、`normalize_args`、`build_command`を使う。
+  地図・モデル選択は既存`Editor.assets`を再利用し、未選択の候補だけUIに提示する。
+  検証結果を確認して明示起動する。設定変更で検証を無効化し、起動時にも再検証する。
+- 起動設定の保存先はNotebookの`.kart-studio/bringup-presets.json`。接続先ごとに保存し、
+  Jetsonの静的YAMLは上書きしない。全CLI項目をフォームで扱うが任意shell入力は受け付けない。
+- CLI/TUI/UIの実行期間はcheckout共通の`.kart-runtime/bringup.lock`を`flock`で排他する。
+  ロックファイルを削除して解除しない。子ROSプロセスへのsignal転送と終了待ちをsupervisorが担う。
+  tmux名だけで稼働を判定せず、ロック・実行ID・セッション所有タグ・ログ・終了コードを表示する。
+- 旧TUI・直接`ros2 launch kart_bringup`もLinuxのprocess argvから保守的に検出して起動を拒否する。
+  直接launchの同時開始は共通ロックに参加しないため、運用入口を`bringup.sh`またはUIへ統一する。
+  既存の外部セッションを自動移管・停止しない。最初の移行時だけ既存端末から終了する。
+- 終了要求は実行IDとtmux所有タグで対象を照合し、Ctrl+C相当のSIGINTだけを送る。
+  強制kill・自動再送・自動再起動はしない。応答不明時は状態再取得を促す。
+  終了要求の受付を終了完了、プロセス稼働をROS/実機準備完了と呼ばない。
+- bringupプロセスの保持と車両の出力継続は別。ESCのUI heartbeat断での中立/STOP、
+  通常Joyの保持・再arm条件を変更しない。Web終了は物理非常停止ではない。

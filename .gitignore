@@ -50,3 +50,6 @@ __pycache__/
 
 # Local rosbag analysis reports and extracted metadata.
 /analysis/
+
+# Shared bringup ownership and persistent remote session logs.
+/.kart-runtime/

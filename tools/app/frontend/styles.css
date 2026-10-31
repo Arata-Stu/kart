@@ -1468,3 +1468,31 @@ summary {
 .coverage-table{overflow:auto;max-height:380px}.coverage-table table{border-collapse:collapse;width:100%}.coverage-table td,.coverage-table th{padding:8px;border:1px solid #ccd3da;text-align:left}
 #coverage-history{display:flex;gap:10px;flex-wrap:wrap}#coverage-settings{white-space:pre-wrap}
 @media(max-width:800px){.coverage-row{grid-template-columns:1fr}.coverage-layout{padding:10px}}
+
+#bringup-page { flex: 1; min-height: 0; width: 100%; overflow: auto; padding: 20px; max-width: 1440px; margin: auto; }
+.bringup-card { padding: 20px; border: 1px solid var(--border, #d4d8dd); border-radius: 10px; margin-bottom: 16px; }
+.bringup-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 20px; margin: 16px 0; }
+.bringup-fields label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.bringup-fields small { opacity: .72; overflow-wrap: anywhere; }
+#bringup-page input, #bringup-page select { max-width: 100%; }
+#bringup-page pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; }
+#bringup-log { background: #17212b; color: #dce9f3; padding: 14px; min-height: 130px; }
+#bringup-choice { padding: 14px; border: 1px solid #4387a4; margin-top: 12px; }
+#bringup-choice-select { display: block; width: 100%; margin: 12px 0; }
+@media (max-width: 760px) { #bringup-page { padding: 10px; } .bringup-fields { grid-template-columns: 1fr; } }
+
+/* Keep the additional operation tab reachable on notebook and narrow screens. */
+header { gap: 16px; }
+header nav { min-width: 0; overflow-x: auto; flex: 1; }
+header button.nav { padding: 10px 14px; }
+header > .brand, header > button { flex-shrink: 0; }
+header .local-tag { white-space: nowrap; }
+#bringup-page .actions { align-items: center; flex-wrap: wrap; }
+@media (max-width: 1000px) {
+  header { height: auto; min-height: 64px; flex-wrap: wrap; padding: 8px 16px; gap: 8px; }
+  header nav { order: 3; flex-basis: 100%; min-height: 44px; }
+  header .local-tag { margin-left: auto; }
+  #connection-open { margin-left: auto; }
+}
+
+#bringup-existing:empty { display: none; }

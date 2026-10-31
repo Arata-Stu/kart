@@ -1,7 +1,7 @@
 # Kart Map Studio
 
 Notebookでbagを受信し、Isaac ROS cuVSLAMの地図・点群からHDMapと走行ラインを作成する。
-**地図 / 転送 / 学習**の3画面。Jetsonのbringup・車両操作機能は持たない。
+地図・転送・学習・解析・分布解析に加え、**Jetson起動 / ESC試験**から起動管理・試験を操作できる。
 学習画面からデータセット作成・DINOv3学習・ONNX export・オフライン評価・RGB特徴量確認・Jetsonモデル転送を実行できる。
 [設計方針](../../docs/policies/ui_app.md)に対象と座標契約を記載。
 
@@ -324,7 +324,7 @@ Jetson側はPython 3、SSHサーバー、SFTPサブシステムが必要。root�
   `.kart-upload-*`へ送信し、件数・サイズ一致後に`<name>_rN_<random>`へrenameする。
   既存地図を上書きしない。失敗したremote一時領域はログに場所を残し、必要に応じて手動整理。
 - known_hosts検証を無効化しない。初回SSH鍵の準備・接続確認は利用者が通常の端末で行う。
-- ブラウザを開くだけではSSH接続しない。bringup、Docker、録画要求、車両操作APIはない。
+- ブラウザを開くだけではSSH接続しない。bringupと既存Dockerの起動は「Jetson起動」の明示操作で行う。転送APIから車両操作は行わない。
 
 転送キューの検証: `test_transfers.py`（ローカル代替SCP・日付階層・API）、
 `test_jobs.py`（実子プロセスの順次実行・取消・失敗後続行・再接続）、
@@ -1476,3 +1476,54 @@ poseがなければ既存公式offline VSLAMジョブを実行する。過去の
 APIは`GET /api/coverage`、`GET /api/coverage/result?id=...`、`POST /api/coverage/run`。
 入力bagはrecord root、datasetは管理下e2e/datasets、再利用poseは解析rootに限定する。
 詳細な集計条件は[解析ツールREADME](../e2e_coverage/README.md)を参照。
+
+
+## Notebook UIからJetsonのbringupを起動する
+
+初回準備: NotebookからJetsonへのSSH鍵認証とknown_hosts、JetsonのDocker権限、
+`/workspaces`へkart checkoutをbindした既存開発コンテナ、tmux、ROSビルド済み環境が必要。
+NotebookとJetsonの両方へこの版のコードを反映し、NotebookのUIサーバーを再起動する。
+コンテナの新規作成・image構築・ROSビルド・SSH鍵登録をUIが自動実行することはない。
+
+1. 上部「接続設定」でJetsonを指定し、「Jetson起動」→「接続先を確認」。
+2. 対象Dockerを選択。停止中なら「既存Dockerを起動」。複数候補は明示選択する。
+3. 用途を選択。地図走行/E2E/評価は「Jetsonの地図・モデル・bagを選択」で
+   車体側の候補を選ぶ。TUIと同じ対応関係の推定・検証を行い、曖昧な候補は選択を求める。
+4. 起動時設定を編集し、「設定を検証」で採用構成を確認、「この設定で起動」。
+5. ログを確認。ESC試験は上部「ESC試験」→「試験ノードに接続」へ進む。
+6. 「bringupを終了」でCtrl+C相当を送り、表示が「終了」になったことを確認する。
+
+UI/Notebook/SSHが切れてもJetsonのtmuxでプロセスを保持する。
+ページ再読込後は接続先とDockerを再選択すると、稼働状態・直近ログ・終了結果を取得できる。
+通信エラーでは状態を未確認と表示し、起動/終了を自動再送しない。
+「起動設定を保存」は接続先ごとの次回用設定をNotebookに保存するだけで、自動起動やYAML変更はしない。
+`--mode`を除くCLIパラメータを用途別フォームで指定できる。独自の任意shellコマンド欄はない。
+ROSノードの全YAML項目を編集する画面ではない。動作中の調整は既存の実車調整画面を使う。
+通常走行のモード・録画開始停止は既存Joy操作、ESC信号列の開始/STOPは既存ESC画面を使用する。
+
+端末から復帰する場合は、画面の「端末からセッションへ復帰」に表示されるコマンドを、同じDockerの`admin`ユーザーで実行する。
+`/tmp`を共有する別Dockerとの混線を避けるため、コンテナごとの専用socketを使う。以下のID部分は画面の実値に置き換える:
+
+```bash
+tmux -L kart-bringup-CONTAINER_ID_FIRST12 attach -t kart-bringup
+# Ctrl-b → d: デタッチして保持、Ctrl-C: bringupの終了要求
+```
+
+CLI/TUI/UIは共通のflockで二重起動を拒否する。旧TUIや直接launchの検出時も起動を拒否し、
+既存端末での終了を案内する。更新前から動作しているプロセスは、初回だけ既存tmuxで終了してから移行する。
+直接`ros2 launch`はロックを取得しないため、以後は`bash scripts/bringup.sh`かUIに起動入口を統一する。
+Dockerの停止・再作成、Jetson再起動でtmuxは終了する。プロセス保持は実車出力の継続保証ではない。
+
+実行状態・ログはJetsonのcheckoutの`.kart-runtime/`に保存する。
+`session.json`が最新状態、`<run_id>.json`が実行要求、`<run_id>.log`がログ、
+`<run_id>.bootstrap.log`がtmux worker起動エラー。前回ログは次回起動で上書きしない。
+`bringup.lock`と`manager.lock`はflock用で、存在自体は起動済みを意味しない。削除して解除しない。
+
+検証: portable Python/JSテストとローカル実tmux上の模擬プロセスで、切離し後の保持・再接続・
+重複起動拒否・実行ID照合・SIGINT終了・ログ保持を確認。
+Jetson SSH/Docker/ROS結合・カメラ/GPU・車両動作は別途実機確認が必要。
+
+```bash
+PYTHONPATH=scripts/lib:tools/app python3 -m pytest scripts/tests/test_bringup_remote.py tools/app/tests/test_bringup.py
+node tools/app/tests/test_bringup.mjs
+```
