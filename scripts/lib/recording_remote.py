@@ -26,18 +26,21 @@ def request(action, expected_service=None):
         raise ValueError('録画状態を取得してから操作してください')
     import rclpy
     from std_srvs.srv import Trigger, SetBool
+    from rclpy.executors import SingleThreadedExecutor
     context = rclpy.Context()
     rclpy.init(context=context, args=[])
     node = None
+    executor = None
     try:
         node = rclpy.create_node('kart_studio_recording_' + uuid.uuid4().hex[:12], context=context)
+        executor = SingleThreadedExecutor(context=context)
         deadline = time.monotonic() + 3.0
         service = None
         while time.monotonic() < deadline:
             service = select_service(node.get_service_names_and_types(), expected_service)
             if service:
                 break
-            rclpy.spin_once(node, timeout_sec=0.05)
+            rclpy.spin_once(node, executor=executor, timeout_sec=0.05)
         if service is None:
             if action == 'recording_status':
                 return dict(available=False, message='録画manager未検出。録画対応bringupの起動とkart_bag_managerの更新・ビルドを確認してください')
@@ -52,7 +55,7 @@ def request(action, expected_service=None):
         if not status_only:
             message.data = action == 'recording_start'
         future = client.call_async(message)  # Exactly once. No ros2 CLI parsing or pub retries.
-        rclpy.spin_until_future_complete(node, future, timeout_sec=3.0)
+        rclpy.spin_until_future_complete(node, future, executor=executor, timeout_sec=3.0)
         if not future.done():
             future.cancel()
             raise ValueError('録画操作の結果は未確認です。自動再送せず、状態を再取得してください')
@@ -62,6 +65,12 @@ def request(action, expected_service=None):
             raise ValueError('録画managerの応答形式が一致しません。両側のコードを更新してください')
         return dict(available=True, service=service, accepted=response.success, **value)
     finally:
-        if node is not None:
-            node.destroy_node()
-        rclpy.shutdown(context=context)
+        try:
+            if executor is not None:
+                executor.shutdown()
+        finally:
+            try:
+                if node is not None:
+                    node.destroy_node()
+            finally:
+                rclpy.shutdown(context=context)

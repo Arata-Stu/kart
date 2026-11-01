@@ -1672,3 +1672,7 @@ MPC失敗時には具体的な理由、失敗した計算の所要ms・反復数
 これらは試走専用設定で、地図や実車ROSパラメータには保存・適用しません。
 HTTP optionsはlookahead_mode、lookahead_m、lookahead_low_speed_m、lookahead_high_speed_m。
 旧クライアントの未指定時は従来値を保持します。
+
+録画状態取得用の一時ROSクライアントは、専用contextと同じcontextのExecutorを使用し、
+終了時にExecutor・node・contextの順で解放する。リモートエラーは標準出力と標準エラーを保持する。
+ブラウザ切断による応答書込み失敗は操作を再実行せずに終了する。

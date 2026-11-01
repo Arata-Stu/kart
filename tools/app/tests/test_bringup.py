@@ -63,3 +63,13 @@ class BringupTests(unittest.TestCase):
         with patch.object(bringup_host, 'containers', return_value=[dict(id=ID,running=True)]), patch.object(bringup_host, 'command', return_value='{}') as run:
             bringup_host.dispatch(dict(action='recording_stop', container=ID, recording_service='/bag/recording_status'))
             self.assertIn('recording_stop', run.call_args.kwargs['input'])
+
+
+class HostErrorTests(unittest.TestCase):
+    def test_original_error_is_preserved_with_cleanup_stderr(self):
+        result = subprocess.CompletedProcess([], 1, '{"error":"context not initialized"}',
+                                             'Executor destructor failed')
+        with patch.object(bringup_host.subprocess, 'run', return_value=result):
+            with self.assertRaisesRegex(ValueError, 'context not initialized') as caught:
+                bringup_host.command(['docker', 'exec'])
+        self.assertIn('Executor destructor failed', str(caught.exception))

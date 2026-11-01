@@ -9,7 +9,8 @@ import sys
 def command(argv, **kwargs):
     result = subprocess.run(argv, capture_output=True, text=True, timeout=50, **kwargs)
     if result.returncode:
-        raise ValueError(result.stderr.strip()[-1500:] or result.stdout.strip()[-1500:])
+        raise ValueError('\n'.join(part.strip()[-1500:] for part in
+                                   (result.stdout, result.stderr) if part.strip()))
     return result.stdout
 
 
