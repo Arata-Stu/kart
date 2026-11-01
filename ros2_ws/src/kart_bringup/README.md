@@ -889,7 +889,7 @@ Jetsonの通常buildは`kart_sim`を探索対象から除外する。simを使�
 AUTO中もステアを操作でき、△でSTOPを挟まずMANUALへ直接引き継げる。
 正常なMANUAL→AUTOも直接切替可能。STOPからの初回進入は全入力中立が必要で、
 AUTO初回進入は0.3秒中立を配信してmux/bridgeのHOST handshakeを待つ。
-直接切替時は中立待ちを挟まない。×はSTOP、固定AUTO中の○はbrake優先＋STOP、L2は中立＋STOP。
+直接切替時は中立待ちを挟まない。×はSTOP、○は独立ブレーキ用MANUALへ引き継ぎ、解除時にSTOP。固定AUTO中のL2は中立＋STOP。
 入力途絶・異常・再起動後はSTOPから再armし、モード変更だけで異常解除しない。
 固定値は速度ではなく補正前の正規化要求で、起動時固定。変更はSTOP後に再起動する。
 
@@ -1193,13 +1193,15 @@ R2/L2操作に自動の制動保持・中立保持・正パルスは入らない
 config/recovery/recovery.yamlのpost_reverse_pulse_throttle（0.08）、post_reverse_pulse_s（0.05秒）で調整する。
 停車確認と中断監視は復帰moduleが継続する。実ESCでの値の校正は未実施。
 
-MANUALの○ではJoy managerが正パルス→brake=1.0を生成する。
-config/input/joy_manager.yamlのbrake_pulse_throttle（既定0.08、範囲0.002..1）、
-brake_pulse_s（既定0.01秒、範囲0.01..0.5）で設定する。起動時固定。
-○を離すと中断し、長押しでパルスを繰り返さない。STOPや入力喪失、モード変更でも中断する。
-AUTOと通常R2/L2は従来どおり。正パルスはMANUAL throttle trimを受け、実ESCでの値は未校正。
+○単独でJoy managerがブレーキ用MANUALを取得し、正パルス→brake=1.0を生成する。
+△保持は不要。STOP／AUTOからは中立配信と基板HOST経路の確認後に開始する。
+config/input/joy_manager.yamlのbrake_pulse_throttle（既定0.05、範囲0.002..1）、
+brake_pulse_s（既定0.02秒、範囲0.01..0.5）で設定する。起動時固定。
+○を離すと中立＋STOP。△／□を保持していても走行へ戻らず、離して押し直す。
+長押しでパルスを繰り返さない。×・入力喪失・外部モード変更・HOST喪失でも中断する。
+○は通常／固定AUTOからも引き継ぐ。通常R2/L2は従来どおり。正パルスはMANUAL throttle trimを受け、実ESCでの値は未校正。
 
-Joyの10 ms正パルスは基板の20 ms PWM更新に捕捉されない可能性がある。出力時間と実ESCの認識は要実機確認。復帰moduleの時間設定は変更していない。
+2026-11-02の利用者によるESC試験を基に+0.05 / 20 msを採用。Joy・mux・bridge経由の出力時間は配信周期に量子化される。出力時間と実ESCの認識は要実機確認。復帰moduleの時間設定は変更していない。
 
 ## Offline E2E latency（RGB）
 

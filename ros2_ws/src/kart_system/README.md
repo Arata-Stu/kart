@@ -22,6 +22,7 @@ QoSはすべてvolatile、keep-last。R=reliable、BE=best effort、数字=depth
 | 方向 | 既定topic名 | 型 | QoS | 内容 |
 | --- | --- | --- | --- | --- |
 | 入力 | `/joy` | `sensor_msgs/msg/Joy` | R/1 | 正規化した軸・ボタン |
+| 入力 | `/vehicle/active_path` | `std_msgs/msg/UInt8` | R/10 | 基板の出力経路。○の開始・保持はHOST=2、受信後150 ms以内を確認 |
 | 入力 | `/joy/ready` | `std_msgs/msg/Bool` | R/1 | 入力・profileが有効かつ設定中でないこと |
 | 入力 | `/operation_mode/state` | `kart_interfaces/msg/OperationModeState` | R/1 | 現在モード |
 | 出力 | `/teleop/fixed_config` | `std_msgs/msg/String` | R/1 | 10 Hz、固定スロットル設定とAUTO gateの状態（JSON） |
@@ -95,7 +96,7 @@ sim時刻での入力鮮度と実時間での通信断を分離する。元stamp
 | `vgl_trigger_service` | `/visual_localization/trigger_localization` | VGLのTriggerサービス名、起動時固定 |
 | `vgl_trigger_timeout_s` | `2.0` | 応答待ちの実時間上限、0.1〜30秒、起動時固定 |
 | `deadman_button` | `-1` | 追加deadmanなし。0以上なら△／□に加えて保持が必要。解除はAUTO/MANUALともSTOP |
-| `brake_button` | `1` | ○。MANUALでは正パルス→brake=1、トリガーより優先 |
+| `brake_button` | `1` | ○単独でMANUALを取得し正パルス→brake=1。解除はSTOP |
 | `stop_button` | `0` | ×。STOP要求、deadman不要 |
 | `manual_button` | `2` | △。保持中のみMANUAL、離すとSTOP。STOPからは中立で要求 |
 | `auto_button` | `3` | □。保持中のみAUTO、離すとSTOP。STOPからは中立で要求 |
@@ -108,14 +109,14 @@ sim時刻での入力鮮度と実時間での通信断を分離する。元stamp
 | `deadzone` | `0.08` | ステア入力の不感帯。0..0.5、外側を再正規化 |
 | `steering_scale` | `1.0` | ステア倍率。0.01..1 |
 | `speed_scale` | `0.3` | 正負スロットル倍率。0.01..1。車速[m/s]ではない |
-| `brake_pulse_throttle` | `0.08` | MANUALの○押下時の正throttle要求、0.002..1。起動時固定 |
-| `brake_pulse_s` | `0.01` | 正パルス保持時間[秒]、steady時刻、0.01..0.5。起動時固定 |
+| `brake_pulse_throttle` | `0.05` | ○による正throttle要求、0.002..1。起動時固定 |
+| `brake_pulse_s` | `0.02` | 正パルス保持時間[秒]、steady時刻、0.01..0.5。起動時固定 |
 | `auto_fixed_throttle` | `-1.0` | AUTO時の固定正規化指令（手動ステア）。-1で通常操作、0..speed_scaleで固定。起動時固定 |
 
 スロットルは`(R2 − L2) × speed_scale`。各トリガー0.01以下を0とし、負側は`reverse`へ格納する。
 両方同量なら相殺するが、モード要求時には両トリガーを離す必要がある。
 Joyとreadyの有効期間は100 ms、監視は100 Hz（固定値）。AUTO/MANUALとも切断・設定開始・入力途絶はSTOP。
-△保持中だけMANUAL、□保持中だけAUTO。離すと`joy_manager:mode_button_released`でSTOPを要求し、
+通常走行は△保持中だけMANUAL、□保持中だけAUTO（○独立ブレーキは下記の例外）。離すと`joy_manager:mode_button_released`でSTOPを要求し、
 teleopへ中立を配信する。×もSTOP。同時保持は`joy_manager:mode_buttons_conflict`でSTOPとし、
 片方だけを離しても再開しない。異常停止・再接続・起動時の押下保持では再armしない。
 両ボタンを離し、新鮮なSTOPを確認後に押し直す。STOPからの進入は従来どおり全入力中立が必要。
@@ -164,7 +165,7 @@ ROSを使わないテストはプロジェクトrootの`./scripts/tests/test-veh
 AUTO中もステアを操作でき、△でSTOPを挟まずMANUALへ直接引き継げる。
 正常なMANUAL→AUTOも直接切替可能。STOPからの初回進入は全入力中立が必要で、
 AUTO初回進入は0.3秒中立を配信してmux/bridgeのHOST handshakeを待つ。
-直接切替時は中立待ちを挟まない。×はSTOP、固定AUTO中の○はbrake優先＋STOP、L2は中立＋STOP。
+直接切替時は中立待ちを挟まない。×はSTOP、○は独立ブレーキ用MANUALへ引き継ぎ、解除時にSTOP。固定AUTO中のL2は中立＋STOP。
 入力途絶・異常・再起動後はSTOPから再armし、モード変更だけで異常解除しない。
 固定AUTOでも□保持が必要で、離すと固定出力を中断してSTOPにする。
 固定値は速度ではなく補正前の正規化要求で、起動時固定。変更はSTOP後に再起動する。
@@ -194,18 +195,22 @@ ROS結合・実車動作は未確認。portable testで固定出力、直接切�
 ### ESCへの手動要求と○による制動試験
 
 R2/L2は通常の前進/負入力要求。L2の自動シーケンスはない。
-MANUALの○はトリガーより優先し、押下からbrake_pulse_throttleをbrake_pulse_sだけ要求し、
-その後は押している間brake=1.0を要求する。ステアは現在の手動入力を維持する。
-正パルス中はbrake/reverse=0、制動中はthrottle/reverse=0。長押しでパルスを再開始しない。
-○を離すとパルスを中断し、通常トリガー操作に戻る。短すぎる押下では制動段階に達しない。
-MANUAL進入後に○を一度離した入力を観測してから、新しい押下でのみ正パルスを開始する。
+○は△／□と独立した保持操作。STOP・MANUAL・AUTOから、○単独でブレーキ用MANUALへ入る。
+トリガー・△／□より優先し、既定+0.05を20 ms、その後は保持中brake=1.0を要求する。
+正パルス中はbrake/reverse=0、制動中はthrottle/reverse=0。制動中の手動ステアは維持する。
+○解除は中立＋STOP。△／□を保持したままでも通常走行へ戻らず、両方を離して押し直す。
+起動・再接続・異常後に○が押されたままでは開始せず、一度離して押し直す。
 
-パルス時間はsteady時刻で判断し、出力はJoy到着周期に量子化する（標準100 Hz）。
-Joy/ready途絶、不正入力、deadman解除、×STOP、モード変更、mode鮮度喪失で中断し、
-復帰後に○が押されたままでも正パルスを再開しない。入力間隔100 ms超や時計逆行でも中断する。
-元Joy stampを保持し、timerから新しいstampで駆動を延命しない。
-AUTOでは正パルスを生成せず、固定AUTOでの○＋STOP、L2＋STOPも従来どおり。
-AUTOから△への引継ぎ時に○を押していてもパルスは始まらない。
+既にMANUALかつ新鮮なHOST経路なら直ちに信号列を開始する。それ以外は全軸中立を50 ms以上配信し、
+MANUALを一度だけ要求する。MANUAL状態と要求後の基板HOST経路を確認し、要求後最低50 ms待って開始する。
+準備開始から500 msで成立しなければ中立＋STOP。待機時間は正パルスの20 msに含めない。
+PROPOではHOSTへ切り替えずSTOP要求のみ。基板のRC側選択や故障をソフトから上書きしない。
+
+出力はJoy到着周期に量子化される（標準100 Hz）。元Joy stampを維持する。
+×保持、Joy/ready途絶、不正入力、追加deadman解除、mode鮮度喪失、外部モード変更、
+制動中のHOST経路喪失、入力間隔100 ms超・時計逆行で中断する。自動再試行しない。
+○専用のMANUAL遷移だけを許可し、通常AUTO・固定AUTOからも同じ操作で引き継ぐ。
+固定AUTOのL2によるSTOPは従来どおり。追加parameterはない。
 
 説明されたESC規則では正入力でforward履歴を作り、次の負入力が制動となる。
 ただし正パルスは実際の駆動要求であり、停止中にも一瞬前進する可能性がある。
@@ -223,16 +228,22 @@ idleでは直前段階・経過時間・解除/STOP/入力喪失/モード変更
 これらは補正前の指令生成とcallback間の経過時間であり、PWM実測値・ESC受信時間・物理制動の証明ではない。
 /vehicle/control_cmdはbridge補正前の要求なので、trim反映後のPWM値そのものではない。
 
-車輪を浮かせてMANUALへ入り、後退を確認してから○を押し続けると、同じ信号列を試験できる。
+車輪を浮かせ、STOPから○単独、MANUALから△解除＋○、AUTOから○の各操作を確認する。
 ROSなしのscripts/tests/test-vehicle.shで一度だけの生成、中断、再接続時の抑制、および
 HostSessionへ接続した全ての既知ESC履歴からの正パルス→brake=1.0を検証する。
+○単独のモード要求・HOST待機・解除・timeout・再始動抑制もportableテストで検証する。
 ROS結合・実PWM・実制動は未確認。
 
-○の正パルスは既定0.01秒。Joy・mux・bridgeの配信周期で量子化され、基板PWM更新で捕捉されない可能性がある。
+
+2026-11-02のESC試験で、利用者が後退から+0.05を20 ms、その後負入力による制動を確認したため、
+○の正パルス既定値へ採用した。後段のbrake=1.0は維持する。ESC試験の結果と、
+MANUALのtrim・Joy配信を通した○操作の実機確認は区別する。
+
+○の正パルスは既定+0.05を0.02秒。Joy・mux・bridgeの配信周期で量子化され、基板PWM更新で捕捉されない可能性がある。
 実際に書き込まれたfirmwareのPWM周期とESCの入力認識時間は別途確認する。復帰moduleの正パルス時間は0.05秒のまま。
 
 2026-10-26の利用者報告では、△保持のMANUAL中に○を押しても減速せず惰性走行が続いた。
 ○による物理制動の成立は確認できていない。`Joy brake signal`と`ESC command model`は
 指令の生成・履歴のログであり、ESCが正パルスを認識した証拠ではない。
 切り分けでは既存ログと`/vehicle/output_channels`を照合する。ただし基板statusは20 Hzの観測であり、
-10 msパルスを観測できなくても未出力とは断定できない。緊急停止用の制動として扱わない。
+20 msパルスを観測できなくても未出力とは断定できない。緊急停止用の制動として扱わない。

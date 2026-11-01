@@ -128,20 +128,21 @@ int main() {
   }
   {
     JoyBrakePulse pulse;
+    assert(pulse.throttle==.05 && pulse.duration_s==.02);
     pulse.duration_s=.05; // Longer pulse remains configurable.
     const Command brake{.2,0,1,0};
     // Startup/reconnection with circle held must never synthesize propulsion.
     assert(pulse.command(brake,true,true,10).brake==1);
     pulse.command({},false,true,10.01);
     auto out=pulse.command(brake,true,true,10.02);
-    assert(out.throttle==.08 && out.brake==0 && out.reverse==0 && out.steering==.2);
-    assert(pulse.command(brake,true,true,10.06).throttle==.08);
+    assert(out.throttle==.05 && out.brake==0 && out.reverse==0 && out.steering==.2);
+    assert(pulse.command(brake,true,true,10.06).throttle==.05);
     assert(pulse.command(brake,true,true,10.08).brake==1);
     for(int n=0;n<100;++n) {assert(pulse.command(brake,true,true,10.09+.01*n).brake==1);}
     // Release cancels immediately, and a new press starts exactly one pulse.
     const Command reverse{-.3,0,0,.2};
     assert(pulse.command(reverse,false,true,11.09).reverse==.2);
-    assert(pulse.command(brake,true,true,11.10).throttle==.08);
+    assert(pulse.command(brake,true,true,11.10).throttle==.05);
     assert(pulse.command({},false,true,11.11).throttle==0);
     pulse.command(brake,true,true,11.12);
     pulse.reset(); // STOP, mode transition, input failure or deadman release.
@@ -157,14 +158,79 @@ int main() {
     pulse.command(brake,true,true,11.42);
     assert(pulse.command(brake,true,true,11.0).throttle==0); // Rewind cannot replay.
     pulse.duration_s=.005; assert(!pulse.valid_settings());
-    pulse.reset(); pulse.duration_s=.01;
+    pulse.reset(); pulse.duration_s=.02;
     assert(pulse.valid_settings());
     pulse.command({},false,true,20);
-    assert(pulse.command(brake,true,true,20.01).throttle==.08);
-    assert(pulse.command(brake,true,true,20.02).brake==1);
+    assert(pulse.command(brake,true,true,20.01).throttle==.05);
+    assert(pulse.command(brake,true,true,20.02).throttle==.05);
     assert(pulse.command(brake,true,true,20.03).brake==1);
     pulse.duration_s=.05; pulse.throttle=0; assert(!pulse.valid_settings());
     pulse.throttle=std::numeric_limits<double>::quiet_NaN(); assert(!pulse.valid_settings());
+  }
+  {
+    // Circle alone enters MANUAL from STOP/AUTO, waits for HOST, then pulses.
+    for (const auto initial : {STOP, AUTO}) {
+      JoyBrakeHold hold;
+      auto step=[&](bool pressed, uint8_t mode, bool host, double t) {
+        return hold.update(pressed,true,mode,host,.2,t);
+      };
+      assert(!step(false,initial,false,1).handled);
+      assert(step(true,initial,false,1.01).handled);
+      assert(!step(true,initial,false,1.04).manual);
+      assert(step(true,initial,false,1.06).manual);
+      assert(neutral(step(true,MANUAL,false,1.10).command));
+      assert(neutral(step(true,MANUAL,false,1.18).command));
+      auto result=step(true,MANUAL,true,1.20);
+      assert(result.command.throttle==.05 && result.command.steering==.2);
+      assert(step(true,MANUAL,true,1.21).command.throttle==.05);
+      assert(step(true,MANUAL,true,1.22).command.brake==1);
+      for(int n=0;n<20;++n) {assert(step(true,MANUAL,true,1.23+n*.01).command.brake==1);}
+      assert(step(false,MANUAL,true,1.44).stop);
+      assert(!hold.active());
+    }
+    // Existing MANUAL starts immediately; no triangle dependency.
+    JoyBrakeHold hold;
+    hold.update(false,true,MANUAL,true,0,2);
+    assert(hold.update(true,true,MANUAL,true,0,2.01).command.throttle==.05);
+    assert(hold.update(true,true,MANUAL,false,0,2.02).stop); // HOST loss
+    assert(hold.update(true,true,MANUAL,true,0,2.03).command.throttle==0);
+    hold.reset(); // STOP and reconnection cannot replay a held circle.
+    assert(hold.update(true,true,STOP,false,0,3).command.throttle==0);
+    assert(!hold.active());
+    hold.update(false,true,STOP,false,0,3.01);
+    hold.update(true,true,STOP,false,0,3.02);
+    assert(hold.update(false,true,STOP,false,0,3.03).stop); // Release while arming
+    for (int fault=0;fault<4;++fault) {
+      hold.reset(); hold.update(false,true,MANUAL,true,0,4);
+      hold.update(true,true,MANUAL,true,0,4.01);
+      const auto r=hold.update(true,fault!=0,fault==1?STOP:MANUAL,true,0,
+                              fault==2?4.3:fault==3?3.9:4.02);
+      assert(r.stop && neutral(r.command) && !hold.active());
+    }
+    // A failed entry never retries while circle remains held.
+    hold.reset(); hold.update(false,true,STOP,false,0,5);
+    hold.update(true,true,STOP,false,0,5.01);
+    bool timed_out=false;
+    for(int n=2;n<60;++n) {
+      timed_out |= hold.update(true,true,STOP,false,0,5+n*.01).stop;
+    }
+    assert(timed_out && !hold.active());
+    hold.reset(); hold.update(false,true,PROPO,false,0,6);
+    assert(hold.update(true,true,PROPO,false,0,6.01).stop);
+    assert(!hold.active());
+    // STOP remains asserted on every sample, including startup with x held.
+    JoyButtons reader;
+    std::vector<int32_t> held_stop(17,0);
+    held_stop[0]=held_stop[1]=1;
+    assert(reader.read(held_stop)->stop_held);
+    assert(reader.read(held_stop)->stop_held);
+    JoyModeHold modes;
+    ButtonActions buttons; modes.update(buttons);
+    buttons.manual=buttons.manual_held=true; assert(modes.update(buttons)==MANUAL);
+    modes.reset(); // Circle takes ownership, then ends in STOP.
+    buttons.manual=false; assert(modes.update(buttons)==0 && !modes.active());
+    buttons.manual_held=false; modes.update(buttons);
+    buttons.manual=buttons.manual_held=true; assert(modes.update(buttons)==MANUAL);
   }
   std::cout<<"joy manager continuous input / button edges: passed\n";
 }

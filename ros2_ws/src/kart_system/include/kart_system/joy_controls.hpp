@@ -34,7 +34,7 @@ public:
 // freshness, mode, deadman and STOP gates. Reset requires a release before a pulse.
 class JoyBrakePulse {
 public:
-  double throttle{0.08}, duration_s{0.01};
+  double throttle{0.05}, duration_s{0.02};
   bool valid_settings() const {
     return std::isfinite(throttle) && throttle>=0.002 && throttle<=1 &&
       std::isfinite(duration_s) && duration_s>=0.01 && duration_s<=0.5;
@@ -66,10 +66,66 @@ private:
 
 struct ButtonActions {
   bool deadman{false}, brake{false}, stop{false}, manual{false}, automatic{false};
-  bool manual_held{false}, auto_held{false};
+  bool manual_held{false}, auto_held{false}, stop_held{false};
   bool bag_start{false}, bag_stop{false};
   bool vgl_trigger{false};
   double steering_delta{0}, throttle_delta{0};
+};
+
+// Circle owns a separate hold-to-brake session. Never resumes ordinary driving.
+// The adapter supplies fresh mode and board HOST-path feedback, and handles STOP.
+class JoyBrakeHold {
+public:
+  struct Result {Command command{}; bool handled{false}, stop{false}, manual{false};};
+  JoyBrakePulse pulse;
+  bool active() const {return phase_!=Phase::idle;}
+  void reset() {phase_=Phase::idle; released_=false; pulse.reset(); last_=NEVER;}
+  Result update(bool pressed, bool healthy, uint8_t mode, bool host_ready,
+                double steering, double now) {
+    if (!healthy || !std::isfinite(now) ||
+        (std::isfinite(last_) && (now<last_ || now-last_>0.1))) {
+      const bool was_active=active(); reset(); return {{},pressed || was_active,was_active,false};
+    }
+    last_=now;
+    if (!pressed) {
+      const bool was_active=active(); reset(); released_=true; last_=now;
+      return {{},was_active,was_active,false};
+    }
+    if (!active()) {
+      if (!released_) {return {{},true,false,false};}
+      released_=false;
+      if (mode!=STOP && !host_mode(mode)) {return {{},true,true,false};}
+      phase_=Phase::prepare; started_=now;
+      pulse.reset(); pulse.command({},false,true,now);
+      // An already active manual session needs no mode handover.
+      if (mode==MANUAL && host_ready) {phase_=Phase::running;}
+    }
+    if (phase_!=Phase::running && now-started_>0.5) {reset(); return {{},true,true,false};}
+    if (phase_==Phase::prepare) {
+      // Let the mux receive neutral before requesting STOP -> MANUAL.
+      if (now-started_+1e-9>=0.05) {
+        phase_=Phase::waiting; requested_=now;
+        return {{},true,false,true};
+      }
+      return {{},true,false,false};
+    }
+    if (phase_==Phase::waiting) {
+      if (mode!=STOP && mode!=AUTO && mode!=MANUAL) {reset(); return {{},true,true,false};}
+      if (mode!=MANUAL || !host_ready || now-requested_<0.05) {
+        // Prime the pulse without spending its duration during handshake.
+        pulse.command({},false,true,now);
+        return {{},true,false,false};
+      }
+      phase_=Phase::running;
+    }
+    if (mode!=MANUAL || !host_ready) {reset(); return {{},true,true,false};}
+    return {pulse.command({steering,0,1,0},true,true,now),true,false,false};
+  }
+private:
+  enum class Phase {idle, prepare, waiting, running};
+  Phase phase_{Phase::idle};
+  bool released_{false};
+  double started_{NEVER}, requested_{NEVER}, last_{NEVER};
 };
 
 // Mode buttons are hold-to-run. A fault/reset requires releasing both buttons;
@@ -126,6 +182,7 @@ public:
     ButtonActions result;
     result.deadman=deadman_button==-1 || pressed(deadman_button); result.brake=pressed(brake_button);
     result.stop=edge(stop_button); result.manual=edge(manual_button); result.automatic=edge(auto_button);
+    result.stop_held=pressed(stop_button);
     result.manual_held=pressed(manual_button); result.auto_held=pressed(auto_button);
     result.bag_stop=edge(bag_stop_button); result.bag_start=edge(bag_start_button) && !result.bag_stop;
     result.vgl_trigger=edge(vgl_trigger_button);
