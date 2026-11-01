@@ -1215,6 +1215,11 @@ summary {
   font-variant-numeric: tabular-nums;
   margin: 8px 0;
 }
+#simulation-h2h-settings { flex: 0 0 auto; max-height: 210px; overflow: auto; }
+#simulation-h2h-settings[hidden] { display: none; }
+#simulation-h2h-settings summary { cursor: pointer; font-size: 13px; padding: 5px 0; }
+#simulation-dialog [hidden] { display: none; }
+#simulation-time { width: 100%; flex: 0 0 auto; }
 
 /* Keep the expanded ancestry visible while browsing remote recordings. */
 .remote-tree,

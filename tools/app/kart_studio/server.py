@@ -314,6 +314,9 @@ class Studio:
         if path == "/api/tracking-preview":
             from .tracking_preview import preview
             return preview(b)
+        if path == "/api/head-to-head-preview":
+            from .head_to_head import preview
+            return preview(b)
         if path == "/api/parking-validate":
             from .parking import validate
             return validate(b["document"])

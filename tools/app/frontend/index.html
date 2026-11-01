@@ -1388,6 +1388,7 @@
         </button>
       </div>
       <div class="simulation-controls">
+        <label>試走モード<select id="simulation-mode"><option value="solo">単独</option><option value="head_to_head">Head-to-head</option></select></label>
         <label>ライン<select id="simulation-line"></select></label>
         <label>周回数（閉コース）<input id="simulation-laps" type="number" min="1" max="20" step="1" value="3"></label>
         <label>横制御<select id="simulation-controller"><option value="pure_pursuit">Pure Pursuit</option><option value="mpc">MPC</option></select></label>
@@ -1424,6 +1425,24 @@
             value="22"
         /></label>
       </div>
+      <details id="simulation-h2h-settings" hidden>
+        <summary>Head-to-head設定 · 相手の位置・速度は既知</summary>
+        <div class="simulation-controls">
+          <label>相手の速度上限 m/s<input id="h2h-opponent-speed" type="number" min="0" max="20" step="0.1" value="2"></label>
+          <label>初期車間 m<input id="h2h-initial-gap" type="number" min="0.5" max="100" step="0.1" value="3"></label>
+          <label>停止時車間 m<input id="h2h-min-gap" type="number" min="0.2" max="10" step="0.1" value="1"></label>
+          <label>時間車間 s<input id="h2h-headway" type="number" min="0.2" max="3" step="0.1" value="0.7"></label>
+          <label>安定観測時間 s<input id="h2h-observe-seconds" type="number" min="0.5" max="30" step="0.5" value="3"></label>
+          <label>試走時間上限 s<input id="h2h-duration" type="number" min="5" max="300" step="5" value="120"></label>
+          <label>追い抜き<select id="h2h-overtake"><option value="off">追従のみ</option><option value="on">指定区間で許可</option></select></label>
+          <label>区間開始 m<input id="h2h-zone-start" type="number" min="0" step="0.1" value="0"></label>
+          <label>合流完了位置 m<input id="h2h-zone-end" type="number" min="0" step="0.1" value="0"></label>
+          <label>追い抜き側<select id="h2h-side"><option value="left">進行方向の左</option><option value="right">進行方向の右</option></select></label>
+          <label>横方向の移動量 m<input id="h2h-offset" type="number" min="0.1" max="3" step="0.05" value="0.65"></label>
+          <label>車体周囲の余裕 m<input id="h2h-margin" type="number" min="0.01" max="0.5" step="0.01" value="0.08"></label>
+        </div>
+        <p class="small">区間は選択ラインの始点からの距離。閉コース専用・始点跨ぎ不可。青＝自車、橙＝相手。両車に選択ラインの速度上限が適用されます。認識・実車PID・タイヤは再現しません。失敗時の退避制御は未実装で、抵触や合流不能を検出すると試走を中断します。</p>
+      </details>
       <canvas
         id="simulation-canvas"
         aria-label="生成ラインの試走プレビュー"
@@ -1432,12 +1451,13 @@
         <button id="simulation-play">再生</button
         ><button id="simulation-reset">リセット</button>
         <select id="simulation-parking-slot" aria-label="試走する駐車区画"><option>P1</option><option>P2</option><option>P3</option></select><button id="simulation-parking">現在位置から駐車を試走</button>
-        <p class="small">駐車は共通planner・選択中のPP/MPC・駐車完了判定で試走します。速度応答は理想モデルで、実車のPID・タイヤ・遅延は再現しません。保存済み地図を使用します。</p>
+        <p id="simulation-parking-note" class="small">駐車は共通planner・選択中のPP/MPC・駐車完了判定で試走します。速度応答は理想モデルで、実車のPID・タイヤ・遅延は再現しません。保存済み地図を使用します。</p>
       </div>
+      <input id="simulation-time" type="range" min="0" max="0" value="0" step="any" aria-label="試走の再生位置">
       <p id="simulation-parking-feedback" class="parking-feedback" role="status" aria-live="polite" hidden></p>
       <p id="simulation-metrics" aria-live="off"></p>
       <p class="help">
-        実車と共通のPure Pursuit／MPC計算＋理想自転車モデル（30 Hz）。設定変更で再計算し、再生して比較できます。実車の設定は変更しません。Race／Customは生成速度を目標に使用。長方形の基準は後輪軸。境界・障害物は表示のみで、試走軌跡の衝突判定・回避、実車PIDやタイヤ特性は未再現です。
+        実車と共通のPure Pursuit／MPC計算＋理想車両モデル（30 Hz）。設定変更で再計算します。実車設定は変更しません。境界・障害物との干渉検査はHead-to-head／駐車試走で行います。実車PID・タイヤ・認識は未再現です。
       </p>
     </dialog>
     <script type="module" src="app.js"></script>

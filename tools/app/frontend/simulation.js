@@ -15,6 +15,11 @@ function pause() {running=false; cancelAnimationFrame(raf); raf=0; $("simulation
 async function reset() {
   pause();clearParkingFeedback();parkingRoute=null;parkingMessage="";
   const serial=++requestSerial;sim=null;
+  const h2h=$("simulation-mode").value==="head_to_head";
+  $("simulation-h2h-settings").hidden=!h2h;
+  $("simulation-parking").disabled=h2h;
+  for(const id of ["simulation-parking","simulation-parking-slot","simulation-parking-note"])$(id).hidden=h2h;
+  $("simulation-time").disabled=true;
   const mpc=$("simulation-controller").value==="mpc";
   $("simulation-lookahead").hidden=mpc;
   for(const input of dialog.querySelectorAll("[data-mpc]")) input.parentElement.hidden=!mpc;
@@ -27,17 +32,23 @@ async function reset() {
     speed:Number($("simulation-speed").value),
     wheelbase:Number($("simulation-wheelbase").value), maxSteer:Number($("simulation-steer").value)*Math.PI/180,
   };
-  $("simulation-metrics").textContent="実車と共通の制御計算で試走を計算中…（初回はコンパイル）";
+  $("simulation-metrics").textContent=h2h?"2台の走行・車体の干渉・追い抜き判断を計算中…":"実車と共通の制御計算で試走を計算中…（初回はコンパイル）";
   $("simulation-play").disabled=true;
   try {
-    const result=await api("tracking-preview",{line:snapshot.lines[kind],closed:snapshot.closed,options:cfg});
+    const head={};
+    for(const key of ["opponent_speed","initial_gap","min_gap","headway","observe_seconds","duration","zone_start","zone_end","offset","margin"])
+      head[key]=Number($("h2h-"+key.replaceAll("_","-")).value);
+    head.overtake=$("h2h-overtake").value==="on";head.side=$("h2h-side").value;
+    const result=await api(h2h?"head-to-head-preview":"tracking-preview",h2h?{lane:snapshot,line_type:kind,obstacles:snapshot.obstacles,options:cfg,head_to_head:head}:{line:snapshot.lines[kind],closed:snapshot.closed,options:cfg});
     if(serial!==requestSerial || !dialog.open)return;
-    sim=replaySimulation(result,cfg);trail=[[sim.car.x,sim.car.y]];draw();
+    sim=replaySimulation(result,cfg);trail=[[sim.car.x,sim.car.y]];
+    $("simulation-time").max=sim.duration;$("simulation-time").disabled=false;draw();
   } catch(e) {if(serial===requestSerial)$("simulation-metrics").textContent=e.message;throw e;} finally {if(serial===requestSerial)$("simulation-play").disabled=!sim;}
 
 }
 function draw() {
   if (!sim) return;
+  $("simulation-time").value=sim.car.time;
   const w=canvas.clientWidth, h=canvas.clientHeight, dpr=devicePixelRatio||1;
   canvas.width=w*dpr; canvas.height=h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.fillStyle="#f4f6f8"; ctx.fillRect(0,0,w,h);
@@ -56,10 +67,27 @@ function draw() {
   for(const o of snapshot.obstacles)path(o.polygon,"#ce4141",true,true);
   for(const a of snapshot.parking_areas||[]){path(a.polygon,'#238457',true,true);path(a.entrance,'#00bddd');}
   path(line.points,"#339675",parkingRoute?false:snapshot.closed);path(trail,"#9763bb");
+  if(sim.h2hResult){
+    const zone=sim.h2hResult.zone;let station=0;const selected=[];
+    for(let i=0;i<line.points.length;i++){
+      if(station>=zone[0]&&station<=zone[1])selected.push(line.points[i]);
+      if(i+1<line.points.length)station+=Math.hypot(line.points[i+1][0]-line.points[i][0],line.points[i+1][1]-line.points[i][1]);
+    }
+    path(selected,"#c49b00");path(sim.h2hResult.planned_route||[],"#ad51c4");
+  }
   const c=sim.car, p=line.settings||{}, length=p.vehicle_length||.35,width=p.vehicle_width||.19,rear=p.rear_axle_to_rear??.1065;
   const [x,y]=project([c.x,c.y]);ctx.save();ctx.translate(x,y);ctx.rotate(-c.yaw);ctx.fillStyle="#263e57";
   ctx.fillRect(-rear*scale,-width/2*scale,length*scale,width*scale);
   ctx.strokeStyle="#f09e38";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Math.max(14,(length-rear)*scale),0);ctx.stroke();ctx.restore();
+  if(c.opponent){
+    const [ox,oy,oyaw]=c.opponent,[px,py]=project([ox,oy]);
+    ctx.save();ctx.translate(px,py);ctx.rotate(-oyaw);ctx.fillStyle="#e48a22";
+    ctx.fillRect(-rear*scale,-width/2*scale,length*scale,width*scale);ctx.restore();
+    ctx.fillStyle="#9c5300";ctx.font="12px sans-serif";ctx.fillText("相手",px+10,py-10);
+    ctx.beginPath();ctx.arc(px,py,4,0,Math.PI*2);ctx.strokeStyle="#e48a22";ctx.stroke();
+    ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.strokeStyle="#263e57";ctx.stroke();
+    ctx.fillStyle="#263e57";ctx.fillText("自車",x+10,y+16);
+  }
   const [tx,ty]=project([c.target.x,c.target.y]);
   ctx.save();ctx.strokeStyle="#dd3877";ctx.lineWidth=1.5;ctx.setLineDash([5,4]);
   ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(tx,ty);ctx.stroke();ctx.setLineDash([]);
@@ -89,6 +117,10 @@ function draw() {
   const failure=c.solverFailure;
   const debug=failure?` · ${failure.reason} · 失敗時 ${failure.elapsed_ms.toFixed(2)} ms / ${failure.iterations}反復 · 残差 ${failure.primal.toExponential(2)} / ${failure.dual.toExponential(2)}`:'';
   $("simulation-metrics").textContent=`${phase}${debug} · ${parkingRoute?"駐車試走（理想車両モデル） · ":""}${diagnostic?`水色:走行可能領域 / 赤:車体・抵触箇所 / 橙:余裕 ${diagnostic.margin_m.toFixed(3)} m${diagnostic.hits.length?"":" / 壁・領域の抵触なし"} · `:""}${parkingMessage || c.reason || (running?"試走中":"停止中")} · ${c.time.toFixed(1)} s · ${c.speed.toFixed(2)} m/s${sim.cfg.controller==="pure_pursuit"?` · 先読み ${c.lookahead.toFixed(2)} m`:""} · 目標 ${c.targetSpeed.toFixed(2)} m/s · 計算 ${c.solverMs.toFixed(2)} ms · 舵角 ${(c.steering*180/Math.PI).toFixed(1)}° · 誤差 ${c.error.toFixed(2)} m / 最大 ${c.maxError.toFixed(2)} m`;
+  if(c.h2h){
+    const h=c.h2h,label={FOLLOW_OBSERVE:"追従・観測",OPPORTUNITY_READY:"速度優位あり",PASS:"追い抜き中",MERGE:"合流中",PASSED:"合流完了"}[h.state]||h.state;
+    $("simulation-metrics").textContent=`Head-to-head（理想観測） · ${label} · ${c.reason||h.note} · ${c.time.toFixed(1)} s · 自車 ${c.speed.toFixed(2)} / 相手 ${h.opponent_speed.toFixed(2)} m/s · 経路上の車間 ${h.gap.toFixed(2)} m · 観測 ${h.stable_seconds.toFixed(1)} s · 推定 ${h.estimate===null?"未確定":h.estimate.toFixed(2)+" m/s"} · 位置 ${h.station.toFixed(1)} / ${sim.h2hResult.total.toFixed(1)} m`;
+  }
 }
 function play(){
   if(!sim || sim.car.done)return;
@@ -114,7 +146,8 @@ action("simulation-open",async()=>{
 });
 action("simulation-play",async()=>{if(!sim)await reset();if(running){pause();draw();return;}if(!sim)return;if(sim.car.done){if(parkingRoute){toast(sim.car.reason+"。通常試走へ戻るにはリセットしてください。");return;}await reset();}parkingMessage="";play();draw();});
 action("simulation-reset",reset);
-for(const id of ["simulation-laps","simulation-controller","simulation-horizon","simulation-tracking","simulation-smoothness","simulation-rate","simulation-line","simulation-speed","simulation-wheelbase","simulation-steer"]){
+$("simulation-time").addEventListener("input",()=>{if(!sim)return;pause();sim.seek(Number($("simulation-time").value));trail=[[sim.car.x,sim.car.y]];draw();});
+for(const id of ["simulation-mode","simulation-laps","simulation-controller","simulation-horizon","simulation-tracking","simulation-smoothness","simulation-rate","simulation-line","simulation-speed","simulation-wheelbase","simulation-steer",...Array.from($("simulation-h2h-settings").querySelectorAll("input,select"),el=>el.id)]){
   $(id).addEventListener("change",async()=>{try{await reset();}catch(e){pause();sim=null;$("simulation-metrics").textContent=e.message;toast(e.message,true);}});
 }
 dialog.addEventListener("close",()=>{requestSerial++;pause();clearParkingFeedback();});
@@ -127,6 +160,7 @@ action("lane-reverse",()=>{
 on("document",()=>{if(dialog.open)dialog.close();});
 
 action('simulation-parking',async()=>{
+  if($("simulation-mode").value==="head_to_head")throw Error('駐車は単独試走で実行してください');
   if(!sim || state.dirty || state.doc.revision!==documentRevision)throw Error('地図を保存し、試走を開き直してください');
   pause();parkingMessage="駐車経路と追従を計算中…";draw();const serial=++requestSerial;
   $('simulation-parking').disabled=true;$('simulation-play').disabled=true;
@@ -144,6 +178,7 @@ action('simulation-parking',async()=>{
     if(serial!==requestSerial || !dialog.open)return;
     parkingRoute={points:result.route.map(p=>p.slice(0,2))};
     sim=replaySimulation(result,sim.cfg);trail=[[sim.car.x,sim.car.y]];parkingMessage="";
+    $("simulation-time").max=sim.duration;$("simulation-time").disabled=false;
     feedback.dataset.state=sim.car.done && result.reason!=='simulated_parked'?'error':'success';
     feedback.textContent=sim.car.done?sim.car.reason:'計算完了。駐車試走を開始しました。';
     play();draw();
@@ -158,6 +193,6 @@ action('simulation-parking',async()=>{
       $('simulation-parking').removeAttribute('aria-busy');
       $('simulation-play').disabled=!sim;
     }
-    $('simulation-parking').disabled=false;
+    $('simulation-parking').disabled=$("simulation-mode").value==="head_to_head";
   }
 });

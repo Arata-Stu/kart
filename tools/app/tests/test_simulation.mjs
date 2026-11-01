@@ -53,3 +53,12 @@ assert.equal(parkingReplay.car.solverFailure,null);
 parkingReplay.step(1/30);assert.equal(parkingReplay.car.phase,'failed');
 assert.equal(parkingReplay.car.solverFailure,failure);
 assert.match(parkingReplay.car.reason,/MPC未収束/);
+
+// Head-to-head replay preserves observations and exact, nonuniform terminal time.
+const h2hReplay=replaySimulation({frames:[frame(0),frame(.033333333333),frame(.05)],opponents:[[1,0,0,2],[2,0,0,2],[3,0,0,2]],h2h:[{state:'FOLLOW_OBSERVE'},{state:'PASS'},{state:'PASSED'}],reason:'overtake_completed'},{});
+h2hReplay.seek(.04);assert.equal(h2hReplay.car.h2h.state,'PASS');
+assert.equal(h2hReplay.car.opponent[0],2);assert.equal(h2hReplay.car.done,false);
+h2hReplay.seek(.05);assert.equal(h2hReplay.car.h2h.state,'PASSED');assert.equal(h2hReplay.car.done,true);
+assert.match(h2hReplay.car.reason,/合流完了/);
+h2hReplay.seek(0);assert.equal(h2hReplay.car.done,false);
+h2hReplay.seek(.05-1e-12);assert.equal(h2hReplay.car.done,true,'range input decimal roundoff still reaches terminal frame');
