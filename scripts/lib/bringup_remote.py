@@ -49,8 +49,8 @@ def fields():
             continue
         kind = 'boolean' if isinstance(action, (argparse._StoreTrueAction, argparse.BooleanOptionalAction)) else 'text'
         result.append(dict(key=action.dest, flag=action.option_strings[0], kind=kind,
-                           choices=(['0', *CAMERA_PROFILES['RGB' if action.dest == 'rgb_profile' else 'Infra']]
-                                    if action.dest in ('rgb_profile', 'infra_profile') else
+                           choices=(['0', *CAMERA_PROFILES[{'rgb_profile':'RGB','infra_profile':'Infra','depth_profile':'Depth'}[action.dest]]]
+                                    if action.dest in ('rgb_profile', 'infra_profile', 'depth_profile') else
                                     list(action.choices) if action.choices else None),
                            default=str(action.default) if isinstance(action.default, Path) else action.default,
                            help=action.help or ''))

@@ -482,3 +482,7 @@ AUTO操舵を正解教師と扱わず、指令分布とVSLAM速度・軌跡曲�
 UIの録画操作は`kart_bag_manager`の`bag/set_recording`（SetBool）を通してJoyと共通処理へ渡す。
 `bag/recording_status`（Trigger）で状態を取得し、要求受付とファイル終了完了を区別する。
 UI切断で自動停止・自動再開しない。操作timeout時は再送せず状態を再取得する。
+
+Depthも空文字=設定保持、0=OFF、明示profile=有効化の起動時指定に統一する。
+DepthとInfra同時使用は同一profileとし、明示指定の不一致を黙って上書きせず起動前に拒否する。
+Depth未指定で既に有効の場合は従来どおりInfraへ揃える。通常記録にもDepthと校正を記録候補として含める。

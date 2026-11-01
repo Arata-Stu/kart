@@ -15,6 +15,24 @@ CONFIG = PACKAGE / "config"
 
 
 class MissionTests(unittest.TestCase):
+    def test_depth_profiles_and_stereo_conflicts(self):
+        from kart_bringup.mission import DEPTH_PROFILES
+        path = camera_config(CONFIG, 'collect')
+        for profile in DEPTH_PROFILES:
+            params = sensor_parameters(path, infra_profile='0', depth_profile=profile)
+            self.assertTrue(params['enable_depth'])
+            self.assertEqual(params['depth_module.depth_profile'], profile)
+        self.assertFalse(sensor_parameters(path)['enable_depth'])
+        for zero in ('0', 0):
+            self.assertFalse(sensor_parameters(camera_config(CONFIG, 'environment'), depth_profile=zero)['enable_depth'])
+        params = sensor_parameters(path, depth_profile='640x480x60', infra_profile='640x480x60')
+        self.assertEqual(params['depth_module.depth_profile'], params['depth_module.infra_profile'])
+        for profile in ('1280x800x30', '1280x720x90', '256x144x30'):
+            with self.assertRaises(ValueError):
+                sensor_parameters(path, infra_profile='0', depth_profile=profile)
+        with self.assertRaisesRegex(ValueError, 'DepthとInfra'):
+            sensor_parameters(path, depth_profile='640x480x60')
+
     def test_imu_profiles_and_vio_requirement(self):
         from kart_bringup.mission import validate_localization_imu
         for mode in ("collect", "environment"):
@@ -381,6 +399,7 @@ class MissionCompositionTests(unittest.TestCase):
                 mode="collect",
                 rgb_profile="1280x720x30",
                 infra_profile="",
+                depth_profile="424x240x60",
                 auto_fixed_throttle="0.10",
                 enable_bridge="false",
                 create_sensor_container="false",
@@ -397,6 +416,8 @@ class MissionCompositionTests(unittest.TestCase):
             )
             vehicle_args = lu.include.call_args_list[-1].kwargs['launch_arguments']
             self.assertEqual(vehicle_args['auto_fixed_throttle'], '0.10')
+            self.assertEqual(lu.include.call_args_list[0].kwargs["launch_arguments"]["depth_profile"], "424x240x60")
+            args.depth_profile = ""
             lu.component_container.assert_not_called()
             lu.include.reset_mock()
             lu.include.reset_mock()
@@ -445,7 +466,7 @@ class MissionCompositionTests(unittest.TestCase):
             args.mode = "e2e"
             with (
                 patch("kart_e2e.contract.routing_settings", return_value=None),
-                patch("kart_e2e.contract.model_contract"),
+                patch("kart_e2e.contract.model_contract", return_value=(None, "steer_throttle")),
                 patch("kart_e2e.contract.input_contract", return_value=("rgb", "image", [1, 3, 120, 212])),
                 patch("kart_e2e.contract.runtime_settings"),
                 patch("kart_e2e.engine_cache.require_engine"),
@@ -471,7 +492,7 @@ class MissionCompositionTests(unittest.TestCase):
             args.rgb_fps = '0'
             with (
                 patch('kart_e2e.contract.routing_settings', return_value=None),
-                patch('kart_e2e.contract.model_contract'),
+                patch('kart_e2e.contract.model_contract', return_value=(None, 'steer_throttle')),
                 patch('kart_e2e.contract.runtime_settings'),
                 patch('kart_e2e.contract.input_contract', return_value=('evs', 'input_tensor', [1,20,120,160])),
                 patch('kart_e2e.engine_cache.require_engine'),
@@ -498,7 +519,7 @@ class MissionCompositionTests(unittest.TestCase):
             args.sensor_container = 'kart_sensor_container'
             with (
                 patch('kart_e2e.contract.routing_settings', return_value=None),
-                patch('kart_e2e.contract.model_contract'),
+                patch('kart_e2e.contract.model_contract', return_value=(None, 'steer_throttle')),
                 patch('kart_e2e.contract.runtime_settings'),
                 patch('kart_e2e.contract.input_contract', return_value=('evs', 'input_tensor', [1,20,120,160])),
                 patch('kart_e2e.engine_cache.require_engine'),

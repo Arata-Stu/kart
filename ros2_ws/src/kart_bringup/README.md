@@ -1593,3 +1593,26 @@ Pure Pursuit / MPCと速度PIDの`control_rate_hz`は、実機・simとも原則
 既存bag記録対象の`/control/lateral_diagnostics`・`/control/speed_diagnostics`に、
 `processing_ms`と入力年齢（`pose_age_ms`／`target_age_ms`／`measurement_age_ms`）を含む。
 単位はms、指令publish前までの計測。PID側は約10 Hzのサンプルで、アクチュエータ応答遅延ではない。
+
+### Depthプロファイルの明示指定
+
+UIの基本設定「Depth Z16 解像度 × FPS」、TUIのDepth、CLIの`--depth-profile`、
+mission / realsense launchの`depth_profile`から指定する。既定は空文字（YAMLを保持）、
+`0`はOFF、`幅x高さxFPS`はDepthを有効化して`depth_module.depth_profile`を上書きする。
+既存realsenseノードの`enable_depth`（通常false、environmentはtrue）と
+`depth_module.depth_profile`（通常424x240x60、environmentは848x480x30）を使用する。
+新規ROSノード・parameter・topic型は追加しない。永続YAMLの値は変更しない。
+
+候補の出典は2026-11-02にユーザー提供のD455 / FW 5.16.0.1 / USB3.2の
+rs-enumerate-devices（Depth Z16）出力。1280x720は30/15/5 Hz、
+848x480・640x480・640x360・480x270・424x240は90/60/30/15/5 Hz、
+848x100は100 Hz、256x144は90 Hz。個別対応の列挙であり同時配信・帯域の保証ではない。
+DepthとInfra有効時は同じ解像度・FPSが必要（kart側の構成方針）。明示Depthとの不一致は起動前に拒否し、
+Depth未指定では従来どおり有効Infraへ揃える。256x144x90などInfra候補にないものはInfra OFFで使う。
+通常記録とEVS併用記録にも`realsense/depth/image_rect_raw`（sensor_msgs/msg/Image）、
+`realsense/depth/camera_info`（sensor_msgs/msg/CameraInfo）、
+`realsense/extrinsics/depth_to_color`（realsense2_camera_msgs/msg/Extrinsics）を記録候補に追加。
+Depth無効時にDepthを起動する変更ではない。画像はnative Z16で、RGBへの整列や点群は有効化しない。
+
+例: `bash scripts/bringup.sh --mode collect --infra-profile 640x480x60 --depth-profile 640x480x60`。
+ROS結合・実機プロファイル採用・Depthの実記録はJetsonで確認する。

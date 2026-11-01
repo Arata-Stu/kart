@@ -25,7 +25,7 @@ def add_mission(args):
     )
     params = sensor_parameters(
         camera_config(root, args.mode), args.rgb_fps, args.infra_fps,
-        getattr(args, "rgb_profile", ""), getattr(args, "infra_profile", ""), getattr(args, "imu_profile", "")
+        getattr(args, "rgb_profile", ""), getattr(args, "infra_profile", ""), getattr(args, "imu_profile", ""), getattr(args, "depth_profile", "")
     )
     section_routing = None
     if cfg['e2e']:
@@ -117,7 +117,7 @@ def add_mission(args):
         from kart_e2e.engine_cache import require_engine
         require_engine(args.e2e_model_dir)
     realsense_enabled = not (cfg['e2e'] and modality == 'evs'
-                             and not any(params[k] for k in ('enable_color', 'enable_infra1', 'enable_infra2')))
+                             and not any(params[k] for k in ('enable_color', 'enable_infra1', 'enable_infra2', 'enable_depth')))
     if realsense_enabled:
         get_package_share_directory('realsense2_camera')
     actions = [
@@ -150,6 +150,7 @@ def add_mission(args):
                     "container_name": "/" + cfg["sensor_container"].lstrip("/"),
                     "camera_config": str(camera_config(root, args.mode)),
                     "rgb_profile": getattr(args, "rgb_profile", ""),
+                    "depth_profile": getattr(args, "depth_profile", ""),
                     "infra_profile": getattr(args, "infra_profile", ""),
                     "imu_profile": getattr(args, "imu_profile", ""),
                     "rgb_fps": args.rgb_fps,
@@ -243,6 +244,7 @@ def generate_launch_description():
         "evs_image",
         "rgb_profile",
         "infra_profile",
+        "depth_profile",
         "imu_profile",
         "rgb_fps",
         "infra_fps",

@@ -55,7 +55,7 @@ class Editor:
     def sensors(self):
         a = self.args
         return sensor_parameters(camera_config(self.config, a.mode), a.rgb_fps or '',
-                                 a.infra_fps or '', a.rgb_profile, a.infra_profile, a.imu_profile)
+                                 a.infra_fps or '', a.rgb_profile, a.infra_profile, a.imu_profile, getattr(a, "depth_profile", ""))
 
     def pick(self, title, values, current=None, label=str):
         values = list(values)
@@ -156,15 +156,17 @@ class Editor:
             try:
                 sensors = self.sensors()
                 rgb = sensors['rgb_camera.color_profile'] if sensors['enable_color'] else 'OFF'
+                depth = sensors['depth_module.depth_profile'] if sensors['enable_depth'] else 'OFF'
                 infra = sensors['depth_module.infra_profile'] if sensors['enable_infra1'] else 'OFF'
                 imu = (f"加速度{sensors['accel_fps']} / ジャイロ{sensors['gyro_fps']}Hz"
                        if sensors['enable_accel'] and sensors['enable_gyro'] else 'OFF')
                 if a.mode == 'environment':
-                    print('Depth:', sensors['depth_module.depth_profile'], '/ 記録内容: 環境記録')
+                    print('Depth:', depth, '/ 記録内容: 環境記録')
             except (ValueError, OSError, KeyError, TypeError, yaml.YAMLError) as error:
                 rgb, infra, imu = a.rgb_profile or 'YAML', a.infra_profile or 'YAML', a.imu_profile or 'YAML'
+                depth = getattr(a, 'depth_profile', '') or 'YAML'
                 print('センサ設定エラー:', error)
-            rows.update(rgb=f'センサ / RGB: {rgb}', infra=f'センサ / Infra: {infra}', imu=f'センサ / IMU: {imu}',
+            rows.update(depth=f'センサ / Depth: {depth}', rgb=f'センサ / RGB: {rgb}', infra=f'センサ / Infra: {infra}', imu=f'センサ / IMU: {imu}',
                         evs=f'センサ / EVS: {"有効" if a.evs else "無効"}（詳細設定）')
             if a.evs:
                 print('EVS詳細:', self.evs_summary())
@@ -275,18 +277,19 @@ class Editor:
         elif action == 'line':
             a.lane_id, a.line_type = self.pick('lane / 追従ライン', mission.hdmap_choices(a.map_file),
                                               (a.lane_id, a.line_type), lambda v: ' / '.join(v))
-        elif action in ('rgb', 'infra'):
+        elif action in ('rgb', 'infra', 'depth'):
             try:
                 sensors = self.sensors()
             except ValueError:
                 sensors = sensor_parameters(camera_config(self.config, a.mode))
             key, enabled = ('rgb_camera.color_profile', 'enable_color') if action == 'rgb' else ('depth_module.infra_profile', 'enable_infra1')
+            if action == 'depth': key, enabled = 'depth_module.depth_profile', 'enable_depth'
             current = sensors[key] if sensors[enabled] else '0'
-            profiles = list(dict.fromkeys([current, *CAMERA_PROFILES['RGB' if action == 'rgb' else 'Infra'], '0']))
+            profiles = list(dict.fromkeys([current, *CAMERA_PROFILES[{'rgb':'RGB','infra':'Infra','depth':'Depth'}[action]], '0']))
             value = self.pick(action.upper() + ' 解像度 × FPS（USB3 D455候補）', profiles, current,
                               lambda v: 'なし' if v == '0' else v.replace('x', ' × '))
             setattr(a, action + '_profile', value)
-            setattr(a, action + '_fps', None)
+            if action != 'depth': setattr(a, action + '_fps', None)
             self.inferred.pop(action + '_profile', None)
         elif action == 'imu':
             a.imu_profile = self.pick('IMU 取得レート', ['', 'low', 'high', 'off'], a.imu_profile,

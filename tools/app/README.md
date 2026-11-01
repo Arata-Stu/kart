@@ -1696,3 +1696,26 @@ JSON応答に`progress`を追加。ノード名・topic・parameterの追加や�
 録画中、欠落、破損、1 MiBを超えるmetadataではnull（未取得）。不明値を0として表示しない。
 UIは取得時点の値を表示し、切断後に時計を進めない。旧managerでは未取得表示になる。
 ファイル計測失敗は録画制御を止めない。ROS/Jetsonでの負荷・実録画は別途確認が必要。
+
+### Depthプロファイルの明示指定
+
+UIの基本設定「Depth Z16 解像度 × FPS」、TUIのDepth、CLIの`--depth-profile`、
+mission / realsense launchの`depth_profile`から指定する。既定は空文字（YAMLを保持）、
+`0`はOFF、`幅x高さxFPS`はDepthを有効化して`depth_module.depth_profile`を上書きする。
+既存realsenseノードの`enable_depth`（通常false、environmentはtrue）と
+`depth_module.depth_profile`（通常424x240x60、environmentは848x480x30）を使用する。
+新規ROSノード・parameter・topic型は追加しない。永続YAMLの値は変更しない。
+
+候補の出典は2026-11-02にユーザー提供のD455 / FW 5.16.0.1 / USB3.2の
+rs-enumerate-devices（Depth Z16）出力。1280x720は30/15/5 Hz、
+848x480・640x480・640x360・480x270・424x240は90/60/30/15/5 Hz、
+848x100は100 Hz、256x144は90 Hz。個別対応の列挙であり同時配信・帯域の保証ではない。
+DepthとInfra有効時は同じ解像度・FPSが必要（kart側の構成方針）。明示Depthとの不一致は起動前に拒否し、
+Depth未指定では従来どおり有効Infraへ揃える。256x144x90などInfra候補にないものはInfra OFFで使う。
+通常記録とEVS併用記録にも`realsense/depth/image_rect_raw`（sensor_msgs/msg/Image）、
+`realsense/depth/camera_info`（sensor_msgs/msg/CameraInfo）、
+`realsense/extrinsics/depth_to_color`（realsense2_camera_msgs/msg/Extrinsics）を記録候補に追加。
+Depth無効時にDepthを起動する変更ではない。画像はnative Z16で、RGBへの整列や点群は有効化しない。
+
+例: `bash scripts/bringup.sh --mode collect --infra-profile 640x480x60 --depth-profile 640x480x60`。
+ROS結合・実機プロファイル採用・Depthの実記録はJetsonで確認する。

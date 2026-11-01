@@ -7,7 +7,7 @@ const labels = {
   device:'車両基板ポート', map_root:'地図の探索先', model_root:'モデルの探索先',
   map_file:'HDMap', map_dir:'VSLAM地図 / VGL bundle', model_dir:'VGL実行モデル',
   lane_id:'走行レーン', line_type:'追従ライン', e2e_model_dir:'E2Eモデル',
-  rgb_profile:'RGB 解像度 × FPS', infra_profile:'Infra 解像度 × FPS', imu_profile:'IMU',
+  depth_profile:'Depth Z16 解像度 × FPS', rgb_profile:'RGB 解像度 × FPS', infra_profile:'Infra 解像度 × FPS', imu_profile:'IMU',
   rgb_fps:'RGB FPS（旧指定）', infra_fps:'Infra FPS（旧指定）',
   evs:'EVSを使用', no_evs:'EVSを明示的に無効化', evs_backend:'EVS処理方式',
   evs_aggregation:'EVS集計方式', evs_image:'EVS可視化画像', evs_serial:'EVSシリアル',
@@ -23,7 +23,7 @@ const labels = {
 const live = ['collect','environment','drive','e2e'];
 const modeKeys = {
   device:live, no_bridge:live, record_dir:[...live,'eval','e2e-latency'], run_name:live,
-  rgb_fps:live, infra_fps:live, rgb_profile:live, infra_profile:live, imu_profile:live,
+  rgb_fps:live, infra_fps:live, rgb_profile:live, infra_profile:live, depth_profile:live, imu_profile:live,
   evs:live, no_evs:live, evs_backend:live, evs_aggregation:live, evs_image:live,
   evs_serial:live, evs_tensor_config:live, evs_bias_file:live, bias_root:live,
   joy_max_throttle:['collect','environment'], auto_fixed_throttle:['collect','environment','drive'],
@@ -36,7 +36,7 @@ const modeKeys = {
   tracking_mode:['eval'], base_frame:['eval'], imu_frame:['eval'], latency_output:['e2e-latency'],
   foxglove:live,
 };
-const essentials = new Set(['device','rgb_profile','infra_profile','imu_profile','evs','run_name',
+const essentials = new Set(['device','rgb_profile','infra_profile','depth_profile','imu_profile','evs','run_name',
   'joy_max_throttle','auto_fixed_throttle','e2e_throttle_mode','e2e_fixed_throttle','recovery','tuning','eval_localization','tracking_mode','rate']);
 const assetKeys = new Set(['map_file','map_dir','model_dir','e2e_model_dir','lane_id','line_type','bag']);
 const panes = ['basic','assets','details','review','log'];
@@ -92,9 +92,9 @@ function renderFields() {
       if (f.kind==='boolean') {
         input.append(new Option('有効','true'),new Option('無効','false'));
       } else for (const value of f.choices) input.append(new Option(
-        (f.key==='rgb_profile' || f.key==='infra_profile') && value==='0'?'なし（OFF）':value,value));
+        (f.key==='rgb_profile' || f.key==='infra_profile' || f.key==='depth_profile') && value==='0'?'なし（OFF）':value,value));
     } else { input=document.createElement('input'); input.type='text'; input.placeholder=f.default==null?'未指定':String(f.default); }
-    if (f.key==='rgb_profile' || f.key==='infra_profile') {
+    if (f.key==='rgb_profile' || f.key==='infra_profile' || f.key==='depth_profile') {
       // An inline list never opens a native popup under the releasing pointer.
       input.size=5;
       input.className='bringup-profile-list';

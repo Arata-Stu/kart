@@ -30,7 +30,13 @@ INFRA_PROFILES = (
     "848x480x90", "848x100x100", "1280x720x15", "1280x720x30", "1280x800x30",
 )
 RGB_PROFILES = tuple(p for p in INFRA_PROFILES if p not in ("640x480x90", "848x480x90", "848x100x100"))
-CAMERA_PROFILES = {"RGB": RGB_PROFILES, "Infra": INFRA_PROFILES}
+# User D455 enumeration, FW 5.16.0.1, USB3.2, 2026-11-02: Depth Z16.
+DEPTH_RATES = {"1280x720": (30, 15, 5), "848x480": (90, 60, 30, 15, 5),
+               "848x100": (100,), "640x480": (90, 60, 30, 15, 5),
+               "640x360": (90, 60, 30, 15, 5), "480x270": (90, 60, 30, 15, 5),
+               "424x240": (90, 60, 30, 15, 5), "256x144": (90,)}
+DEPTH_PROFILES = tuple(f"{size}x{fps}" for size, rates in DEPTH_RATES.items() for fps in rates)
+CAMERA_PROFILES = {"RGB": RGB_PROFILES, "Infra": INFRA_PROFILES, "Depth": DEPTH_PROFILES}
 
 
 def validate_camera_profile(stream, profile):
@@ -45,6 +51,7 @@ def validate_camera_profile(stream, profile):
                   "848x480": (5, 15, 30, 60, 90), "848x100": (100,),
                   "1280x720": (5, 15, 30), "1280x800": (15, 30)},
     }
+    rates["Depth"] = DEPTH_RATES
     parts = re.split(r"[x,]", str(profile))
     if len(parts) != 3 or not all(p.isdigit() for p in parts) or int(parts[2]) not in rates[stream].get("x".join(parts[:2]), ()):
         raise ValueError(f"{stream}: unsupported D455 profile: {profile}")
@@ -63,11 +70,11 @@ def recording_config(root, mode, evs=False):
     return Path(root) / "recording" / f"bag_manager{suffix}.yaml"
 
 
-def sensor_parameters(path, rgb_fps="", infra_fps="", rgb_profile="", infra_profile="", imu_profile=""):
+def sensor_parameters(path, rgb_fps="", infra_fps="", rgb_profile="", infra_profile="", imu_profile="", depth_profile=""):
     # ArgumentContainer evaluates numeric launch arguments ("0" becomes int 0).
     # Normalize before testing emptiness so OFF never falls back to YAML.
-    rgb_fps, infra_fps, rgb_profile, infra_profile = map(
-        str, (rgb_fps, infra_fps, rgb_profile, infra_profile)
+    rgb_fps, infra_fps, rgb_profile, infra_profile, depth_profile = map(
+        str, (rgb_fps, infra_fps, rgb_profile, infra_profile, depth_profile)
     )
     params = yaml.safe_load(Path(path).read_text())["/**/realsense"]["ros__parameters"]
     params = dict(params)
@@ -92,6 +99,7 @@ def sensor_parameters(path, rgb_fps="", infra_fps="", rgb_profile="", infra_prof
     for stream, value, fps, key, flags in (
         ("RGB", rgb_profile, rgb_fps, "rgb_camera.color_profile", ("enable_color",)),
         ("Infra", infra_profile, infra_fps, "depth_module.infra_profile", ("enable_infra1", "enable_infra2")),
+        ("Depth", depth_profile, "", "depth_module.depth_profile", ("enable_depth",)),
     ):
         if not value:
             continue
@@ -118,7 +126,11 @@ def sensor_parameters(path, rgb_fps="", infra_fps="", rgb_profile="", infra_prof
             params["unite_imu_method"] = 2
     # Depth and Infra share the D455 stereo sensor. Keep one capture profile.
     if params["enable_depth"] and (params["enable_infra1"] or params["enable_infra2"]):
+        if depth_profile and params["depth_module.depth_profile"] != params["depth_module.infra_profile"]:
+            raise ValueError("DepthとInfraは同じ解像度・FPSを選択してください（Depth単独ならInfraをOFF）")
         params["depth_module.depth_profile"] = params["depth_module.infra_profile"]
+    if params["enable_depth"]:
+        validate_camera_profile("Depth", params["depth_module.depth_profile"])
     return params
 
 

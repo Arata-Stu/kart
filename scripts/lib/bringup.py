@@ -100,7 +100,7 @@ def validate_mode_options(args):
     """Reject runtime selections that would otherwise disappear from argv."""
     offline = args.mode in ("eval", "e2e-latency")
     groups = [
-        (("rgb_fps", "infra_fps", "rgb_profile", "infra_profile", "imu_profile", "device", "run_name"), not offline),
+        (("rgb_fps", "infra_fps", "rgb_profile", "infra_profile", "depth_profile", "imu_profile", "device", "run_name"), not offline),
         (("bag", "rate"), offline),
         (("e2e_throttle_mode",), args.mode == "e2e"),
         (("e2e_model_dir",), args.mode in ("e2e", "e2e-latency")),
@@ -139,6 +139,7 @@ def argument_parser():
     parser.add_argument("--infra-fps", choices=("0", "30", "60", "90"))
     parser.add_argument("--rgb-profile", default="", help="RGB WIDTHxHEIGHTxFPS; 0 disables")
     parser.add_argument("--imu-profile", choices=("low", "high", "off"), default="", help="IMU: low=accel100/gyro200Hz, high=accel200/gyro400Hz, off=なし; 未指定はYAML")
+    parser.add_argument("--depth-profile", default="", help="Depth Z16 WIDTHxHEIGHTxFPS; 0 disables; Infra有効時は同じprofileを指定")
     parser.add_argument("--infra-profile", default="", help="Infra WIDTHxHEIGHTxFPS; 0 disables")
     for key in ("device", "map-file", "map-dir", "model-dir", "lane-id", "line-type"):
         parser.add_argument("--" + key, default="")
@@ -260,7 +261,7 @@ def build_command(args, config):
         print(f"EVS: {overrides}; packet topic OFF; configs={paths}")
     sensors = sensor_parameters(
         camera_config(config, args.mode), args.rgb_fps or "", args.infra_fps or "",
-        args.rgb_profile, args.infra_profile, args.imu_profile
+        args.rgb_profile, args.infra_profile, args.imu_profile, getattr(args, "depth_profile", "")
     )
     if section_routing:
         from kart_bringup.localization import resolve
@@ -369,6 +370,7 @@ def build_command(args, config):
         "e2e_fixed_throttle": None if args.e2e_fixed_throttle is None else str(args.e2e_fixed_throttle),
         "rgb_profile": args.rgb_profile,
         "infra_profile": args.infra_profile,
+        "depth_profile": getattr(args, "depth_profile", ""),
         "imu_profile": args.imu_profile,
         "rgb_fps": args.rgb_fps,
         "infra_fps": args.infra_fps,
@@ -441,10 +443,11 @@ def build_command(args, config):
             else "OFF",
         )
     if args.mode != "eval":
+        print("Depth:", sensors["depth_module.depth_profile"] if sensors["enable_depth"] else "OFF")
         print("IMU:", f"加速度{sensors['accel_fps']} / ジャイロ{sensors['gyro_fps']}Hz"
               if sensors["enable_accel"] and sensors["enable_gyro"] else "OFF")
     if args.mode == "environment":
-        print("環境記録: Depth Z16:", sensors["depth_module.depth_profile"],
+        print("環境記録: Depth Z16:", sensors["depth_module.depth_profile"] if sensors["enable_depth"] else "OFF",
               "IMU: accel=", sensors["enable_accel"], "gyro=", sensors["enable_gyro"],
               "unite_imu_method=", sensors["unite_imu_method"])
         print("センサ設定:", camera_config(config, args.mode))
