@@ -1434,6 +1434,7 @@
         <select id="simulation-parking-slot" aria-label="試走する駐車区画"><option>P1</option><option>P2</option><option>P3</option></select><button id="simulation-parking">現在位置から駐車を試走</button>
         <p class="small">駐車は共通planner・選択中のPP/MPC・駐車完了判定で試走します。速度応答は理想モデルで、実車のPID・タイヤ・遅延は再現しません。保存済み地図を使用します。</p>
       </div>
+      <p id="simulation-parking-feedback" class="parking-feedback" role="status" aria-live="polite" hidden></p>
       <p id="simulation-metrics" aria-live="off"></p>
       <p class="help">
         実車と共通のPure Pursuit／MPC計算＋理想自転車モデル（30 Hz）。設定変更で再計算し、再生して比較できます。実車の設定は変更しません。Race／Customは生成速度を目標に使用。長方形の基準は後輪軸。境界・障害物は表示のみで、試走軌跡の衝突判定・回避、実車PIDやタイヤ特性は未再現です。

@@ -1503,3 +1503,23 @@ header .local-tag { white-space: nowrap; }
 #tuning-speed-panel[hidden] { display: none; }
 #tuning-speed-chart { width: 100%; height: clamp(100px, 20vh, 170px); display: block; }
 #tuning-speed-values { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 12px; }
+
+.parking-feedback {
+  padding: 10px 14px;
+  margin: 8px 0;
+  border: 1px solid #328ccb;
+  border-radius: 8px;
+  background: #edf7ff;
+  color: #174c71;
+  font-weight: 600;
+}
+.parking-feedback[data-state="error"] {
+  border-color: #ce4141;
+  background: #fff1f1;
+  color: #922525;
+}
+.parking-feedback[data-state="success"] {
+  border-color: #238457;
+  background: #edf9f2;
+  color: #195d3e;
+}

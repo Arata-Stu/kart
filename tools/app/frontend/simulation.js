@@ -3,10 +3,17 @@ import { reverseLane } from "./direction.js";
 import { replaySimulation } from "./simulation_replay.js";
 let requestSerial=0, parkingRoute=null, documentRevision=null, parkingMessage="";
 let sim=null, snapshot=null, trail=[], running=false, last=0, accumulator=0, raf=0;
+let parkingFeedbackTimer=null;
+function clearParkingFeedback() {
+  clearInterval(parkingFeedbackTimer);parkingFeedbackTimer=null;
+  $('simulation-parking').textContent='現在位置から駐車を試走';
+  $('simulation-parking').removeAttribute('aria-busy');
+  $('simulation-parking-feedback').hidden=true;
+}
 const dialog=$("simulation-dialog"), canvas=$("simulation-canvas"), ctx=canvas.getContext("2d");
 function pause() {running=false; cancelAnimationFrame(raf); raf=0; $("simulation-play").textContent="再生";}
 async function reset() {
-  pause();parkingRoute=null;parkingMessage="";
+  pause();clearParkingFeedback();parkingRoute=null;parkingMessage="";
   const serial=++requestSerial;sim=null;
   const mpc=$("simulation-controller").value==="mpc";
   $("simulation-lookahead").hidden=mpc;
@@ -110,7 +117,7 @@ action("simulation-reset",reset);
 for(const id of ["simulation-laps","simulation-controller","simulation-horizon","simulation-tracking","simulation-smoothness","simulation-rate","simulation-line","simulation-speed","simulation-wheelbase","simulation-steer"]){
   $(id).addEventListener("change",async()=>{try{await reset();}catch(e){pause();sim=null;$("simulation-metrics").textContent=e.message;toast(e.message,true);}});
 }
-dialog.addEventListener("close",()=>{requestSerial++;pause();});
+dialog.addEventListener("close",()=>{requestSerial++;pause();clearParkingFeedback();});
 new ResizeObserver(()=>{if(dialog.open)draw();}).observe(canvas);
 action("lane-reverse",()=>{
   if(!state.lane || state.doc.snapshot_status==="pending")throw Error("編集可能な地図を選んでください");
@@ -123,15 +130,34 @@ action('simulation-parking',async()=>{
   if(!sim || state.dirty || state.doc.revision!==documentRevision)throw Error('地図を保存し、試走を開き直してください');
   pause();parkingMessage="駐車経路と追従を計算中…";draw();const serial=++requestSerial;
   $('simulation-parking').disabled=true;$('simulation-play').disabled=true;
+  const feedback=$('simulation-parking-feedback'), started=performance.now();
+  feedback.hidden=false;feedback.dataset.state='busy';
+  feedback.textContent='操作を受け付けました。駐車経路と追従を計算中…';
+  $('simulation-parking').textContent='計算中… 0秒';
+  $('simulation-parking').setAttribute('aria-busy','true');
+  clearInterval(parkingFeedbackTimer);
+  parkingFeedbackTimer=setInterval(()=>{
+    $('simulation-parking').textContent=`計算中… ${Math.floor((performance.now()-started)/1000)}秒`;
+  },1000);
   try {
     const result=await api('parking-preview',{id:state.id,revision:documentRevision,lane_id:state.laneId,line_type:$('simulation-line').value,slot:$('simulation-parking-slot').value,pose:[sim.car.x,sim.car.y,sim.car.yaw],options:sim.cfg,initial_speed:sim.car.speed});
     if(serial!==requestSerial || !dialog.open)return;
     parkingRoute={points:result.route.map(p=>p.slice(0,2))};
     sim=replaySimulation(result,sim.cfg);trail=[[sim.car.x,sim.car.y]];parkingMessage="";
+    feedback.dataset.state=sim.car.done && result.reason!=='simulated_parked'?'error':'success';
+    feedback.textContent=sim.car.done?sim.car.reason:'計算完了。駐車試走を開始しました。';
     play();draw();
     toast(sim.car.done?sim.car.reason:'駐車試走を開始しました。',sim.car.done && result.reason!=='simulated_parked');
   } catch(e) {
-    if(serial===requestSerial && dialog.open){parkingMessage='駐車試走を開始できません: '+e.message;draw();}
+    if(serial===requestSerial && dialog.open){parkingMessage='駐車試走を開始できません: '+e.message;feedback.dataset.state='error';feedback.textContent=parkingMessage;draw();}
     throw e;
-  } finally {if(serial===requestSerial)$('simulation-play').disabled=!sim;$('simulation-parking').disabled=false;}
+  } finally {
+    if(serial===requestSerial){
+      clearInterval(parkingFeedbackTimer);parkingFeedbackTimer=null;
+      $('simulation-parking').textContent='現在位置から駐車を試走';
+      $('simulation-parking').removeAttribute('aria-busy');
+      $('simulation-play').disabled=!sim;
+    }
+    $('simulation-parking').disabled=false;
+  }
 });
