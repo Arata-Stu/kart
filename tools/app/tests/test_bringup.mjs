@@ -27,7 +27,7 @@ globalThis.fetch=async(url,options)=>{
   let result;
   if(action==='containers')result={containers:[{id,name:'kart',running:true,root:'/repo'}]};
   else if(action==='preset_get')result={preset:null};
-  else if(action==='catalog')result={modes:{'esc-trial':'ESC試験',collect:'記録'},fields:[{key:'device',kind:'text'},{key:'rgb_profile',choices:['0','640x480x30']},{key:'infra_profile',choices:['0','640x480x90']},{key:'depth_profile',choices:['0','640x480x90']}],status:snapshot};
+  else if(action==='catalog')result={modes:{'esc-trial':'ESC試験',collect:'記録'},stereo_defaults:{collect:{profile:'640x480x90',infra_profile:'640x480x90',depth_profile:'0'}},fields:[{key:'device',kind:'text'},{key:'rgb_profile',choices:['0','640x480x30']},{key:'infra_profile',choices:['0','640x480x90']},{key:'depth_profile',choices:['0','640x480x90']}],status:snapshot};
   else if(action==='plan')result={revision:'reviewed',review:'ESC plan'};
   else if(action==='start'){assert.equal(body.revision,'reviewed');snapshot={...snapshot,run_id:'r1',phase:'running',session:true,ownership:{locked:true},managed:true};result=snapshot;}
   else if(action==='stop'){assert.equal(body.run_id,'r1');result={...snapshot,stop_requested:true};}
@@ -41,7 +41,8 @@ el('bringup-connect').onclick();await flush();
 assert.equal(el('bringup-workspace').hidden,false);
 assert.equal(el('bringup-start').disabled,true);
 el('bringup-mode').value='collect';el('bringup-mode').onchange();
-for(const key of ['rgb_profile','infra_profile','depth_profile']) assert.equal(el('bringup-field-'+key).size,5);
+for(const key of ['rgb_profile','stereo_profile']) assert.equal(el('bringup-field-'+key).size,5);
+el('bringup-field-depth_enabled').value='true';el('bringup-field-depth_enabled').onchange();
 const profile=el('bringup-field-rgb_profile');
 profile.value='640x480x30';profile.onchange();
 el('bringup-tab-log').onclick();
@@ -51,6 +52,8 @@ el('bringup-tab-basic').onclick();
 assert.equal(profile.value,'640x480x30','navigation preserves settings');
 el('bringup-plan').onclick();await flush();
 assert.equal(calls.find(c=>c.url.endsWith('/plan')).body.values.rgb_profile,'640x480x30');
+assert.equal(calls.find(c=>c.url.endsWith('/plan')).body.values.infra_profile,'640x480x90');
+assert.equal(calls.find(c=>c.url.endsWith('/plan')).body.values.depth_profile,'640x480x90');
 assert.equal(el('bringup-pane-review').hidden,false);
 assert.equal(el('bringup-start').disabled,false);
 el('bringup-field-device').value='/dev/new';el('bringup-field-device').onchange();

@@ -190,7 +190,7 @@ GPUでTensor構成・正規化を行う。既定eventsとCPU版evt3_runsは維�
 
 ### Depthプロファイルの明示指定
 
-UIの基本設定「Depth Z16 解像度 × FPS」、TUIのDepth、CLIの`--depth-profile`、
+UIの基本設定「Stereo 解像度 × FPS」とInfra／Depth各ON・OFF、TUIのDepth、CLIの`--depth-profile`、
 mission / realsense launchの`depth_profile`から指定する。既定は空文字（YAMLを保持）、
 `0`はOFF、`幅x高さxFPS`はDepthを有効化して`depth_module.depth_profile`を上書きする。
 既存realsenseノードの`enable_depth`（通常false、environmentはtrue）と
@@ -201,9 +201,14 @@ mission / realsense launchの`depth_profile`から指定する。既定は空文
 rs-enumerate-devices（Depth Z16）出力。1280x720は30/15/5 Hz、
 848x480・640x480・640x360・480x270・424x240は90/60/30/15/5 Hz、
 848x100は100 Hz、256x144は90 Hz。個別対応の列挙であり同時配信・帯域の保証ではない。
-DepthとInfraは解像度・FPSを独立指定でき、不一致をkart側で拒否しない。
-Depth未指定時はDepthのYAML値を保持し、Infraへ自動的に揃えない。
-個別に有効なprofileでも同時配信できるとは限らず、採用値と配信は実機で確認する。
+DepthとInfraの同時使用は同じ解像度・FPSとする。UIでは共通Stereo profileを選び、
+Infra（左右）とDepthをそれぞれON/OFFする。両方ONでは両ストリームの共通候補だけを表示する。
+ON/OFFの初期値はJetsonの用途別YAMLまたは保存設定から取得し、画面を開くだけでは上書きしない。
+操作後は既存infra_profile/depth_profileへ同じprofileまたは0を保存・送信し、旧infra_fps指定を解除する。
+旧保存設定の不一致は選び直しを案内し、起動前検証でも拒否する。未指定値はYAMLを保持する。
+TUIで片方のStereo profileを編集した場合、もう片方がONなら共通値を適用し、OFFは個別に扱う。
+単独ONなら単独対応候補も選べる。Jetsonの旧catalogには更新案内を表示する。
+ドライバの採用値と配信は実機で確認する。
 通常記録とEVS併用記録にも`realsense/depth/image_rect_raw`（sensor_msgs/msg/Image）、
 `realsense/depth/camera_info`（sensor_msgs/msg/CameraInfo）、
 `realsense/extrinsics/depth_to_color`（realsense2_camera_msgs/msg/Extrinsics）を記録候補に追加。

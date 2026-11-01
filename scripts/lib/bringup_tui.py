@@ -286,9 +286,17 @@ class Editor:
             if action == 'depth': key, enabled = 'depth_module.depth_profile', 'enable_depth'
             current = sensors[key] if sensors[enabled] else '0'
             profiles = list(dict.fromkeys([current, *CAMERA_PROFILES[{'rgb':'RGB','infra':'Infra','depth':'Depth'}[action]], '0']))
-            value = self.pick(action.upper() + ' 解像度 × FPS（USB3 D455候補）', profiles, current,
+            value = self.pick(action.upper() + (' 解像度 × FPS（USB3 D455候補）' if action == 'rgb' else ' 解像度 × FPS（Stereo同時ON時は共通・0はこのstreamのみOFF）'), profiles, current,
                               lambda v: 'なし' if v == '0' else v.replace('x', ' × '))
             setattr(a, action + '_profile', value)
+            # Editing either stereo stream applies the shared capture profile to
+            # the other stream only when it is already enabled. OFF stays local.
+            if action in ('infra', 'depth') and value != '0':
+                other = 'depth' if action == 'infra' else 'infra'
+                enabled_other = sensors['enable_depth'] if other == 'depth' else (sensors['enable_infra1'] or sensors['enable_infra2'])
+                if enabled_other:
+                    setattr(a, other + '_profile', value)
+                    if other == 'infra': a.infra_fps = None
             if action != 'depth': setattr(a, action + '_fps', None)
             self.inferred.pop(action + '_profile', None)
         elif action == 'imu':

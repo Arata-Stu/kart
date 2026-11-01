@@ -261,7 +261,15 @@ def dispatch(body):
         from recording_remote import request
         return request(action, body.get('recording_service'))
     if action == 'catalog':
-        return dict(modes=MODES, fields=fields(), status=status())
+        from kart_bringup.mission import sensor_parameters, camera_config
+        defaults = {}
+        for mode in ('collect', 'environment', 'drive', 'e2e'):
+            p = sensor_parameters(camera_config(CONFIG, mode))
+            defaults[mode] = dict(
+                profile=p['depth_module.infra_profile'],
+                infra_profile=p['depth_module.infra_profile'] if p['enable_infra1'] or p['enable_infra2'] else '0',
+                depth_profile=p['depth_module.depth_profile'] if p['enable_depth'] else '0')
+        return dict(modes=MODES, fields=fields(), status=status(), stereo_defaults=defaults)
     if action == 'status':
         return status()
     if action == 'assets':

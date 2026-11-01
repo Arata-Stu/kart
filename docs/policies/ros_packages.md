@@ -416,7 +416,7 @@ bringupの対話選択は解像度とFPSを組にした候補一覧とする。
 
 環境そのものの記録には`environment`モードを用意し、RGB・左右Infra・Depth・IMU・
 校正・TFを保存する。通常collectの負荷や記録対象を暗黙に変えず、環境用の完全な
-センサ／bag YAMLを選択する。DepthとInfraのprofileはそれぞれ独立して扱う。
+センサ／bag YAMLを選択する。DepthとInfra同時使用は同じ解像度・FPSとする。
 録画の開始・停止はJoyとUIから同じmanagerに要求し、起動時に自動録画やAUTO遷移を行わない。
 
 ### ESC固有の信号列の生成
@@ -487,6 +487,7 @@ UIの録画操作は`kart_bag_manager`の`bag/set_recording`（SetBool）を通�
 UI切断で自動停止・自動再開しない。操作timeout時は再送せず状態を再取得する。
 
 Depthも空文字=設定保持、0=OFF、明示profile=有効化の起動時指定に統一する。
-DepthとInfraの一致は強制せず、明示指定を独立して渡す。未指定のDepthはYAMLを保持し、
-Infraへ暗黙に揃えない。個別profileの検証と実機の同時配信確認を区別する。
+UIのStereo profileは共通選択とし、Depth／InfraのON・OFFを分離する。
+両方有効時の不一致は起動前に拒否し、旧保存設定の不一致も選び直しを案内する。
+未指定はYAMLを保持する。個別profileの検証と実機の配信確認を区別する。
 通常記録にもDepthと校正を記録候補として含める。

@@ -135,3 +135,14 @@ def test_real_tmux_detach_reconnect_duplicate_and_sigint(tmp_path):
     finally:
         subprocess.run(['tmux','-L','kart-bringup-local','kill-server'],env=env,capture_output=True)
         socket_dir.cleanup()
+
+
+def test_catalog_exposes_mode_specific_stereo_defaults():
+    with patch.object(remote, 'status', return_value={}):
+        catalog = remote.dispatch({'action': 'catalog'})
+    normal = catalog['stereo_defaults']['collect']
+    environment = catalog['stereo_defaults']['environment']
+    assert normal['depth_profile'] == '0'
+    assert normal['infra_profile'] == normal['profile']
+    assert environment['depth_profile'] == environment['infra_profile']
+    assert environment['depth_profile'] != '0'
