@@ -1499,6 +1499,8 @@ RGB/Infra profileは重なるポップアップを使わず、枠内の候補一
 タブ切替で入力値は保持され、設定変更時は再検証が必要。
 
 UI/Notebook/SSHが切れてもJetsonのtmuxでプロセスを保持する。
+セッション名は`kart-bringup`。ソケット名は`kart-bringup-<コンテナID先頭12文字>`で分離し、
+起動・操作・復帰コマンドは`tmux -u`でUTF-8を明示する。
 ページ再読込後は接続先とDockerを再選択すると、稼働状態・直近ログ・終了結果を取得できる。
 通信エラーでは状態を未確認と表示し、起動/終了を自動再送しない。
 「起動設定を保存」は接続先ごとの次回用設定をNotebookに保存するだけで、自動起動やYAML変更はしない。
@@ -1510,7 +1512,7 @@ ROSノードの全YAML項目を編集する画面ではない。動作中の調�
 `/tmp`を共有する別Dockerとの混線を避けるため、コンテナごとの専用socketを使う。以下のID部分は画面の実値に置き換える:
 
 ```bash
-tmux -L kart-bringup-CONTAINER_ID_FIRST12 attach -t kart-bringup
+tmux -u -L kart-bringup-CONTAINER_ID_FIRST12 attach -t kart-bringup
 # Ctrl-b → d: デタッチして保持、Ctrl-C: bringupの終了要求
 ```
 

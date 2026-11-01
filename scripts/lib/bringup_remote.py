@@ -147,7 +147,7 @@ def assets(values, selections):
 
 
 def tmux(*args, check=True):
-    p = subprocess.run(['tmux', '-L', SOCKET, *args], capture_output=True, text=True, timeout=5)
+    p = subprocess.run(['tmux', '-u', '-L', SOCKET, *args], capture_output=True, text=True, timeout=5)
     if check and (p.returncode or 'error creating' in p.stderr):
         raise ValueError('tmux: ' + p.stderr.strip())
     return p
@@ -178,7 +178,7 @@ def status():
                 log += stream.read().decode(errors='replace')
     return dict(**{**state, 'phase': phase}, session=has_session, session_id=session_id, ownership=owner,
                 legacy=legacy_processes(), log=log, managed=has_session and marker == run,
-                attach='tmux -L ' + SOCKET + ' attach -t ' + SESSION)
+                attach='tmux -u -L ' + SOCKET + ' attach -t ' + SESSION)
 
 
 def start(body):
