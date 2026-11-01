@@ -1676,3 +1676,7 @@ HTTP optionsはlookahead_mode、lookahead_m、lookahead_low_speed_m、lookahead_
 録画状態取得用の一時ROSクライアントは、専用contextと同じcontextのExecutorを使用し、
 終了時にExecutor・node・contextの順で解放する。リモートエラーは標準出力と標準エラーを保持する。
 ブラウザ切断による応答書込み失敗は操作を再実行せずに終了する。
+
+録画欄は状態取得中・開始要求送信中・停止要求送信中をボタンにも表示し、
+取得完了時刻・エラー詳細・開始できない理由を欄内に表示する。状態取得中の再取得連打は
+重複要求にしない。状態再取得はmanagerを再探索し、開始停止は直近に確認したmanagerに限定する。

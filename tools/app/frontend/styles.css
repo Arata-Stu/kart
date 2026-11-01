@@ -1534,3 +1534,5 @@ header .local-tag { white-space: nowrap; }
 .bringup-toolbar [aria-pressed="true"] { background: #225f79; color: white; }
 #bringup-page .bringup-profile-list { width: 100%; min-height: 150px; padding: 4px; }
 .bringup-profile-list option { padding: 6px 10px; }
+
+#recording-event { white-space: pre-wrap; overflow-wrap: anywhere; }
