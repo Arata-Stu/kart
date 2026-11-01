@@ -15,7 +15,7 @@ import {
   undo,
   fmt,
 } from "./api.js";
-import { fit, draw } from "./canvas.js";
+import { fit, draw, neutral } from "./canvas.js";
 export async function refreshMaps() {
   state.maps = await api("maps");
   const list = $("map-list");
@@ -54,11 +54,13 @@ export async function loadMap(id, preserve = false) {
     doc,
     cloud,
     registrationPreview: null,
+    target: null,
     dirty: false,
     undo: [],
     redo: [],
     selected: -1,
   });
+  $("parking-editor").open = false;
   emit("parking-reset-editor");
   state.laneId = doc.lanes.some((lane) => lane.id === state.laneId)
     ? state.laneId
@@ -115,7 +117,7 @@ export async function save() {
 function step(value) {
   state.step = value;
   state.selected = -1;
-  if (value === "bounds" && state.target === "custom") state.target = "left";
+  if (value === "bounds" && state.target === "custom") state.target = null;
   for (const s of ["cloud", "bounds", "lines"]) {
     $("panel-" + s).hidden = s !== value;
     $("step-" + s).classList.toggle("active", s === value);
@@ -179,6 +181,7 @@ function status() {
   $("raceline-speed-open").disabled = !d || busy;
   $("raceline-speed-summary").textContent =
     `次回生成：上限 ${state.settings.max_speed} m/s · 横加速度 ${state.settings.lateral_accel} m/s² · 加速 ${state.settings.accel} / 減速 ${state.settings.decel} m/s²`;
+  $("edit-neutral").classList.toggle("active", state.target === null && !$("parking-editor").open);
   $("edit-pair").classList.toggle("active", state.target === "pair");
   $("edit-left").classList.toggle("active", state.target === "left");
   $("edit-right").classList.toggle("active", state.target === "right");
@@ -190,10 +193,10 @@ function status() {
     ? state.zmax.toFixed(2) + " m"
     : "—";
   $("canvas-hint").textContent =
-    state.step === "cloud" ||
+    state.target === null || state.step === "cloud" ||
     (state.step === "lines" && state.target !== "custom")
-      ? "ホイール: 拡大 · 右ドラッグ: 移動"
-      : `編集: ${state.target === "obstacle" ? "禁止領域" : state.target === "pair" ? "左右セット" : state.target === "left" ? "左境界" : state.target === "right" ? "右境界" : "Customline"} · クリック追加 / 点ドラッグ / Delete削除`;
+      ? "閲覧 · ホイール: 拡大 · ドラッグ: 移動 · 編集する対象を選択"
+      : `編集: ${state.target === "obstacle" ? "禁止領域" : state.target === "pair" ? "左右セット" : state.target === "left" ? "左境界" : state.target === "right" ? "右境界" : "Customline"} · クリック追加 / 点ドラッグ / Delete削除 · Esc: 閲覧へ`;
   for (const id of [
     "registration-open",
     "custom-speeds-open",
@@ -214,6 +217,8 @@ function status() {
     "z-reset",
   ])
     $(id).disabled = !d;
+  $("clear-line").disabled = !d || state.target === null;
+  $("delete-point").disabled = !d || state.target === null || state.selected < 0;
 }
 for (const s of ["cloud", "bounds", "lines"])
   action("step-" + s, () => step(s));
@@ -243,10 +248,11 @@ for (const t of ["left", "right", "custom", "pair"])
 action("undo", () => undo());
 action("redo", () => undo(true));
 action("fit", () => fit(true));
+action("edit-neutral", neutral);
 action("save", save);
 action("refresh-maps", refreshMaps);
 action("delete-point", () => {
-  if (state.selected < 0) return;
+  if (state.target === null || state.selected < 0) return;
   remember();
   if (state.target === "obstacle")
     state.obstacle?.polygon.splice(state.selected, 1);
@@ -259,6 +265,7 @@ action("delete-point", () => {
   edited();
 });
 action("clear-line", () => {
+  if (state.target === null) return;
   if (!confirm("選択中の境界をクリアしますか？")) return;
   remember();
   if (state.target === "obstacle") {
@@ -406,6 +413,7 @@ action("delete-map-confirm", async () => {
     redo: [],
     selected: -1,
     registrationPreview: null,
+    target: null,
   });
   emit("document");
   emit("view");

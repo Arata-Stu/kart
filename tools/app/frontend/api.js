@@ -15,7 +15,7 @@ export const state = {
   dirty: false,
   diagnostic: null,
   step: "cloud",
-  target: "left",
+  target: null,
   selected: -1,
   zmin: -Infinity,
   zmax: Infinity,

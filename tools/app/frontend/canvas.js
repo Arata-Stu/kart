@@ -45,7 +45,7 @@ function editPoints() {
     ? centers(state.lane)
     : state.target === "obstacle"
       ? state.obstacle?.polygon || []
-      : state.lane[state.target];
+      : state.lane?.[state.target] || [];
 }
 function nearestPoint(x, y) {
   let index = -1,
@@ -62,7 +62,7 @@ function nearestPoint(x, y) {
 }
 function paintPlacement() {
   if (
-    state.parkingPick ||
+    state.target === null || state.parkingPick ||
     !hover ||
     hover.alt ||
     drag ||
@@ -508,7 +508,7 @@ canvas.addEventListener("pointerdown", (e) => {
   }
   canvas.setPointerCapture(e.pointerId);
   const edit =
-    state.doc &&
+    state.target !== null && state.doc &&
     (state.step === "bounds" ||
       (state.step === "lines" && state.target === "custom" && lineVisible("customline")));
   if (!edit || e.button !== 0 || e.altKey) {
@@ -585,6 +585,24 @@ canvas.addEventListener("pointercancel", () => {
   drag = null;
   draw();
 });
+export function neutral() {
+  // Keep already-applied edits; discard only a pending click with no movement.
+  if (drag?.mode === "edit" && !drag.moved) state.undo.pop();
+  drag = null;
+  state.target = null;
+  state.selected = -1;
+  state.parkingPick = null;
+  $('parking-editor').open = false;
+  emit('parking-end');
+  emit('status');
+  draw();
+}
+document.addEventListener('keydown', e => {
+  // Let dialogs retain their native Escape-to-close behavior.
+  if (e.key !== 'Escape' || document.querySelector('dialog[open]')) return;
+  e.preventDefault();
+  neutral();
+});
 canvas.addEventListener("keydown", (e) => {
   if($('parking-editor').open) {
     if(e.key==='Escape'){state.parkingPick=null;emit('parking-end');}
@@ -613,7 +631,7 @@ canvas.addEventListener("keydown", (e) => {
 });
 on("document", () => {
   if (state.target === "pair" && state.lane && !compatible(state.lane))
-    state.target = "left";
+    state.target = null;
   draw();
 });
 on("view", invalidate);

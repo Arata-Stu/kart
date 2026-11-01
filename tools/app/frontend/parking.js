@@ -35,6 +35,7 @@ function preview() {
 }
 $('parking-id').addEventListener('change',load);
 $('parking-editor').addEventListener('toggle',()=>{
+  emit('status');
   if($('parking-editor').open) preview();
   else {picking=state.parkingPick=null;state.parkingDraft=null;emit('view');}
 });
