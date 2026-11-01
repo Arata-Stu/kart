@@ -14,7 +14,7 @@ inline bool valid_mpc(MpcSettings m) {
     std::isfinite(m.steering_rate) && m.steering_rate>=.1 && m.steering_rate<=5;
 }
 inline double angle_wrap(double a) { return std::atan2(std::sin(a),std::cos(a)); }
-struct MpcResult { Result command; int iterations{}; double elapsed_ms{}; const char *reason{"mpc_invalid_input"}; };
+struct MpcResult { Result command; int iterations{}; double elapsed_ms{}, primal_residual{}, dual_residual{}; const char *reason{"mpc_invalid_input"}; };
 
 // Fixed-size condensed convex QP. Linearized forward bicycle model in path-error
 // coordinates. ADMM handles BOTH angle and first-difference box constraints.
@@ -125,6 +125,7 @@ inline MpcResult lateral_mpc(const std::vector<Point>& line, bool closed, Pose p
       dual=std::max({dual,rho*std::abs(z[i]-oldz[i]),rho*std::abs(w[i]-oldw[i])});
     }
     out.iterations=iteration+1;
+    out.primal_residual=residual;out.dual_residual=dual;
     if(residual<1e-5 && dual<1e-4){converged=true;break;}
     if(iteration%16==0 && std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()>budget_ms) return finish("mpc_timeout");
   }

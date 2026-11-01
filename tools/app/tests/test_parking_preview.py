@@ -41,3 +41,19 @@ def test_actual_controller_and_mission_reach_parking_goal(method):
     assert result['reason']=='simulated_parked',result['reason']
     assert result['frames'][-1][4]==0
     assert max(f[4] for f in result['frames'])<=.25
+
+@pytest.mark.parametrize('method',['pure_pursuit','mpc'])
+def test_approach_transitions_to_parked(method):
+    cfg=dict(controller=method,speed=1.5,wheelbase=.257,maxSteer=.384,horizon=1,tracking=10,smoothness=1,steeringRate=1.5)
+    result=preview(document(),'main','centerline','P1',[0,0,0],cfg,.5)
+    assert result['reason']=='simulated_parked'
+    assert list(dict.fromkeys(result['states']))==['approach','parking','settling','parked']
+    assert len(result['states'])==len(result['frames'])
+
+def test_parking_preserves_solver_failure():
+    cfg=dict(controller='mpc',speed=1.5,wheelbase=.257,maxSteer=.384,horizon=1,tracking=100,smoothness=.1,steeringRate=.1)
+    result=preview(document(),'main','centerline','P1',[0,0,0],cfg,.5)
+    assert result['reason'] in ('mpc_not_converged','mpc_timeout')
+    assert result['states'][-1]=='failed'
+    assert result['solver_failure']['reason']==result['reason']
+    assert result['solver_failure']['iterations']>0

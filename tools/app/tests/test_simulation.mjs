@@ -41,3 +41,15 @@ for(let s=.1;s<12;s+=.13)assert.equal(cap(s,oldSections),cap(12-s,speedLane.cust
 const stopped=createSimulation({points},false,{speed:0});
 for(let i=0;i<100;i++)stopped.step();
 assert.equal(stopped.car.speed,0);assert.equal(stopped.car.x,points[0][0]);
+
+const {replaySimulation}=await import('../frontend/simulation_replay.js');
+const frame=t=>[t,0,0,0,.25,0,0,0,1,0,.1,.25,.25];
+const failure={reason:'mpc_not_converged',iterations:1500,primal:.002,dual:.003,elapsed_ms:2};
+const parkingReplay=replaySimulation({frames:[frame(0),frame(1/30),frame(2/30),frame(3/30)],states:['approach','parking','settling','failed'],reason:failure.reason,solver_failure:failure},{});
+assert.equal(parkingReplay.car.phase,'approach');
+parkingReplay.step(1/30);assert.equal(parkingReplay.car.phase,'parking');
+parkingReplay.step(1/30);assert.equal(parkingReplay.car.phase,'settling');
+assert.equal(parkingReplay.car.solverFailure,null);
+parkingReplay.step(1/30);assert.equal(parkingReplay.car.phase,'failed');
+assert.equal(parkingReplay.car.solverFailure,failure);
+assert.match(parkingReplay.car.reason,/MPC未収束/);

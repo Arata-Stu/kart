@@ -50,3 +50,30 @@ def test_adaptive_lookahead_uses_current_speed():
         # On a straight path the actual reference point must use that distance.
         if row[1]+expected<200:
             assert row[8]-row[1]==pytest.approx(expected,abs=1e-8)
+
+@pytest.mark.parametrize('method',['pure_pursuit','mpc'])
+def test_multiple_laps(method):
+    body=request(method);body['options']['laps']=3
+    result=preview(body)
+    assert result['reason']=='completed'
+    assert result['laps']==3
+    assert len(result['lap_frames'])==len(result['frames'])
+    assert set(result['lap_frames'])=={1,2,3}
+    assert result['frames'][-1][0]>35
+
+@pytest.mark.parametrize('laps',[0,21,1.5,True])
+def test_invalid_laps(laps):
+    body=request();body['options']['laps']=laps
+    with pytest.raises(ValueError,match='周回数'):preview(body)
+
+def test_failed_solver_diagnostics():
+    body=request();body['options'].update(speed=3,tracking=100,smoothness=.1,steeringRate=.1)
+    result=preview(body)
+    assert result['reason'] in ('mpc_not_converged','mpc_timeout')
+    failure=result['solver_failure']
+    assert failure['reason']==result['reason']
+    assert failure['iterations']>0
+    assert failure['elapsed_ms']>0
+    if result['reason']=='mpc_not_converged':
+        assert failure['iterations']==1500
+        assert failure['primal']>=1e-5 or failure['dual']>=1e-4

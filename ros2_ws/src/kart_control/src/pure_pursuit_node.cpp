@@ -253,6 +253,8 @@ private:
     cmd.header.frame_id = frame_;
     cmd.drive.steering_angle = r.valid ? r.steering : 0;
     cmd.drive.speed = r.valid ? r.speed : 0;
+    const double processing = processing_ms(tick_started_, steady());
+    const double pose_age = r.valid ? (rclcpp::Time(cmd.header.stamp)-pose_stamp_).seconds()*1000 : -1;
     command_->publish(cmd);
     diagnostic_msgs::msg::DiagnosticArray diagnostics;
     diagnostics.header.stamp=cmd.header.stamp;
@@ -265,6 +267,8 @@ private:
       {"mpc_tracking_weight",std::to_string(get_parameter("mpc_tracking_weight").as_double())},
       {"mpc_smoothness_weight",std::to_string(get_parameter("mpc_smoothness_weight").as_double())},
       {"mpc_steering_rate_rad_s",std::to_string(get_parameter("mpc_steering_rate_rad_s").as_double())},
+      {"processing_ms",std::to_string(processing)},
+      {"pose_age_ms",std::to_string(pose_age)},
       {"solver_ms",std::to_string(solver_ms_)},{"iterations",std::to_string(solver_iterations_)},
       {"steering_rad",std::to_string(cmd.drive.steering_angle)},
       {"target_speed_mps",std::to_string(cmd.drive.speed)}}) {
@@ -390,6 +394,7 @@ private:
     return true;
   }
   void tick() {
+    TickStartScope tick_scope(tick_started_, steady());
     if (refresh_control_timer()) return;
     solver_ms_=0;solver_iterations_=0;
     // Read after the parameter transaction commits; never mutate control state
@@ -480,6 +485,7 @@ private:
   rclcpp::Time mode_stamp_{0, 0, RCL_ROS_TIME};
   rclcpp::Subscription<kart_interfaces::msg::OperationModeState>::SharedPtr mode_sub_;
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_callback_;
+  double tick_started_{-1};
   double applied_rate_{0};
   double previous_steering_{0}, control_dt_{1./100}, last_mpc_tick_{0}, solver_ms_{0};
   int solver_iterations_{0};

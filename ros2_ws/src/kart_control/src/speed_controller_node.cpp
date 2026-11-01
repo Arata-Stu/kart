@@ -235,6 +235,10 @@ private:
       command.throttle = result.throttle;
       command.brake = result.brake;
     }
+    const auto published_at = now();
+    const double processing = processing_ms(tick_started_, steady());
+    const double target_age = state=="active" ? (published_at-rclcpp::Time(target_.header.stamp)).seconds()*1000 : -1;
+    const double measurement_age = state=="active" ? (published_at-rclcpp::Time(measured_stamp_)).seconds()*1000 : -1;
     pub_->publish(command);
     if (steady() - last_diagnostic_ < 0.1)
       return;
@@ -248,6 +252,9 @@ private:
     s.level = state == "active" || state == "inactive" ? 0 : 1;
     for (const auto &item : std::vector<std::pair<std::string, double>>{
              {"control_dt_s", control_dt_},
+             {"processing_ms", processing},
+             {"target_age_ms", target_age},
+             {"measurement_age_ms", measurement_age},
              {"target_mps", target_.drive.speed},
              {"measured_mps", measured_},
              {"error_mps", target_.drive.speed - measured_},
@@ -295,6 +302,7 @@ private:
     return true;
   }
   void tick() {
+    TickStartScope tick_scope(tick_started_, steady());
     if (refresh_control_timer()) return;
     const double time = sim_time_ ? now().seconds() : steady();
     const auto elapsed = control_time_.advance(time);
@@ -409,6 +417,7 @@ private:
   ControlTime control_time_;
   double control_dt_{0};
   SpeedPid pid_;
+  double tick_started_{-1};
   PidSettings settings_;
   bool tracking_ok_{false}, measurement_ok_{false}, latched_{false},
       was_auto_{false};

@@ -27,7 +27,7 @@ def follow(route, zone, world, settings, departure, pose, options, initial_speed
     if any(type(v) not in (int,float) or not math.isfinite(v) or not lo<=v<=hi for v,(_,lo,hi) in zip(values,keys)):
         raise ValueError('駐車試走の設定が範囲外です')
     if not math.isfinite(initial_speed) or not 0<=initial_speed<=20:raise ValueError('試走速度が不正です')
-    mission=Mission(route,zone,world,settings,departure);speed=initial_speed;omega=steering=0.;frames=[];maxerror=0.
+    mission=Mission(route,zone,world,settings,departure);speed=initial_speed;omega=steering=0.;frames=[];maxerror=0.;states=[];solver_failure=None
     proc=subprocess.Popen([str(binary)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,bufsize=1)
     try:
         proc.stdin.write(' '.join(map(str,[len(route),int(options['controller']=='mpc'),*values]))+'\n')
@@ -39,19 +39,22 @@ def follow(route, zone, world, settings, departure, pose, options, initial_speed
             if mission.state not in ('settling','parked','failed'):
                 window=mission.window()
                 proc.stdin.write(' '.join(map(str,[mission.index,mission.index+len(window),*pose,speed,steering,int(mission.approaching_parking())]))+'\n');proc.stdin.flush()
-                output=list(map(float,proc.stdout.readline().split()))
-                if len(output)!=7:raise ValueError('駐車試走の制御計算に失敗しました')
-                valid,steering,command,tx,ty,ms,lookahead=output;target=(tx,ty)
-                if not valid:mission.fault('controller_invalid')
+                output=proc.stdout.readline().split()
+                if len(output)!=11:raise ValueError('駐車試走の制御計算に失敗しました')
+                valid,steering,command,tx,ty,ms,lookahead=map(float,output[:7]);target=(tx,ty)
+                if not valid:
+                    solver_failure=dict(reason=output[7],iterations=int(output[8]),primal=float(output[9]),dual=float(output[10]),elapsed_ms=ms)
+                    mission.fault(output[7])
             segment=min(mission.index,len(route)-2)
             error=point_segment(pose,route[segment],route[segment+1])[0];maxerror=max(maxerror,error)
+            states.append(mission.state)
             frames.append([now,*pose,speed,steering,error,maxerror,*target[:2],ms,command,lookahead])
             if mission.state in ('parked','failed'):break
-            if time.monotonic()>deadline:return dict(frames=frames,reason='time_limit')
+            if time.monotonic()>deadline:return dict(frames=frames,reason='time_limit',states=states,solver_failure=solver_failure)
             # Ideal longitudinal response; does not simulate the real speed PID.
             speed=command;omega=speed*math.tan(steering)/settings.wheelbase_m
             pose=(pose[0]+speed*math.cos(pose[2]+omega/60)/30,pose[1]+speed*math.sin(pose[2]+omega/60)/30,wrap(pose[2]+omega/30))
-        result = dict(frames=frames,reason='simulated_parked' if mission.state=='parked' else mission.reason or 'time_limit')
+        result = dict(frames=frames,reason='simulated_parked' if mission.state=='parked' else mission.reason or 'time_limit',states=states,solver_failure=solver_failure)
         if mission.state == 'failed':
             from .parking_diagnostics import clearance_diagnostic
             result['diagnostic'] = clearance_diagnostic(world, pose, zone['area'] if mission.reason == 'left_goal_after_arrival' else None)

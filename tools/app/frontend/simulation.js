@@ -14,7 +14,7 @@ async function reset() {
   for (const input of dialog.querySelectorAll("input")) if (!input.checkValidity()) throw Error("試走設定の範囲を確認してください");
   const kind=$("simulation-line").value;
   const cfg={
-    controller:$("simulation-controller").value,
+    controller:$("simulation-controller").value, laps:Number($("simulation-laps").value),
     horizon:Number($("simulation-horizon").value),tracking:Number($("simulation-tracking").value),
     smoothness:Number($("simulation-smoothness").value),steeringRate:Number($("simulation-rate").value),
     speed:Number($("simulation-speed").value),
@@ -78,7 +78,10 @@ function draw() {
       ctx.font='12px sans-serif';ctx.fillStyle='#a51c30';ctx.fillText(`${hit.kind}（距離 ${hit.distance_m.toFixed(3)} m）`,Math.min(w-230,Math.max(8,hx+12)),Math.max(20,hy-12));
     }
   }
-  $("simulation-metrics").textContent=`${parkingRoute?"駐車試走（理想車両モデル） · ":""}${diagnostic?`水色:走行可能領域 / 赤:車体・抵触箇所 / 橙:余裕 ${diagnostic.margin_m.toFixed(3)} m${diagnostic.hits.length?"":" / 壁・領域の抵触なし"} · `:""}${parkingMessage || c.reason || (running?"試走中":"停止中")} · ${c.time.toFixed(1)} s · ${c.speed.toFixed(2)} m/s${sim.cfg.controller==="pure_pursuit"?` · 先読み ${c.lookahead.toFixed(2)} m`:""} · 目標 ${c.targetSpeed.toFixed(2)} m/s · 計算 ${c.solverMs.toFixed(2)} ms · 舵角 ${(c.steering*180/Math.PI).toFixed(1)}° · 誤差 ${c.error.toFixed(2)} m / 最大 ${c.maxError.toFixed(2)} m`;
+  const phase={approach:'駐車モード：入口へ接近',parking:'駐車モード：進入中',settling:'駐車モード：停止確認中',parked:'駐車モード：完了',failed:'駐車モード：失敗'}[c.phase] || (c.laps?`通常走行：${c.lap} / ${c.laps} 周目`:'通常走行');
+  const failure=c.solverFailure;
+  const debug=failure?` · ${failure.reason} · 失敗時 ${failure.elapsed_ms.toFixed(2)} ms / ${failure.iterations}反復 · 残差 ${failure.primal.toExponential(2)} / ${failure.dual.toExponential(2)}`:'';
+  $("simulation-metrics").textContent=`${phase}${debug} · ${parkingRoute?"駐車試走（理想車両モデル） · ":""}${diagnostic?`水色:走行可能領域 / 赤:車体・抵触箇所 / 橙:余裕 ${diagnostic.margin_m.toFixed(3)} m${diagnostic.hits.length?"":" / 壁・領域の抵触なし"} · `:""}${parkingMessage || c.reason || (running?"試走中":"停止中")} · ${c.time.toFixed(1)} s · ${c.speed.toFixed(2)} m/s${sim.cfg.controller==="pure_pursuit"?` · 先読み ${c.lookahead.toFixed(2)} m`:""} · 目標 ${c.targetSpeed.toFixed(2)} m/s · 計算 ${c.solverMs.toFixed(2)} ms · 舵角 ${(c.steering*180/Math.PI).toFixed(1)}° · 誤差 ${c.error.toFixed(2)} m / 最大 ${c.maxError.toFixed(2)} m`;
 }
 function play(){
   if(!sim || sim.car.done)return;
@@ -104,7 +107,7 @@ action("simulation-open",async()=>{
 });
 action("simulation-play",async()=>{if(!sim)await reset();if(running){pause();draw();return;}if(!sim)return;if(sim.car.done){if(parkingRoute){toast(sim.car.reason+"。通常試走へ戻るにはリセットしてください。");return;}await reset();}parkingMessage="";play();draw();});
 action("simulation-reset",reset);
-for(const id of ["simulation-controller","simulation-horizon","simulation-tracking","simulation-smoothness","simulation-rate","simulation-line","simulation-speed","simulation-wheelbase","simulation-steer"]){
+for(const id of ["simulation-laps","simulation-controller","simulation-horizon","simulation-tracking","simulation-smoothness","simulation-rate","simulation-line","simulation-speed","simulation-wheelbase","simulation-steer"]){
   $(id).addEventListener("change",async()=>{try{await reset();}catch(e){pause();sim=null;$("simulation-metrics").textContent=e.message;toast(e.message,true);}});
 }
 dialog.addEventListener("close",()=>{requestSerial++;pause();});

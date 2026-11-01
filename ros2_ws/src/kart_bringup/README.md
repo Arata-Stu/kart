@@ -1589,3 +1589,7 @@ Studio「Jetson起動」の録画開始・停止ボタンとJoy（運用設定R1
 
 Pure Pursuit / MPCと速度PIDの`control_rate_hz`は、実機・simとも原則100.0 Hz（10 ms）。
 起動後はSTOP・計測停車中に10〜100 Hzで動的変更可能。診断配信周期やセンサー周期とは独立で、実効100 Hzはターゲット上で確認する。
+
+既存bag記録対象の`/control/lateral_diagnostics`・`/control/speed_diagnostics`に、
+`processing_ms`と入力年齢（`pose_age_ms`／`target_age_ms`／`measurement_age_ms`）を含む。
+単位はms、指令publish前までの計測。PID側は約10 Hzのサンプルで、アクチュエータ応答遅延ではない。

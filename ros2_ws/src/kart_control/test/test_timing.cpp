@@ -4,6 +4,15 @@
 #include <limits>
 using namespace kart_control;
 int main() {
+  double start = -1;
+  assert(processing_ms(start, 5) == -1);
+  {
+    TickStartScope scope(start, 5);
+    assert(std::abs(processing_ms(start, 5.003)-3) < 1e-9);
+    assert(processing_ms(start, 4) == -1);
+  }
+  assert(processing_ms(start, 6) == -1); // watchdog must not reuse old tick time
+  assert(processing_ms(1, std::numeric_limits<double>::quiet_NaN()) == -1);
   ControlTime clock;
   assert(!clock.advance(0).advanced);
   assert(!clock.advance(100).advanced); // Late subscription: no 100 s PID dt.

@@ -577,3 +577,28 @@ UIは追加で既存の1秒以上の停車ゲートを要求する。横制御�
 sim clock停止中もwall watchdogで周期を反映するが、制御はROS clockに従い停止したまま。
 読戻しはパラメータの受付値であり、実効周期の測定ではない。ノードの再起動でYAML値に戻る。
 新規topicなし。`test_control_rate_parameters.py`はROS環境で受付・拒否と出力周期を検証する。
+
+### 出力までの処理時間・入力年齢
+
+既存`/control/lateral_diagnostics`と`/control/speed_diagnostics`
+（ともに`diagnostic_msgs/msg/DiagnosticArray`）へ以下を追加する。parameter追加なし。
+
+| キー | ノード | 単位・意味 |
+| --- | --- | --- |
+| processing_ms | 両方 | ms、制御tick開始から指令publish呼出し直前まで。steady clock。TF待機を含む |
+| pose_age_ms | 横制御 | ms、使用したodom/pose stampから指令作成時刻まで。ROS clock |
+| target_age_ms | 速度PID | ms、tracking_cmd stampから指令publish直前まで。ROS clock |
+| measurement_age_ms | 速度PID | ms、速度計測odom stampから指令publish直前まで。ROS clock |
+
+watchdog由来の出力のprocessing_ms、無効／非active指令の入力年齢は-1（未計測）。
+入力年齢はROS clockなのでsimではシミュレーション時間、processing_msは常に実経過時間。
+許容範囲内の未来stampでは入力年齢が負になり得るため診断状態と合わせて解釈する。
+これらはDDS配信・USB送信・基板処理・物理アクチュエータ応答を含まない。
+横制御のpose_ageとPIDのtarget_ageは別段階であり、PIDのtarget_age単独はセンサー起点の全遅延ではない。
+横制御は指令ごと、PID診断は約10 Hzのサンプルであり、全100 Hz周期の最大処理時間を保証しない。
+既存bringup bag profileで両topicを記録する。制御指令stampやタイムアウト動作は変更しない。
+
+MPCコアの`MpcResult`は診断用に`primal_residual`・`dual_residual`を返す。
+反復計算前の入力拒否では両値と反復数は0。反復した場合は最後の残差を保持する。
+Studioの通常／駐車試走は失敗時のreason・iterations・elapsed_msと併せて表示する。
+ROSノード・topic・parameterの追加変更はなく、収束条件と計算時間制限も変更しない。

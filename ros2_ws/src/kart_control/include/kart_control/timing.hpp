@@ -2,6 +2,16 @@
 #include <cmath>
 
 namespace kart_control {
+// Scope keeps watchdog publications from reusing the previous control tick.
+struct TickStartScope {
+  double &start;
+  TickStartScope(double &value, double now) : start(value) { start = now; }
+  ~TickStartScope() { start = -1; }
+};
+inline double processing_ms(double start, double now) {
+  return start >= 0 && std::isfinite(start) && std::isfinite(now) && now >= start
+      ? (now - start) * 1000 : -1;
+}
 // Explicit clock input permits tests independent of ROS and host execution speed.
 struct TickDelta {
   double dt{0};

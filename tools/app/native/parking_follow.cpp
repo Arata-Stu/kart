@@ -14,9 +14,9 @@ int main(){
   std::vector<Point> window(line.begin()+begin,line.begin()+end);
   c.lookahead=*lookahead_distance(.8,speed,LookaheadSettings{});
   if(parking)c.lookahead=std::min(c.lookahead,.25);
-  Result r;double ms=0;
-  if(mpc){auto v=lateral_mpc(window,false,{x,y,yaw},c,m,speed,previous,1./30);r=v.command;ms=v.elapsed_ms;}
+  Result r;double ms=0,primal=0,dual=0;int iterations=0;const char* reason="invalid_geometry_or_off_path";
+  if(mpc){auto v=lateral_mpc(window,false,{x,y,yaw},c,m,speed,previous,1./30);r=v.command;ms=v.elapsed_ms;reason=v.reason;iterations=v.iterations;primal=v.primal_residual;dual=v.dual_residual;}
   else r=pursue(window,false,{x,y,yaw},c);
-  std::cout<<r.valid<<' '<<r.steering<<' '<<r.speed<<' '<<r.target_x<<' '<<r.target_y<<' '<<ms<<' '<<c.lookahead<<std::endl;
+  std::cout<<r.valid<<' '<<r.steering<<' '<<r.speed<<' '<<r.target_x<<' '<<r.target_y<<' '<<ms<<' '<<c.lookahead<<' '<<reason<<' '<<iterations<<' '<<primal<<' '<<dual<<std::endl;
  }
 }

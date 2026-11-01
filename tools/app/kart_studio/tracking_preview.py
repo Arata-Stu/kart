@@ -29,6 +29,8 @@ def _preview(body):
         if result.returncode: raise ValueError('試走計算のビルドに失敗: '+result.stderr[-2000:])
     line=body['line'];points=line['points'];closed=body['closed'];cfg=body['options']
     if type(closed) is not bool or not (3 if closed else 2)<=len(points)<=5000: raise ValueError('試走ラインの点数が不正です')
+    laps=cfg.get('laps',1)
+    if type(laps) is not int or not 1<=laps<=20: raise ValueError('周回数は1〜20の整数で指定してください')
     method=cfg.get('controller','pure_pursuit')
     if method not in ('pure_pursuit','mpc'): raise ValueError('未知の試走方式です')
     keys=[('speed',0,20),('wheelbase',.05,2),('maxSteer',.01,1.2),('horizon',.3,2),('tracking',.1,100),('smoothness',.1,100),('steeringRate',.1,5)]
@@ -45,15 +47,18 @@ def _preview(body):
         v=profile[i][5] if profile is not None else cfg['speed']
         if len(p)!=2 or any(type(x) not in (int,float) or not math.isfinite(x) for x in [*p,v]) or not 0<=v<=20: raise ValueError('試走ラインが不正です')
         rows.append(f'{p[0]} {p[1]} {v}')
-    header=[len(points),int(closed),int(method=='mpc'),int(line.get('speed_mode')=='step'),*values]
+    header=[len(points),int(closed),int(method=='mpc'),int(line.get('speed_mode')=='step'),*values,laps]
     result=subprocess.run([str(executable)],input=' '.join(map(str,header))+'\n'+'\n'.join(rows),capture_output=True,text=True,timeout=30)
     if result.returncode: raise ValueError('試走計算に失敗しました')
-    frames=[];reason=''
+    frames=[];reason='';lap_frames=[];solver_failure=None
     for row in result.stdout.splitlines():
-        if row.startswith('END '): reason=row[4:]
+        if row.startswith('DEBUG '):
+            fields=row.split();solver_failure=dict(reason=fields[1],iterations=int(fields[2]),primal=float(fields[3]),dual=float(fields[4]),elapsed_ms=float(fields[5]))
+        elif row.startswith('LAP '): lap_frames.append(int(row[4:]))
+        elif row.startswith('END '): reason=row[4:]
         else:
             frame=list(map(float,row.split()))
             if len(frame)!=13 or not all(math.isfinite(v) for v in frame): raise ValueError('試走出力が不正です')
             frames.append(frame)
     if not frames: raise ValueError('試走開始に失敗: '+reason)
-    return dict(frames=frames,reason=reason,controller=method)
+    return dict(frames=frames,reason=reason,controller=method,lap_frames=lap_frames,laps=laps if closed else None,solver_failure=solver_failure)
