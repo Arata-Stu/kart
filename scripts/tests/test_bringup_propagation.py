@@ -20,6 +20,9 @@ class PropagationTests(unittest.TestCase):
         output = self.run_cli('--mode', 'collect', '--depth-profile', '424x240x60')
         self.assertIn('depth_profile:=424x240x60', output)
         self.assertIn('Depth: 424x240x60', output)
+        output = self.run_cli('--mode', 'collect', '--depth-profile', '848x480x30', '--infra-profile', '424x240x90')
+        self.assertIn('depth_profile:=848x480x30', output)
+        self.assertIn('infra_profile:=424x240x90', output)
         with self.assertRaises(ValueError):
             self.run_cli('--mode', 'eval', '--depth-profile', '0')
 

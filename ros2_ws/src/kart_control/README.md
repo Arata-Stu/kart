@@ -492,6 +492,8 @@ Studio「ESC試験」→「試験ノードに接続」→各行の出力・秒�
 開始操作は新鮮なSTOPと正常な基板HOST選択、AUTO/vehicle/mode publisherの排他を確認し、
 UIからAUTOを要求する。最初の中立配信とHOST handshakeを経て再生する（最低0.3秒、2秒でtimeout）。
 JoyでAUTOを保持する必要はない。通常のJoyブレーキ用正パルスは挿入しない。
+診断の`DiagnosticStatus.level`はPython側で整数／1バイトの`bytes`のいずれでも受信可能。
+受信時に整数へ統一し、正常判定（0のみ正常）・イベントJSON・UI状態応答に使用する。
 正規化された正入力は`throttle`、負入力の絶対値は`reverse`へ格納し、`brake=0`。
 既存bridgeが負入力を制動／後退として扱う。値はm/sでも生PWMでもない。
 ステアは0要求で既存bridgeの校正を通す。AUTOではスロットルtrimを適用しない。

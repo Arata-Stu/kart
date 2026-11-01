@@ -1607,8 +1607,9 @@ mission / realsense launchの`depth_profile`から指定する。既定は空文
 rs-enumerate-devices（Depth Z16）出力。1280x720は30/15/5 Hz、
 848x480・640x480・640x360・480x270・424x240は90/60/30/15/5 Hz、
 848x100は100 Hz、256x144は90 Hz。個別対応の列挙であり同時配信・帯域の保証ではない。
-DepthとInfra有効時は同じ解像度・FPSが必要（kart側の構成方針）。明示Depthとの不一致は起動前に拒否し、
-Depth未指定では従来どおり有効Infraへ揃える。256x144x90などInfra候補にないものはInfra OFFで使う。
+DepthとInfraは解像度・FPSを独立指定でき、不一致をkart側で拒否しない。
+Depth未指定時はDepthのYAML値を保持し、Infraへ自動的に揃えない。
+個別に有効なprofileでも同時配信できるとは限らず、採用値と配信は実機で確認する。
 通常記録とEVS併用記録にも`realsense/depth/image_rect_raw`（sensor_msgs/msg/Image）、
 `realsense/depth/camera_info`（sensor_msgs/msg/CameraInfo）、
 `realsense/extrinsics/depth_to_color`（realsense2_camera_msgs/msg/Extrinsics）を記録候補に追加。

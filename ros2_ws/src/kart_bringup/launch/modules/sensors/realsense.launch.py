@@ -43,7 +43,7 @@ def generate_launch_description():
     )
     args.add_arg("camera_config", "", description="Full RealSense YAML; empty uses standard config", cli=True)
     args.add_arg("rgb_profile", "", description="WIDTHxHEIGHTxFPS; 0 disables RGB", cli=True)
-    args.add_arg("depth_profile", "", description="Depth Z16 WIDTHxHEIGHTxFPS; 0 disables; match enabled Infra", cli=True)
+    args.add_arg("depth_profile", "", description="Depth Z16 WIDTHxHEIGHTxFPS; 0 disables; independent of Infra", cli=True)
     args.add_arg("infra_profile", "", description="WIDTHxHEIGHTxFPS; 0 disables Infra", cli=True)
     args.add_arg("imu_profile", "", description="low: accel100/gyro200Hz; high: accel200/gyro400Hz; off; empty preserves YAML", cli=True)
     args.add_opaque_function(add_camera)

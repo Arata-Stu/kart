@@ -139,7 +139,7 @@ def argument_parser():
     parser.add_argument("--infra-fps", choices=("0", "30", "60", "90"))
     parser.add_argument("--rgb-profile", default="", help="RGB WIDTHxHEIGHTxFPS; 0 disables")
     parser.add_argument("--imu-profile", choices=("low", "high", "off"), default="", help="IMU: low=accel100/gyro200Hz, high=accel200/gyro400Hz, off=なし; 未指定はYAML")
-    parser.add_argument("--depth-profile", default="", help="Depth Z16 WIDTHxHEIGHTxFPS; 0 disables; Infra有効時は同じprofileを指定")
+    parser.add_argument("--depth-profile", default="", help="Depth Z16 WIDTHxHEIGHTxFPS; 0 disables; Infraとは独立指定")
     parser.add_argument("--infra-profile", default="", help="Infra WIDTHxHEIGHTxFPS; 0 disables")
     for key in ("device", "map-file", "map-dir", "model-dir", "lane-id", "line-type"):
         parser.add_argument("--" + key, default="")

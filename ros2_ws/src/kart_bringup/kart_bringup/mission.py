@@ -124,11 +124,7 @@ def sensor_parameters(path, rgb_fps="", infra_fps="", rgb_profile="", infra_prof
         if imu_profile != "off":
             params["accel_fps"], params["gyro_fps"] = (100, 200) if imu_profile == "low" else (200, 400)
             params["unite_imu_method"] = 2
-    # Depth and Infra share the D455 stereo sensor. Keep one capture profile.
-    if params["enable_depth"] and (params["enable_infra1"] or params["enable_infra2"]):
-        if depth_profile and params["depth_module.depth_profile"] != params["depth_module.infra_profile"]:
-            raise ValueError("DepthとInfraは同じ解像度・FPSを選択してください（Depth単独ならInfraをOFF）")
-        params["depth_module.depth_profile"] = params["depth_module.infra_profile"]
+    # Preserve independent stream selections; simultaneous support is checked on device.
     if params["enable_depth"]:
         validate_camera_profile("Depth", params["depth_module.depth_profile"])
     return params

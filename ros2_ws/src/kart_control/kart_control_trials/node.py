@@ -129,10 +129,15 @@ class TrialNode(Node):
             keys = ('host_active', 'host_phase', 'esc_command_state', 'esc_negative_action',
                     'esc_brake_rejected', 'fault_bits', 'selector', 'command_fresh')
             current = {k: values.get(k) for k in keys}
-            current.update(level=row.level, message=row.message)
+            # DiagnosticStatus.level is ROS byte, exposed as one-byte bytes
+            # by some generated Python messages (rather than uint8/int).
+            level = row.level
+            if isinstance(level, bytes) and len(level) == 1:
+                level = level[0]
+            current.update(level=level, message=row.message)
             if current != self.diag:
                 self.event('bridge', current)
-            self.diag, self.diag_ok, self.diag_at = current, row.level == 0, time.monotonic()
+            self.diag, self.diag_ok, self.diag_at = current, level == 0, time.monotonic()
 
     def on_pwm(self, msg):
         values = list(msg.data)

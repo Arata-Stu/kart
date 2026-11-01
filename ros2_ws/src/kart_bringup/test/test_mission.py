@@ -15,7 +15,7 @@ CONFIG = PACKAGE / "config"
 
 
 class MissionTests(unittest.TestCase):
-    def test_depth_profiles_and_stereo_conflicts(self):
+    def test_depth_profiles_and_independent_stereo_selection(self):
         from kart_bringup.mission import DEPTH_PROFILES
         path = camera_config(CONFIG, 'collect')
         for profile in DEPTH_PROFILES:
@@ -30,8 +30,9 @@ class MissionTests(unittest.TestCase):
         for profile in ('1280x800x30', '1280x720x90', '256x144x30'):
             with self.assertRaises(ValueError):
                 sensor_parameters(path, infra_profile='0', depth_profile=profile)
-        with self.assertRaisesRegex(ValueError, 'DepthとInfra'):
-            sensor_parameters(path, depth_profile='640x480x60')
+        params = sensor_parameters(path, depth_profile='848x480x30', infra_profile='424x240x90')
+        self.assertEqual(params['depth_module.depth_profile'], '848x480x30')
+        self.assertEqual(params['depth_module.infra_profile'], '424x240x90')
 
     def test_imu_profiles_and_vio_requirement(self):
         from kart_bringup.mission import validate_localization_imu
@@ -202,7 +203,7 @@ class MissionTests(unittest.TestCase):
         self.assertTrue(params["enable_gyro"])
         self.assertEqual(params["unite_imu_method"], 2)
         changed = sensor_parameters(camera, infra_profile="640x480x60")
-        self.assertEqual(changed["depth_module.depth_profile"], "640x480x60")
+        self.assertEqual(changed["depth_module.depth_profile"], "848x480x30")
         self.assertEqual(sensor_parameters(camera, infra_profile="0")["depth_module.depth_profile"], "848x480x30")
         for evs in (False, True):
             bag = yaml.safe_load(recording_config(CONFIG, "environment", evs).read_text())["/**/kart_bag_manager"]["ros__parameters"]

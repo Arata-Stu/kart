@@ -1,5 +1,6 @@
 """Portable sequence and ROS adapter tests; no actual ROS, network or vehicle."""
 import importlib
+import json
 import math
 from pathlib import Path
 import queue
@@ -99,6 +100,31 @@ def enqueue(node, action='/start', **extra):
               steps=[{'output':.3,'seconds':1}],**extra)
     node.requests.put((action,body,reply,11.))
     return body,reply
+
+
+@pytest.mark.parametrize('level', [0, 1, 2, 3])
+@pytest.mark.parametrize('as_bytes', [False, True])
+def test_diagnostic_level_serializes_and_preserves_health(adapter, level, as_bytes):
+    node = adapter
+    node.seq = 0
+    node.get_clock = lambda: types.SimpleNamespace(
+        now=lambda: types.SimpleNamespace(nanoseconds=123))
+    published = []
+    node.record = types.SimpleNamespace(publish=published.append)
+    # Use the real event publisher, including its strict JSON encoding.
+    node.event = types.MethodType(type(node).event, node)
+    row = types.SimpleNamespace(name='kart_bridge', values=[],
+                                level=bytes([level]) if as_bytes else level,
+                                message='board status')
+    node.on_diag(types.SimpleNamespace(status=[row]))
+    assert node.diag['level'] == level
+    assert type(node.diag['level']) is int
+    assert node.diag_ok is (level == 0)
+    assert node.diag_at == 10.
+    assert json.loads(published[0].data)['data']['level'] == level
+    assert json.loads(json.dumps(node.events, allow_nan=False))[0]['data'] == node.diag
+    node.on_diag(types.SimpleNamespace(status=[row]))
+    assert len(published) == 1
 
 
 def test_stop_cancels_every_queued_start_and_rejects_delayed_start(adapter):
