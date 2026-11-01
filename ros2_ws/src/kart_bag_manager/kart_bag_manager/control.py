@@ -12,7 +12,7 @@ def snapshot(recorder, settings, raw_relay=None):
     return dict(
         schema='kart.recording.v1', phase=recorder.phase,
         recording=recorder.recording, current_uri=recorder.current_uri,
-        last_event=recorder.last_event,
+        last_event=recorder.last_event, progress=recorder.progress(),
         writing_unverified=bool(settings.start_paused or settings.snapshot_mode),
         raw=(dict(state=raw_relay.state, last_event=raw_relay.last_event,
                   last_error=raw_relay.last_error, owned_writer=raw_relay.owns_raw,

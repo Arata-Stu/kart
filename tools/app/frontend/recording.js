@@ -26,6 +26,16 @@ function render() {
     !s.available?s.message:!fresh?'受信停止・録画状態は未確認です。':names[s.phase] || s.phase;
   $('recording-uri').textContent=s?.current_uri || '—';
   $('recording-event').textContent=[recording.error, recording.feedback, s?.last_event].filter(Boolean).join('\n');
+  const progress=s?.progress;
+  const elapsed=progress?.elapsed_s;
+  const seconds=Number.isFinite(elapsed)?Math.floor(elapsed):null;
+  const duration=seconds===null?'—':`${Math.floor(seconds/3600)}:${String(Math.floor(seconds/60)%60).padStart(2,'0')}:${String(seconds%60).padStart(2,'0')}`;
+  const bytes=progress?.size_bytes;
+  const size=Number.isFinite(bytes)?(bytes>=1024**3?`${(bytes/1024**3).toFixed(2)} GiB`:`${(bytes/1024**2).toFixed(1)} MiB`):'未取得';
+  const count=progress?.message_count;
+  $('recording-progress').textContent=`経過 ${duration} · 保存サイズ ${size} · メッセージ数 ${Number.isSafeInteger(count)?count.toLocaleString()+'（停止後）':'未取得（停止後に表示）'}`+
+    (progress?.started_at?` · 開始 ${progress.started_at}`:'')+
+    (s && !fresh?' · 最終取得値':' · 取得時点の値');
   const raw=s?.raw;
   $('recording-raw').textContent=raw ? `EVS RAW: ${raw.state} · ${raw.last_error || raw.last_event || ''}${raw.pending?' · 処理中':''}`:'';
   $('recording-warning').textContent+=s?.writing_unverified?'一時停止／snapshot設定です。録画中の表示だけではデータ書込みを確認できません。':'';

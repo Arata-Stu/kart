@@ -262,3 +262,17 @@ manager自身の入出力・parameterは追加せず、topics既定値への追�
 
 標準の通常／OpenEBプロファイルは`e2e/status`（std_msgs/msg/String）も記録する。
 operation_mode/request・stateと組み合わせ、E2Eの最初の停止理由を診断する。
+
+### 録画進捗の表示
+
+`/bag/recording_status`（std_srvs/srv/Trigger）と`/bag/set_recording`（std_srvs/srv/SetBool）の
+JSON応答に`progress`を追加。ノード名・topic・parameterの追加や既定値変更はない。
+`started_at`は出力ディレクトリ生成を確認した開始時刻（タイムゾーン付きISO文字列）、
+`elapsed_s`は同時点からSTOP要求までのmonotonic経過秒。異常終了時は検出時点で停止する。
+一時停止時間を差し引かず、保存済みメッセージの時間幅や最初の受信時刻ではない。
+`size_bytes`は現在のbagディレクトリ直下の通常ファイルの論理サイズ合計。2秒間キャッシュし、
+最大2048エントリまでstatする。symlink・サブディレクトリ・別保存のEVS RAW・未flushバッファは含まない。
+`message_count`は正常終了後にmetadata.yamlのrosbag2_bagfile_information.message_countから取得する。
+録画中、欠落、破損、1 MiBを超えるmetadataではnull（未取得）。不明値を0として表示しない。
+UIは取得時点の値を表示し、切断後に時計を進めない。旧managerでは未取得表示になる。
+ファイル計測失敗は録画制御を止めない。ROS/Jetsonでの負荷・実録画は別途確認が必要。

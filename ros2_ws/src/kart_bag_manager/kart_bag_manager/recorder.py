@@ -4,6 +4,7 @@ import os
 import signal
 import subprocess
 import time
+import yaml
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -128,6 +129,41 @@ class Recorder:
         self._deadline = 0.0
         self._signal_stage = 0
         self._failed = False
+        self.started_at = None
+        self._started_clock = None
+        self._ended_clock = None
+        self._metrics_at = float('-inf')
+        self._metrics = dict(size_bytes=None, message_count=None)
+
+    def progress(self):
+        now = self._clock()
+        elapsed = None if self._started_clock is None else max(
+            0.0, (self._ended_clock if self._ended_clock is not None else now) - self._started_clock)
+        if self.current_uri and now - self._metrics_at >= 2.0:
+            self._metrics_at = now
+            self._metrics = dict(size_bytes=None, message_count=None)
+            try:
+                # Bound directory work; never scan message payloads or follow symlinks.
+                total = 0
+                with os.scandir(self.current_uri) as entries:
+                    for index, entry in enumerate(entries):
+                        if index >= 2048:
+                            raise OSError('too many recording files')
+                        if entry.is_file(follow_symlinks=False):
+                            total += entry.stat(follow_symlinks=False).st_size
+                self._metrics['size_bytes'] = total
+                if self.process is None and self.phase == 'idle':
+                    with (Path(self.current_uri) / 'metadata.yaml').open('rb') as stream:
+                        content = stream.read(1024 * 1024 + 1)
+                    if len(content) <= 1024 * 1024:
+                        metadata = yaml.safe_load(content)
+                        info = metadata.get('rosbag2_bagfile_information', {}) if isinstance(metadata, dict) else {}
+                        count = info.get('message_count') if isinstance(info, dict) else None
+                        if type(count) is int and count >= 0:
+                            self._metrics['message_count'] = count
+            except (OSError, yaml.YAMLError):
+                pass  # Missing/incomplete metrics must never interrupt recording control.
+        return dict(started_at=self.started_at, elapsed_s=elapsed, **self._metrics)
 
     @property
     def recording(self):
@@ -168,6 +204,10 @@ class Recorder:
             path = self.next_path(label)
             path.parent.mkdir(parents=True, exist_ok=True)
             self.current_uri = str(path)
+            self.started_at = None
+            self._started_clock = self._ended_clock = None
+            self._metrics_at = float('-inf')
+            self._metrics = dict(size_bytes=None, message_count=None)
             # No shell and no preexec_fn; recorder has its own POSIX process group.
             self.process = self._popen(self.settings.command(path), start_new_session=True,
                                        stdin=subprocess.DEVNULL)
@@ -193,6 +233,8 @@ class Recorder:
         if self.phase == 'stopping':
             return  # Do not restart the shutdown deadline on repeated STOP requests.
         self._failed = failed
+        if self._started_clock is not None:
+            self._ended_clock = self._clock()
         self.last_event, self.phase = reason, 'stopping'
         self._send(signal.SIGINT)
         self._signal_stage = 1
@@ -203,6 +245,9 @@ class Recorder:
             return
         code = self.process.poll()
         if code is not None:
+            if self._started_clock is not None and self._ended_clock is None:
+                self._ended_clock = self._clock()
+            self._metrics_at = float('-inf')
             if self.phase != 'stopping':
                 self._failed = True
                 self.last_event = f'rosbag process exited unexpectedly: {code}'
@@ -219,6 +264,8 @@ class Recorder:
         if self.phase == 'starting':
             if Path(self.current_uri).is_dir():
                 self.phase, self.last_event = 'recording', 'recording started'
+                self._started_clock = now
+                self.started_at = datetime.now().astimezone().isoformat(timespec='seconds')
             elif now >= self._deadline:
                 self.stop('start failed: output directory timeout', failed=True)
         elif self.phase == 'stopping' and now >= self._deadline:

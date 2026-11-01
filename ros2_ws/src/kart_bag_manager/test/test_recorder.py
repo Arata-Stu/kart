@@ -106,6 +106,36 @@ class RecorderTest(unittest.TestCase):
         self.settings.snapshot_mode = True
         self.assertTrue(snapshot(r, self.settings)['writing_unverified'])
 
+    def test_progress_clock_size_and_final_count(self):
+        r = self.make()
+        self.assertIsNone(r.progress()['elapsed_s'])
+        r.start()
+        self.until(r, lambda: r.recording)
+        root = Path(r.current_uri)
+        (root / 'chunk.mcap').write_bytes(b'x' * 1234)
+        outside = root.parent / 'outside.bin'
+        outside.write_bytes(b'x' * 5000)
+        (root / 'ignored').symlink_to(outside)
+        with patch.object(r, '_clock', return_value=r._started_clock + 65):
+            value = snapshot(r, self.settings)['progress']
+            self.assertEqual(value['elapsed_s'], 65)
+            self.assertEqual(value['size_bytes'], 1234)
+            self.assertIsNone(value['message_count'])
+            self.assertIsNotNone(value['started_at'])
+        r.stop()
+        duration = r.progress()['elapsed_s']
+        self.until(r, lambda: r.process is None)
+        (root / 'metadata.yaml').write_text('rosbag2_bagfile_information:\n  message_count: 42\n')
+        r._metrics_at = float('-inf')
+        self.assertEqual(r.progress()['message_count'], 42)
+        self.assertEqual(r.progress()['elapsed_s'], duration)
+        (root / 'metadata.yaml').write_text('[')
+        r._metrics_at = float('-inf')
+        self.assertIsNone(r.progress()['message_count'])
+        r.start()
+        self.assertIsNone(r.progress()['elapsed_s'])
+        self.assertIsNone(r.progress()['message_count'])
+
     def test_close_finalizes_child(self):
         r=self.make(); r.start(); self.until(r,lambda:r.recording)
         r.close()
