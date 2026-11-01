@@ -1405,7 +1405,12 @@
             step="0.1"
             value="1.5"
         /></label>
-        <p id="simulation-lookahead" class="small">先読み：速度連動（1 m/s以下で0.8 m、5 m/s以上で3.0 m、中間は線形補間）</p>
+        <div id="simulation-lookahead" class="simulation-controls">
+          <label>先読み方式<select id="simulation-lookahead-mode"><option value="speed_interpolated">速度連動</option><option value="fixed">固定距離</option></select></label>
+          <label id="simulation-lookahead-fixed-label" hidden>先読み距離 m<input id="simulation-lookahead-fixed" type="number" min="0.05" max="20" step="0.05" value="0.8"></label>
+          <label id="simulation-lookahead-low-label">1 m/s以下の距離 m<input id="simulation-lookahead-low" type="number" min="0.05" max="20" step="0.05" value="0.8"></label>
+          <label id="simulation-lookahead-high-label">5 m/s以上の距離 m<input id="simulation-lookahead-high" type="number" min="0.05" max="20" step="0.05" value="3.0"></label>
+        </div>
         <label
           >軸距 m<input
             id="simulation-wheelbase"

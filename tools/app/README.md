@@ -1655,3 +1655,15 @@ MPC失敗時には具体的な理由、失敗した計算の所要ms・反復数
 試走スナップショットと設定を受け取り、frames/opponents/h2h/eventsと終了理由を返します。
 検証: `PYTHONPATH=tools/app python -m pytest tools/app/tests/test_head_to_head.py`。
 実行環境には既存駐車試走と同じShapelyとC++17コンパイラが必要です。
+
+### 試走のPure Pursuitパラメータ
+
+横制御がPure Pursuitの場合、「先読み方式」で固定距離／速度連動を選べます。
+固定距離は既定0.8 m。速度連動は1 m/s以下で0.8 m、5 m/s以上で3.0 mを既定とし、
+中間を現在のモデル速度の絶対値で線形補間します。距離の入力範囲は0.05〜20 m、
+高速側は低速側以上です。方式・距離を変えると再計算し、再生で挙動を比較できます。
+既定方式は従来と同じ速度連動です。MPC選択中は先読み設定を非表示にします。
+単独／Head-to-head／駐車への接近で同じ指定を使います。駐車進入時は既存の0.25 m上限を維持します。
+これらは試走専用設定で、地図や実車ROSパラメータには保存・適用しません。
+HTTP optionsはlookahead_mode、lookahead_m、lookahead_low_speed_m、lookahead_high_speed_m。
+旧クライアントの未指定時は従来値を保持します。

@@ -13,6 +13,7 @@ import subprocess
 import time
 
 from shapely.geometry import Polygon
+from .preview_lookahead import lookahead_values
 from .tracking_preview import _cache, _lock
 
 
@@ -113,6 +114,7 @@ def preview(request):
     if lane.get('closed') is not True:raise ValueError('Head-to-head初版は閉コース専用です')
     method=options.get('controller')
     if method not in ('pure_pursuit','mpc'):raise ValueError('横制御方式が不正です')
+    lookahead_config=lookahead_values(options)
     vmax=number(options,'speed',1.5,.1,20)
     wb=number(options,'wheelbase',.257,.05,2);steer_limit=number(options,'maxSteer',.384,.01,1.2)
     controls=[number(options,k,d,lo,hi) for k,d,lo,hi in [('horizon',1,.3,2),('tracking',10,.1,100),('smoothness',1,.1,100),('steeringRate',1.5,.1,5)]]
@@ -190,7 +192,7 @@ def preview(request):
     selector=selectors.DefaultSelector();selector.register(proc.stdout,selectors.EVENT_READ)
     deadline=time.monotonic()+60
     try:
-        proc.stdin.write(' '.join(map(str,[int(method=='mpc'),int(course.step),wb,steer_limit,*controls]))+'\n');proc.stdin.flush()
+        proc.stdin.write(' '.join(map(str,[int(method=='mpc'),int(course.step),wb,steer_limit,*controls,*lookahead_config]))+'\n');proc.stdin.flush()
         terminal_time=0.
         for tick in range(int(duration*30)+1):
             now=tick*dt;terminal_time=now;gap=os-s-length
@@ -234,7 +236,7 @@ def preview(request):
                 target_cap=min(vmax,max(0.,ov+.8*(gap-(min_gap+headway*v))),math.sqrt(max(0.,ov*ov+2*brake*(gap-min_gap))))
             # Feed a local route into the production PP/MPC. The open-route end is
             # well beyond stopping distance; course zero-speed samples remain active.
-            horizon=max(8.,vmax*vmax/(2*brake)+5.)
+            horizon=max(8.,vmax*vmax/(2*brake)+5.,max(lookahead_config[1:])+2.)
             count=min(900,math.ceil((horizon+1)/.25)+1)
             route=[route_point(s-1+i*(horizon+1)/(count-1),plan) for i in range(count)]
             proc.stdin.write(' '.join(map(str,[len(route),*pose,v,steer,max(.001,target_cap)]))+'\n')

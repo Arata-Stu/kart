@@ -99,3 +99,10 @@ def test_swept_conflict_between_samples():
 def test_open_course_rejected():
     body=request();body['lane']['closed']=False
     with pytest.raises(ValueError,match='閉コース'):preview(body)
+
+
+def test_h2h_fixed_lookahead():
+    body=request();body['options'].update(lookahead_mode='fixed',lookahead_m=1.1)
+    body['head_to_head'].update(overtake=False,duration=5)
+    result=preview(body)
+    assert all(row[12]==pytest.approx(1.1) for row in result['frames'])

@@ -77,3 +77,18 @@ def test_failed_solver_diagnostics():
     if result['reason']=='mpc_not_converged':
         assert failure['iterations']==1500
         assert failure['primal']>=1e-5 or failure['dual']>=1e-4
+
+@pytest.mark.parametrize('mode',['fixed','speed_interpolated'])
+def test_configurable_lookahead(mode):
+    body=request('pure_pursuit');body['closed']=False;body['line']={'points':[[0,0],[200,0]]}
+    body['options'].update(speed=6,lookahead_mode=mode,lookahead_m=1.25,lookahead_low_speed_m=.5,lookahead_high_speed_m=2.)
+    result=preview(body)
+    for row in result['frames']:
+        expected=1.25 if mode=='fixed' else .5+1.5*min(1,max(0,(row[4]-1)/4))
+        assert row[12]==pytest.approx(expected)
+        if row[1]+expected<200:assert row[8]-row[1]==pytest.approx(expected,abs=1e-8)
+
+@pytest.mark.parametrize('options',[{'lookahead_mode':'bad'},{'lookahead_m':0},{'lookahead_low_speed_m':4,'lookahead_high_speed_m':2},{'lookahead_high_speed_m':float('nan')}])
+def test_invalid_lookahead(options):
+    body=request('pure_pursuit');body['options'].update(options)
+    with pytest.raises(ValueError,match='先読み'):preview(body)

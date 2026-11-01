@@ -22,10 +22,18 @@ async function reset() {
   $("simulation-time").disabled=true;
   const mpc=$("simulation-controller").value==="mpc";
   $("simulation-lookahead").hidden=mpc;
+  const fixed=$("simulation-lookahead-mode").value==="fixed";
+  $("simulation-lookahead-fixed-label").hidden=!fixed;
+  $("simulation-lookahead-low-label").hidden=fixed;
+  $("simulation-lookahead-high-label").hidden=fixed;
   for(const input of dialog.querySelectorAll("[data-mpc]")) input.parentElement.hidden=!mpc;
   for (const input of dialog.querySelectorAll("input")) if (!input.checkValidity()) throw Error("試走設定の範囲を確認してください");
   const kind=$("simulation-line").value;
   const cfg={
+    lookahead_mode:$("simulation-lookahead-mode").value,
+    lookahead_m:Number($("simulation-lookahead-fixed").value),
+    lookahead_low_speed_m:Number($("simulation-lookahead-low").value),
+    lookahead_high_speed_m:Number($("simulation-lookahead-high").value),
     controller:$("simulation-controller").value, laps:Number($("simulation-laps").value),
     horizon:Number($("simulation-horizon").value),tracking:Number($("simulation-tracking").value),
     smoothness:Number($("simulation-smoothness").value),steeringRate:Number($("simulation-rate").value),
@@ -147,7 +155,7 @@ action("simulation-open",async()=>{
 action("simulation-play",async()=>{if(!sim)await reset();if(running){pause();draw();return;}if(!sim)return;if(sim.car.done){if(parkingRoute){toast(sim.car.reason+"。通常試走へ戻るにはリセットしてください。");return;}await reset();}parkingMessage="";play();draw();});
 action("simulation-reset",reset);
 $("simulation-time").addEventListener("input",()=>{if(!sim)return;pause();sim.seek(Number($("simulation-time").value));trail=[[sim.car.x,sim.car.y]];draw();});
-for(const id of ["simulation-mode","simulation-laps","simulation-controller","simulation-horizon","simulation-tracking","simulation-smoothness","simulation-rate","simulation-line","simulation-speed","simulation-wheelbase","simulation-steer",...Array.from($("simulation-h2h-settings").querySelectorAll("input,select"),el=>el.id)]){
+for(const id of ["simulation-lookahead-mode","simulation-lookahead-fixed","simulation-lookahead-low","simulation-lookahead-high","simulation-mode","simulation-laps","simulation-controller","simulation-horizon","simulation-tracking","simulation-smoothness","simulation-rate","simulation-line","simulation-speed","simulation-wheelbase","simulation-steer",...Array.from($("simulation-h2h-settings").querySelectorAll("input,select"),el=>el.id)]){
   $(id).addEventListener("change",async()=>{try{await reset();}catch(e){pause();sim=null;$("simulation-metrics").textContent=e.message;toast(e.message,true);}});
 }
 dialog.addEventListener("close",()=>{requestSerial++;pause();clearParkingFeedback();});

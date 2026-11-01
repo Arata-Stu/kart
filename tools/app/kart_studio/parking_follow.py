@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import time
+from .preview_lookahead import lookahead_values
 from .tracking_preview import _cache, _lock
 
 
@@ -23,6 +24,7 @@ def follow(route, zone, world, settings, departure, pose, options, initial_speed
             if result.returncode:raise ValueError('駐車試走のコンパイル失敗: '+result.stderr[-1000:])
     if options.get('controller') not in ('pure_pursuit','mpc'):raise ValueError('未知の横制御方式です')
     keys=[('speed',.01,20),('wheelbase',.05,2),('maxSteer',.01,1.2),('horizon',.3,2),('tracking',.1,100),('smoothness',.1,100),('steeringRate',.1,5)]
+    lookahead_config=lookahead_values(options)
     values=[options[k] for k,_,_ in keys]
     if any(type(v) not in (int,float) or not math.isfinite(v) or not lo<=v<=hi for v,(_,lo,hi) in zip(values,keys)):
         raise ValueError('駐車試走の設定が範囲外です')
@@ -30,7 +32,7 @@ def follow(route, zone, world, settings, departure, pose, options, initial_speed
     mission=Mission(route,zone,world,settings,departure);speed=initial_speed;omega=steering=0.;frames=[];maxerror=0.;states=[];solver_failure=None
     proc=subprocess.Popen([str(binary)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,bufsize=1)
     try:
-        proc.stdin.write(' '.join(map(str,[len(route),int(options['controller']=='mpc'),*values]))+'\n')
+        proc.stdin.write(' '.join(map(str,[len(route),int(options['controller']=='mpc'),*values,*lookahead_config]))+'\n')
         for x,y,_,v in route:proc.stdin.write(f'{x} {y} {v}\n')
         proc.stdin.flush();deadline=time.monotonic()+25
         for tick in range(9000):

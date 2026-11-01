@@ -5,8 +5,9 @@
 using namespace kart_control;
 int main(){
  size_t n;int closed,mpc,step,laps;
+ LookaheadSettings lookahead;double fixed;
  Settings c{.257,.384,.8,1.5,2.,.04,2.5};MpcSettings m;
- if(!(std::cin>>n>>closed>>mpc>>step>>c.max_speed>>c.wheelbase>>c.steering_limit>>m.horizon>>m.tracking>>m.smoothness>>m.steering_rate>>laps)||laps<1||laps>20||n<2||n>5000)return 2;
+ if(!(std::cin>>n>>closed>>mpc>>step>>c.max_speed>>c.wheelbase>>c.steering_limit>>m.horizon>>m.tracking>>m.smoothness>>m.steering_rate>>laps>>lookahead.interpolated>>fixed>>lookahead.low_m>>lookahead.high_m)||laps<1||laps>20||n<2||n>5000)return 2;
  const bool stopped=c.max_speed==0;
  if(stopped)c.max_speed=.001;
  c.step_speed=step;
@@ -19,7 +20,7 @@ int main(){
    Result cmd;double ms=0;
    if(mpc){auto result=lateral_mpc(line,closed,p,c,m,v,steer,dt);cmd=result.command;ms=result.elapsed_ms;if(!cmd.valid){std::cout<<"DEBUG "<<result.reason<<' '<<result.iterations<<' '<<result.primal_residual<<' '<<result.dual_residual<<' '<<result.elapsed_ms<<"\n";std::cout<<"END "<<result.reason<<"\n";return 0;}}
    else {
-     c.lookahead=*lookahead_distance(.8,v,LookaheadSettings{});
+     c.lookahead=*lookahead_distance(fixed,v,lookahead);
      cmd=pursue(line,closed,p,c);
    }
    if(!cmd.valid){std::cout<<"END invalid_geometry_or_off_path\n";return 0;}

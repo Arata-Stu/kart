@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+from .preview_lookahead import lookahead_values
 
 _lock=threading.Lock()
 _cache=Path(tempfile.mkdtemp(prefix='kart-tracking-preview-'))
@@ -39,6 +40,7 @@ def _preview(body):
         v=cfg[key]
         if type(v) not in (int,float) or not math.isfinite(v) or not low<=v<=high: raise ValueError(key+': 試走設定が範囲外です')
         values.append(v)
+    lookahead=lookahead_values(cfg)
     profile=line.get('profile')
     if profile is not None and len(profile)!=len(points): raise ValueError('速度profileの点数が不一致です')
     rows=[]
@@ -47,7 +49,7 @@ def _preview(body):
         v=profile[i][5] if profile is not None else cfg['speed']
         if len(p)!=2 or any(type(x) not in (int,float) or not math.isfinite(x) for x in [*p,v]) or not 0<=v<=20: raise ValueError('試走ラインが不正です')
         rows.append(f'{p[0]} {p[1]} {v}')
-    header=[len(points),int(closed),int(method=='mpc'),int(line.get('speed_mode')=='step'),*values,laps]
+    header=[len(points),int(closed),int(method=='mpc'),int(line.get('speed_mode')=='step'),*values,laps,*lookahead]
     result=subprocess.run([str(executable)],input=' '.join(map(str,header))+'\n'+'\n'.join(rows),capture_output=True,text=True,timeout=30)
     if result.returncode: raise ValueError('試走計算に失敗しました')
     frames=[];reason='';lap_frames=[];solver_failure=None
