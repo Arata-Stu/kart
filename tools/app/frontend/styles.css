@@ -1528,3 +1528,9 @@ header .local-tag { white-space: nowrap; }
   background: #edf9f2;
   color: #195d3e;
 }
+
+/* Keep setting navigation and explicit lifecycle controls within reach. */
+.bringup-toolbar { position: sticky; top: 0; z-index: 3; background: var(--bg, #fff); border: 1px solid var(--border, #d4d8dd); border-radius: 10px; padding: 12px; margin-bottom: 12px; display: grid; gap: 10px; }
+.bringup-toolbar [aria-pressed="true"] { background: #225f79; color: white; }
+#bringup-page .bringup-profile-list { width: 100%; min-height: 150px; padding: 4px; }
+.bringup-profile-list option { padding: 6px 10px; }

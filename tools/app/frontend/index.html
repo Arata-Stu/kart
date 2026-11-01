@@ -40,22 +40,31 @@
         <p class="small">「録画中」はプロセスと保存先の確認です。メッセージ受信・記録内容の完全性は別途確認してください。</p>
       </div>
       <div id="bringup-workspace" hidden>
+        <div class="bringup-toolbar">
+          <nav class="actions" aria-label="起動設定の表示切替">
+            <button id="bringup-tab-basic" aria-pressed="true">基本設定</button>
+            <button id="bringup-tab-assets" aria-pressed="false">地図・モデル</button>
+            <button id="bringup-tab-details" aria-pressed="false">詳細設定</button>
+            <button id="bringup-tab-review" aria-pressed="false">設定確認</button>
+            <button id="bringup-tab-log" aria-pressed="false">ログ</button>
+          </nav>
+          <div class="actions"><button id="bringup-save">起動設定を保存</button><button id="bringup-plan" class="primary">設定を検証</button><button id="bringup-start" class="primary" disabled>この設定で起動</button><button id="bringup-stop" disabled>bringupを終了</button></div>
+        </div>
         <div class="bringup-card">
-          <h3>1. 用途と構成</h3>
+          <h3>用途と構成</h3>
           <div class="actions"><label>用途<select id="bringup-mode"></select></label><button id="bringup-assets">Jetsonの地図・モデル・bagを選択</button></div>
           <div id="bringup-choice" hidden><strong id="bringup-choice-title"></strong><select id="bringup-choice-select"></select><button id="bringup-choice-next">この候補を選択</button><button id="bringup-choice-cancel">取消</button></div>
-          <div id="bringup-assets-fields" class="bringup-fields"></div>
-          <h3>2. 起動時の設定</h3>
+          <section id="bringup-pane-assets" hidden><h3>地図・モデル・bag</h3><div id="bringup-assets-fields" class="bringup-fields"></div></section>
+          <section id="bringup-pane-basic"><h3>基本設定</h3>
           <p class="small">未指定項目はCLIと同じ既定値を使用します。変更は今回の起動に適用。「起動設定を保存」で次回も呼び出せます。</p>
           <div id="bringup-basic" class="bringup-fields"></div>
-          <details id="bringup-detail-section"><summary>詳細設定</summary><div id="bringup-details" class="bringup-fields"></div></details>
-          <div class="actions"><button id="bringup-save">起動設定を保存</button><button id="bringup-plan" class="primary">設定を検証</button></div>
-          <h3>3. 設定を確認して起動</h3><pre id="bringup-review">設定を検証すると、採用される構成をここに表示します。</pre>
-          <div class="actions"><button id="bringup-start" class="primary" disabled>この設定で起動</button><button id="bringup-stop" disabled>bringupを終了</button></div>
+          </section><section id="bringup-pane-details" hidden><div id="bringup-detail-section"><h3>詳細設定</h3><div id="bringup-details" class="bringup-fields"></div></div></section>
+          <section id="bringup-pane-review" hidden><h3>設定を確認して起動</h3><pre id="bringup-review">設定を検証すると、採用される構成をここに表示します。</pre>
+          </section>
           <p class="small">起動のみでは録画やAUTOを開始しません。ESC試験は「ESC試験」画面から操作できます。通常の走行モードはJoyで操作し、録画はR1/L1と上のボタンの両方で操作できます。</p>
           <p class="small">「bringupを終了」はCtrl+C相当の終了要求です。車両の物理非常停止ではありません。プロセス稼働中の表示はROSノードや実機の準備完了を意味しません。</p>
         </div>
-        <div class="bringup-card"><h3>実行ログ</h3><pre id="bringup-log">ログはまだありません。</pre><details><summary>端末からセッションへ復帰</summary><p>選択中のDockerに入り、次のコマンドを実行できます。</p><code id="bringup-attach"></code></details></div>
+        <div class="bringup-card" id="bringup-pane-log" hidden><h3>実行ログ</h3><pre id="bringup-log">ログはまだありません。</pre><details><summary>端末からセッションへ復帰</summary><p>選択中のDockerに入り、次のコマンドを実行できます。</p><code id="bringup-attach"></code></details></div>
       </div>
     </section>
     <main id="coverage-page" hidden>

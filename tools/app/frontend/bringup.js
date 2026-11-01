@@ -39,6 +39,14 @@ const modeKeys = {
 const essentials = new Set(['device','rgb_profile','infra_profile','imu_profile','evs','run_name',
   'joy_max_throttle','auto_fixed_throttle','e2e_throttle_mode','e2e_fixed_throttle','recovery','tuning','eval_localization','tracking_mode','rate']);
 const assetKeys = new Set(['map_file','map_dir','model_dir','e2e_model_dir','lane_id','line_type','bag']);
+const panes = ['basic','assets','details','review','log'];
+function showPane(name) {
+  for (const pane of panes) {
+    $('bringup-pane-'+pane).hidden=pane!==name;
+    $('bringup-tab-'+pane).setAttribute('aria-pressed',String(pane===name));
+  }
+}
+for (const pane of panes) $('bringup-tab-'+pane).onclick=()=>showPane(pane);
 function request(action, extra={}) {
   if (!ui.connection) throw Error('接続先を確認してください');
   return api('bringup/'+action,{connection:ui.connection,container:ui.container,...extra});
@@ -86,6 +94,11 @@ function renderFields() {
       } else for (const value of f.choices) input.append(new Option(
         (f.key==='rgb_profile' || f.key==='infra_profile') && value==='0'?'なし（OFF）':value,value));
     } else { input=document.createElement('input'); input.type='text'; input.placeholder=f.default==null?'未指定':String(f.default); }
+    if (f.key==='rgb_profile' || f.key==='infra_profile') {
+      // An inline list never opens a native popup under the releasing pointer.
+      input.size=5;
+      input.className='bringup-profile-list';
+    }
     input.id='bringup-field-'+f.key; input.value=ui.values[f.key] ?? '';
     input.title=f.help || caption.textContent;
     input.onchange=()=>{
@@ -98,6 +111,9 @@ function renderFields() {
     if(f.help) {const help=document.createElement('small');help.textContent=f.help;label.append(help);}
     $(assetKeys.has(f.key)?'bringup-assets-fields':essentials.has(f.key)?'bringup-basic':'bringup-details').append(label);
   }
+  $('bringup-tab-details').hidden=$('bringup-details').children.length===0;
+  $('bringup-tab-assets').hidden=$('bringup-assets-fields').children.length===0;
+  showPane('basic');
   $('bringup-mode').value=ui.values.mode;
   $('bringup-assets').hidden=['collect','environment','esc-trial'].includes(ui.values.mode);
   $('bringup-detail-section').hidden=$('bringup-details').children.length===0;
@@ -179,7 +195,7 @@ $('bringup-refresh').onclick=()=>guarded(async epoch=>{await refresh(epoch);if(e
 $('bringup-plan').onclick=()=>guarded(async epoch=>{
   invalidate();const values=structuredClone(ui.values);
   const data=await request('plan',{values});if(epoch!==ui.epoch || JSON.stringify(values)!==JSON.stringify(ui.values))return;
-  ui.revision=data.revision;$('bringup-review').textContent=data.review;renderButtons();
+  ui.revision=data.revision;$('bringup-review').textContent=data.review;showPane('review');renderButtons();
 });
 $('bringup-start').onclick=()=>guarded(async epoch=>{
   const revision=ui.revision;ui.revision=null;renderButtons();
