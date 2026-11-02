@@ -81,8 +81,8 @@ class MissionTests(unittest.TestCase):
         path = CONFIG / "sensors/realsense.yaml"
         original = sensor_parameters(path)
         changed = sensor_parameters(path, 60, 90)
-        self.assertEqual(changed["rgb_camera.color_profile"], "424x240x60")
-        self.assertEqual(changed["depth_module.infra_profile"], "424x240x90")
+        self.assertEqual(changed["rgb_camera.color_profile"], "640x480x60")
+        self.assertEqual(changed["depth_module.infra_profile"], "640x480x90")
         self.assertEqual(changed["camera_name"], "camera")
         self.assertEqual(changed["base_frame_id"], "link")
         for key in original.keys() - {
@@ -107,7 +107,7 @@ class MissionTests(unittest.TestCase):
         self.assertTrue(params["enable_color"])
         self.assertFalse(params["enable_infra1"])
         self.assertFalse(params["enable_infra2"])
-        self.assertEqual(params["depth_module.infra_profile"], "424x240x60")
+        self.assertEqual(params["depth_module.infra_profile"], "640x480x90")
         for kwargs in ({"rgb_profile": "1280x720x90"},
                        {"rgb_profile": "1280x720x30", "rgb_fps": "30"},
                        {"infra_profile": "0", "infra_fps": "0"}):
@@ -297,6 +297,7 @@ class MissionTests(unittest.TestCase):
                 "--mode",
                 "drive",
                 "--no-bridge",
+                "--no-tuning",
                 "--infra-fps",
                 "0",
                 "--dry-run",
@@ -398,7 +399,7 @@ class MissionCompositionTests(unittest.TestCase):
             values.update(
                 mode="collect",
                 rgb_profile="1280x720x30",
-                infra_profile="",
+                infra_profile="424x240x60",
                 depth_profile="424x240x60",
                 auto_fixed_throttle="0.10",
                 enable_bridge="false",
@@ -422,6 +423,7 @@ class MissionCompositionTests(unittest.TestCase):
             lu.include.reset_mock()
             lu.include.reset_mock()
             args.mode = "environment"
+            args.infra_profile = ""
             args.imu_profile = "low"
             module.add_mission(args)
             camera_args = lu.include.call_args_list[0].kwargs["launch_arguments"]
@@ -432,6 +434,8 @@ class MissionCompositionTests(unittest.TestCase):
             self.assertEqual(len(lu.include.call_args_list), 2)
             lu.include.reset_mock()
             args.mode = "drive"
+            args.infra_profile = "424x240x60"
+            args.enable_foxglove = "false"
             args.lane_id = "lane_001"
             args.line_type = "centerline"
             args.multicam_mode = "2"
@@ -514,6 +518,7 @@ class MissionCompositionTests(unittest.TestCase):
             self.assertNotIn('launch/localization.launch.py', paths)
             self.assertNotIn('launch/tracking.launch.py', paths)
             lu.include.reset_mock()
+            args.infra_profile = ''
             args.infra_fps = '0'
             args.create_sensor_container = 'true'
             args.sensor_container = 'kart_sensor_container'

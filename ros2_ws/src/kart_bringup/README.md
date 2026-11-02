@@ -1095,7 +1095,7 @@ ROS結合・USB3帯域・全topicの実記録は未確認。
 
 `bash scripts/bringup.sh`で`drive`を選び、地図を選択した後、
 「設定一覧」→「補助 / Studio調整」で有効／無効を変更できる。未編集時は
-`config/hdmap/hdmap.yaml`の`tuning_enabled`（標準false）。YAMLの手編集は不要。
+`config/hdmap/hdmap.yaml`の`tuning_enabled`（標準true）。YAMLの手編集は不要。
 HDMapを含む転送フォルダーを自動検出し、選択した自己位置推定地図の内容hashと照合して
 `tuning_map_dir`を設定する。転送先`vgl/<bundle>`内にある同内容の地図にも対応する。
 不一致なら起動前に拒否する。地図・lane・ラインの既存選択手順は維持する。
@@ -1105,7 +1105,7 @@ CLIは`--mode drive --tuning`、無効化は`--no-tuning`。未指定はYAMLに�
 
 `hdmap.launch.py`・`tracking.launch.py`・`mission.launch.py`は
 `tuning_enabled`・`tuning_map_dir`・`tuning_tracking_frame`を明示指定できる。
-未指定は`config/hdmap/hdmap.yaml`を保持する。通常は`tuning_enabled: false`。
+未指定は`config/hdmap/hdmap.yaml`を保持する。地図走行では標準`tuning_enabled: true`。
 `tuning_map_dir`は自己位置推定と同じ転送bundleの絶対パス、`tuning_tracking_frame`既定は`rear_axle`。
 ノード・topic・parameterの全仕様は[kart_hdmap README](../kart_hdmap/README.md#notebookからの動的調整)を参照。
 
@@ -1624,3 +1624,17 @@ Depth無効時にDepthを起動する変更ではない。画像はnative Z16で
 
 例: `bash scripts/bringup.sh --mode collect --infra-profile 640x480x60 --depth-profile 640x480x60`。
 ROS結合・実機プロファイル採用・Depthの実記録はJetsonで確認する。
+
+データ記録のUI/TUIでは走行用・環境用の用途分岐を廃止しました。新規選択は`collect`で、
+Depthは個別設定からONにします。通常のbag設定にも`realsense/accel/imu_info`と
+`realsense/gyro/imu_info`（ともに`realsense2_camera_msgs/msg/IMUInfo`）を記録候補として追加しました。
+旧`environment` CLIと保存設定は互換用に保持し、既存のセンサー既定値は変更しません。
+ノード・パラメータの追加や既定値変更はありません。
+
+
+既定センサー設定はRGB `640x480x30`、Infra左右 `640x480x90`。
+Depthは標準OFF、ON時の共通Stereo既定は`640x480x90`です。
+EVS有効時は`cuda_async` / `evt3_runs_gpu_direct`（5方式中4番目）を使用します。
+地図走行のFoxgloveは標準ON（`mission.yaml`のdrive設定）、動的調整も標準ONです。
+`--no-foxglove` / `--no-tuning`で明示的にOFFにできます。記録モードのFoxglove既定はOFFです。
+旧environment設定と明示指定・保存済みprofileは維持します。実機配信確認は別途必要です。

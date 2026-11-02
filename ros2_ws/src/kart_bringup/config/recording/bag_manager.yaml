@@ -48,6 +48,8 @@
     - realsense/depth/image_rect_raw
     - realsense/depth/camera_info
     - realsense/extrinsics/depth_to_color
+    - realsense/accel/imu_info
+    - realsense/gyro/imu_info
     - realsense/imu
     - realsense/accel/sample
     - realsense/gyro/sample

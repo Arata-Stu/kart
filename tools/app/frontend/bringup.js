@@ -162,7 +162,8 @@ function renderFields() {
   $('bringup-tab-details').hidden=$('bringup-details').children.length===0;
   $('bringup-tab-assets').hidden=$('bringup-assets-fields').children.length===0;
   showPane('basic');
-  $('bringup-mode').value=ui.values.mode;
+  // Preserve legacy saved sensor defaults without exposing a second recording mode.
+  $('bringup-mode').value=ui.values.mode==='environment'?'collect':ui.values.mode;
   $('bringup-assets').hidden=['collect','environment','esc-trial'].includes(ui.values.mode);
   $('bringup-detail-section').hidden=$('bringup-details').children.length===0;
 }

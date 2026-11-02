@@ -25,8 +25,7 @@ def select_purpose(args, choose):
               'esc-trial': 'ESC信号列試験（UI操作・地図／自己位置／Joy不要）'}
     args.mode = choose('用途', list(labels), labels.__getitem__)
     if args.mode == 'record':
-        args.mode = choose('記録内容', ['collect', 'environment'],
-                          lambda v: '走行データ' if v == 'collect' else '環境記録（Depth付き）')
+        args.mode = 'collect'
     if args.mode == 'eval':
         args.eval_localization = args.eval_localization or choose(
             'オフライン解析', list(EVALUATIONS), EVALUATIONS.__getitem__)
@@ -178,7 +177,7 @@ class Editor:
                 from kart_bringup.recovery import configuration, LABELS
                 enabled, settings = configuration(self.config / 'recovery', a.recovery)
                 rows['recovery'] = '補助 / 自動復帰: ' + LABELS[settings['sensor_profile'] if enabled else 'off']
-            rows['foxglove'] = f'補助 / Foxglove: {"有効" if a.foxglove else "無効"}'
+            rows['foxglove'] = f'補助 / Foxglove: {"有効" if self.foxglove_enabled() else "無効"}'
             if a.mode == 'drive':
                 enabled = self.params('hdmap/hdmap.yaml', 'hdmap_server')['tuning_enabled'] if a.tuning is None else a.tuning
                 rows['tuning'] = f'補助 / Studio調整: {"有効" if enabled else "無効"}'
@@ -208,6 +207,11 @@ class Editor:
             return 'モデル出力' if a.e2e_throttle_mode == 'model' else f'モデル操舵＋固定スロットル {value}'
         value = self.params('input/joy_manager.yaml', 'kart_joy_manager')['auto_fixed_throttle'] if a.auto_fixed_throttle is None else a.auto_fixed_throttle
         return '通常AUTO' if value < 0 else f'固定スロットル {value}＋手動操舵'
+
+    def foxglove_enabled(self):
+        from kart_bringup.mission import composition
+        return (composition(self.config / 'mission.yaml', self.args.mode)['enable_foxglove']
+                if self.args.foxglove is None else self.args.foxglove)
 
     def evs_values(self):
         a = self.args
@@ -321,7 +325,7 @@ class Editor:
             a.recovery = self.pick('壁接触・スタック自動復帰', CHOICES,
                                    settings['sensor_profile'] if enabled else 'off', LABELS.__getitem__)
         elif action in ('foxglove', 'tuning', 'bridge'):
-            current = (not a.no_bridge if action == 'bridge' else a.foxglove if action == 'foxglove' else
+            current = (not a.no_bridge if action == 'bridge' else self.foxglove_enabled() if action == 'foxglove' else
                        self.params('hdmap/hdmap.yaml', 'hdmap_server')['tuning_enabled'] if a.tuning is None else a.tuning)
             value = self.pick({'foxglove': 'Foxglove Bridge', 'tuning': 'Map Studio 動的調整', 'bridge': '車両基板'}[action],
                               [False, True], current, lambda v: '有効' if v else '無効')

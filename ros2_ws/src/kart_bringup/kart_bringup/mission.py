@@ -147,6 +147,9 @@ def composition(path, mode, overrides=None):
     }
     if set(cfg) != allowed or mode not in cfg["modes"]:
         raise ValueError("Invalid mission config or mode")
+    mode_flags = cfg["modes"][mode]
+    if "enable_foxglove" in mode_flags:
+        cfg["enable_foxglove"] = mode_flags.pop("enable_foxglove")
     for key, value in (overrides or {}).items():
         if key not in allowed - {"modes", "sensor_container_type"}:
             raise ValueError(f"Unknown mission override: {key}")

@@ -141,6 +141,8 @@ def test_catalog_exposes_mode_specific_stereo_defaults():
     with patch.object(remote, 'status', return_value={}):
         catalog = remote.dispatch({'action': 'catalog'})
     normal = catalog['stereo_defaults']['collect']
+    assert catalog['modes']['collect'] == 'データ記録'
+    assert 'environment' not in catalog['modes']
     environment = catalog['stereo_defaults']['environment']
     assert normal['depth_profile'] == '0'
     assert normal['infra_profile'] == normal['profile']
@@ -154,3 +156,21 @@ def test_preview_catalog_does_not_inspect_runtime():
     assert catalog['status']['phase'] == 'preview'
     assert catalog['stereo_defaults']['collect']['depth_profile'] == '0'
     assert any(f['key'] == 'depth_profile' for f in catalog['fields'])
+
+
+def test_requested_drive_and_sensor_defaults():
+    from kart_bringup.mission import composition, sensor_parameters
+    from kart_bringup.evs import pipeline_configuration, AGGREGATIONS
+    import yaml
+    config = remote.CONFIG
+    camera = sensor_parameters(config / 'sensors/realsense.yaml')
+    assert camera['rgb_camera.color_profile'] == '640x480x30'
+    assert camera['depth_module.infra_profile'] == '640x480x90'
+    assert composition(config / 'mission.yaml', 'drive')['enable_foxglove'] is True
+    assert composition(config / 'mission.yaml', 'collect')['enable_foxglove'] is False
+    assert composition(config / 'mission.yaml', 'drive', {'enable_foxglove': 'false'})['enable_foxglove'] is False
+    assert '--no-foxglove' in remote.arguments({'mode': 'drive', 'foxglove': False})
+    paths, overrides = pipeline_configuration(config / 'sensors')
+    assert overrides['tensor_backend'] == 'cuda_async'
+    assert yaml.safe_load(paths[1].read_text())['/**/event_tensor']['ros__parameters']['event_aggregation'] == AGGREGATIONS[3] == 'evt3_runs_gpu_direct'
+    assert yaml.safe_load((config / 'hdmap/hdmap.yaml').read_text())['/**/hdmap_server']['ros__parameters']['tuning_enabled'] is True

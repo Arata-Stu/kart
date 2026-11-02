@@ -26,7 +26,7 @@ SESSION = 'kart-bringup'
 SOCKET = os.environ.get('KART_BRINGUP_TMUX_SOCKET', 'kart-bringup-local')
 if not re.fullmatch(r'kart-bringup-[a-z0-9-]{1,32}', SOCKET):
     raise ValueError('Invalid tmux socket name')
-MODES = {'collect': 'データ記録（走行）', 'environment': 'データ記録（環境・Depth付き）',
+MODES = {'collect': 'データ記録', 'environment': 'データ記録',
          'drive': '地図走行', 'e2e': 'E2E走行', 'eval': 'オフライン評価',
          'e2e-latency': 'E2E遅延評価', 'esc-trial': 'ESC信号列試験'}
 
@@ -269,7 +269,7 @@ def dispatch(body):
                 profile=p['depth_module.infra_profile'],
                 infra_profile=p['depth_module.infra_profile'] if p['enable_infra1'] or p['enable_infra2'] else '0',
                 depth_profile=p['depth_module.depth_profile'] if p['enable_depth'] else '0')
-        return dict(modes=MODES, fields=fields(), status=(dict(phase='preview', session=False, log='プレビューです。Jetsonの実行ログではありません。') if action == 'preview_catalog' else status()), stereo_defaults=defaults)
+        return dict(modes={k: v for k, v in MODES.items() if k != 'environment'}, fields=fields(), status=(dict(phase='preview', session=False, log='プレビューです。Jetsonの実行ログではありません。') if action == 'preview_catalog' else status()), stereo_defaults=defaults)
     if action == 'status':
         return status()
     if action == 'assets':

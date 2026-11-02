@@ -162,7 +162,7 @@ def argument_parser():
     parser.add_argument("--evs-tensor-config", default="", help="Full OpenEB tensor YAML; E2E defaults to model_dir/openeb_tensor.yaml")
     parser.add_argument("--evs-bias-file", default="", help=".bias path; @defaultでカメラ既定")
     parser.add_argument("--bias-root", type=Path, default=ROOT / "bias/evs")
-    parser.add_argument("--foxglove", action="store_true")
+    parser.add_argument("--foxglove", action=argparse.BooleanOptionalAction, default=None, help="Foxglove。未指定は用途のYAML既定（地図走行はON）")
     parser.add_argument("--no-bridge", action="store_true", help="車両基板なしの確認用")
     parser.add_argument(
         "--dry-run", action="store_true", help="選択・検証とコマンド表示のみ"
@@ -388,7 +388,7 @@ def build_command(args, config):
         "evs_tensor_config": args.evs_tensor_config,
         "evs_aggregation": args.evs_aggregation,
         "evs_image": "" if args.evs_image is None else str(args.evs_image).lower(),
-        "enable_foxglove": str(args.foxglove).lower(),
+        "enable_foxglove": "" if args.foxglove is None else str(args.foxglove).lower(),
         "record_dir": args.record_dir,
         "run_name": recording_name if args.mode != "eval" else "",
         "multicam_mode": args.multicam_mode,

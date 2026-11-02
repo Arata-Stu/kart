@@ -72,13 +72,13 @@ class FzfTests(unittest.TestCase):
                 self.assertIn('mission.launch.py', output.getvalue())
 
     def test_infra_vga_90_selection_reaches_launch(self):
-        for mode in ("collect", "environment"):
+        for mode in ("collect",):
             def choose(title, values, *args, **kwargs):
                 if title == "用途":
                     self.assertEqual(values, ["record", "drive", "e2e", "eval", "esc-trial"])
                     return "record"
                 if title == "記録内容":
-                    self.assertEqual(values, ["collect", "environment"])
+                    self.fail("記録内容の二段階選択は廃止")
                     return mode
                 if "解像度 × FPS" in title:
                     if title.startswith("RGB"):
@@ -100,7 +100,7 @@ class FzfTests(unittest.TestCase):
 
     def test_additional_camera_profiles_reach_tui_and_launch_arguments(self):
         expected = {f"{size}x{fps}" for size in ("480x270", "640x360") for fps in (30, 60, 90)}
-        for mode in ("collect", "environment"):
+        for mode in ("collect",):
             for profile in sorted(expected):
                 with self.subTest(mode=mode, profile=profile):
                     selected = []
@@ -109,7 +109,7 @@ class FzfTests(unittest.TestCase):
                             self.assertEqual(values, ["record", "drive", "e2e", "eval", "esc-trial"])
                             return "record"
                         if title == "記録内容":
-                            self.assertEqual(values, ["collect", "environment"])
+                            self.fail("記録内容の二段階選択は廃止")
                             return mode
                         if "解像度 × FPS" in title:
                             self.assertTrue(expected.issubset(set(values)))
@@ -150,14 +150,14 @@ class FzfTests(unittest.TestCase):
         self.assertIn('infra_profile:=848x100x100', output.getvalue())
 
     def test_imu_selection_reaches_mission_command(self):
-        for mode in ("collect", "environment"):
+        for mode in ("collect",):
             for profile in ("low", "high", "off"):
                 def choose(title, values, *args, **kwargs):
                     if title == "用途":
                         self.assertEqual(values, ["record", "drive", "e2e", "eval", "esc-trial"])
                         return "record"
                     if title == "記録内容":
-                        self.assertEqual(values, ["collect", "environment"])
+                        self.fail("記録内容の二段階選択は廃止")
                         return mode
                     if title == "IMU 取得レート":
                         self.assertEqual(values[kwargs["default"]], "")

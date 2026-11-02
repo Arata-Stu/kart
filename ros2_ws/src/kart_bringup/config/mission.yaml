@@ -16,6 +16,7 @@ modes:
     tracking: false
     e2e: false
   drive:
+    enable_foxglove: true
     localization: true
     tracking: true
     e2e: false

@@ -448,7 +448,7 @@ bash scripts/bringup.sh --mode environment
 # カメラを手持ちで記録する場合は --no-bridge を追加可能
 ```
 
-対話起動の「データ記録」→「記録内容」→「環境記録」でも選択できる。RGB=1280×720×30、左右InfraとDepth=848×480×30、
+対話起動は「データ記録」に統一。以下は互換用の`--mode environment`の既定値。RGB=1280×720×30、左右InfraとDepth=848×480×30、
 加速度=250Hz・gyro=200Hz、統合IMU=線形補間を既定とする。
 RGB・左右Infra・Z16 Depth・各camera_info・IMU・TFをMCAPへ記録する。
 Infraを有効にしてprofileを変更すると、同じセンサのDepthも同じprofileになる。
@@ -616,3 +616,7 @@ bringupの`--run-name`未指定時は、解決済みセンサー設定から記�
 無効は`OFF`、EVSはTensor出力Hzと画像FPS、IMUは加速度A/ジャイロGのHzを示します。
 EVSの非同期イベント自体にFPSは付けません。値は設定値で、実測やbagの受信保証ではありません。
 明示した名前は維持し、日付/起動時刻の親ディレクトリと重複時の連番は従来通りです。
+
+地図走行のFoxgloveとStudio動的調整は既定ONです。`--no-foxglove`、`--no-tuning`でOFF。
+RGB既定は640×480・30 FPS、Infra既定は640×480・90 FPSです。
+EVS有効時の既定はcuda_async＋evt3_runs_gpu_direct（集計方式一覧の4番目）です。

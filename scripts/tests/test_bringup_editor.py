@@ -44,22 +44,22 @@ def run_tui(steps, *options, inputs=()):
 
 
 def test_record_defaults_only_ask_purpose_and_review():
-    out, err = run_tui([('用途', 'record'), ('記録内容', 'collect'), (REVIEW, 'start')])
+    out, err = run_tui([('用途', 'record'), (REVIEW, 'start')])
     assert not err
     assert 'mode:=collect' in out
-    assert 'run_name:=collect_rgb30fps_infra60fps_evsOFF_depthOFF_imuA200-G400Hz' in out
+    assert 'run_name:=collect_rgb30fps_infra90fps_evsOFF_depthOFF_imuA200-G400Hz' in out
     assert 'rgb_profile:=' not in out  # YAML preserved, not copied into overrides.
     assert 'auto_fixed_throttle:=' not in out
 
 
 def test_cancel_does_not_build_or_launch():
     with patch.object(entry, 'build_command', side_effect=AssertionError('cancel must not validate/launch')):
-        out, err = run_tui([('用途', 'record'), ('記録内容', 'collect'), (REVIEW, 'cancel')])
+        out, err = run_tui([('用途', 'record'), (REVIEW, 'cancel')])
     assert 'ros2 launch' not in out
 
 
 def test_repeated_edits_keep_other_fields_and_only_last_camera_choice():
-    steps = [('用途', 'record'), ('記録内容', 'collect'), (REVIEW, 'rgb'),
+    steps = [('用途', 'record'), (REVIEW, 'rgb'),
              ('RGB 解像度 × FPS（USB3 D455候補）', '640x480x30'), (REVIEW, 'imu'),
              ('IMU 取得レート', 'off'), (REVIEW, 'rgb'),
              ('RGB 解像度 × FPS（USB3 D455候補）', '640x360x60'), (REVIEW, 'start')]
@@ -72,7 +72,7 @@ def test_repeated_edits_keep_other_fields_and_only_last_camera_choice():
 
 
 def test_validation_error_returns_to_review_and_can_be_fixed():
-    steps = [('用途', 'record'), ('記録内容', 'collect'), (REVIEW, 'start'), (REVIEW, 'record'),
+    steps = [('用途', 'record'), (REVIEW, 'start'), (REVIEW, 'record'),
              ('記録設定', 'name'), ('記録設定', 'back'), (REVIEW, 'start')]
     out, err = run_tui(steps, '--run-name', '../invalid', inputs=['fixed'])
     assert '設定エラー' in err
@@ -81,7 +81,7 @@ def test_validation_error_returns_to_review_and_can_be_fixed():
 
 
 def test_conflicting_camera_options_can_be_repaired():
-    out, err = run_tui([('用途', 'record'), ('記録内容', 'collect'), (REVIEW, 'rgb'),
+    out, err = run_tui([('用途', 'record'), (REVIEW, 'rgb'),
                        ('RGB 解像度 × FPS（USB3 D455候補）', '640x480x30'), (REVIEW, 'start')],
                       '--rgb-profile', '640x480x60', '--rgb-fps', '30')
     assert 'rgb_profile:=640x480x30' in out
@@ -90,7 +90,7 @@ def test_conflicting_camera_options_can_be_repaired():
 
 
 def test_evs_detail_only_changes_requested_setting():
-    steps = [('用途', 'record'), ('記録内容', 'collect'), (REVIEW, 'evs'),
+    steps = [('用途', 'record'), (REVIEW, 'evs'),
              ('EVS 詳細設定', 'enabled'), ('EVS', True), ('EVS 詳細設定', 'image'),
              ('EVS event image可視化', False), ('EVS 詳細設定', 'back'), (REVIEW, 'start')]
     out, err = run_tui(steps)
@@ -100,7 +100,7 @@ def test_evs_detail_only_changes_requested_setting():
 
 
 def test_disabling_evs_clears_inactive_overrides():
-    steps = [('用途', 'record'), ('記録内容', 'collect'), (REVIEW, 'evs'),
+    steps = [('用途', 'record'), (REVIEW, 'evs'),
              ('EVS 詳細設定', 'enabled'), ('EVS', False), ('EVS 詳細設定', 'back'), (REVIEW, 'start')]
     out, err = run_tui(steps, '--evs-aggregation', 'events', '--evs-image')
     command = next(line for line in out.splitlines() if line.startswith('ros2 launch'))
@@ -157,7 +157,7 @@ def test_bad_edit_rolls_back_and_cancel_keeps_previous_record_name():
 
 
 def test_launch_only_after_successful_validation():
-    steps = [('用途', 'record'), ('記録内容', 'collect'), (REVIEW, 'start'),
+    steps = [('用途', 'record'), (REVIEW, 'start'),
              (REVIEW, 'record'), ('記録設定', 'name'), ('記録設定', 'back'), (REVIEW, 'start')]
     with (patch.object(sys, 'argv', ['bringup.py', '--no-bridge', '--run-name', '../bad']),
           patch.object(sys.stdin, 'isatty', return_value=True),
@@ -214,7 +214,7 @@ def test_evaluation_can_switch_without_retaining_incompatible_options():
 
 
 def test_record_joy_limit_input_reaches_launch():
-    out, err = run_tui([('用途', 'record'), ('記録内容', 'collect'),
+    out, err = run_tui([('用途', 'record'),
                         (REVIEW, 'joy_limit'), (REVIEW, 'start')], inputs=('0.5',))
     assert not err
     assert 'joy_max_throttle:=0.5' in out
@@ -222,7 +222,7 @@ def test_record_joy_limit_input_reaches_launch():
 
 
 def test_record_joy_limit_blank_preserves_yaml():
-    out, err = run_tui([('用途', 'record'), ('記録内容', 'collect'),
+    out, err = run_tui([('用途', 'record'),
                         (REVIEW, 'joy_limit'), (REVIEW, 'start')], inputs=('',))
     assert not err
     assert 'joy_max_throttle:=' not in out
@@ -231,7 +231,7 @@ def test_record_joy_limit_blank_preserves_yaml():
 
 @pytest.mark.parametrize('value', ['nan', 'inf', '0', '1.1', '-0.1'])
 def test_record_joy_limit_rejects_invalid_input(value):
-    out, err = run_tui([('用途', 'record'), ('記録内容', 'collect'),
+    out, err = run_tui([('用途', 'record'),
                         (REVIEW, 'joy_limit'), (REVIEW, 'start')], inputs=(value,))
     assert not err
     assert '変更できません' in out
