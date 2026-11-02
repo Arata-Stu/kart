@@ -90,3 +90,16 @@ el('bringup-preview-exit').onclick();
 assert.equal(el('bringup-workspace').hidden,true);
 assert.equal(el('bringup-connect').disabled,false);
 console.log('Offline preview: local catalog, no remote calls, no start/record/save, explicit exit passed');
+
+const {profilePicker}=await import('../frontend/profile_picker.js');
+const picker=profilePicker({id:'default-rgb-test',profiles:['424x240x30','640x480x30'],optional:true,defaultValue:'640x480x30',title:'RGB'});
+assert.equal(picker.input.value,'','showing the default must not create an explicit override');
+assert.equal(picker.root.children[1].textContent,'640 × 480 / 30 Hz（既定）');
+const controls=picker.root.children[2];
+assert.equal(controls.children[1].children[1]['aria-pressed'],'true');
+assert.equal(controls.children[2].children[0]['aria-pressed'],'true');
+controls.children[0].children[1].onclick();
+assert.equal(picker.root.children[1].textContent,'OFF');
+controls.children[0].children[0].onclick();
+assert.equal(picker.root.children[1].textContent,'640 × 480 / 30 Hz（既定）');
+console.log('RGB defaults: resolved value, highlighted resolution/rate, OFF and reset passed');

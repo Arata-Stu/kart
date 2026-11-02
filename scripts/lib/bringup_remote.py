@@ -57,6 +57,40 @@ def fields():
     return result
 
 
+def default_labels(mode):
+    """Display configured defaults without turning them into runtime overrides."""
+    import yaml
+    from kart_bringup.mission import sensor_parameters, camera_config, composition
+    from kart_bringup.recovery import configuration
+    def params(path, node):
+        return yaml.safe_load((CONFIG / path).read_text())[f'/**/{node}']['ros__parameters']
+    labels = {f['key']: ('有効' if f['default'] is True else '無効' if f['default'] is False
+                        else str(f['default'])) for f in fields() if f['default'] not in (None, '')}
+    labels.update(run_name='センサー構成から自動生成', eval_localization='選択が必要',
+                  e2e_fixed_throttle='モデル設定から決定', e2e_throttle_mode='fixed',
+                  evs_tensor_config='処理方式・モデルに応じて決定', parking_site='選択した地図を使用',
+                  parking_slot='指定なし', evs_serial='自動選択', latency_output='日時から自動生成')
+    labels.update(multicam_mode=str(params('localization/cuvslam.yaml', 'visual_slam')['multicam_mode']))
+    if mode in ('collect', 'environment', 'drive', 'e2e'):
+        camera = sensor_parameters(camera_config(CONFIG, mode))
+        labels['imu_profile'] = (f"加速度 {camera['accel_fps']} Hz / ジャイロ {camera['gyro_fps']} Hz"
+                                 if camera['enable_accel'] and camera['enable_gyro'] else '個別YAML設定')
+        labels['rgb_fps'] = camera['rgb_camera.color_profile'].split('x')[-1] if camera['enable_color'] else 'OFF'
+        labels['foxglove'] = '有効' if composition(CONFIG / 'mission.yaml', mode)['enable_foxglove'] else '無効'
+        joy = params('input/joy_manager.yaml', 'kart_joy_manager')
+        labels.update(joy_max_throttle=str(joy['speed_scale']),
+                      auto_fixed_throttle='通常AUTO' if joy['auto_fixed_throttle'] < 0 else str(joy['auto_fixed_throttle']),
+                      device=params('vehicle/bridge.yaml', 'kart_bridge')['device'])
+        enabled, recovery = configuration(CONFIG / 'recovery')
+        labels['recovery'] = recovery['sensor_profile'] if enabled else 'off'
+        labels['tuning'] = '有効' if params('hdmap/hdmap.yaml', 'hdmap_server')['tuning_enabled'] else '無効'
+    labels['evs_backend'] = params('sensors/openeb_tensor_pipeline.yaml', 'tensor_pipeline')['tensor_backend']
+    labels['evs_aggregation'] = params(f"sensors/openeb_tensor_{labels['evs_backend']}.yaml", 'event_tensor').get('event_aggregation', 'events')
+    labels['evs_image'] = '有効' if params('sensors/openeb_visualization.yaml', 'event_preprocessor')['event_image_enabled'] else '無効'
+    labels['evs_bias_file'] = params('sensors/openeb.yaml', 'event_camera_driver')['bias_file'] or 'カメラ標準'
+    return labels
+
+
 def arguments(values):
     if not isinstance(values, dict) or values.get('mode') not in MODES:
         raise ValueError('用途を選択してください')
@@ -266,10 +300,11 @@ def dispatch(body):
         for mode in ('collect', 'environment', 'drive', 'e2e'):
             p = sensor_parameters(camera_config(CONFIG, mode))
             defaults[mode] = dict(
+                rgb_profile=p['rgb_camera.color_profile'] if p['enable_color'] else '0',
                 profile=p['depth_module.infra_profile'],
                 infra_profile=p['depth_module.infra_profile'] if p['enable_infra1'] or p['enable_infra2'] else '0',
                 depth_profile=p['depth_module.depth_profile'] if p['enable_depth'] else '0')
-        return dict(modes={k: v for k, v in MODES.items() if k != 'environment'}, fields=fields(), status=(dict(phase='preview', session=False, log='プレビューです。Jetsonの実行ログではありません。') if action == 'preview_catalog' else status()), stereo_defaults=defaults)
+        return dict(modes={k: v for k, v in MODES.items() if k != 'environment'}, fields=fields(), status=(dict(phase='preview', session=False, log='プレビューです。Jetsonの実行ログではありません。') if action == 'preview_catalog' else status()), stereo_defaults=defaults, default_labels={mode: default_labels(mode) for mode in MODES})
     if action == 'status':
         return status()
     if action == 'assets':

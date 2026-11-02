@@ -126,6 +126,15 @@ function renderStereo() {
   profile.onchange=()=>{if(profile.value)change();};
   infraSwitch.onchange=change;depthSwitch.onchange=change;
 }
+function defaultLabel(f) {
+  const configured=ui.catalog?.default_labels?.[ui.values.mode]?.[f.key];
+  if (f.key==='evs_backend' && ui.values.evs_aggregation) return 'cuda_async（集計方式に連動）';
+  if (f.key==='evs_aggregation' && (ui.values.evs_backend || ui.values.evs_tensor_config)) return '選択したEVS設定に依存（設定確認で確定）';
+  if (f.key==='evs' && (ui.values.mode==='e2e' || ['evs_backend','evs_aggregation','evs_serial','evs_tensor_config','evs_bias_file','evs_image'].some(k=>ui.values[k]!=null && ui.values[k]!==''))) return 'モデル・EVS設定に応じて決定';
+  if (configured!=null && configured!=='') return `${configured}（既定）`;
+  if (f.default!=null && f.default!=='') return `${typeof f.default==='boolean'?(f.default?'有効':'無効'):f.default}（既定）`;
+  return '未指定・設定確認で確定';
+}
 function renderFields() {
   for (const id of ['bringup-basic','bringup-assets-fields','bringup-details']) $(id).replaceChildren();
   for (const f of ui.catalog?.fields || []) {
@@ -136,22 +145,26 @@ function renderFields() {
     caption.textContent=labels[f.key] || f.key; label.append(caption);
     let input;
     if(f.key==='rgb_profile') {
-      const picker=profilePicker({id:'bringup-field-rgb_profile',profiles:f.choices || [],value:ui.values[f.key] ?? '',optional:true,title:'RGB profile'});
+      const picker=profilePicker({id:'bringup-field-rgb_profile',profiles:f.choices || [],value:ui.values[f.key] ?? '',optional:true,defaultValue:ui.catalog?.stereo_defaults?.[ui.values.mode]?.rgb_profile,title:'RGB profile'});
       input=picker.input;label.append(picker.root);
     } else if (f.kind==='boolean' || f.choices) {
       input=document.createElement('select');
-      input.append(new Option('既定を使用', ''));
+      input.append(new Option(defaultLabel(f), ''));
       if (f.kind==='boolean') {
         input.append(new Option('有効','true'),new Option('無効','false'));
       } else for (const value of f.choices) input.append(new Option(
         (f.key==='rgb_profile' || f.key==='infra_profile' || f.key==='depth_profile') && value==='0'?'なし（OFF）':value,value));
-    } else { input=document.createElement('input'); input.type='text'; input.placeholder=f.default==null?'未指定':String(f.default); }
+    } else { input=document.createElement('input'); input.type='text'; input.placeholder=defaultLabel(f); }
     input.id='bringup-field-'+f.key; input.value=ui.values[f.key] ?? '';
     input.title=f.help || caption.textContent;
     input.onchange=()=>{
       $('bringup-choice').hidden=true;
       if(input.value==='') delete ui.values[f.key];
       else ui.values[f.key]=f.kind==='boolean'?input.value==='true':input.value;
+      for(const field of ui.catalog.fields){
+        const option=$('bringup-field-'+field.key)?.options?.[0];
+        if(option?.value==='')option.textContent=defaultLabel(field);
+      }
       invalidate();
     };
     if(f.key!=='rgb_profile')label.append(input);

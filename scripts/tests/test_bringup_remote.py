@@ -174,3 +174,15 @@ def test_requested_drive_and_sensor_defaults():
     assert overrides['tensor_backend'] == 'cuda_async'
     assert yaml.safe_load(paths[1].read_text())['/**/event_tensor']['ros__parameters']['event_aggregation'] == AGGREGATIONS[3] == 'evt3_runs_gpu_direct'
     assert yaml.safe_load((config / 'hdmap/hdmap.yaml').read_text())['/**/hdmap_server']['ros__parameters']['tuning_enabled'] is True
+
+
+def test_catalog_explains_defaults_without_changing_arguments():
+    catalog = remote.dispatch({'action': 'preview_catalog'})
+    labels = catalog['default_labels']
+    assert labels['drive']['foxglove'] == '有効'
+    assert labels['collect']['foxglove'] == '無効'
+    assert labels['drive']['tuning'] == '有効'
+    assert labels['collect']['evs_backend'] == 'cuda_async'
+    assert labels['collect']['evs_aggregation'] == 'evt3_runs_gpu_direct'
+    assert '200 Hz' in labels['collect']['imu_profile']
+    assert remote.arguments({'mode': 'collect'}) == ['--mode', 'collect']

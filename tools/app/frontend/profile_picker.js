@@ -1,5 +1,5 @@
 // Inline controls avoid native select popups overlapping the opening click.
-export function profilePicker({id, profiles, value='', optional=false, title}) {
+export function profilePicker({id, profiles, value='', optional=false, defaultValue='', title}) {
   const root=document.createElement('div');root.className='profile-picker';
   root.setAttribute('role','group');root.setAttribute('aria-label',title);
   const input=document.createElement('input');input.type='hidden';input.id=id;input.value=value;
@@ -18,16 +18,19 @@ export function profilePicker({id, profiles, value='', optional=false, title}) {
   };
   function draw(){
     controls.replaceChildren();
-    heading.textContent=input.value==='0'?'OFF':input.value===''?(optional?'既定を使用':'プロファイル未選択'):input.value.replace(/x/g,' × ').replace(/ × (\d+)$/,' / $1 Hz');
+    const effective=input.value || defaultValue;
+    resolution=choices.includes(effective)?effective.split('x').slice(0,2).join('x'):null;
+    const display=effective==='0'?'OFF':effective?effective.replace(/x/g,' × ').replace(/ × (\d+)$/,' / $1 Hz'):(optional?'既定値未取得':'プロファイル未選択');
+    heading.textContent=display+(input.value==='' && defaultValue?'（既定）':'');
     if(optional)group('RGBの使用',[{text:'既定',selected:input.value==='',click:()=>select('')},{text:'OFF',selected:input.value==='0',click:()=>select('0')}]);
     const sizes=[...new Set(choices.map(p=>p.split('x').slice(0,2).join('x')))];
-    group('解像度',sizes.map(size=>({text:size.replace('x',' × '),selected:choices.includes(input.value)&&input.value.startsWith(size+'x'),click:()=>{
+    group('解像度',sizes.map(size=>({text:size.replace('x',' × '),selected:choices.includes(effective)&&effective.startsWith(size+'x'),click:()=>{
       resolution=size;
       const rates=choices.filter(p=>p.startsWith(size+'x'));
-      const old=input.value.split('x')[2];
+      const old=effective.split('x')[2];
       select(rates.find(p=>p.endsWith('x'+old)) || rates.find(p=>p.endsWith('x30')) || rates[0]);
     }})));
-    if(resolution)group('FPS',choices.filter(p=>p.startsWith(resolution+'x')).map(p=>({text:p.split('x')[2]+' Hz',selected:input.value===p,click:()=>select(p)})));
+    if(resolution)group('FPS',choices.filter(p=>p.startsWith(resolution+'x')).map(p=>({text:p.split('x')[2]+' Hz',selected:effective===p,click:()=>select(p)})));
     else {const hint=document.createElement('small');hint.textContent='解像度を選ぶと、対応するHzが表示されます。';controls.append(hint);}
   }
   draw();return {root,input};
