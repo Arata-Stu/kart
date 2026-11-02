@@ -399,3 +399,22 @@ config JSONでは同名の`coverage_max_throttle`を指定可能。CLI指定が�
 これは分布に基づく追加記録の目安。動的モデルの新規同定、未観測応答の補完、
 係数の信頼区間推定、旋回条件の自動緩和は含まない。既存解析の終了コードは維持し、
 一定入力の採用が0点なら診断成果物を保存したうえでexit 2となる。
+
+## JoyのD-padで固定スロットルを調整する収集
+
+通常bringupの固定AUTO収集でも記録できる。
+
+```bash
+bash scripts/bringup.sh --mode collect --auto-fixed-throttle 0.10
+# 0.3を超える収集範囲を明示する場合だけ --joy-max-throttle を指定する
+```
+
+TUIでは「データ記録」→「制御 / AUTO」→「固定値で収集」を選び、初期値を入力する。
+STOPでモードボタンを離して入力を中立にし、D-pad上/下を押すと現在値が0.01増減する。
+INFOログの`AUTO fixed throttle selected`で現在値と上限を確認する。長押しの連続変更なし。
+□保持で固定AUTO＋手動ステア、△保持で通常MANUAL。録画はR1開始/L1停止で独立。
+現在値は既存`/teleop/fixed_config`へ記録する。MANUAL中も上下のトリム調整は無効となる。
+通常collectはオンラインVSLAMを起動しないため、速度解析には記録したstereoからoffline poseを求める。
+固定AUTO区間の解析には`--mode auto`を使う。
+このD-pad調整はJoy managerの`auto_fixed_throttle`用で、別ノードの
+`tuning_collect fixed_command:=true` / `vehicle_tuning.sh control`を操作する機能ではない。

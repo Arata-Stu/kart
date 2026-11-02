@@ -72,6 +72,22 @@ int main() {
   recording_actions=recording_buttons.read(recording_keys);
   assert(!recording_actions->bag_start && !recording_actions->bag_stop);
 
+  {
+    JoyButtons adjustment;
+    std::vector<int32_t> pressed(17,0);
+    adjustment.read(pressed);
+    pressed[13]=1;
+    assert(adjustment.read(pressed)->fixed_throttle_direction==1);
+    assert(adjustment.read(pressed)->fixed_throttle_direction==0); // Hold does not repeat.
+    pressed[14]=1;
+    assert(adjustment.read(pressed)->fixed_throttle_direction==0); // Opposite key while held.
+    pressed[13]=0;
+    assert(adjustment.read(pressed)->fixed_throttle_direction==0); // Release is not a press.
+    adjustment.reset();
+    assert(adjustment.read(pressed)->fixed_throttle_direction==0); // Reconnect held.
+    pressed[14]=0; adjustment.read(pressed); pressed[14]=1;
+    assert(adjustment.read(pressed)->fixed_throttle_direction==-1);
+  }
   JoyButtons buttons;
   buttons.deadman_button=4; // Optional L1 deadman remains supported.
   std::vector<int32_t> keys(17,0);

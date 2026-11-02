@@ -109,8 +109,25 @@ def executable():
     return binary
 
 
+def predictive_executable():
+    root=Path(__file__).resolve().parents[3]
+    source=root/'tools/app/native/predictive_spliner.cpp'
+    include=root/'ros2_ws/src/kart_racing/include'
+    digest=hashlib.sha256(source.read_bytes()+b''.join(p.read_bytes() for p in sorted(include.rglob('*.hpp')))).hexdigest()
+    binary=_cache/digest
+    with _lock:
+        if not binary.exists():
+            compiler=shutil.which('c++')
+            if not compiler:raise ValueError('試走にはC++コンパイラが必要です')
+            result=subprocess.run([compiler,'-std=c++17','-O2','-I'+str(include),str(source),'-o',str(binary)],capture_output=True,text=True,timeout=60)
+            if result.returncode:raise ValueError('Predictive plannerビルド失敗: '+result.stderr[-1500:])
+    return binary
+
+
 def preview(request):
     lane=request['lane'];options=request['options'];cfg=request['head_to_head']
+    planner_kind=cfg.get('planner','baseline')
+    if planner_kind not in ('baseline','predictive_spliner'):raise ValueError('追い抜きplannerが不正です')
     if lane.get('closed') is not True:raise ValueError('Head-to-head初版は閉コース専用です')
     method=options.get('controller')
     if method not in ('pure_pursuit','mpc'):raise ValueError('横制御方式が不正です')
@@ -188,16 +205,48 @@ def preview(request):
             previous=shape;previous_pose=p
         return True
 
+    predictor=None;prediction_selector=None;prediction=None
+    predictor_binary=predictive_executable() if planner_kind=='predictive_spliner' else None
     proc=subprocess.Popen([str(executable())],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,bufsize=1)
     selector=selectors.DefaultSelector();selector.register(proc.stdout,selectors.EVENT_READ)
     deadline=time.monotonic()+60
     try:
+        if predictor_binary:
+            predictor=subprocess.Popen([str(predictor_binary)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,bufsize=1)
+            prediction_selector=selectors.DefaultSelector();prediction_selector.register(predictor.stdout,selectors.EVENT_READ)
+            predictor.stdin.write(' '.join(map(str,[course.total,length,width,margin,min_gap,headway,.8*math.tan(steer_limit)/wb]))+'\n');predictor.stdin.flush()
         proc.stdin.write(' '.join(map(str,[int(method=='mpc'),int(course.step),wb,steer_limit,*controls,*lookahead_config]))+'\n');proc.stdin.flush()
         terminal_time=0.
         for tick in range(int(duration*30)+1):
             now=tick*dt;terminal_time=now;gap=os-s-length
             minimum=min(minimum,gap) if not plan and not passed else minimum
-            if not plan and not passed:
+            if predictor:
+                local=s%course.total
+                # Width is a search bound only: exact geometry is checked below.
+                x0,y0,yaw0,_=course.sample(s)
+                ego_d=-(pose[0]-x0)*math.sin(yaw0)+(pose[1]-y0)*math.cos(yaw0)
+                end=s-local+zone_end
+                cap=min(vmax,min(course.sample(s+i*max(0,end-s)/100)[3] for i in range(101)))
+                allowed=enabled and (plan is not None or zone_start<=local<zone_end)
+                predictor.stdin.write(' '.join(map(str,[now,s,ego_d,v,os,0,ov,cap,end,abs(offset)+width if side=='left' else 0,abs(offset)+width if side=='right' else 0,int(allowed)]))+'\n');predictor.stdin.flush()
+                if not prediction_selector.select(2):raise ValueError('Predictive planner応答timeout')
+                values=predictor.stdout.readline().split()
+                if len(values)!=12:raise ValueError('Predictive planner出力不正')
+                if not all(math.isfinite(float(values[i])) for i in (0,1,2,5,6,7,8,9,10,11)):raise ValueError('Predictive planner出力が非有限です')
+                prediction=dict(valid=bool(int(values[0])),speed=float(values[1]),coverage=float(values[2]),state=values[3],reason=values[4],active=bool(int(values[5])),start=float(values[6]),end=float(values[7]),ramp=float(values[8]),offset=float(values[9]),roc=[float(values[10]),float(values[11])])
+                if not prediction['valid']:
+                    reason=prediction['reason'];note='予測失効・試走中断（実車退避未検証）';break
+                if prediction['state']=='PASSED':
+                    state='PASSED';reason='overtake_completed';passed=True;break
+                if not plan:
+                    state=prediction['state'];note=f"GP観測被覆 {prediction['coverage']:.0%} / {prediction['reason']}"
+                    if prediction['active']:
+                        candidate=(prediction['start'],prediction['end'],prediction['ramp'])
+                        offset=prediction['offset']
+                        if not clear_plan(candidate):
+                            reason='predictive_geometry_rejected';note='予測経路の車体境界・曲率検査で中断';break
+                        plan=candidate;events.append(dict(time=now,state='PASS',station=s,roc=prediction['roc']))
+            if not predictor and not plan and not passed:
                 desired_gap=min_gap+headway*v
                 stable=stable+dt if abs(gap-desired_gap)<.4 and abs(v-ov)<.2 else 0.
                 # Perfect course observations; no simulated detector confidence.
@@ -234,6 +283,7 @@ def preview(request):
             target_cap=vmax
             if not plan and not passed:
                 target_cap=min(vmax,max(0.,ov+.8*(gap-(min_gap+headway*v))),math.sqrt(max(0.,ov*ov+2*brake*(gap-min_gap))))
+            if prediction is not None:target_cap=prediction['speed']
             # Feed a local route into the production PP/MPC. The open-route end is
             # well beyond stopping distance; course zero-speed samples remain active.
             horizon=max(8.,vmax*vmax/(2*brake)+5.,max(lookahead_config[1:])+2.)
@@ -251,7 +301,7 @@ def preview(request):
             s,error=course.project(pose,s,max(1.,v*dt*3));maxerror=max(maxerror,error)
             frames.append([now,*pose,v,steer,error,maxerror,tx,ty,ms,target,lookahead])
             rivals.append([*opose,ov])
-            metrics.append(dict(state=state,gap=gap,opponent_speed=ov,estimate=estimate,stable_seconds=stable,note=note,station=s%course.total))
+            metrics.append(dict(state=state,gap=gap,opponent_speed=ov,estimate=estimate,stable_seconds=stable,note=note,station=s%course.total,coverage=prediction['coverage'] if prediction else None))
             if time.monotonic()>deadline:reason='compute_timeout';break
             if tick==int(duration*30):break
             # Substeps bound translation and heading changes for swept geometry.
@@ -279,9 +329,15 @@ def preview(request):
         terminal=list(frames[-1]);terminal[:5]=[terminal_time,*pose,v]
         if terminal_time<=frames[-1][0]+1e-9:
             frames.pop();rivals.pop();metrics.pop()
-        frames.append(terminal);rivals.append([*opose,ov]);metrics.append(dict(state=state,gap=os-s-length,opponent_speed=ov,estimate=estimate,stable_seconds=stable,note=note,station=s%course.total))
-        return dict(frames=frames,opponents=rivals,h2h=metrics,events=events,reason=reason,controller=method,total=course.total,zone=[zone_start,zone_end],minimum_follow_gap=minimum,vehicle=dict(length=length,width=width,rear=rear),planned_route=[list(route_point(plan[0]+i*(plan[1]-plan[0])/200,plan)[:2]) for i in range(201)] if plan else [])
+        frames.append(terminal);rivals.append([*opose,ov]);metrics.append(dict(state=state,gap=os-s-length,opponent_speed=ov,estimate=estimate,stable_seconds=stable,note=note,station=s%course.total,coverage=prediction['coverage'] if prediction else None))
+        return dict(planner=planner_kind,observation='ideal',frames=frames,opponents=rivals,h2h=metrics,events=events,reason=reason,controller=method,total=course.total,zone=[zone_start,zone_end],minimum_follow_gap=minimum,vehicle=dict(length=length,width=width,rear=rear),planned_route=[list(route_point(plan[0]+i*(plan[1]-plan[0])/200,plan)[:2]) for i in range(201)] if plan else [])
     finally:
+        if predictor is not None:
+            if prediction_selector:prediction_selector.close()
+            predictor.stdin.close()
+            try:predictor.wait(timeout=2)
+            except subprocess.TimeoutExpired:predictor.kill();predictor.wait()
+            predictor.stdout.close()
         selector.close()
         proc.stdin.close()
         try:proc.wait(timeout=2)

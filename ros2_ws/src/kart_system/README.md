@@ -111,7 +111,7 @@ sim時刻での入力鮮度と実時間での通信断を分離する。元stamp
 | `speed_scale` | `0.3` | 正負スロットル倍率。0.01..1。車速[m/s]ではない |
 | `brake_pulse_throttle` | `0.05` | ○による正throttle要求、0.002..1。起動時固定 |
 | `brake_pulse_s` | `0.02` | 正パルス保持時間[秒]、steady時刻、0.01..0.5。起動時固定 |
-| `auto_fixed_throttle` | `-1.0` | AUTO時の固定正規化指令（手動ステア）。-1で通常操作、0..speed_scaleで固定。起動時固定 |
+| `auto_fixed_throttle` | `-1.0` | AUTO時の固定正規化指令（手動ステア）。-1で通常操作、0..speed_scaleで固定。parameterは起動時の初期値、運用値はSTOP中にD-pad変更可能 |
 
 スロットルは`(R2 − L2) × speed_scale`。各トリガー0.01以下を0とし、負側は`reverse`へ格納する。
 両方同量なら相殺するが、モード要求時には両トリガーを離す必要がある。
@@ -168,7 +168,7 @@ AUTO初回進入は0.3秒中立を配信してmux/bridgeのHOST handshakeを待�
 直接切替時は中立待ちを挟まない。×はSTOP、○は独立ブレーキ用MANUALへ引き継ぎ、解除時にSTOP。固定AUTO中のL2は中立＋STOP。
 入力途絶・異常・再起動後はSTOPから再armし、モード変更だけで異常解除しない。
 固定AUTOでも□保持が必要で、離すと固定出力を中断してSTOPにする。
-固定値は速度ではなく補正前の正規化要求で、起動時固定。変更はSTOP後に再起動する。
+固定値は速度ではなく補正前の正規化要求。初期値は起動時指定し、有効時は新鮮なSTOP中のD-pad上下で0.01ずつ変更できる。
 
 JoyManagerNodeが`/teleop/control_cmd`（kart_interfaces/msg/ControlCommand、reliable/depth1）へ
 元Joy stampで合成指令を出版する。bringupは固定設定からcommand_muxの
@@ -247,3 +247,15 @@ MANUALのtrim・Joy配信を通した○操作の実機確認は区別する。
 指令の生成・履歴のログであり、ESCが正パルスを認識した証拠ではない。
 切り分けでは既存ログと`/vehicle/output_channels`を照合する。ただし基板statusは20 Hzの観測であり、
 20 msパルスを観測できなくても未出力とは断定できない。緊急停止用の制動として扱わない。
+
+### 固定AUTO収集時のD-padスロットル調整
+
+`auto_fixed_throttle >= 0`のとき、D-pad上下（既存`throttle_trim_up_button=13` / `throttle_trim_down_button=14`）は
+スロットルトリムではなく固定AUTO値の調整に使う。1押し0.01（定数、parameter追加なし）、
+範囲0..speed_scale。上下同時押し・長押し・再接続時の押下保持では変更しない。
+新鮮なSTOP、Joy/ready正常、中立入力、モードボタン解放、deadman有効時だけ受け付ける。
+走行中の変更は拒否し、次回□保持で選択値を使用する。MANUALのトリガー操作は従来どおり。
+固定AUTO無効時は従来のスロットルトリム、左右は従来の操舵トリムを維持する。
+起動時と受理した各押下（上下限到達を含む）で現在値をINFOログへ出し、値は
+既存`/teleop/fixed_config`（std_msgs/msg/String、reliable/volatile/depth1、10Hzおよび変更時）へ記録する。
+ROS parameterとYAMLは初期設定のまま。再起動では初期値へ戻る。独自service/actionは追加しない。

@@ -130,3 +130,12 @@ section selector → E2E decoderへ送信する。headerは判定対象画像と
 始点の目標速度を保持し、境界で即時切替する指定。通常の速度補間・境界先行減速を省くが、
 走行側の上限と開路終点停止は維持する。publisherはkart_hdmap、consumerはkart_control。
 独自parameter追加なし。型変更時は関連workspaceを再ビルド・source・ノード再起動する。
+
+### HeadToHeadObservation / HeadToHeadPlan
+
+相手1台の実験用Frenetインターフェース。`/racing/observation`をkart_racingが購読し、
+`/racing/shadow_plan`へ出力する。各fieldの単位と契約はmsgコメントと
+[kart_racing README](../kart_racing/README.md)を参照。
+元stamp、reference_id（地図/ラインrevision）、同一周回原点のs、左正d、相手IDと分散を保持。
+observed=falseと空いたコースを混同しない。出力は空間スプラインと速度目標のshadow情報。
+有効期限は元観測時刻から計算し、時刻付き動的安全軌道や車両指令とは扱わない。

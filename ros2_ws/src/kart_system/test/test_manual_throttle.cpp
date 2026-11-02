@@ -5,6 +5,31 @@
 #include <limits>
 using namespace kart_system;
 int main() {
+  {
+    ManualFixedThrottle adjustable;
+    assert(!adjustable.adjust(1,0.3,10,true)); // Disabled never becomes enabled by D-pad.
+    adjustable.throttle=0.1;
+    adjustable.observe(STOP,10,10,1,true,true);
+    assert(adjustable.adjust(1,0.3,10,true) && std::abs(adjustable.throttle-0.11)<1e-9);
+    assert(adjustable.adjust(-1,0.3,10,true) && std::abs(adjustable.throttle-0.1)<1e-9);
+    assert(!adjustable.adjust(1,0.3,10,false));
+    assert(!adjustable.adjust(1,0.3,10.31,true)); // Stale STOP.
+    assert(!adjustable.adjust(1,0.3,9.9,true)); // Future STOP stamp.
+    assert(!adjustable.adjust(0,0.3,10,true));
+    assert(!adjustable.adjust(1,std::numeric_limits<double>::quiet_NaN(),10,true));
+    for(int i=0;i<50;++i) adjustable.adjust(1,0.3,10,true);
+    assert(adjustable.throttle==0.3);
+    for(int i=0;i<50;++i) adjustable.adjust(-1,0.3,10,true);
+    assert(adjustable.throttle==0);
+    adjustable.adjust(1,0.3,10,true);
+    adjustable.observe(AUTO,10.01,10.01,1.01,true,true);
+    assert(!adjustable.adjust(1,0.3,10.01,true));
+    adjustable.observe(AUTO,10.32,10.32,1.32,true,true);
+    auto output=adjustable.command({},false,10.32,1.32,true);
+    assert(!output.stop && std::abs(output.command.throttle-0.01)<1e-9);
+    adjustable.observe(MANUAL,10.33,10.33,1.33,true,true);
+    assert(!adjustable.adjust(-1,0.3,10.33,true));
+  }
   ManualFixedThrottle gate;
   assert(gate.valid_settings(0.3) && !gate.enabled());
   Command raw{0.4,0.25,0,0};

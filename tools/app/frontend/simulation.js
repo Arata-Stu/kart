@@ -43,7 +43,7 @@ async function reset() {
   $("simulation-metrics").textContent=h2h?"2台の走行・車体の干渉・追い抜き判断を計算中…":"実車と共通の制御計算で試走を計算中…（初回はコンパイル）";
   $("simulation-play").disabled=true;
   try {
-    const head={};
+    const head={planner:$("h2h-planner").value};
     for(const key of ["opponent_speed","initial_gap","min_gap","headway","observe_seconds","duration","zone_start","zone_end","offset","margin"])
       head[key]=Number($("h2h-"+key.replaceAll("_","-")).value);
     head.overtake=$("h2h-overtake").value==="on";head.side=$("h2h-side").value;
@@ -127,7 +127,7 @@ function draw() {
   $("simulation-metrics").textContent=`${phase}${debug} · ${parkingRoute?"駐車試走（理想車両モデル） · ":""}${diagnostic?`水色:走行可能領域 / 赤:車体・抵触箇所 / 橙:余裕 ${diagnostic.margin_m.toFixed(3)} m${diagnostic.hits.length?"":" / 壁・領域の抵触なし"} · `:""}${parkingMessage || c.reason || (running?"試走中":"停止中")} · ${c.time.toFixed(1)} s · ${c.speed.toFixed(2)} m/s${sim.cfg.controller==="pure_pursuit"?` · 先読み ${c.lookahead.toFixed(2)} m`:""} · 目標 ${c.targetSpeed.toFixed(2)} m/s · 計算 ${c.solverMs.toFixed(2)} ms · 舵角 ${(c.steering*180/Math.PI).toFixed(1)}° · 誤差 ${c.error.toFixed(2)} m / 最大 ${c.maxError.toFixed(2)} m`;
   if(c.h2h){
     const h=c.h2h,label={FOLLOW_OBSERVE:"追従・観測",OPPORTUNITY_READY:"速度優位あり",PASS:"追い抜き中",MERGE:"合流中",PASSED:"合流完了"}[h.state]||h.state;
-    $("simulation-metrics").textContent=`Head-to-head（理想観測） · ${label} · ${c.reason||h.note} · ${c.time.toFixed(1)} s · 自車 ${c.speed.toFixed(2)} / 相手 ${h.opponent_speed.toFixed(2)} m/s · 経路上の車間 ${h.gap.toFixed(2)} m · 観測 ${h.stable_seconds.toFixed(1)} s · 推定 ${h.estimate===null?"未確定":h.estimate.toFixed(2)+" m/s"} · 位置 ${h.station.toFixed(1)} / ${sim.h2hResult.total.toFixed(1)} m`;
+    $("simulation-metrics").textContent=`Head-to-head（理想観測） · ${label} · ${c.reason||h.note} · ${c.time.toFixed(1)} s · 自車 ${c.speed.toFixed(2)} / 相手 ${h.opponent_speed.toFixed(2)} m/s · 経路上の車間 ${h.gap.toFixed(2)} m · ${h.coverage==null?`観測 ${h.stable_seconds.toFixed(1)} s`:`GP被覆 ${(100*h.coverage).toFixed(0)}%`} · 推定 ${h.estimate===null?"未確定":h.estimate.toFixed(2)+" m/s"} · 位置 ${h.station.toFixed(1)} / ${sim.h2hResult.total.toFixed(1)} m`;
   }
 }
 function play(){

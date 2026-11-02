@@ -1,0 +1,12 @@
+/**/predictive_spliner:
+  ros__parameters:
+    vehicle_length: 0.35
+    vehicle_width: 0.19
+    margin: 0.08
+    min_gap: 1.0
+    headway: 0.7
+    acceleration: 1.5
+    deceleration: 2.5
+    max_curvature: 1.2
+    prediction_horizon: 15.0
+    input_timeout: 0.2

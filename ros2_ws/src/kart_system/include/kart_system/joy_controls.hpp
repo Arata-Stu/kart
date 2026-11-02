@@ -70,6 +70,7 @@ struct ButtonActions {
   bool bag_start{false}, bag_stop{false};
   bool vgl_trigger{false};
   double steering_delta{0}, throttle_delta{0};
+  int fixed_throttle_direction{0};
 };
 
 // Circle owns a separate hold-to-brake session. Never resumes ordinary driving.
@@ -188,6 +189,9 @@ public:
     result.vgl_trigger=edge(vgl_trigger_button);
     result.steering_delta=(static_cast<int>(edge(steering_left))-static_cast<int>(edge(steering_right)))*steering_step;
     result.throttle_delta=(static_cast<int>(edge(throttle_up))-static_cast<int>(edge(throttle_down)))*throttle_step;
+    if (!(pressed(throttle_up) && pressed(throttle_down))) {
+      result.fixed_throttle_direction=static_cast<int>(edge(throttle_up))-static_cast<int>(edge(throttle_down));
+    }
     previous_=buttons; primed_=true;
     return result;
   }

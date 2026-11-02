@@ -891,7 +891,7 @@ AUTO中もステアを操作でき、△でSTOPを挟まずMANUALへ直接引き
 AUTO初回進入は0.3秒中立を配信してmux/bridgeのHOST handshakeを待つ。
 直接切替時は中立待ちを挟まない。×はSTOP、○は独立ブレーキ用MANUALへ引き継ぎ、解除時にSTOP。固定AUTO中のL2は中立＋STOP。
 入力途絶・異常・再起動後はSTOPから再armし、モード変更だけで異常解除しない。
-固定値は速度ではなく補正前の正規化要求で、起動時固定。変更はSTOP後に再起動する。
+固定値は速度ではなく補正前の正規化要求。初期値は起動時指定し、有効時は新鮮なSTOP中のD-pad上下で0.01ずつ変更できる。
 
 JoyManagerNodeが`/teleop/control_cmd`（kart_interfaces/msg/ControlCommand、reliable/depth1）へ
 元Joy stampで合成指令を出版する。bringupは固定設定からcommand_muxの
@@ -1638,3 +1638,23 @@ EVS有効時は`cuda_async` / `evt3_runs_gpu_direct`（5方式中4番目）を�
 地図走行のFoxgloveは標準ON（`mission.yaml`のdrive設定）、動的調整も標準ONです。
 `--no-foxglove` / `--no-tuning`で明示的にOFFにできます。記録モードのFoxglove既定はOFFです。
 旧environment設定と明示指定・保存済みprofileは維持します。実機配信確認は別途必要です。
+
+### 固定AUTO収集時のD-padスロットル調整
+
+`auto_fixed_throttle >= 0`のとき、D-pad上下（既存`throttle_trim_up_button=13` / `throttle_trim_down_button=14`）は
+スロットルトリムではなく固定AUTO値の調整に使う。1押し0.01（定数、parameter追加なし）、
+範囲0..speed_scale。上下同時押し・長押し・再接続時の押下保持では変更しない。
+新鮮なSTOP、Joy/ready正常、中立入力、モードボタン解放、deadman有効時だけ受け付ける。
+走行中の変更は拒否し、次回□保持で選択値を使用する。MANUALのトリガー操作は従来どおり。
+固定AUTO無効時は従来のスロットルトリム、左右は従来の操舵トリムを維持する。
+起動時と受理した各押下（上下限到達を含む）で現在値をINFOログへ出し、値は
+既存`/teleop/fixed_config`（std_msgs/msg/String、reliable/volatile/depth1、10Hzおよび変更時）へ記録する。
+ROS parameterとYAMLは初期設定のまま。再起動では初期値へ戻る。独自service/actionは追加しない。
+
+### 相手1台のPredictive Spliner shadow実行
+
+`ros2 launch kart_bringup racing_shadow.launch.py`は`kart_racing`だけを起動する。
+設定は[config/racing](config/racing/README.md)。標準driveのPP/PID/localizationは変更しない。
+`/racing/observation`（kart_interfaces/msg/HeadToHeadObservation）を受け、
+`/racing/shadow_plan`（kart_interfaces/msg/HeadToHeadPlan）へ結果を出す。
+画像観測frontend、実車制御への接続は未実装。全parameterはkart_racing README参照。

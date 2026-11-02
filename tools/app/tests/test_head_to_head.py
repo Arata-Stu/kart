@@ -106,3 +106,31 @@ def test_h2h_fixed_lookahead():
     body['head_to_head'].update(overtake=False,duration=5)
     result=preview(body)
     assert all(row[12]==pytest.approx(1.1) for row in result['frames'])
+
+
+def test_predictive_learn_pass_merge():
+    body=request();body['options']['laps']=3
+    body['head_to_head'].update(planner='predictive_spliner',duration=300,initial_gap=6)
+    result=preview(body)
+    assert result['planner']=='predictive_spliner'
+    assert result['observation']=='ideal'
+    assert result['reason']=='overtake_completed',result['h2h'][-1]
+    assert result['h2h'][0]['coverage']<.1
+    assert result['h2h'][-1]['coverage']>=.9
+    assert result['events'][0]['time']>100  # cannot pass before observing the lap
+    assert result['h2h'][-1]['gap']< -1
+    assert {'FOLLOW_OBSERVE','PASS','MERGE','PASSED'}<={m['state'] for m in result['h2h']}
+
+
+def test_predictive_untrained_follow():
+    body=request();body['head_to_head'].update(planner='predictive_spliner',duration=10)
+    result=preview(body)
+    assert result['reason']=='time_limit'
+    assert not result['events']
+    assert result['minimum_follow_gap']>=1
+    assert all(m['state']=='FOLLOW_OBSERVE' for m in result['h2h'])
+
+
+def test_unknown_planner_rejected():
+    body=request();body['head_to_head']['planner']='unknown'
+    with pytest.raises(ValueError,match='planner'):preview(body)
