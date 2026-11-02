@@ -64,6 +64,11 @@ function invalidate() {
 }
 function renderButtons() {
   for (const el of $('bringup-workspace').querySelectorAll('input,select,.profile-picker button')) el.disabled=ui.busy;
+  for(const key of ['evs_backend','evs_aggregation','evs_serial','evs_tensor_config','evs_bias_file','evs_image']){
+    const control=$('bringup-field-'+key);
+    if(control){control.disabled=ui.busy || ui.values.no_evs===true;
+      if(ui.values.no_evs===true)control.title='基本設定でEVSを有効にすると変更できます。';}
+  }
   $('bringup-connect').disabled=ui.preview;
   $('bringup-container').disabled=ui.preview;
   $('bringup-preview').disabled=ui.busy;
@@ -136,10 +141,18 @@ function defaultLabel(f) {
   return '未指定・設定確認で確定';
 }
 function renderFields() {
+  // Adapt legacy presets to the single visible controls.
+  if(ui.values.no_evs)ui.values.evs=false;
+  if(ui.values.rgb_fps!=null && ui.values.rgb_fps!=='' && !ui.values.rgb_profile){
+    const base=ui.catalog?.stereo_defaults?.[ui.values.mode]?.rgb_profile;
+    if(String(ui.values.rgb_fps)==='0')ui.values.rgb_profile='0';
+    else if(base && base!=='0')ui.values.rgb_profile=base.split('x').slice(0,2).concat(String(ui.values.rgb_fps)).join('x');
+    if(ui.values.rgb_profile)delete ui.values.rgb_fps;
+  }
   for (const id of ['bringup-basic','bringup-assets-fields','bringup-details']) $(id).replaceChildren();
   for (const f of ui.catalog?.fields || []) {
     const visible=ui.values.mode==='esc-trial'?f.key==='device':modeKeys[f.key]?.includes(ui.values.mode);
-    if (!visible || ['infra_profile','depth_profile','infra_fps'].includes(f.key)) continue;
+    if (!visible || ['infra_profile','depth_profile','infra_fps','rgb_fps','no_evs'].includes(f.key)) continue;
     const label=document.createElement(f.key==='rgb_profile'?'div':'label'), caption=document.createElement('span');
     if(f.key==='rgb_profile')label.className='bringup-profile-card';
     caption.textContent=labels[f.key] || f.key; label.append(caption);
@@ -159,6 +172,17 @@ function renderFields() {
     input.title=f.help || caption.textContent;
     input.onchange=()=>{
       $('bringup-choice').hidden=true;
+      if(f.key==='rgb_profile')delete ui.values.rgb_fps;
+      if(f.key==='evs'){
+        delete ui.values.no_evs;
+        if(input.value==='false'){
+          ui.values.no_evs=true;
+          for(const key of ['evs_backend','evs_aggregation','evs_serial','evs_tensor_config','evs_bias_file','evs_image']){
+            delete ui.values[key];
+            const control=$('bringup-field-'+key);if(control)control.value='';
+          }
+        }
+      }
       if(input.value==='') delete ui.values[f.key];
       else ui.values[f.key]=f.kind==='boolean'?input.value==='true':input.value;
       for(const field of ui.catalog.fields){
