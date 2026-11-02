@@ -137,15 +137,18 @@ public:
       if(a.ego_s>=active_.end-active_.ramp && a.ego_s-a.opponent_s-cfg_.length<cfg_.min_gap){out.valid=false;out.speed=0;out.state="FAULT";out.reason="merge_unavailable";active_={};return out;}
       out.plan=active_;out.speed=a.speed_cap;out.state=a.ego_s>=active_.end-active_.ramp?"MERGE":"PASS";out.reason="prediction_valid";return out;
     }
-    if(!model_.ready()||!a.passing_allowed)return out;
+    if(!model_.ready())return out;
+    if(!a.passing_allowed){out.reason="passing_not_allowed";return out;}
     out.state="OPPORTUNITY_READY";out.reason="no_feasible_trajectory";
-    if(a.speed_cap-a.opponent_v<.5 || gap<cfg_.min_gap || std::abs(a.ego_d)>.15)return out;
+    if(a.speed_cap-a.opponent_v<.5){out.reason="speed_advantage_insufficient";return out;}
+    if(gap<cfg_.min_gap){out.reason="following_gap_insufficient";return out;}
+    if(std::abs(a.ego_d)>.15){out.reason="ego_off_reference";return out;}
     // Propagate learned opponent speed with an upper uncertainty bound.
     double es=a.ego_s,os=a.opponent_s,ev=a.ego_v,begin=-1,end=-1,max_d=-1e9,min_d=1e9;
     for(double t=0;t<cfg_.horizon;t+=.1){
-      auto p=model_.predict(os);if(!p.valid)return out;
+      auto p=model_.predict(os);if(!p.valid){out.reason="prediction_unavailable";return out;}
       const double pv=p.v+2*p.v_sigma;
-      if(a.speed_cap-pv<.2)return out;
+      if(a.speed_cap-pv<.2){out.reason="predicted_speed_advantage_insufficient";return out;}
       ev=std::min(a.speed_cap,ev+cfg_.acceleration*.1);es+=ev*.1;os+=pv*.1;
       if(es+cfg_.length+cfg_.margin>=os){
         if(begin<0)begin=es;
@@ -153,7 +156,8 @@ public:
         if(es-os>=cfg_.length+cfg_.min_gap+cfg_.headway*pv){end=es;break;}
       }
     }
-    if(begin<0||end<0)return out;
+    if(begin<0||end<0){out.reason="prediction_horizon_insufficient";return out;}
+    bool longitudinal_candidate=false;
     double best=std::numeric_limits<double>::infinity();
     // Bounded candidate optimization, conservatively restricted to straight
     // passing corridors. GP inference is outside this search.
@@ -162,11 +166,13 @@ public:
       double ramp=std::max({3.,a.speed_cap,std::sqrt(6*std::abs(offset)/cfg_.curvature)})*stretch;
       Plan p{true,a.ego_s,end+ramp,ramp,offset,begin,end};
       if(begin-a.ego_s<ramp || p.end>a.zone_end || p.end-p.start<2*ramp)continue;
+      longitudinal_candidate=true;
       if(offset+cfg_.width/2+cfg_.margin>a.left_width || offset-cfg_.width/2-cfg_.margin< -a.right_width)continue;
       const double score=std::abs(offset)*(p.end-p.start)+2/ramp;
       if(score<best){best=score;active_=p;pass_cap_=a.speed_cap;}
     }
     if(active_.valid){out.plan=active_;out.speed=a.speed_cap;out.state="PASS";out.reason="learned_prediction";}
+    else out.reason=longitudinal_candidate?"lateral_clearance_insufficient":"longitudinal_space_insufficient";
     return out;
   }
 };

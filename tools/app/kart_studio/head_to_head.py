@@ -241,7 +241,21 @@ def preview(request):
                 if prediction['state']=='PASSED':
                     state='PASSED';reason='overtake_completed';passed=True;break
                 if not plan:
-                    state=prediction['state'];note=f"GP観測被覆 {prediction['coverage']:.0%} / {prediction['reason']}"
+                    state=prediction['state']
+                    reasons={
+                        'learning':'GP観測中（被覆90%以上・観測進行95%以上を待機）',
+                        'passing_not_allowed':'追い越し無効' if not enabled else '追い越し許可区間の外',
+                        'speed_advantage_insufficient':'追い越し待機：速度差不足（必要0.50 m/s）',
+                        'following_gap_insufficient':'追い越し待機：開始時の車間不足',
+                        'ego_off_reference':'追い越し待機：自車の横ずれが0.15 mを超過',
+                        'prediction_unavailable':'追い越し待機：前方のGP予測が得られない',
+                        'predicted_speed_advantage_insufficient':'追い越し待機：予測誤差を含めると速度差不足',
+                        'prediction_horizon_insufficient':'追い越し待機：予測時間内に追い抜きを完了できない',
+                        'longitudinal_space_insufficient':'追い越し待機：横移動・合流に必要な前後距離／区間長が不足',
+                        'lateral_clearance_insufficient':'追い越し待機：設定された横方向の余裕が不足',
+                        'learned_prediction':'追い越し候補成立',
+                    }
+                    note=reasons.get(prediction['reason'],prediction['reason'])
                     if prediction['active']:
                         candidate=(prediction['start'],prediction['end'],prediction['ramp'])
                         offset=prediction['offset']

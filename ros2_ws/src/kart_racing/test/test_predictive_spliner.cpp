@@ -18,9 +18,13 @@ int main(){
   for(int i=0;i<=420;++i){a.time=i*.05;a.opponent_s=i*.1;a.ego_s=a.opponent_s-4;r=planner.update(a);assert(r.valid);assert(!r.plan.valid);}
   a.time+=.05;a.opponent_s+=.1;a.ego_s=a.opponent_s-6;a.zone_end=a.ego_s+100;a.passing_allowed=true;
   auto narrow=planner;auto blocked=a;blocked.left_width=blocked.right_width=.15;
-  assert(!narrow.update(blocked).plan.valid);
+  auto nr=narrow.update(blocked);assert(!nr.plan.valid);assert(nr.reason=="lateral_clearance_insufficient");
   auto slow=planner;auto insufficient=a;insufficient.speed_cap=2;
-  assert(!slow.update(insufficient).plan.valid);
+  auto sr=slow.update(insufficient);assert(!sr.plan.valid);assert(sr.reason=="speed_advantage_insufficient");
+  auto outside=planner;auto disabled=a;disabled.passing_allowed=false;
+  assert(outside.update(disabled).reason=="passing_not_allowed");
+  auto short_zone=planner;auto short_scene=a;short_scene.zone_end=a.ego_s+1;
+  assert(short_zone.update(short_scene).reason=="longitudinal_space_insufficient");
   r=planner.update(a);assert(r.plan.valid);assert(r.plan.start<r.plan.roc_start);assert(r.plan.end>r.plan.roc_end);
   assert(std::abs(r.plan.at(r.plan.start))<1e-9);assert(std::abs(r.plan.at(r.plan.end))<1e-9);
   assert(std::abs(r.plan.at(r.plan.roc_start))>=cfg.width+cfg.margin);
