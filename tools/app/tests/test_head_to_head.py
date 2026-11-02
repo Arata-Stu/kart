@@ -141,3 +141,15 @@ def test_predictive_untrained_follow():
 def test_unknown_planner_rejected():
     body=request();body['head_to_head']['planner']='unknown'
     with pytest.raises(ValueError,match='planner'):preview(body)
+
+
+def test_studio_overtake_sample():
+    import json
+    from pathlib import Path
+    source=(Path(__file__).parents[1]/'frontend/samples/overtake.js').read_text()
+    body=json.loads(source.removeprefix('export default ').strip().removesuffix(';'))
+    result=preview(body)
+    assert result['reason']=='overtake_completed',result['h2h'][-1]
+    assert {'FOLLOW_OBSERVE','PASS','MERGE','PASSED'}<={h['state'] for h in result['h2h']}
+    assert result['h2h'][-1]['coverage']>=.9
+    assert result['h2h'][-1]['gap']< -1

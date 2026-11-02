@@ -153,6 +153,29 @@ action("simulation-open",async()=>{
   dialog.showModal();await reset();
 });
 action("simulation-play",async()=>{if(!sim)await reset();if(running){pause();draw();return;}if(!sim)return;if(sim.car.done){if(parkingRoute){toast(sim.car.reason+"。通常試走へ戻るにはリセットしてください。");return;}await reset();}parkingMessage="";play();draw();});
+action("simulation-overtake-sample",async()=>{
+  const {default:body}=await import('./samples/overtake.js');
+  snapshot=structuredClone({...body.lane,obstacles:[]});
+  documentRevision=null;
+  $("simulation-title").textContent='追い越し成功サンプル · 保存中の地図には反映しません';
+  $("simulation-line").replaceChildren(new Option('centerline','centerline'));
+  const values={'simulation-mode':'head_to_head','simulation-controller':'pure_pursuit','simulation-speed':5,'simulation-laps':3,'simulation-wheelbase':.257,'simulation-steer':22,'simulation-lookahead-mode':'speed','simulation-lookahead-fixed':1,'simulation-lookahead-low':.8,'simulation-lookahead-high':3};
+  // Match the supported speed-dependent lookahead option in this UI.
+  values['simulation-lookahead-mode']=Array.from($('simulation-lookahead-mode').options).find(o=>o.value!=='fixed').value;
+  for(const [id,value] of Object.entries(values))$(id).value=value;
+  for(const [key,value] of Object.entries(body.head_to_head)){
+    const input=$('h2h-'+key.replaceAll('_','-'));
+    if(input)input.value=key==='overtake'?(value?'on':'off'):value;
+  }
+  $('simulation-h2h-settings').open=false;
+  await reset();
+  if(sim?.h2hResult?.events.length){sim.seek(Math.max(0,sim.h2hResult.events[0].time-5));trail=[];play();draw();}
+});
+action("simulation-pass-jump",()=>{
+  const event=sim?.h2hResult?.events.find(e=>e.state==='PASS');
+  if(!event){toast('この試走には追い越し開始がありません');return;}
+  pause();sim.seek(Math.max(0,event.time-5));trail=[];draw();
+});
 action("simulation-reset",reset);
 $("simulation-time").addEventListener("input",()=>{if(!sim)return;pause();sim.seek(Number($("simulation-time").value));trail=[[sim.car.x,sim.car.y]];draw();});
 for(const id of ["simulation-lookahead-mode","simulation-lookahead-fixed","simulation-lookahead-low","simulation-lookahead-high","simulation-mode","simulation-laps","simulation-controller","simulation-horizon","simulation-tracking","simulation-smoothness","simulation-rate","simulation-line","simulation-speed","simulation-wheelbase","simulation-steer",...Array.from($("simulation-h2h-settings").querySelectorAll("input,select"),el=>el.id)]){
