@@ -178,7 +178,7 @@ def argument_parser():
     from kart_bringup.recovery import CHOICES
     parser.add_argument("--recovery", choices=CHOICES, default="",
                         help="自動復帰: off / infra_imu / rgb_imu / evs_assisted（未指定はYAML）")
-    parser.add_argument("--run-name", default=None)
+    parser.add_argument("--run-name", default=None, help="記録名。空欄はセンサー構成・設定レートから自動生成")
     parser.add_argument("--e2e-model-dir", default="")
     parser.add_argument("--eval-localization", choices=("vslam", "vgl", "fresh", "e2e_latency"), default=None)
     parser.add_argument("--multicam-mode", choices=("0","1","2"), default="", help="速度・精度: 0=Moderate / 1=Performance / 2=Precision")
@@ -256,6 +256,7 @@ def build_command(args, config):
             args.evs_tensor_config = select_evs_tensor(args.e2e_model_dir, args.evs_tensor_config)
     if args.evs:
         paths, overrides = pipeline_configuration(config / "sensors", args.evs_backend, args.evs_serial, args.evs_bias_file, args.evs_tensor_config, args.evs_aggregation, "" if args.evs_image is None else str(args.evs_image).lower())
+        recording_evs_paths, recording_evs_overrides = paths, overrides
         if args.evs_bias_file and args.evs_bias_file != DEFAULT_BIAS:
             args.evs_bias_file = bias_selection(args.evs_bias_file)
         print(f"EVS: {overrides}; packet topic OFF; configs={paths}")
@@ -354,7 +355,11 @@ def build_command(args, config):
     if args.mode != "eval":
         from kart_bag_manager.recorder import Settings
 
-        Settings(recording_name=args.run_name or "run").validate()
+        from recording_name import sensor_recording_name
+        recording_name = args.run_name or sensor_recording_name(
+            args.mode, sensors, recording_evs_paths if args.evs else None,
+            recording_evs_overrides if args.evs else None)
+        Settings(recording_name=recording_name).validate()
     else:
         from kart_bringup.replay import playback, imu_topics
 
@@ -385,7 +390,7 @@ def build_command(args, config):
         "evs_image": "" if args.evs_image is None else str(args.evs_image).lower(),
         "enable_foxglove": str(args.foxglove).lower(),
         "record_dir": args.record_dir,
-        "run_name": args.run_name or "run",
+        "run_name": recording_name if args.mode != "eval" else "",
         "multicam_mode": args.multicam_mode,
     }
     if args.mode in ("drive", "eval") and not fresh:
@@ -461,7 +466,7 @@ def build_command(args, config):
         )
     else:
         print(
-            f"保存先: {args.record_dir}/<日付>/<起動時刻>/{args.run_name or 'run'}（最初のSTARTで生成）"
+            f"保存先: {args.record_dir}/<日付>/<起動時刻>/{recording_name}（最初のSTARTで生成）"
         )
         print("録画はJoy設定の開始/停止ボタンで操作（標準bringupはR1開始/L1停止）。起動では録画・AUTOを開始しません。終了はCtrl-C。")
     if args.mode == "drive":

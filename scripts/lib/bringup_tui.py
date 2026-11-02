@@ -182,7 +182,7 @@ class Editor:
             if a.mode == 'drive':
                 enabled = self.params('hdmap/hdmap.yaml', 'hdmap_server')['tuning_enabled'] if a.tuning is None else a.tuning
                 rows['tuning'] = f'補助 / Studio調整: {"有効" if enabled else "無効"}'
-            rows['record'] = f'記録: {a.record_dir} / {a.run_name or "run"}'
+            rows['record'] = f'記録: {a.record_dir} / {a.run_name or "自動（センサー構成・Hz）"}'
             rows['bridge'] = f'車両基板: {"無効" if a.no_bridge else a.device or "設定値（YAML）"}'
         else:
             rows['bag'] = f'再生bag: {a.bag or "未選択"}'
@@ -328,13 +328,13 @@ class Editor:
             setattr(a, 'no_bridge' if action == 'bridge' else action, not value if action == 'bridge' else value)
         elif action == 'record':
             while True:
-                rows = {'back': '設定一覧へ戻る', 'name': f'記録名: {a.run_name or "run"}',
+                rows = {'back': '設定一覧へ戻る', 'name': f'記録名: {a.run_name or "自動（センサー構成・Hz）"}',
                         'directory': f'保存先: {a.record_dir}'}
                 field = self.pick('記録設定', rows, label=rows.__getitem__)
                 if field == 'back':
                     break
                 if field == 'name':
-                    a.run_name = input(f'run_name [{a.run_name or "run"}] > ').strip() or a.run_name or 'run'
+                    a.run_name = input(f'run_name [{a.run_name or "自動（センサー構成・Hz）"}] > ').strip() or a.run_name
                 else:
                     value = input(f'記録保存先 [{a.record_dir}] > ').strip()
                     if value:

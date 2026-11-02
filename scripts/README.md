@@ -610,3 +610,9 @@ UI起動はDocker内の`kart-bringup` tmuxで保持し、`tmux -L kart-bringup-C
 Ctrl+C/TERM/HUPをROS launchのprocess groupへ転送し、終了までロックを保持します。
 `--dry-run`ではロック取得・起動をしません。直接`ros2 launch`は排他対象の入口ではないため、
 運用時は`bringup.sh`またはUIを使用してください。通常走行は既存Joy契約のままです。録画はJoyとStudioの録画ボタンから共通managerを操作できます。
+
+bringupの`--run-name`未指定時は、解決済みセンサー設定から記録名を自動生成します。
+例: `collect_rgb30fps_infra90fps_evsT250Hz-I25fps_depth90fps_imuA100-G200Hz`。
+無効は`OFF`、EVSはTensor出力Hzと画像FPS、IMUは加速度A/ジャイロGのHzを示します。
+EVSの非同期イベント自体にFPSは付けません。値は設定値で、実測やbagの受信保証ではありません。
+明示した名前は維持し、日付/起動時刻の親ディレクトリと重複時の連番は従来通りです。

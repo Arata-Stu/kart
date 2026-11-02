@@ -1536,3 +1536,26 @@ header .local-tag { white-space: nowrap; }
 .bringup-profile-list option { padding: 6px 10px; }
 
 #recording-event { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Compact startup form: override global label margins within this page only. */
+#bringup-page .bringup-card { padding: 12px 14px; margin-bottom: 10px; }
+#bringup-page h3 { margin: 8px 0; font-size: 14px; }
+#bringup-page p { margin: 6px 0; }
+#bringup-page label { margin: 0; font-size: 12px; }
+#bringup-page input, #bringup-page select { margin-top: 2px; padding: 7px 8px; }
+#bringup-page .small { margin-left: 0; font-size: 12px; }
+#bringup-page .bringup-fields { grid-template-columns: repeat(2,minmax(0,1fr)); align-items: start; gap: 10px 14px; margin: 10px 0; }
+#bringup-page .bringup-fields label { gap: 3px; }
+#bringup-page .bringup-fields small { font-size: 11px; line-height: 1.4; opacity: 1; color: #526575; }
+.bringup-profile-card { order: -1; padding: 10px; border: 1px solid #d4dee5; border-radius: 8px; background: white; }
+.bringup-profile-card > span { font-weight: 650; font-size: 13px; }
+.profile-current { display: block; font-size: 17px; color: #126c65; margin: 6px 0; font-variant-numeric: tabular-nums; }
+.profile-options { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
+#bringup-page .profile-options button { padding: 6px 9px; font-size: 13px; min-height: 32px; border: 1px solid #b6c5cf; background: #f6f8fa; color: #273e50; font-variant-numeric: tabular-nums; }
+#bringup-page .profile-options button[aria-pressed="true"] { background: #126c65; border-color: #126c65; color: white; font-weight: 700; }
+#bringup-page .profile-options button:focus-visible { outline: 3px solid #368eca; outline-offset: 2px; }
+#bringup-page .stereo-note { font-size: 11px; color: #526575; }
+@media(max-width:760px) { #bringup-page .bringup-fields { grid-template-columns: 1fr; } }
+
+.stereo-toggles { display: flex; gap: 12px; margin: 8px 0; }
+.stereo-toggles label { flex: 1; }

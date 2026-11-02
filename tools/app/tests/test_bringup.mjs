@@ -42,7 +42,7 @@ el('bringup-connect').onclick();await flush();
 assert.equal(el('bringup-workspace').hidden,false);
 assert.equal(el('bringup-start').disabled,true);
 el('bringup-mode').value='collect';el('bringup-mode').onchange();
-for(const key of ['rgb_profile','stereo_profile']) assert.equal(el('bringup-field-'+key).size,5);
+for(const key of ['rgb_profile','stereo_profile']) assert.equal(el('bringup-field-'+key).type,'hidden');
 el('bringup-field-depth_enabled').value='true';el('bringup-field-depth_enabled').onchange();
 const profile=el('bringup-field-rgb_profile');
 profile.value='640x480x30';profile.onchange();

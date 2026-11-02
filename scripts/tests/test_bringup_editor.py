@@ -47,7 +47,7 @@ def test_record_defaults_only_ask_purpose_and_review():
     out, err = run_tui([('用途', 'record'), ('記録内容', 'collect'), (REVIEW, 'start')])
     assert not err
     assert 'mode:=collect' in out
-    assert 'run_name:=run' in out
+    assert 'run_name:=collect_rgb30fps_infra60fps_evsOFF_depthOFF_imuA200-G400Hz' in out
     assert 'rgb_profile:=' not in out  # YAML preserved, not copied into overrides.
     assert 'auto_fixed_throttle:=' not in out
 

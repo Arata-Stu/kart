@@ -1,4 +1,5 @@
 import { $, state, api, on, toast } from './api.js';
+import { profilePicker } from './profile_picker.js';
 import { stereoState, setStereo } from './stereo.js';
 import { connectRecording, disconnectRecording } from './recording.js';
 
@@ -62,7 +63,7 @@ function invalidate() {
   renderButtons();
 }
 function renderButtons() {
-  for (const el of $('bringup-workspace').querySelectorAll('input,select')) el.disabled=ui.busy;
+  for (const el of $('bringup-workspace').querySelectorAll('input,select,.profile-picker button')) el.disabled=ui.busy;
   $('bringup-connect').disabled=ui.preview;
   $('bringup-container').disabled=ui.preview;
   $('bringup-preview').disabled=ui.busy;
@@ -100,20 +101,23 @@ function renderStereo() {
   const choices=key=>(ui.catalog.fields.find(f=>f.key===key)?.choices || []).filter(v=>v!=='0');
   const infra=choices('infra_profile'), depth=choices('depth_profile');
   const profiles=[...new Set([...infra,...depth])].filter(p=>(!current.infraOn || infra.includes(p)) && (!current.depthOn || depth.includes(p)));
-  const add=(key,title,options,value,size)=>{
+  const add=(key,title,options,value,size,parent=$('bringup-basic'))=>{
     const label=document.createElement('label'), span=document.createElement('span'), input=document.createElement('select');
     span.textContent=title;input.id='bringup-field-'+key;
     input.append(...options.map(([v,text])=>new Option(text,v)));
     input.value=value;if(size){input.size=size;input.className='bringup-profile-list';}
-    label.append(span,input);$('bringup-basic').append(label);return input;
+    label.append(span,input);parent.append(label);return input;
   };
-  const profile=add('stereo_profile','Stereo 解像度 × FPS（Infra / Depth共通）',
-    [['','プロファイルを選択'],...profiles.map(p=>[p,p])],current.conflict?'':current.profile,5);
-  const infraSwitch=add('infra_enabled','Infra（左右）',[['true','ON'],['false','OFF']],String(current.infraOn));
-  const depthSwitch=add('depth_enabled','Depth Z16',[['true','ON'],['false','OFF']],String(current.depthOn));
+  const stereoCard=document.createElement('div');stereoCard.className='bringup-profile-card';
+  const stereoTitle=document.createElement('span');stereoTitle.textContent='Stereo（Infra / Depth共通）';
+  const picker=profilePicker({id:'bringup-field-stereo_profile',profiles,value:current.conflict?'':current.profile,title:'Stereo profile'});
+  const profile=picker.input;stereoCard.append(stereoTitle,picker.root);$('bringup-basic').append(stereoCard);
+  const toggles=document.createElement('div');toggles.className='stereo-toggles';stereoCard.append(toggles);
+  const infraSwitch=add('infra_enabled','Infra（左右）',[['true','ON'],['false','OFF']],String(current.infraOn),null,toggles);
+  const depthSwitch=add('depth_enabled','Depth Z16',[['true','ON'],['false','OFF']],String(current.depthOn),null,toggles);
   const note=document.createElement('p');
   note.textContent=!profiles.includes(current.profile)?'現在のプロファイルはONの組み合わせに対応しません。共通候補を選び直してください。':current.conflict?'保存設定のInfraとDepthが不一致です。共通プロファイルを選び直してください。':'ONのストリームに共通プロファイルを適用します。両方OFFにもできます。';
-  $('bringup-basic').append(note);
+  note.className='stereo-note';stereoCard.append(note);
   const change=()=>{
     const selected=profile.value || current.profile;
     setStereo(ui.values,{profile:selected,infraOn:infraSwitch.value==='true',depthOn:depthSwitch.value==='true'});
@@ -127,10 +131,14 @@ function renderFields() {
   for (const f of ui.catalog?.fields || []) {
     const visible=ui.values.mode==='esc-trial'?f.key==='device':modeKeys[f.key]?.includes(ui.values.mode);
     if (!visible || ['infra_profile','depth_profile','infra_fps'].includes(f.key)) continue;
-    const label=document.createElement('label'), caption=document.createElement('span');
+    const label=document.createElement(f.key==='rgb_profile'?'div':'label'), caption=document.createElement('span');
+    if(f.key==='rgb_profile')label.className='bringup-profile-card';
     caption.textContent=labels[f.key] || f.key; label.append(caption);
     let input;
-    if (f.kind==='boolean' || f.choices) {
+    if(f.key==='rgb_profile') {
+      const picker=profilePicker({id:'bringup-field-rgb_profile',profiles:f.choices || [],value:ui.values[f.key] ?? '',optional:true,title:'RGB profile'});
+      input=picker.input;label.append(picker.root);
+    } else if (f.kind==='boolean' || f.choices) {
       input=document.createElement('select');
       input.append(new Option('既定を使用', ''));
       if (f.kind==='boolean') {
@@ -138,11 +146,6 @@ function renderFields() {
       } else for (const value of f.choices) input.append(new Option(
         (f.key==='rgb_profile' || f.key==='infra_profile' || f.key==='depth_profile') && value==='0'?'なし（OFF）':value,value));
     } else { input=document.createElement('input'); input.type='text'; input.placeholder=f.default==null?'未指定':String(f.default); }
-    if (f.key==='rgb_profile' || f.key==='infra_profile' || f.key==='depth_profile') {
-      // An inline list never opens a native popup under the releasing pointer.
-      input.size=5;
-      input.className='bringup-profile-list';
-    }
     input.id='bringup-field-'+f.key; input.value=ui.values[f.key] ?? '';
     input.title=f.help || caption.textContent;
     input.onchange=()=>{
@@ -151,8 +154,8 @@ function renderFields() {
       else ui.values[f.key]=f.kind==='boolean'?input.value==='true':input.value;
       invalidate();
     };
-    label.append(input);
-    if(f.help) {const help=document.createElement('small');help.textContent=f.help;label.append(help);}
+    if(f.key!=='rgb_profile')label.append(input);
+    if(f.help && f.key!=='rgb_profile') {const help=document.createElement('small');help.textContent=f.help;label.append(help);}
     $(assetKeys.has(f.key)?'bringup-assets-fields':essentials.has(f.key)?'bringup-basic':'bringup-details').append(label);
   }
   renderStereo();
