@@ -61,6 +61,13 @@ def test_obstacle_failure():
     body['obstacles']=[dict(polygon=[[8,-2],[9,-2],[9,2],[8,2]])]
     result=preview(body)
     assert result['reason']=='boundary_violation'
+    diagnostic=result['diagnostic']
+    assert diagnostic['hits']
+    assert all(hit['actor'] in ('自車','相手') for hit in diagnostic['hits'])
+    assert any(hit['outside']['coordinates'] for hit in diagnostic['hits'])
+    assert diagnostic['surface']['type'] in ('Polygon','MultiPolygon')
+    import json
+    json.dumps(diagnostic,allow_nan=False)
 
 
 @pytest.mark.parametrize('key,value',[('opponent_speed',float('nan')),('initial_gap',-1),('zone_end',1000),('side','unknown'),('overtake',1)])

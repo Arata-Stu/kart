@@ -12,7 +12,8 @@ import shutil
 import subprocess
 import time
 
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, mapping
+from shapely.ops import nearest_points
 from .preview_lookahead import lookahead_values
 from .tracking_preview import _cache, _lock
 
@@ -216,6 +217,7 @@ def preview(request):
             prediction_selector=selectors.DefaultSelector();prediction_selector.register(predictor.stdout,selectors.EVENT_READ)
             predictor.stdin.write(' '.join(map(str,[course.total,length,width,margin,min_gap,headway,.8*math.tan(steer_limit)/wb]))+'\n');predictor.stdin.flush()
         proc.stdin.write(' '.join(map(str,[int(method=='mpc'),int(course.step),wb,steer_limit,*controls,*lookahead_config]))+'\n');proc.stdin.flush()
+        diagnostic=None
         terminal_time=0.
         for tick in range(int(duration*30)+1):
             now=tick*dt;terminal_time=now;gap=os-s-length
@@ -321,16 +323,28 @@ def preview(request):
                 elif ego_sweep.distance(other_sweep)<=margin:fault='vehicle_conflict'
                 pose,opose,shape,oshape,v,ov,os=newpose,newopose,newshape,newoshape,nv,nov,nos
                 terminal_time=now+(substep+1)*h
-                if fault:break
+                if fault:
+                    hits=[]
+                    for actor, swept in [('自車',ego_sweep),('相手',other_sweep)]:
+                        if fault=='boundary_violation' and usable.contains(swept):continue
+                        obstacle=surface.boundary if fault=='boundary_violation' else (other_sweep if actor=='自車' else ego_sweep)
+                        a,b=nearest_points(swept,obstacle)
+                        outside=swept.difference(usable) if fault=='boundary_violation' else swept.intersection(obstacle.buffer(margin))
+                        marker=outside.representative_point() if not outside.is_empty else a
+                        hits.append(dict(kind=actor+'の掃引領域',actor=actor,geometry=mapping(swept),outside=mapping(outside),closest=[list(a.coords[0]),list(b.coords[0])],marker=list(marker.coords[0]),distance_m=swept.distance(obstacle)))
+                    diagnostic=dict(surface=mapping(surface),clearance=mapping(usable.boundary),body=list(shape.exterior.coords),hits=hits,margin_m=margin,summary='・'.join(hit['actor'] for hit in hits)+'の掃引領域が'+('境界・障害物との余裕に抵触' if fault=='boundary_violation' else '車間の余裕に抵触'))
+                    break
             s,_=course.project(pose,s,max(1.,v*dt*3))
             if fault:reason=fault;note='車体の掃引領域・余裕の抵触';break
         if not frames:raise ValueError('試走開始失敗: '+reason+' '+note)
         # Final frame corresponds to the actual terminal state, not a stale sample.
         terminal=list(frames[-1]);terminal[:5]=[terminal_time,*pose,v]
+        _,terminal_error=course.project(pose,s,max(1.,v*dt*3))
+        terminal[6:8]=[terminal_error,max(maxerror,terminal_error)]
         if terminal_time<=frames[-1][0]+1e-9:
             frames.pop();rivals.pop();metrics.pop()
         frames.append(terminal);rivals.append([*opose,ov]);metrics.append(dict(state=state,gap=os-s-length,opponent_speed=ov,estimate=estimate,stable_seconds=stable,note=note,station=s%course.total,coverage=prediction['coverage'] if prediction else None))
-        return dict(planner=planner_kind,observation='ideal',frames=frames,opponents=rivals,h2h=metrics,events=events,reason=reason,controller=method,total=course.total,zone=[zone_start,zone_end],minimum_follow_gap=minimum,vehicle=dict(length=length,width=width,rear=rear),planned_route=[list(route_point(plan[0]+i*(plan[1]-plan[0])/200,plan)[:2]) for i in range(201)] if plan else [])
+        return dict(diagnostic=diagnostic,planner=planner_kind,observation='ideal',frames=frames,opponents=rivals,h2h=metrics,events=events,reason=reason,controller=method,total=course.total,zone=[zone_start,zone_end],minimum_follow_gap=minimum,vehicle=dict(length=length,width=width,rear=rear),planned_route=[list(route_point(plan[0]+i*(plan[1]-plan[0])/200,plan)[:2]) for i in range(201)] if plan else [])
     finally:
         if predictor is not None:
             if prediction_selector:prediction_selector.close()
