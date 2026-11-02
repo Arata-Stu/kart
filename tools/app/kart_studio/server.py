@@ -21,7 +21,7 @@ from .maps import Maps
 from .storage import atomic_json, name, read_json, within
 from .transfers import Transfers, profile
 from .tuning import Tuning, remote
-from .bringup import Bringup
+from .bringup import Bringup, preview_catalog
 from .audit import Audit, FILES as AUDIT_FILES
 
 
@@ -64,6 +64,8 @@ class Studio:
         )
 
     def get(self, path, q):
+        if path == '/api/bringup/preview':
+            return preview_catalog(self.repo)
         key = q.get("id", "")
         if path == '/api/audits':
             result = self.audit.catalog()

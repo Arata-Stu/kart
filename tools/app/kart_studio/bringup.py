@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 import shlex
 import subprocess
+import sys
 import threading
 
 from .storage import atomic_json, read_json
@@ -32,6 +33,15 @@ def remote(connection, body):
     if response.returncode or result.get('error'):
         raise ValueError(result.get('error') or response.stderr[-1000:])
     return result
+
+
+def preview_catalog(repo):
+    result = subprocess.run([sys.executable, str(Path(repo) / 'scripts/lib/bringup_remote.py')],
+                            input=json.dumps({'action': 'preview_catalog'}), text=True,
+                            capture_output=True, timeout=10)
+    if result.returncode:
+        raise ValueError(result.stdout.strip() or result.stderr.strip())
+    return json.loads(result.stdout)
 
 
 class Bringup:

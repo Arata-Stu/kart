@@ -2,7 +2,7 @@ import { $, state, api, on, toast } from './api.js';
 import { stereoState, setStereo } from './stereo.js';
 import { connectRecording, disconnectRecording } from './recording.js';
 
-const ui = {connection:null, container:null, catalog:null, values:{mode:'esc-trial'},
+const ui = {preview:false,connection:null, container:null, catalog:null, values:{mode:'esc-trial'},
   revision:null, snapshot:null, timer:null, epoch:0, busy:false, choices:[], assetBase:null};
 const labels = {
   device:'車両基板ポート', map_root:'地図の探索先', model_root:'モデルの探索先',
@@ -49,6 +49,10 @@ function showPane(name) {
 }
 for (const pane of panes) $('bringup-tab-'+pane).onclick=()=>showPane(pane);
 function request(action, extra={}) {
+  if(ui.preview) {
+    if(action==='plan')return Promise.resolve({revision:null,review:'プレビュー：入力内容のみ。Jetsonのファイル存在・起動可否は未検証です。\n'+JSON.stringify(extra.values,null,2)});
+    throw Error('プレビュー中はJetson操作・設定保存を行いません');
+  }
   if (!ui.connection) throw Error('接続先を確認してください');
   return api('bringup/'+action,{connection:ui.connection,container:ui.container,...extra});
 }
@@ -59,11 +63,16 @@ function invalidate() {
 }
 function renderButtons() {
   for (const el of $('bringup-workspace').querySelectorAll('input,select')) el.disabled=ui.busy;
+  $('bringup-connect').disabled=ui.preview;
+  $('bringup-container').disabled=ui.preview;
+  $('bringup-preview').disabled=ui.busy;
+  $('bringup-preview-exit').hidden=!ui.preview;
+  $('bringup-plan').textContent=ui.preview?'入力内容を確認（プレビュー）':'設定を検証';
   const s=ui.snapshot, occupied=s?.session || s?.ownership?.locked || s?.legacy?.length;
   $('bringup-refresh').disabled=!ui.connection || !ui.container;
   $('bringup-start').disabled=ui.busy || !ui.revision || !s || !!occupied;
   $('bringup-stop').disabled=!s?.session || !s?.run_id || !['running','starting','stopping'].includes(s?.phase);
-  for (const id of ['bringup-plan','bringup-assets','bringup-save']) $(id).disabled=ui.busy || !ui.catalog;
+  for (const id of ['bringup-plan','bringup-assets','bringup-save']) $(id).disabled=ui.busy || !ui.catalog || (ui.preview && id!=='bringup-plan');
 }
 function renderStatus(s) {
   ui.snapshot=s;
@@ -164,6 +173,7 @@ async function guarded(fn) {
 }
 function reset() {
   disconnectRecording();
+  ui.preview=false;
   ui.epoch++;clearTimeout(ui.timer);ui.catalog=null;ui.snapshot=null;ui.revision=null;
   ui.busy=false;ui.connection=null;ui.container=null;
   $('bringup-workspace').hidden=true;$('bringup-container-start').disabled=true;
@@ -189,7 +199,30 @@ async function loadContainer(epoch) {
   $('bringup-mode').replaceChildren(...Object.entries(data.modes).map(([v,l])=>new Option(l,v)));
   renderFields();renderStatus(data.status);schedule(epoch);
 }
+$('bringup-preview').onclick=async()=>{
+  const previous=ui.preview?ui.previewValues:structuredClone(ui.values);
+  reset();ui.preview=true;ui.previewValues=previous;ui.busy=true;renderButtons();
+  $('bringup-target').textContent='オフラインプレビュー（Jetsonへの通信なし）';
+  $('bringup-status').textContent='ローカルの設定項目を読み込み中…';
+  const epoch=ui.epoch;
+  try {
+    const data=await api('bringup/preview');
+    if(epoch!==ui.epoch)return;
+    ui.catalog=data;ui.values={mode:'collect'};
+    $('bringup-container').replaceChildren(new Option('プレビュー：実行環境なし',''));
+    $('bringup-mode').replaceChildren(...Object.entries(data.modes).map(([v,l])=>new Option(l,v)));
+    $('bringup-workspace').hidden=false;renderFields();renderStatus(data.status);
+    $('bringup-status').textContent='プレビュー：Notebook側の設定を表示しています。起動・録画・保存はできません。';
+  } catch(e) {if(epoch===ui.epoch)$('bringup-status').textContent='プレビュー読込失敗: '+e.message;}
+  finally {if(epoch===ui.epoch){ui.busy=false;renderButtons();}}
+};
+$('bringup-preview-exit').onclick=()=>{
+  ui.values=ui.previewValues || {mode:'esc-trial'};reset();
+  $('bringup-target').textContent='';
+  $('bringup-container').replaceChildren(new Option('接続後に選択',''));
+};
 $('bringup-connect').onclick=()=>{
+  if(ui.preview)return;
   disconnectRecording();
   // A fresh epoch binds every response to this explicit connection selection.
   clearTimeout(ui.timer);ui.epoch++;ui.busy=false;

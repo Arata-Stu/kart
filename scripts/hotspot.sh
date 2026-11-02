@@ -7,14 +7,14 @@ uuid=d2c82d15-9fd1-4174-9f30-aac3c61e76c2
 usage() {
   cat <<'EOF'
 Usage: scripts/hotspot.sh [start|stop|status|diagnose]
-  start    既存のHotspot-Internal-5GHzを保存済み設定で起動
+  start    既存profileを5 GHz・channel 36に保存して起動
   stop     対象APだけ停止（通常Wi-Fiには自動復帰しません）
   status   interface・接続・IPを表示
   diagnose AP対応・rfkill・NetworkManagerの直近ログを表示
 固定interface: wlP1p1s0
 既存UUID: d2c82d15-9fd1-4174-9f30-aac3c61e76c2
-設定名に5GHzが残っていても現在の保存設定は2.4 GHz/channel 6。
-新規作成・設定変更は行いません。自動起動はNetworkManagerの保存設定に従います。
+startは帯域を5 GHz（band=a）、channelを36（5180 MHz）へ変更します。
+新規profileは作成しません。自動起動も変更後の保存設定に従います。
 Jetsonホストで実行してください。startで同じinterfaceのWi-Fi接続は切り替わります。
 EOF
 }
@@ -59,9 +59,11 @@ if [[ $action == stop ]]; then
   exit
 fi
 [[ $(nmcli -g WIFI-PROPERTIES.AP device show "$iface") == yes ]] || fail 'AP機能が利用できません。diagnoseでドライバ・adapterを確認してください。'
-echo "$iface をhotspotへ切り替えます。同じWi-Fi経由のSSHは切断されます。"
+# Persist the requested band for subsequent NetworkManager autoconnect as well.
+nmcli connection modify uuid "$uuid" 802-11-wireless.band a 802-11-wireless.channel 36
+echo "$iface を5 GHz hotspotへ切り替えます。同じWi-Fi経由のSSHは切断されます。"
 if ! nmcli --wait 30 connection up uuid "$uuid" ifname "$iface"; then
-  echo '起動失敗。sudo bash scripts/hotspot.sh diagnose で確認してください。保存profileは残っています。' >&2
+  echo '起動失敗。sudo bash scripts/hotspot.sh diagnose で確認してください。5 GHz設定は保存済みです。no IR/disabled等の制約を確認してください。2.4 GHzへの自動fallbackはしません。' >&2
   exit 1
 fi
 status

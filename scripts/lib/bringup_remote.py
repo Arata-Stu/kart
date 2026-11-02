@@ -260,7 +260,7 @@ def dispatch(body):
     if action in ('recording_status', 'recording_start', 'recording_stop'):
         from recording_remote import request
         return request(action, body.get('recording_service'))
-    if action == 'catalog':
+    if action in ('catalog', 'preview_catalog'):
         from kart_bringup.mission import sensor_parameters, camera_config
         defaults = {}
         for mode in ('collect', 'environment', 'drive', 'e2e'):
@@ -269,7 +269,7 @@ def dispatch(body):
                 profile=p['depth_module.infra_profile'],
                 infra_profile=p['depth_module.infra_profile'] if p['enable_infra1'] or p['enable_infra2'] else '0',
                 depth_profile=p['depth_module.depth_profile'] if p['enable_depth'] else '0')
-        return dict(modes=MODES, fields=fields(), status=status(), stereo_defaults=defaults)
+        return dict(modes=MODES, fields=fields(), status=(dict(phase='preview', session=False, log='プレビューです。Jetsonの実行ログではありません。') if action == 'preview_catalog' else status()), stereo_defaults=defaults)
     if action == 'status':
         return status()
     if action == 'assets':

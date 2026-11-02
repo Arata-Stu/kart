@@ -1725,3 +1725,12 @@ Depth無効時にDepthを起動する変更ではない。画像はnative Z16で
 
 例: `bash scripts/bringup.sh --mode collect --infra-profile 640x480x60 --depth-profile 640x480x60`。
 ROS結合・実機プロファイル採用・Depthの実記録はJetsonで確認する。
+
+### Jetson未接続で起動画面を確認する
+
+Studioを通常どおり起動し、「Jetson起動」→「未接続でUIを試す」を押す。
+Notebook checkoutのCLI schemaと用途別YAMLから画面を生成する。Stereo共通profile、
+各stream ON/OFF、用途、タブ、入力内容の確認を操作できる。JetsonへのSSH・状態pollは行わず、
+起動・終了・録画・リモート資産探索・設定保存は無効。「入力内容を確認」は実機の起動検証ではない。
+プレビュー入力は保存せず、「プレビューを終了」後に「接続先を確認」で実環境に戻る。
+実行中のJetsonがある場合もプレビュー切替でそのプロセスを停止しない。

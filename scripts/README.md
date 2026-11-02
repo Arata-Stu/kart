@@ -559,12 +559,13 @@ portable testで1回の地図フォルダー選択からlaunch引数への伝播
 
 Jetsonホストで既存の `Hotspot-Internal-5GHz` を操作する（Docker内では実行しない）。
 interfaceは `wlP1p1s0`、UUIDは `d2c82d15-9fd1-4174-9f30-aac3c61e76c2`。
-設定名は5GHzだが、ユーザーが2.4 GHz/channel 6へ変更して起動成功を確認したprofileを使う。
-スクリプトはSSID・password・帯域・自動接続設定を変更せず、別profileを新規作成しない。
+startは既存profileを5 GHz（band=a）、channel=36（5180 MHz）へ保存して起動する。
+Bluetoothの2.4 GHz帯と分離するため、2.4 GHzへの自動fallbackは行わない。
+SSID・password・自動接続設定を保持し、別profileを新規作成しない。
 対象UUIDが存在しない、interfaceやAP modeが異なる場合はエラーで中止する。
 
 ```bash
-sudo bash scripts/hotspot.sh start    # 既存profileを起動
+sudo bash scripts/hotspot.sh start    # 5 GHz設定を保存して既存profileを起動
 bash scripts/hotspot.sh status        # 保存設定・現在の接続・IP
 sudo bash scripts/hotspot.sh diagnose # AP対応・rfkill・規制情報・チャンネル・NMログ
 sudo bash scripts/hotspot.sh stop     # 対象APのみ停止
@@ -577,7 +578,12 @@ start/stopは対象Wi-Fi経由のSSHを切断し得るため、ローカル端�
 通常Wi-Fiへの自動復帰は行わない。statusのIPv4がJetsonへの接続先。
 
 5 GHz/channel 36では、対象phyのself-managed country 00・no IRとAP生成タイムアウトを確認した。
-2.4 GHz/channel 6で起動成功。再起動後の自動起動は別途実機で確認する。
+過去には2.4 GHz/channel 6で起動成功。最新の実機出力ではch 36にno IRがなく、自動選択されたch 149にはno IRがある。
+自動選択時は5745 MHz指定とAP起動失敗を確認したため、ch 36固定へ変更。
+ch 36固定での起動成功はまだ未確認。
+5 GHzのAP利用可能チャンネルがなければ起動できない。diagnoseで現在のphy制約を確認する。
+起動失敗時も5 GHz設定は保存される。起動後は `iw dev wlP1p1s0 info` の
+channel周波数が5 GHzであることと、再起動後の自動起動を実機で確認する。
 診断ログを共有する際はSSID・MAC等を必要に応じて伏せる。
 既存の別profile `kart-hotspot-wlP1p1s0` があっても削除・変更しない。
 

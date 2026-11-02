@@ -11,3 +11,11 @@ JetPilotのBlueZ導入・D-Bus共有を参考にした。実Docker/実Bluetooth�
 
 ユーザー指定により、scripts/setup/bluetooth.shはJetPilot版をそのままコピーする。
 独自の自動判定・引数・接続確認を追加しない。選択したMACのremoveを含む元の動作を維持する。
+
+## Wi-Fiとの帯域分離
+
+Jetsonのkart hotspotはBluetoothとの帯域分離のため5 GHzを使用する。
+`scripts/hotspot.sh start`で既存NetworkManager profileにband=a・channel=36を保存する。
+自動選択でno IR付きのch 149が選ばれた実機ログに基づき、ch 36を明示する。
+規制・ドライバー制約で起動できない場合は診断し、2.4 GHzへ暗黙にfallbackしない。
+帯域分離だけでBluetooth切断の解消を保証せず、接続維持は実機で確認する。

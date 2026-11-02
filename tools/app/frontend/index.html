@@ -24,7 +24,7 @@
     </header>
     <section id="bringup-page" hidden>
       <div class="bringup-card">
-        <div class="actions"><h2>Jetsonの起動管理</h2><button id="bringup-connect" class="primary">接続先を確認</button><strong id="bringup-target"></strong></div>
+        <div class="actions"><h2>Jetsonの起動管理</h2><button id="bringup-connect" class="primary">接続先を確認</button><button id="bringup-preview">未接続でUIを試す</button><button id="bringup-preview-exit" hidden>プレビューを終了</button><strong id="bringup-target"></strong></div>
         <p>用途と設定を選び、Jetsonで起動します。UI・SSHが切れてもプロセスはtmuxに残ります。再接続後にログ確認・終了できます。</p>
         <div class="actions"><label>実行環境<select id="bringup-container"><option value="">接続後に選択</option></select></label><button id="bringup-container-start" disabled>既存Dockerを起動</button><button id="bringup-refresh">状態を再取得</button></div>
         <p id="bringup-status" role="status">未接続。上部「接続設定」でJetsonを指定してください。</p>

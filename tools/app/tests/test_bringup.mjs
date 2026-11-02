@@ -20,6 +20,7 @@ const id='a'.repeat(64), calls=[];
 let snapshot={phase:'idle',session:false,ownership:{locked:false},legacy:[]};
 let delayedStatus=null,failStatus=false;
 globalThis.fetch=async(url,options)=>{
+  if(url==='/api/bringup/preview')return {ok:true,json:async()=>({modes:{collect:'記録'},fields:[{key:'device',kind:'text'}],status:{phase:'preview',session:false}})};
   const body=JSON.parse(options.body);calls.push({url,body});
   const action=url.split('/').at(-1);
   if(action==='status' && delayedStatus)return new Promise(resolve=>delayedStatus.resolve=resolve);
@@ -72,3 +73,20 @@ assert.equal(el('bringup-workspace').hidden,true);
 assert.equal(el('bringup-start').disabled,true);
 assert.equal(el('bringup-stop').disabled,true);
 console.log('Bringup UI: explicit connection, review invalidation, duplicate prevention, independent stop, stale response suppression passed');
+
+const beforePreview=calls.length;
+await el('bringup-preview').onclick();
+assert.equal(el('bringup-workspace').hidden,false);
+assert.equal(el('bringup-connect').disabled,true);
+assert.equal(el('bringup-start').disabled,true);
+assert.equal(el('bringup-save').disabled,true);
+assert.equal(el('recording-start').disabled,true);
+el('bringup-plan').onclick();await flush();
+assert.match(el('bringup-review').textContent,/プレビュー/);
+assert.equal(el('bringup-start').disabled,true);
+el('bringup-connect').onclick();await flush();
+assert.equal(calls.length,beforePreview,'preview must not contact Jetson or save presets');
+el('bringup-preview-exit').onclick();
+assert.equal(el('bringup-workspace').hidden,true);
+assert.equal(el('bringup-connect').disabled,false);
+console.log('Offline preview: local catalog, no remote calls, no start/record/save, explicit exit passed');

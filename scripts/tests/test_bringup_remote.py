@@ -146,3 +146,11 @@ def test_catalog_exposes_mode_specific_stereo_defaults():
     assert normal['infra_profile'] == normal['profile']
     assert environment['depth_profile'] == environment['infra_profile']
     assert environment['depth_profile'] != '0'
+
+
+def test_preview_catalog_does_not_inspect_runtime():
+    with patch.object(remote, 'status', side_effect=AssertionError('runtime access')):
+        catalog = remote.dispatch({'action': 'preview_catalog'})
+    assert catalog['status']['phase'] == 'preview'
+    assert catalog['stereo_defaults']['collect']['depth_profile'] == '0'
+    assert any(f['key'] == 'depth_profile' for f in catalog['fields'])
