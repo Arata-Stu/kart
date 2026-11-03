@@ -76,7 +76,7 @@ async function reset() {
   $("simulation-play").disabled=true;
   try {
     const head={planner:$("h2h-planner").value};
-    for(const key of ["opponent_speed","initial_gap","min_gap","headway","observe_seconds","duration","zone_start","zone_end","offset","margin"])
+    for(const key of ["min_zone_length","opponent_speed","initial_gap","min_gap","headway","observe_seconds","duration","zone_start","zone_end","offset","margin"])
       head[key]=Number($("h2h-"+key.replaceAll("_","-")).value);
     head.overtake=$("h2h-overtake").value==="on";head.side=$("h2h-side").value;
     const result=await api(h2h?"head-to-head-preview":"tracking-preview",h2h?{lane:snapshot,line_type:kind,obstacles:snapshot.obstacles,options:cfg,head_to_head:head}:{line:snapshot.lines[kind],closed:snapshot.closed,options:cfg});
@@ -226,13 +226,13 @@ canvas.addEventListener('click',async event=>{
   const station=Math.floor(nearest.station*10)/10;
   if(zonePick.start===null){
     zonePick.start=station;
-    $('h2h-pick-help').textContent='② 走行方向に沿って先の合流完了位置をクリック（区間長5〜500 m・周回始点を跨ぐ指定も可能）。';draw();return;
+    $('h2h-pick-help').textContent=`② 合流完了位置をクリック（区間長${$('h2h-min-zone-length').value}〜500 m・周回始点跨ぎも可能）。`;draw();return;
   }
   const points=snapshot.lines[$('simulation-line').value].points;
   const total=points.reduce((sum,a,i)=>sum+Math.hypot(a[0]-points[(i+1)%points.length][0],a[1]-points[(i+1)%points.length][1]),0);
   const length=station-zonePick.start+(station<zonePick.start?total:0);
-  if(length<5 || length>500){
-    $('h2h-pick-help').textContent='走行方向に5〜500 mの区間を指定してください。開始を変える場合はキャンセルしてください。';return;
+  if(length<Number($('h2h-min-zone-length').value) || length>500){
+    $('h2h-pick-help').textContent=`走行方向に${$('h2h-min-zone-length').value}〜500 mの区間を指定してください。開始を変える場合はキャンセルしてください。`;return;
   }
   $('h2h-zone-start').value=zonePick.start;$('h2h-zone-end').value=station;
   $('h2h-overtake').value='on';stopZonePick();
@@ -257,7 +257,7 @@ action("simulation-open",async()=>{
   view=null;projection=null;
   documentRevision=state.doc.revision;
   snapshot=structuredClone({...state.lane,obstacles:state.doc.obstacles||[],parking_areas:state.doc.parking_areas||[]});
-  $("simulation-speed").value = state.lane.centerline_speed_mps ?? 1.5;
+
   $("simulation-title").textContent=`試走 · ${state.laneId}`;
   $("simulation-line").replaceChildren(...kinds.map(k=>new Option(k,k)));
   dialog.showModal();await reset();
@@ -279,7 +279,7 @@ action("simulation-overtake-sample",async()=>{
   documentRevision=null;
   $("simulation-title").textContent='追い越し成功サンプル · 保存中の地図には反映しません';
   $("simulation-line").replaceChildren(new Option('centerline','centerline'));
-  const values={'simulation-mode':'head_to_head','simulation-controller':'pure_pursuit','simulation-speed':5,'simulation-laps':3,'simulation-wheelbase':.257,'simulation-steer':22,'simulation-lookahead-mode':'speed','simulation-lookahead-fixed':1,'simulation-lookahead-low':.8,'simulation-lookahead-high':3};
+  const values={'h2h-min-zone-length':5,'simulation-mode':'head_to_head','simulation-controller':'pure_pursuit','simulation-speed':5,'simulation-laps':3,'simulation-wheelbase':.257,'simulation-steer':22,'simulation-lookahead-mode':'speed','simulation-lookahead-fixed':1,'simulation-lookahead-low':.8,'simulation-lookahead-high':3};
   // Match the supported speed-dependent lookahead option in this UI.
   values['simulation-lookahead-mode']=Array.from($('simulation-lookahead-mode').options).find(o=>o.value!=='fixed').value;
   for(const [id,value] of Object.entries(values))$(id).value=value;

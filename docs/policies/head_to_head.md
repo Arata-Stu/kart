@@ -187,3 +187,7 @@ ROS出力は期限付きshadow情報で、実車ReferenceLineや車両指令へ�
 既存90 Hz VO・PP/PID・TF所有者を変更しない。GPU推論を追加しない。
 試走は理想相手観測と理想加減速、既存車体掃引検査を使い、予測失効時は中断する。
 並走中のFAULTを安全な実車退避と扱わない。
+
+Studioの許可区間長の入力下限は `min_zone_length`（既定5 m、0.1〜500 m）で
+変更できる。これはUI/APIの受付条件であり、plannerの候補成立条件や車体余裕を
+変更しない。既定plannerはPredictive Spliner、自車／相手速度上限は5.0／1.0 m/sとする。

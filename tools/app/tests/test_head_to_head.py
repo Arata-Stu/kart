@@ -11,7 +11,7 @@ def request():
                 [[i,6+radius] for i in range(98,-1,-2)] +
                 [[radius*math.cos(math.pi/2+i*math.pi/60),6+radius*math.sin(math.pi/2+i*math.pi/60)] for i in range(1,60)])
     points=ring(6)
-    return dict(lane=dict(closed=True,left=ring(4),right=ring(8),lines=dict(centerline=dict(points=points))),line_type='centerline',obstacles=[],options=dict(controller='pure_pursuit',speed=5,wheelbase=.257,maxSteer=.384,laps=1),head_to_head=dict(opponent_speed=2,initial_gap=3,observe_seconds=1,duration=30,zone_start=10,zone_end=90,overtake=True))
+    return dict(lane=dict(closed=True,left=ring(4),right=ring(8),lines=dict(centerline=dict(points=points))),line_type='centerline',obstacles=[],options=dict(controller='pure_pursuit',speed=5,wheelbase=.257,maxSteer=.384,laps=1),head_to_head=dict(planner='baseline',opponent_speed=2,initial_gap=3,observe_seconds=1,duration=30,zone_start=10,zone_end=90,overtake=True))
 
 
 @pytest.mark.parametrize('method',['pure_pursuit','mpc'])
@@ -175,3 +175,12 @@ def test_predictive_pass_across_seam():
     assert result['reason']=='overtake_completed',result['h2h'][-1]
     assert result['events'][0]['station']%total>total-10
     assert result['h2h'][-1]['station']<20
+
+
+def test_short_zone_configurable():
+    body=request();body['head_to_head'].update(zone_start=10,zone_end=12,duration=5)
+    with pytest.raises(ValueError,match='5〜500'):preview(body)
+    body['head_to_head']['min_zone_length']=1
+    result=preview(body)
+    assert result['reason']=='time_limit'
+    assert not result['events']  # Input acceptance does not bypass feasibility.

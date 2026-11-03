@@ -136,13 +136,13 @@ def predictive_executable():
 
 def preview(request):
     lane=request['lane'];options=request['options'];cfg=request['head_to_head']
-    planner_kind=cfg.get('planner','baseline')
+    planner_kind=cfg.get('planner','predictive_spliner')
     if planner_kind not in ('baseline','predictive_spliner'):raise ValueError('追い抜きplannerが不正です')
     if lane.get('closed') is not True:raise ValueError('Head-to-head初版は閉コース専用です')
     method=options.get('controller')
     if method not in ('pure_pursuit','mpc'):raise ValueError('横制御方式が不正です')
     lookahead_config=lookahead_values(options)
-    vmax=number(options,'speed',1.5,.1,20)
+    vmax=number(options,'speed',5.,.1,20)
     wb=number(options,'wheelbase',.257,.05,2);steer_limit=number(options,'maxSteer',.384,.01,1.2)
     controls=[number(options,k,d,lo,hi) for k,d,lo,hi in [('horizon',1,.3,2),('tracking',10,.1,100),('smoothness',1,.1,100),('steeringRate',1.5,.1,5)]]
     laps=number(options,'laps',3,1,20)
@@ -162,7 +162,7 @@ def preview(request):
     rear=number(settings,'rear_axle_to_rear',.1065,0,length)
     margin=number(cfg,'margin',.08,.01,.5)
     usable=surface.buffer(-margin)
-    opponent_cap=number(cfg,'opponent_speed',2,0,20)
+    opponent_cap=number(cfg,'opponent_speed',1.,0,20)
     initial_gap=number(cfg,'initial_gap',3,.5,min(100,course.total-length-1))
     headway=number(cfg,'headway',.7,.2,3)
     min_gap=number(cfg,'min_gap',1,.2,10)
@@ -172,7 +172,8 @@ def preview(request):
     enabled=cfg.get('overtake',False)
     if type(enabled) is not bool:raise ValueError('追い抜き設定が不正です')
     zone_length=zone_end-zone_start+(course.total if zone_end<zone_start else 0)
-    if enabled and not 5<=zone_length<=500:raise ValueError('追い抜き区間の走行方向の長さは5〜500 mで指定してください')
+    min_zone_length=number(cfg,'min_zone_length',5,.1,500)
+    if enabled and not min_zone_length<=zone_length<=500:raise ValueError(f'追い抜き区間の走行方向の長さは{min_zone_length:g}〜500 mで指定してください')
     side=cfg.get('side','left')
     if side not in ('left','right'):raise ValueError('追い抜き側が不正です')
     offset=number(cfg,'offset',.65,width+2*margin,3)*(1 if side=='left' else -1)
