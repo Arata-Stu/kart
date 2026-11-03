@@ -1462,11 +1462,12 @@
       </details>
       <canvas
         id="simulation-canvas"
-        aria-label="生成ラインの試走プレビュー"
+        aria-label="生成ラインの試走プレビュー。ホイールで拡大縮小、ドラッグで移動"
+        title="ホイールで拡大縮小・ドラッグで移動・全体表示で戻す"
       ></canvas>
       <div class="actions">
-        <button id="simulation-play">再生</button
-        ><button id="simulation-reset">リセット</button><button id="simulation-overtake-sample">追い越し成功サンプル</button><button id="simulation-pass-jump">追い越し直前へ</button>
+        <button id="simulation-fit">全体表示</button><button id="simulation-play">再生</button
+        ><button id="simulation-reset">リセット</button><button id="simulation-original-map" hidden>通常マップに戻す</button><button id="simulation-overtake-sample">追い越し成功サンプル</button><button id="simulation-pass-jump">追い越し直前へ</button>
         <select id="simulation-parking-slot" aria-label="試走する駐車区画"><option>P1</option><option>P2</option><option>P3</option></select><button id="simulation-parking">現在位置から駐車を試走</button>
         <p id="simulation-parking-note" class="small">駐車は共通planner・選択中のPP/MPC・駐車完了判定で試走します。速度応答は理想モデルで、実車のPID・タイヤ・遅延は再現しません。保存済み地図を使用します。</p>
       </div>
@@ -1474,7 +1475,7 @@
       <p id="simulation-parking-feedback" class="parking-feedback" role="status" aria-live="polite" hidden></p>
       <p id="simulation-metrics" aria-live="off"></p>
       <p class="help">
-        実車と共通のPure Pursuit／MPC計算＋理想車両モデル（30 Hz）。設定変更で再計算します。実車設定は変更しません。境界・障害物との干渉検査はHead-to-head／駐車試走で行います。実車PID・タイヤ・認識は未再現です。
+        地図はホイールで拡大縮小、ドラッグで移動。「全体表示」で戻せます。実車と共通のPure Pursuit／MPC計算＋理想車両モデル（30 Hz）。設定変更で再計算します。実車設定は変更しません。境界・障害物との干渉検査はHead-to-head／駐車試走で行います。実車PID・タイヤ・認識は未再現です。
       </p>
     </dialog>
     <script type="module" src="app.js"></script>

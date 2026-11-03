@@ -4,6 +4,18 @@ import { replaySimulation } from "./simulation_replay.js";
 let requestSerial=0, parkingRoute=null, documentRevision=null, parkingMessage="";
 let sim=null, snapshot=null, trail=[], running=false, last=0, accumulator=0, raf=0;
 let parkingFeedbackTimer=null;
+let view=null, projection=null, drag=null;
+let originalSimulation=null;
+function restoreOriginalSimulation(){
+  if(!originalSimulation)return;
+  const saved=originalSimulation;originalSimulation=null;
+  snapshot=saved.snapshot;documentRevision=saved.revision;view=saved.view;projection=null;
+  $('simulation-title').textContent=saved.title;
+  $('simulation-line').replaceChildren(...saved.lines.map(o=>new Option(o.text,o.value)));
+  for(const [id,value] of Object.entries(saved.values))$(id).value=value;
+  $('simulation-h2h-settings').open=saved.settingsOpen;
+  $('simulation-original-map').hidden=true;
+}
 function clearParkingFeedback() {
   clearInterval(parkingFeedbackTimer);parkingFeedbackTimer=null;
   $('simulation-parking').textContent='現在位置から駐車を試走';
@@ -65,8 +77,11 @@ function draw() {
   const pts=[...snapshot.left,...snapshot.right,...line.points,...(diagnostic?.body||[])];
   let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
   for(const [x,y] of pts){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);}
-  const scale=Math.min((w-60)/Math.max(1,x1-x0),(h-60)/Math.max(1,y1-y0));
-  const project=([x,y])=>[w/2+(x-(x0+x1)/2)*scale,h/2-(y-(y0+y1)/2)*scale];
+  const fitScale=Math.min((w-60)/Math.max(1,x1-x0),(h-60)/Math.max(1,y1-y0));
+  const center=view || {x:(x0+x1)/2,y:(y0+y1)/2,zoom:1};
+  const scale=fitScale*center.zoom;
+  projection={...center,scale,w,h};
+  const project=([x,y])=>[w/2+(x-center.x)*scale,h/2-(y-center.y)*scale];
   function path(points,color,closed=false,fill=false){
     if(!points.length)return; ctx.beginPath(); points.forEach((p,i)=>{const [x,y]=project(p);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
     if(closed)ctx.closePath();ctx.strokeStyle=color;ctx.lineWidth=1.8;ctx.stroke();if(fill){ctx.fillStyle=color+"33";ctx.fill();}
@@ -130,6 +145,34 @@ function draw() {
     $("simulation-metrics").textContent=`Head-to-head（理想観測） · ${label} · ${diagnostic?.summary||[c.reason,h.note].filter(Boolean).join(" / ")} · ${c.time.toFixed(1)} s · 自車 ${c.speed.toFixed(2)} / 相手 ${h.opponent_speed.toFixed(2)} m/s · 経路上の車間 ${h.gap.toFixed(2)} m · ${h.coverage==null?`観測 ${h.stable_seconds.toFixed(1)} s`:`GP被覆 ${(100*h.coverage).toFixed(0)}%`}${h.coverage==null?` · 推定 ${h.estimate===null?"未確定":h.estimate.toFixed(2)+" m/s"}`:""} · 位置 ${h.station.toFixed(1)} / ${sim.h2hResult.total.toFixed(1)} m · 先読み ${c.lookahead.toFixed(2)} m · 追従誤差 ${c.error.toFixed(2)} m${diagnostic?" · 赤:抵触した掃引領域 / 橙:余裕境界":""}`;
   }
 }
+// View operations do not change simulation geometry or trigger recomputation.
+canvas.addEventListener('wheel',event=>{
+  if(!sim || !projection)return;
+  event.preventDefault();
+  const rect=canvas.getBoundingClientRect(),p=projection;
+  const dx=event.clientX-rect.left-p.w/2,dy=event.clientY-rect.top-p.h/2;
+  const delta=event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?p.h:1);
+  const zoom=Math.max(1,Math.min(40,p.zoom*Math.exp(-delta*.002)));
+  const scale=p.scale*zoom/p.zoom;
+  view={x:p.x+dx/p.scale-dx/scale,y:p.y-dy/p.scale+dy/scale,zoom};
+  draw();
+},{passive:false});
+canvas.addEventListener('pointerdown',event=>{
+  if(!sim || !projection || event.button!==0)return;
+  drag={id:event.pointerId,x:event.clientX,y:event.clientY,view:{...projection}};
+  canvas.setPointerCapture(event.pointerId);canvas.style.cursor='grabbing';
+});
+canvas.addEventListener('pointermove',event=>{
+  if(!drag || drag.id!==event.pointerId)return;
+  const p=drag.view;
+  view={x:p.x-(event.clientX-drag.x)/p.scale,y:p.y+(event.clientY-drag.y)/p.scale,zoom:p.zoom};
+  draw();
+});
+function endPan(){drag=null;canvas.style.cursor='grab';}
+canvas.addEventListener('pointerup',endPan);
+canvas.addEventListener('pointercancel',endPan);
+canvas.addEventListener('lostpointercapture',endPan);
+action('simulation-fit',()=>{view=null;draw();});
 function play(){
   if(!sim || sim.car.done)return;
   running=true;last=performance.now();accumulator=0;
@@ -145,6 +188,7 @@ action("simulation-open",async()=>{
   if(!state.lane || state.doc.snapshot_status==="pending")throw Error("編集可能な地図を選んでください");
   const kinds=["centerline","raceline","customline"].filter(k=>state.lane.lines[k]?.points.length);
   if(!kinds.length)throw Error("先にラインを生成してください");
+  view=null;projection=null;
   documentRevision=state.doc.revision;
   snapshot=structuredClone({...state.lane,obstacles:state.doc.obstacles||[],parking_areas:state.doc.parking_areas||[]});
   $("simulation-speed").value = state.lane.centerline_speed_mps ?? 1.5;
@@ -155,6 +199,16 @@ action("simulation-open",async()=>{
 action("simulation-play",async()=>{if(!sim)await reset();if(running){pause();draw();return;}if(!sim)return;if(sim.car.done){if(parkingRoute){toast(sim.car.reason+"。通常試走へ戻るにはリセットしてください。");return;}await reset();}parkingMessage="";play();draw();});
 action("simulation-overtake-sample",async()=>{
   const {default:body}=await import('./samples/overtake.js');
+  if(!dialog.open)return;
+  if(!originalSimulation){
+    originalSimulation={snapshot,revision:documentRevision,view,title:$('simulation-title').textContent,
+      lines:Array.from($('simulation-line').options,o=>({text:o.text,value:o.value})),
+      values:Object.fromEntries(Array.from(dialog.querySelectorAll('input[id],select[id]')).filter(el=>el.id!=='simulation-time').map(el=>[el.id,el.value])),
+      settingsOpen:$('simulation-h2h-settings').open};
+  }
+  const saved=originalSimulation;
+  $('simulation-original-map').hidden=false;
+  view=null;projection=null;
   snapshot=structuredClone({...body.lane,obstacles:[]});
   documentRevision=null;
   $("simulation-title").textContent='追い越し成功サンプル · 保存中の地図には反映しません';
@@ -169,7 +223,11 @@ action("simulation-overtake-sample",async()=>{
   }
   $('simulation-h2h-settings').open=false;
   await reset();
-  if(sim?.h2hResult?.events.length){sim.seek(Math.max(0,sim.h2hResult.events[0].time-5));trail=[];play();draw();}
+  if(originalSimulation===saved && dialog.open && sim?.h2hResult?.events.length){sim.seek(Math.max(0,sim.h2hResult.events[0].time-5));trail=[];play();draw();}
+});
+action("simulation-original-map",async()=>{
+  if(!originalSimulation)return;
+  pause();restoreOriginalSimulation();await reset();
 });
 action("simulation-pass-jump",()=>{
   const event=sim?.h2hResult?.events.find(e=>e.state==='PASS');
@@ -181,7 +239,7 @@ $("simulation-time").addEventListener("input",()=>{if(!sim)return;pause();sim.se
 for(const id of ["simulation-lookahead-mode","simulation-lookahead-fixed","simulation-lookahead-low","simulation-lookahead-high","simulation-mode","simulation-laps","simulation-controller","simulation-horizon","simulation-tracking","simulation-smoothness","simulation-rate","simulation-line","simulation-speed","simulation-wheelbase","simulation-steer",...Array.from($("simulation-h2h-settings").querySelectorAll("input,select"),el=>el.id)]){
   $(id).addEventListener("change",async()=>{try{await reset();}catch(e){pause();sim=null;$("simulation-metrics").textContent=e.message;toast(e.message,true);}});
 }
-dialog.addEventListener("close",()=>{requestSerial++;pause();clearParkingFeedback();});
+dialog.addEventListener("close",()=>{requestSerial++;pause();clearParkingFeedback();restoreOriginalSimulation();});
 new ResizeObserver(()=>{if(dialog.open)draw();}).observe(canvas);
 action("lane-reverse",()=>{
   if(!state.lane || state.doc.snapshot_status==="pending")throw Error("編集可能な地図を選んでください");

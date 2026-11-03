@@ -1204,6 +1204,8 @@ summary {
   width: 100%;
 }
 #simulation-canvas {
+  touch-action: none;
+  cursor: grab;
   display: block;
   width: 100%;
   height: 0;
