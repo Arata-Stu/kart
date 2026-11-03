@@ -191,3 +191,8 @@ ROS出力は期限付きshadow情報で、実車ReferenceLineや車両指令へ�
 Studioの許可区間長の入力下限は `min_zone_length`（既定5 m、0.1〜500 m）で
 変更できる。これはUI/APIの受付条件であり、plannerの候補成立条件や車体余裕を
 変更しない。既定plannerはPredictive Spliner、自車／相手速度上限は5.0／1.0 m/sとする。
+
+横移動距離は `transition_min_distance`（既定3.0 m）と `transition_time`（既定1.0 s）で調整する。
+Studioでは「横移動の最小距離」「横移動の速度係数」。往路・復路共通で、
+固定下限・速度上限×係数・曲率由来の下限の最大値から候補を生成する。
+短縮しても車体掃引・境界・曲率の検査を省略しない。成功サンプルは既定値へ戻す。

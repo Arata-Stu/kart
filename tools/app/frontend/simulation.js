@@ -76,7 +76,7 @@ async function reset() {
   $("simulation-play").disabled=true;
   try {
     const head={planner:$("h2h-planner").value};
-    for(const key of ["min_zone_length","opponent_speed","initial_gap","min_gap","headway","observe_seconds","duration","zone_start","zone_end","offset","margin"])
+    for(const key of ["transition_min_distance","transition_time","min_zone_length","opponent_speed","initial_gap","min_gap","headway","observe_seconds","duration","zone_start","zone_end","offset","margin"])
       head[key]=Number($("h2h-"+key.replaceAll("_","-")).value);
     head.overtake=$("h2h-overtake").value==="on";head.side=$("h2h-side").value;
     const result=await api(h2h?"head-to-head-preview":"tracking-preview",h2h?{lane:snapshot,line_type:kind,obstacles:snapshot.obstacles,options:cfg,head_to_head:head}:{line:snapshot.lines[kind],closed:snapshot.closed,options:cfg});
@@ -279,7 +279,7 @@ action("simulation-overtake-sample",async()=>{
   documentRevision=null;
   $("simulation-title").textContent='追い越し成功サンプル · 保存中の地図には反映しません';
   $("simulation-line").replaceChildren(new Option('centerline','centerline'));
-  const values={'h2h-min-zone-length':5,'simulation-mode':'head_to_head','simulation-controller':'pure_pursuit','simulation-speed':5,'simulation-laps':3,'simulation-wheelbase':.257,'simulation-steer':22,'simulation-lookahead-mode':'speed','simulation-lookahead-fixed':1,'simulation-lookahead-low':.8,'simulation-lookahead-high':3};
+  const values={'h2h-transition-min-distance':3,'h2h-transition-time':1,'h2h-min-zone-length':5,'simulation-mode':'head_to_head','simulation-controller':'pure_pursuit','simulation-speed':5,'simulation-laps':3,'simulation-wheelbase':.257,'simulation-steer':22,'simulation-lookahead-mode':'speed','simulation-lookahead-fixed':1,'simulation-lookahead-low':.8,'simulation-lookahead-high':3};
   // Match the supported speed-dependent lookahead option in this UI.
   values['simulation-lookahead-mode']=Array.from($('simulation-lookahead-mode').options).find(o=>o.value!=='fixed').value;
   for(const [id,value] of Object.entries(values))$(id).value=value;

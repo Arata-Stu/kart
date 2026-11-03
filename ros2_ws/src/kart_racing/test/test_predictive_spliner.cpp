@@ -28,6 +28,12 @@ int main(){
   r=planner.update(a);assert(r.plan.valid);assert(r.plan.start<r.plan.roc_start);assert(r.plan.end>r.plan.roc_end);
   assert(std::abs(r.plan.at(r.plan.start))<1e-9);assert(std::abs(r.plan.at(r.plan.end))<1e-9);
   assert(std::abs(r.plan.at(r.plan.roc_start))>=cfg.width+cfg.margin);
+  Settings tuned_cfg;tuned_cfg.transition_min_distance=1;tuned_cfg.transition_time=.2;
+  Planner tuned(40,tuned_cfg);Scene ta;ta.speed_cap=5;ta.opponent_v=2;ta.ego_v=2;ta.left_width=ta.right_width=2;
+  for(int i=0;i<=420;++i){ta.time=i*.05;ta.opponent_s=i*.1;ta.ego_s=ta.opponent_s-4;tuned.update(ta);}
+  ta.time+=.05;ta.opponent_s+=.1;ta.ego_s=ta.opponent_s-6;ta.zone_end=ta.ego_s+100;ta.passing_allowed=true;
+  auto tr=tuned.update(ta);assert(tr.plan.valid);assert(tr.plan.ramp<r.plan.ramp);
+  assert(tr.plan.ramp>=std::sqrt(6*std::abs(tr.plan.offset)/tuned_cfg.curvature));
   a.time+=.05;a.observed=false;r=planner.update(a);assert(!r.valid&&r.speed==0&&!r.plan.valid);
   a.observed=true;a.time+=.05;r=planner.update(a);assert(!r.plan.valid&&r.coverage<.1);
   a.time+=.05;a.ego_v=std::numeric_limits<double>::quiet_NaN();assert(!planner.update(a).valid);

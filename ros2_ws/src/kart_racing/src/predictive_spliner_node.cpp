@@ -57,6 +57,8 @@ public:
     cfg_.length=param("vehicle_length",.35);cfg_.width=param("vehicle_width",.19);
     cfg_.margin=param("margin",.08);cfg_.min_gap=param("min_gap",1);cfg_.headway=param("headway",.7);
     cfg_.acceleration=param("acceleration",1.5);cfg_.deceleration=param("deceleration",2.5);
+    cfg_.transition_min_distance=param("transition_min_distance",3.0);
+    cfg_.transition_time=param("transition_time",1.0);
     cfg_.curvature=param("max_curvature",1.2);cfg_.horizon=param("prediction_horizon",15);
     timeout_=param("input_timeout",.2);
     if(!cfg_.valid()||!finite(timeout_)||timeout_<=0||timeout_>.5)throw std::invalid_argument("invalid planner parameters");

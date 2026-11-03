@@ -166,6 +166,8 @@ def preview(request):
     initial_gap=number(cfg,'initial_gap',3,.5,min(100,course.total-length-1))
     headway=number(cfg,'headway',.7,.2,3)
     min_gap=number(cfg,'min_gap',1,.2,10)
+    transition_min_distance=number(cfg,'transition_min_distance',3,.1,20)
+    transition_time=number(cfg,'transition_time',1,.05,5)
     observe=number(cfg,'observe_seconds',3,.5,30)
     zone_start=number(cfg,'zone_start',0,0,course.total)
     zone_end=number(cfg,'zone_end',0,0,course.total)
@@ -226,7 +228,7 @@ def preview(request):
         if predictor_binary:
             predictor=subprocess.Popen([str(predictor_binary)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,bufsize=1)
             prediction_selector=selectors.DefaultSelector();prediction_selector.register(predictor.stdout,selectors.EVENT_READ)
-            predictor.stdin.write(' '.join(map(str,[course.total,length,width,margin,min_gap,headway,.8*math.tan(steer_limit)/wb]))+'\n');predictor.stdin.flush()
+            predictor.stdin.write(' '.join(map(str,[course.total,length,width,margin,min_gap,headway,.8*math.tan(steer_limit)/wb,transition_min_distance,transition_time]))+'\n');predictor.stdin.flush()
         proc.stdin.write(' '.join(map(str,[int(method=='mpc'),int(course.step),wb,steer_limit,*controls,*lookahead_config]))+'\n');proc.stdin.flush()
         diagnostic=None
         terminal_time=0.
@@ -284,7 +286,7 @@ def preview(request):
                 local=s%course.total
                 if enabled and state=='OPPORTUNITY_READY' and passing_window(s,course.total,zone_start,zone_end)[0]:
                     in_zone,end=passing_window(s,course.total,zone_start,zone_end)
-                    ramp=max(3.,vmax,math.sqrt(8*abs(offset)*wb/math.tan(steer_limit)))
+                    ramp=max(transition_min_distance,vmax*transition_time,math.sqrt(8*abs(offset)*wb/math.tan(steer_limit)))
                     own_cap=min(vmax,min(course.sample(s+i*(end-s)/100)[3] for i in range(101)))
                     advantage=own_cap-opponent_cap
                     # Conservative: ignore positive relative gain while accelerating,

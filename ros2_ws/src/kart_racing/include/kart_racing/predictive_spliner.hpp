@@ -85,10 +85,11 @@ public:
 };
 struct Settings {
   double length=.35,width=.19,margin=.08,min_gap=1,headway=.7;
+  double transition_min_distance=3,transition_time=1;
   double acceleration=1.5,deceleration=2.5,curvature=1.2,horizon=15;
   bool valid() const {
-    for(double x:{length,width,margin,min_gap,headway,acceleration,deceleration,curvature,horizon})if(!finite(x)||x<=0)return false;
-    return length<=2&&width<=1&&horizon<=30&&curvature<=10;
+    for(double x:{length,width,margin,min_gap,headway,acceleration,deceleration,curvature,horizon,transition_min_distance,transition_time})if(!finite(x)||x<=0)return false;
+    return transition_min_distance<=20&&transition_time<=5&&length<=2&&width<=1&&horizon<=30&&curvature<=10;
   }
 };
 struct Scene {
@@ -163,7 +164,7 @@ public:
     // passing corridors. GP inference is outside this search.
     for(int side:{-1,1})for(double stretch:{1.,1.25,1.5}){
       double offset=side>0?max_d+cfg_.width+cfg_.margin:min_d-cfg_.width-cfg_.margin;
-      double ramp=std::max({3.,a.speed_cap,std::sqrt(6*std::abs(offset)/cfg_.curvature)})*stretch;
+      double ramp=std::max({cfg_.transition_min_distance,a.speed_cap*cfg_.transition_time,std::sqrt(6*std::abs(offset)/cfg_.curvature)})*stretch;
       Plan p{true,a.ego_s,end+ramp,ramp,offset,begin,end};
       if(begin-a.ego_s<ramp || p.end>a.zone_end || p.end-p.start<2*ramp)continue;
       longitudinal_candidate=true;

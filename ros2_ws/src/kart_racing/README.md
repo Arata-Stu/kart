@@ -65,6 +65,8 @@ ReferenceLine・/auto/control_cmdへの自動変換は行わない。
 | acceleration | 1.5 | m/s²、自車予測加速度、正値・未実測 |
 | deceleration | 2.5 | m/s²、追従速度上限の減速度、正値・未実測 |
 | max_curvature | 1.2 | 1/m、直線での候補曲率上限（0..10） |
+| transition_min_distance | 3.0 | m、往路・復路それぞれの横移動距離下限（0より大、20以下） |
+| transition_time | 1.0 | s、速度上限に掛ける距離係数（0より大、5以下） |
 | prediction_horizon | 15.0 | s、RoC探索上限（0..30） |
 | input_timeout | 0.2 | s、元stampとsteady受信期限（0..0.5） |
 
@@ -100,3 +102,5 @@ Predictive Splinerの待機理由は、GP観測待ち、追い越し許可なし
 設定上の横余裕不足を区別する。複数条件が不成立なら最初に検出した理由を表示する。
 これは候補探索の結果であり、追い越し不可能の証明ではない。Studioでは従来方式専用の
 「推定未確定」をGPモードに表示せず、試走終了時にも待機理由を残す。
+
+横移動の基準距離は `max(transition_min_distance, speed_cap * transition_time, sqrt(6 * abs(offset) / max_curvature))`。候補探索で1／1.25／1.5倍を評価する。往路・復路に同じ値を使い、曲率制約は維持する。パラメータは起動時指定。

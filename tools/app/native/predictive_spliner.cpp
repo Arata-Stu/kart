@@ -3,7 +3,7 @@
 #include <iomanip>
 int main(){
   double length;kart_racing::Settings c;
-  if(!(std::cin>>length>>c.length>>c.width>>c.margin>>c.min_gap>>c.headway>>c.curvature))return 2;
+  if(!(std::cin>>length>>c.length>>c.width>>c.margin>>c.min_gap>>c.headway>>c.curvature>>c.transition_min_distance>>c.transition_time))return 2;
   try{
     kart_racing::Planner planner(length,c);kart_racing::Scene a;
     std::cout<<std::setprecision(12);
