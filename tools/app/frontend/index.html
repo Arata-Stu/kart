@@ -1452,6 +1452,7 @@
           <label>安定観測時間 s<input id="h2h-observe-seconds" type="number" min="0.5" max="30" step="0.5" value="3"></label>
           <label>試走時間上限 s<input id="h2h-duration" type="number" min="5" max="300" step="5" value="120"></label>
           <label>追い抜き<select id="h2h-overtake"><option value="off">追従のみ</option><option value="on">指定区間で許可</option></select></label>
+          <button id="h2h-pick-zone" type="button">地図で追い越し区間を指定</button>
           <label>区間開始 m<input id="h2h-zone-start" type="number" min="0" step="0.1" value="0"></label>
           <label>合流完了位置 m<input id="h2h-zone-end" type="number" min="0" step="0.1" value="0"></label>
           <label>追い抜き側<select id="h2h-side"><option value="left">進行方向の左</option><option value="right">進行方向の右</option></select></label>
@@ -1460,6 +1461,7 @@
         </div>
         <p class="small">区間は選択ラインの始点からの距離。閉コース専用・始点跨ぎ不可。青＝自車、橙＝相手。両車に選択ラインの速度上限が適用されます。認識・実車PID・タイヤは再現しません。失敗時の退避制御は未実装で、抵触や合流不能を検出すると試走を中断します。</p>
       </details>
+      <p id="h2h-pick-help" role="status" hidden></p>
       <canvas
         id="simulation-canvas"
         aria-label="生成ラインの試走プレビュー。ホイールで拡大縮小、ドラッグで移動"

@@ -6,6 +6,24 @@ let sim=null, snapshot=null, trail=[], running=false, last=0, accumulator=0, raf
 let parkingFeedbackTimer=null;
 let view=null, projection=null, drag=null;
 let originalSimulation=null;
+let zonePick=null;
+function stopZonePick(){
+  zonePick=null;canvas.style.cursor='grab';
+  $('h2h-pick-help').hidden=true;
+  $('h2h-pick-zone').textContent='地図で追い越し区間を指定';
+}
+function stationOnLine(points,query){
+  let best={distance:Infinity,station:0},station=0;
+  for(let i=0;i<points.length;i++){
+    const a=points[i],b=points[(i+1)%points.length],dx=b[0]-a[0],dy=b[1]-a[1],length=Math.hypot(dx,dy);
+    if(!length)continue;
+    const u=Math.max(0,Math.min(1,((query[0]-a[0])*dx+(query[1]-a[1])*dy)/(length*length)));
+    const distance=Math.hypot(query[0]-a[0]-u*dx,query[1]-a[1]-u*dy);
+    if(distance<best.distance)best={distance,station:station+u*length};
+    station+=length;
+  }
+  return best;
+}
 function restoreOriginalSimulation(){
   if(!originalSimulation)return;
   const saved=originalSimulation;originalSimulation=null;
@@ -25,7 +43,7 @@ function clearParkingFeedback() {
 const dialog=$("simulation-dialog"), canvas=$("simulation-canvas"), ctx=canvas.getContext("2d");
 function pause() {running=false; cancelAnimationFrame(raf); raf=0; $("simulation-play").textContent="再生";}
 async function reset() {
-  pause();clearParkingFeedback();parkingRoute=null;parkingMessage="";
+  stopZonePick();pause();clearParkingFeedback();parkingRoute=null;parkingMessage="";
   const serial=++requestSerial;sim=null;
   const h2h=$("simulation-mode").value==="head_to_head";
   $("simulation-h2h-settings").hidden=!h2h;
@@ -97,6 +115,18 @@ function draw() {
       if(i+1<line.points.length)station+=Math.hypot(line.points[i+1][0]-line.points[i][0],line.points[i+1][1]-line.points[i][1]);
     }
     path(selected,"#c49b00");path(sim.h2hResult.planned_route||[],"#ad51c4");
+    const markers=zonePick?.start!=null?[[zonePick.start,'開始（選択中）']]:[[zone[0],'開始'],[zone[1],'合流完了']];
+    for(const [target,label] of markers){
+      let travelled=0;
+      for(let i=0;i<line.points.length;i++){
+        const a=line.points[i],b=line.points[(i+1)%line.points.length],length=Math.hypot(b[0]-a[0],b[1]-a[1]);
+        if(length && target<=travelled+length){
+          const u=Math.max(0,(target-travelled)/length),q=project([a[0]+u*(b[0]-a[0]),a[1]+u*(b[1]-a[1])]);
+          ctx.fillStyle='#976b00';ctx.beginPath();ctx.arc(...q,6,0,2*Math.PI);ctx.fill();ctx.font='12px sans-serif';ctx.fillText(label,q[0]+8,q[1]+18);break;
+        }
+        travelled+=length;
+      }
+    }
   }
   const c=sim.car, p=line.settings||{}, length=p.vehicle_length||.35,width=p.vehicle_width||.19,rear=p.rear_axle_to_rear??.1065;
   const [x,y]=project([c.x,c.y]);ctx.save();ctx.translate(x,y);ctx.rotate(-c.yaw);ctx.fillStyle="#263e57";
@@ -158,6 +188,7 @@ canvas.addEventListener('wheel',event=>{
   draw();
 },{passive:false});
 canvas.addEventListener('pointerdown',event=>{
+  if(zonePick && !event.altKey)return;
   if(!sim || !projection || event.button!==0)return;
   drag={id:event.pointerId,x:event.clientX,y:event.clientY,view:{...projection}};
   canvas.setPointerCapture(event.pointerId);canvas.style.cursor='grabbing';
@@ -168,10 +199,36 @@ canvas.addEventListener('pointermove',event=>{
   view={x:p.x-(event.clientX-drag.x)/p.scale,y:p.y+(event.clientY-drag.y)/p.scale,zoom:p.zoom};
   draw();
 });
-function endPan(){drag=null;canvas.style.cursor='grab';}
+function endPan(){drag=null;canvas.style.cursor=zonePick?'crosshair':'grab';}
 canvas.addEventListener('pointerup',endPan);
 canvas.addEventListener('pointercancel',endPan);
 canvas.addEventListener('lostpointercapture',endPan);
+action('h2h-pick-zone',()=>{
+  if(zonePick){stopZonePick();draw();return;}
+  if(!sim?.h2hResult){toast('Head-to-headの試走を計算してから区間を選択してください');return;}
+  pause();zonePick={start:null};canvas.style.cursor='crosshair';
+  $('h2h-pick-zone').textContent='区間指定をキャンセル';
+  $('h2h-pick-help').hidden=false;
+  $('h2h-pick-help').textContent='① ライン上の開始位置をクリック。ホイールで拡大、Alt＋ドラッグで移動できます。';
+});
+canvas.addEventListener('click',async event=>{
+  if(!zonePick || !projection || event.altKey)return;
+  const rect=canvas.getBoundingClientRect(),p=projection;
+  const query=[p.x+(event.clientX-rect.left-p.w/2)/p.scale,p.y-(event.clientY-rect.top-p.h/2)/p.scale];
+  const nearest=stationOnLine(snapshot.lines[$('simulation-line').value].points,query);
+  if(nearest.distance*p.scale>25){$('h2h-pick-help').textContent='ラインの近くをクリックしてください（拡大して選択できます）。';return;}
+  const station=Math.floor(nearest.station*10)/10;
+  if(zonePick.start===null){
+    zonePick.start=station;
+    $('h2h-pick-help').textContent='② 走行方向に沿って先の合流完了位置をクリック（区間長5〜500 m・周回始点を跨がない範囲）。';draw();return;
+  }
+  if(station-zonePick.start<5 || station-zonePick.start>500){
+    $('h2h-pick-help').textContent='開始より先に、5〜500 mの区間を指定してください。始点跨ぎは未対応です。開始を変える場合はキャンセルしてください。';return;
+  }
+  $('h2h-zone-start').value=zonePick.start;$('h2h-zone-end').value=station;
+  $('h2h-overtake').value='on';stopZonePick();
+  try{await reset();}catch(e){toast(e.message,true);}
+});
 action('simulation-fit',()=>{view=null;draw();});
 function play(){
   if(!sim || sim.car.done)return;
@@ -239,7 +296,7 @@ $("simulation-time").addEventListener("input",()=>{if(!sim)return;pause();sim.se
 for(const id of ["simulation-lookahead-mode","simulation-lookahead-fixed","simulation-lookahead-low","simulation-lookahead-high","simulation-mode","simulation-laps","simulation-controller","simulation-horizon","simulation-tracking","simulation-smoothness","simulation-rate","simulation-line","simulation-speed","simulation-wheelbase","simulation-steer",...Array.from($("simulation-h2h-settings").querySelectorAll("input,select"),el=>el.id)]){
   $(id).addEventListener("change",async()=>{try{await reset();}catch(e){pause();sim=null;$("simulation-metrics").textContent=e.message;toast(e.message,true);}});
 }
-dialog.addEventListener("close",()=>{requestSerial++;pause();clearParkingFeedback();restoreOriginalSimulation();});
+dialog.addEventListener("close",()=>{requestSerial++;stopZonePick();pause();clearParkingFeedback();restoreOriginalSimulation();});
 new ResizeObserver(()=>{if(dialog.open)draw();}).observe(canvas);
 action("lane-reverse",()=>{
   if(!state.lane || state.doc.snapshot_status==="pending")throw Error("編集可能な地図を選んでください");
