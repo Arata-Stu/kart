@@ -131,6 +131,46 @@ function draw() {
       }
     }
   }
+  const distanceSummary=$('h2h-distance-summary');
+  distanceSummary.hidden=$('simulation-mode').value!=='head_to_head';
+  if(!distanceSummary.hidden){
+    const points=line.points,segments=points.map((a,i)=>Math.hypot(points[(i+1)%points.length][0]-a[0],points[(i+1)%points.length][1]-a[1]));
+    const total=segments.reduce((a,b)=>a+b,0);
+    function at(station){
+      let remaining=((station%total)+total)%total;
+      for(let i=0;i<points.length;i++){
+        if(remaining<=segments[i] && segments[i]>0){const a=points[i],b=points[(i+1)%points.length],u=remaining/segments[i];return [a[0]+u*(b[0]-a[0]),a[1]+u*(b[1]-a[1])];}
+        remaining-=segments[i];
+      }
+      return points[0];
+    }
+    function distanceBand(start,end,color,label){
+      if(end<=start || total<=0)return;
+      ctx.save();ctx.strokeStyle=color;ctx.lineWidth=6;ctx.globalAlpha=.75;ctx.setLineDash([7,4]);ctx.beginPath();
+      const n=Math.min(1500,Math.max(2,Math.ceil((end-start)/.08)));
+      for(let i=0;i<=n;i++){const q=project(at(start+(end-start)*i/n));i?ctx.lineTo(...q):ctx.moveTo(...q);}
+      ctx.stroke();ctx.globalAlpha=1;ctx.setLineDash([]);
+      const q=project(at((start+end)/2));ctx.font='bold 12px sans-serif';ctx.fillStyle=color;ctx.fillText(label,q[0]+8,q[1]-20);ctx.restore();
+    }
+    const d=sim?.car.h2h?.distance_plan;
+    if(d){
+      distanceBand(d.start,d.start+d.ramp,'#1678c7',`横へ出る ${d.ramp.toFixed(1)}m`);
+      distanceBand(d.start+d.ramp,d.end-d.ramp,'#9d45ae','追い抜き');
+      distanceBand(d.end-d.ramp,d.end,'#df7414',`戻る ${d.ramp.toFixed(1)}m`);
+      const required=d.end-d.start,available=d.zone_end-d.start,entry=d.overlap_start-d.start;
+      distanceSummary.textContent=`${d.accepted?'planner採用候補':'評価候補（未採用・最短の横移動候補）'}の沿線距離：青＝横へ出る、紫＝追い抜き、橙＝戻る。必要 ${required.toFixed(1)} m / 許可区間の残り ${Math.max(0,available).toFixed(1)} m${required>available?`（${(required-available).toFixed(1)} m不足）`:''}。相手に並び始めるまで ${entry.toFixed(1)} m / 横移動に必要 ${d.ramp.toFixed(1)} m${entry<d.ramp?'（横へ出る前に追いつく）':''}。帯は距離の目盛りであり、横方向の走行軌道ではありません。`;
+    }else{
+      const minimum=Number($('h2h-transition-min-distance').value),time=Number($('h2h-transition-time').value),speed=Number($('simulation-speed').value);
+      const lower=Math.max(minimum,speed*time),start=sim?.car.h2h?.station??Number($('h2h-zone-start').value);
+      distanceBand(start,start+lower,'#1678c7',`設定下限 ${lower.toFixed(1)}m`);
+      distanceBand(start+lower,start+2*lower,'#df7414',`設定下限 ${lower.toFixed(1)}m`);
+      distanceSummary.textContent=`設定上の下限：横へ出る ${lower.toFixed(1)} m ＋ 戻る ${lower.toFixed(1)} m（最小距離 ${minimum.toFixed(1)} m と速度上限 ${speed.toFixed(1)} m/s × ${time.toFixed(2)} s の大きい方）。plannerの評価距離はまだありません。曲率・追い抜き距離は未算入で、実際の要求はこれより長くなる場合があります。`;
+    }
+  }
+  // A physical scale remains useful while zooming and panning.
+  const scaleMeters=10**Math.floor(Math.log10(100/scale)),scalePixels=scaleMeters*scale;
+  ctx.save();ctx.strokeStyle='#354353';ctx.fillStyle='#354353';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(20,h-25);ctx.lineTo(20+scalePixels,h-25);ctx.stroke();ctx.font='12px sans-serif';ctx.fillText(`${scaleMeters} m`,20,h-32);ctx.restore();
   if(!sim)return;
   const c=sim.car, p=line.settings||{}, length=p.vehicle_length||.35,width=p.vehicle_width||.19,rear=p.rear_axle_to_rear??.1065;
   const [x,y]=project([c.x,c.y]);ctx.save();ctx.translate(x,y);ctx.rotate(-c.yaw);ctx.fillStyle="#263e57";

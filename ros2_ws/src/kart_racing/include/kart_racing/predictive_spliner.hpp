@@ -106,7 +106,7 @@ struct Plan {
     return offset*(10*u*u*u-15*u*u*u*u+6*u*u*u*u*u);
   }
 };
-struct Output { bool valid=false;double speed=0,coverage=0;std::string state="FAULT",reason="invalid_input";Plan plan; };
+struct Output { bool valid=false;double speed=0,coverage=0;std::string state="FAULT",reason="invalid_input";Plan plan;Plan evaluated; };
 class Planner {
   Settings cfg_;OpponentModel model_;Plan active_;double last_time_=-1,pass_cap_=0;std::uint64_t id_=0;bool passed_=false;
 public:
@@ -129,6 +129,7 @@ public:
     }
     out.speed=std::min({a.speed_cap,std::max(0.,a.opponent_v+.8*(gap-cfg_.min_gap-cfg_.headway*a.ego_v)),std::sqrt(std::max(0.,a.opponent_v*a.opponent_v+2*cfg_.deceleration*(gap-cfg_.min_gap)))});
     if(active_.valid){
+      out.evaluated=active_;
       if(!model_.ready() || !a.passing_allowed || a.speed_cap<pass_cap_-.05 || active_.end>a.zone_end || active_.offset+cfg_.width/2+cfg_.margin>a.left_width || active_.offset-cfg_.width/2-cfg_.margin< -a.right_width){active_={};out.valid=false;out.speed=0;out.state="FAULT";out.reason="pass_prediction_invalid";return out;}
       if(a.ego_s>=active_.end){
         if(a.ego_s-a.opponent_s-cfg_.length>=cfg_.min_gap && std::abs(a.ego_d)<.15){passed_=true;out.state="PASSED";out.reason="complete";out.speed=a.speed_cap;active_={};return out;}
@@ -136,7 +137,7 @@ public:
       }
       // Never command an inward merge while still alongside the opponent.
       if(a.ego_s>=active_.end-active_.ramp && a.ego_s-a.opponent_s-cfg_.length<cfg_.min_gap){out.valid=false;out.speed=0;out.state="FAULT";out.reason="merge_unavailable";active_={};return out;}
-      out.plan=active_;out.speed=a.speed_cap;out.state=a.ego_s>=active_.end-active_.ramp?"MERGE":"PASS";out.reason="prediction_valid";return out;
+      out.plan=active_;out.evaluated=active_;out.speed=a.speed_cap;out.state=a.ego_s>=active_.end-active_.ramp?"MERGE":"PASS";out.reason="prediction_valid";return out;
     }
     if(!model_.ready())return out;
     if(!a.passing_allowed){out.reason="passing_not_allowed";return out;}
@@ -166,13 +167,15 @@ public:
       double offset=side>0?max_d+cfg_.width+cfg_.margin:min_d-cfg_.width-cfg_.margin;
       double ramp=std::max({cfg_.transition_min_distance,a.speed_cap*cfg_.transition_time,std::sqrt(6*std::abs(offset)/cfg_.curvature)})*stretch;
       Plan p{true,a.ego_s,end+ramp,ramp,offset,begin,end};
+      // Diagnostic only: shortest candidate on an enabled side, even if rejected.
+      if((side>0?a.left_width:a.right_width)>0 && (!out.evaluated.valid || ramp<out.evaluated.ramp))out.evaluated=p;
       if(begin-a.ego_s<ramp || p.end>a.zone_end || p.end-p.start<2*ramp)continue;
       longitudinal_candidate=true;
       if(offset+cfg_.width/2+cfg_.margin>a.left_width || offset-cfg_.width/2-cfg_.margin< -a.right_width)continue;
       const double score=std::abs(offset)*(p.end-p.start)+2/ramp;
       if(score<best){best=score;active_=p;pass_cap_=a.speed_cap;}
     }
-    if(active_.valid){out.plan=active_;out.speed=a.speed_cap;out.state="PASS";out.reason="learned_prediction";}
+    if(active_.valid){out.plan=active_;out.evaluated=active_;out.speed=a.speed_cap;out.state="PASS";out.reason="learned_prediction";}
     else out.reason=longitudinal_candidate?"lateral_clearance_insufficient":"longitudinal_space_insufficient";
     return out;
   }

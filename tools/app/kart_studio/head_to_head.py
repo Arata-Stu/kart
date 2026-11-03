@@ -247,9 +247,10 @@ def preview(request):
                 predictor.stdin.write(' '.join(map(str,[now,s,ego_d,v,os,0,ov,cap,end,abs(offset)+width if side=='left' else 0,abs(offset)+width if side=='right' else 0,int(allowed)]))+'\n');predictor.stdin.flush()
                 if not prediction_selector.select(2):raise ValueError('Predictive planner応答timeout')
                 values=predictor.stdout.readline().split()
-                if len(values)!=12:raise ValueError('Predictive planner出力不正')
-                if not all(math.isfinite(float(values[i])) for i in (0,1,2,5,6,7,8,9,10,11)):raise ValueError('Predictive planner出力が非有限です')
+                if len(values)!=19:raise ValueError('Predictive planner出力不正')
+                if not all(math.isfinite(float(values[i])) for i in (0,1,2,5,6,7,8,9,10,11,12,13,14,15,16,17,18)):raise ValueError('Predictive planner出力が非有限です')
                 prediction=dict(valid=bool(int(values[0])),speed=float(values[1]),coverage=float(values[2]),state=values[3],reason=values[4],active=bool(int(values[5])),start=float(values[6]),end=float(values[7]),ramp=float(values[8]),offset=float(values[9]),roc=[float(values[10]),float(values[11])])
+                prediction['distance_plan']=dict(start=float(values[13]),end=float(values[14]),ramp=float(values[15]),offset=float(values[16]),overlap_start=float(values[17]),overlap_end=float(values[18]),zone_end=end,accepted=prediction['active']) if bool(int(values[12])) else None
                 if not prediction['valid']:
                     reason=prediction['reason'];note='予測失効・試走中断（実車退避未検証）';break
                 if prediction['state']=='PASSED':
@@ -331,7 +332,7 @@ def preview(request):
             s,error=course.project(pose,s,max(1.,v*dt*3));maxerror=max(maxerror,error)
             frames.append([now,*pose,v,steer,error,maxerror,tx,ty,ms,target,lookahead])
             rivals.append([*opose,ov])
-            metrics.append(dict(state=state,gap=gap,opponent_speed=ov,estimate=estimate,stable_seconds=stable,note=note,station=s%course.total,coverage=prediction['coverage'] if prediction else None))
+            metrics.append(dict(state=state,gap=gap,opponent_speed=ov,estimate=estimate,stable_seconds=stable,note=note,station=s%course.total,coverage=prediction['coverage'] if prediction else None,distance_plan=prediction['distance_plan'] if prediction else None))
             if time.monotonic()>deadline:reason='compute_timeout';break
             if tick==int(duration*30):break
             # Substeps bound translation and heading changes for swept geometry.
@@ -371,7 +372,7 @@ def preview(request):
         terminal[6:8]=[terminal_error,max(maxerror,terminal_error)]
         if terminal_time<=frames[-1][0]+1e-9:
             frames.pop();rivals.pop();metrics.pop()
-        frames.append(terminal);rivals.append([*opose,ov]);metrics.append(dict(state=state,gap=os-s-length,opponent_speed=ov,estimate=estimate,stable_seconds=stable,note=note,station=s%course.total,coverage=prediction['coverage'] if prediction else None))
+        frames.append(terminal);rivals.append([*opose,ov]);metrics.append(dict(state=state,gap=os-s-length,opponent_speed=ov,estimate=estimate,stable_seconds=stable,note=note,station=s%course.total,coverage=prediction['coverage'] if prediction else None,distance_plan=prediction['distance_plan'] if prediction else None))
         return dict(diagnostic=diagnostic,planner=planner_kind,observation='ideal',frames=frames,opponents=rivals,h2h=metrics,events=events,reason=reason,controller=method,total=course.total,zone=[zone_start,zone_end],minimum_follow_gap=minimum,vehicle=dict(length=length,width=width,rear=rear),planned_route=[list(route_point(plan[0]+i*(plan[1]-plan[0])/200,plan)[:2]) for i in range(201)] if plan else [])
     finally:
         if predictor is not None:

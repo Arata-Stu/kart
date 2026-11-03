@@ -124,6 +124,9 @@ def test_predictive_learn_pass_merge():
     assert result['reason']=='overtake_completed',result['h2h'][-1]
     assert result['h2h'][0]['coverage']<.1
     assert result['h2h'][-1]['coverage']>=.9
+    evaluated=[h['distance_plan'] for h in result['h2h'] if h.get('distance_plan')]
+    assert evaluated and any(d['accepted'] for d in evaluated)
+    assert all(d['ramp']>0 and d['end']>d['start'] for d in evaluated)
     assert result['events'][0]['time']>100  # cannot pass before observing the lap
     assert result['h2h'][-1]['gap']< -1
     assert {'FOLLOW_OBSERVE','PASS','MERGE','PASSED'}<={m['state'] for m in result['h2h']}

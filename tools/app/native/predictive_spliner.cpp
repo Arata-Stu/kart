@@ -9,7 +9,7 @@ int main(){
     std::cout<<std::setprecision(12);
     while(std::cin>>a.time>>a.ego_s>>a.ego_d>>a.ego_v>>a.opponent_s>>a.opponent_d>>a.opponent_v>>a.speed_cap>>a.zone_end>>a.left_width>>a.right_width>>a.passing_allowed){
       auto r=planner.update(a);
-      std::cout<<r.valid<<' '<<r.speed<<' '<<r.coverage<<' '<<r.state<<' '<<r.reason<<' '<<r.plan.valid<<' '<<r.plan.start<<' '<<r.plan.end<<' '<<r.plan.ramp<<' '<<r.plan.offset<<' '<<r.plan.roc_start<<' '<<r.plan.roc_end<<std::endl;
+      std::cout<<r.valid<<' '<<r.speed<<' '<<r.coverage<<' '<<r.state<<' '<<r.reason<<' '<<r.plan.valid<<' '<<r.plan.start<<' '<<r.plan.end<<' '<<r.plan.ramp<<' '<<r.plan.offset<<' '<<r.plan.roc_start<<' '<<r.plan.roc_end<<' '<<r.evaluated.valid<<' '<<r.evaluated.start<<' '<<r.evaluated.end<<' '<<r.evaluated.ramp<<' '<<r.evaluated.offset<<' '<<r.evaluated.roc_start<<' '<<r.evaluated.roc_end<<std::endl;
     }
   }catch(const std::exception&){return 2;}
 }
