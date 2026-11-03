@@ -9,6 +9,8 @@ let originalSimulation=null;
 let zonePick=null;
 function stopZonePick(){
   zonePick=null;canvas.style.cursor='grab';
+  $('h2h-pick-zone').setAttribute('aria-pressed','false');
+  canvas.classList.remove('zone-picking');
   $('h2h-pick-help').hidden=true;
   $('h2h-pick-zone').textContent='地図で追い越し区間を指定';
 }
@@ -85,13 +87,13 @@ async function reset() {
 
 }
 function draw() {
-  if (!sim) return;
-  $("simulation-time").value=sim.car.time;
+  if (!snapshot) return;
+  if(sim)$("simulation-time").value=sim.car.time;
   const w=canvas.clientWidth, h=canvas.clientHeight, dpr=devicePixelRatio||1;
   canvas.width=w*dpr; canvas.height=h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.fillStyle="#f4f6f8"; ctx.fillRect(0,0,w,h);
   const line=parkingRoute || snapshot.lines[$("simulation-line").value];
-  const diagnostic=sim.car.done?sim.diagnostic:null;
+  const diagnostic=sim?.car.done?sim.diagnostic:null;
   const pts=[...snapshot.left,...snapshot.right,...line.points,...(diagnostic?.body||[])];
   let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
   for(const [x,y] of pts){x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);}
@@ -108,13 +110,14 @@ function draw() {
   for(const o of snapshot.obstacles)path(o.polygon,"#ce4141",true,true);
   for(const a of snapshot.parking_areas||[]){path(a.polygon,'#238457',true,true);path(a.entrance,'#00bddd');}
   path(line.points,"#339675",parkingRoute?false:snapshot.closed);path(trail,"#9763bb");
-  if(sim.h2hResult){
-    const zone=sim.h2hResult.zone;let station=0;const selected=[];
+  if($("simulation-mode").value==="head_to_head"){
+    const zone=[Number($("h2h-zone-start").value),Number($("h2h-zone-end").value)];let station=0;const selected=[];
     for(let i=0;i<line.points.length;i++){
-      if(station>=zone[0]&&station<=zone[1])selected.push(line.points[i]);
+      if(zone[1]<zone[0]?(station>=zone[0]||station<=zone[1]):(station>=zone[0]&&station<=zone[1]))selected.push(line.points[i]);
+      else if(selected.length){path(selected,"#c49b00");selected.length=0;}
       if(i+1<line.points.length)station+=Math.hypot(line.points[i+1][0]-line.points[i][0],line.points[i+1][1]-line.points[i][1]);
     }
-    path(selected,"#c49b00");path(sim.h2hResult.planned_route||[],"#ad51c4");
+    path(selected,"#c49b00");path(sim?.h2hResult?.planned_route||[],"#ad51c4");
     const markers=zonePick?.start!=null?[[zonePick.start,'開始（選択中）']]:[[zone[0],'開始'],[zone[1],'合流完了']];
     for(const [target,label] of markers){
       let travelled=0;
@@ -128,6 +131,7 @@ function draw() {
       }
     }
   }
+  if(!sim)return;
   const c=sim.car, p=line.settings||{}, length=p.vehicle_length||.35,width=p.vehicle_width||.19,rear=p.rear_axle_to_rear??.1065;
   const [x,y]=project([c.x,c.y]);ctx.save();ctx.translate(x,y);ctx.rotate(-c.yaw);ctx.fillStyle="#263e57";
   ctx.fillRect(-rear*scale,-width/2*scale,length*scale,width*scale);
@@ -177,7 +181,7 @@ function draw() {
 }
 // View operations do not change simulation geometry or trigger recomputation.
 canvas.addEventListener('wheel',event=>{
-  if(!sim || !projection)return;
+  if(!snapshot || !projection)return;
   event.preventDefault();
   const rect=canvas.getBoundingClientRect(),p=projection;
   const dx=event.clientX-rect.left-p.w/2,dy=event.clientY-rect.top-p.h/2;
@@ -189,7 +193,7 @@ canvas.addEventListener('wheel',event=>{
 },{passive:false});
 canvas.addEventListener('pointerdown',event=>{
   if(zonePick && !event.altKey)return;
-  if(!sim || !projection || event.button!==0)return;
+  if(!snapshot || !projection || event.button!==0)return;
   drag={id:event.pointerId,x:event.clientX,y:event.clientY,view:{...projection}};
   canvas.setPointerCapture(event.pointerId);canvas.style.cursor='grabbing';
 });
@@ -205,8 +209,10 @@ canvas.addEventListener('pointercancel',endPan);
 canvas.addEventListener('lostpointercapture',endPan);
 action('h2h-pick-zone',()=>{
   if(zonePick){stopZonePick();draw();return;}
-  if(!sim?.h2hResult){toast('Head-to-headの試走を計算してから区間を選択してください');return;}
+  if(!snapshot?.lines[$('simulation-line').value]){toast('ラインを選択してください');return;}
   pause();zonePick={start:null};canvas.style.cursor='crosshair';
+  $('h2h-pick-zone').setAttribute('aria-pressed','true');canvas.classList.add('zone-picking');draw();
+  canvas.scrollIntoView({block:'center',behavior:'smooth'});
   $('h2h-pick-zone').textContent='区間指定をキャンセル';
   $('h2h-pick-help').hidden=false;
   $('h2h-pick-help').textContent='① ライン上の開始位置をクリック。ホイールで拡大、Alt＋ドラッグで移動できます。';
@@ -220,10 +226,13 @@ canvas.addEventListener('click',async event=>{
   const station=Math.floor(nearest.station*10)/10;
   if(zonePick.start===null){
     zonePick.start=station;
-    $('h2h-pick-help').textContent='② 走行方向に沿って先の合流完了位置をクリック（区間長5〜500 m・周回始点を跨がない範囲）。';draw();return;
+    $('h2h-pick-help').textContent='② 走行方向に沿って先の合流完了位置をクリック（区間長5〜500 m・周回始点を跨ぐ指定も可能）。';draw();return;
   }
-  if(station-zonePick.start<5 || station-zonePick.start>500){
-    $('h2h-pick-help').textContent='開始より先に、5〜500 mの区間を指定してください。始点跨ぎは未対応です。開始を変える場合はキャンセルしてください。';return;
+  const points=snapshot.lines[$('simulation-line').value].points;
+  const total=points.reduce((sum,a,i)=>sum+Math.hypot(a[0]-points[(i+1)%points.length][0],a[1]-points[(i+1)%points.length][1]),0);
+  const length=station-zonePick.start+(station<zonePick.start?total:0);
+  if(length<5 || length>500){
+    $('h2h-pick-help').textContent='走行方向に5〜500 mの区間を指定してください。開始を変える場合はキャンセルしてください。';return;
   }
   $('h2h-zone-start').value=zonePick.start;$('h2h-zone-end').value=station;
   $('h2h-overtake').value='on';stopZonePick();

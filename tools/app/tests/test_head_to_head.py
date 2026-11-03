@@ -153,3 +153,25 @@ def test_studio_overtake_sample():
     assert {'FOLLOW_OBSERVE','PASS','MERGE','PASSED'}<={h['state'] for h in result['h2h']}
     assert result['h2h'][-1]['coverage']>=.9
     assert result['h2h'][-1]['gap']< -1
+
+
+def test_wrapped_passing_window():
+    from kart_studio.head_to_head import passing_window
+    assert passing_window(95,100,90,20)==(True,120)
+    assert passing_window(105,100,90,20)==(True,120)
+    assert passing_window(120,100,90,20)==(False,120)
+    assert passing_window(195,100,90,20)==(True,220)
+
+
+def test_predictive_pass_across_seam():
+    body=request()
+    for key in ('left','right'):
+        pts=body['lane'][key];body['lane'][key]=pts[25:]+pts[:25]
+    line=body['lane']['lines']['centerline'];pts=line['points'];line['points']=pts[25:]+pts[:25]
+    total=Course(line,True,5).total
+    body['options']['laps']=4
+    body['head_to_head'].update(planner='predictive_spliner',duration=300,initial_gap=6,opponent_speed=3,zone_start=total-10,zone_end=20)
+    result=preview(body)
+    assert result['reason']=='overtake_completed',result['h2h'][-1]
+    assert result['events'][0]['station']%total>total-10
+    assert result['h2h'][-1]['station']<20

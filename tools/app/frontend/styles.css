@@ -1563,3 +1563,7 @@ header .local-tag { white-space: nowrap; }
 
 .stereo-toggles { display: flex; gap: 12px; margin: 8px 0; }
 .stereo-toggles label { flex: 1; }
+
+#h2h-pick-zone[aria-pressed="true"] { background: #176fbb; color: white; outline: 3px solid #8ac8ff; }
+#simulation-canvas.zone-picking { outline: 4px solid #176fbb; }
+#h2h-pick-help { background: #e6f2ff; color: #123e68; padding: 12px; font-weight: 600; }

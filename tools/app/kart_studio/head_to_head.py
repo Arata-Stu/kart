@@ -18,6 +18,15 @@ from .preview_lookahead import lookahead_values
 from .tracking_preview import _cache, _lock
 
 
+def passing_window(station, total, start, end):
+    """Return membership and unwrapped merge deadline for a cyclic interval."""
+    local=station%total
+    base=station-local
+    if end<start:
+        return local>=start or local<end, base+end+(total if local>=start else 0)
+    return start<=local<end,base+end
+
+
 def number(data, key, default, lo, hi):
     value = data.get(key, default)
     if type(value) not in (int, float) or not math.isfinite(value) or not lo <= value <= hi:
@@ -162,7 +171,8 @@ def preview(request):
     zone_end=number(cfg,'zone_end',0,0,course.total)
     enabled=cfg.get('overtake',False)
     if type(enabled) is not bool:raise ValueError('追い抜き設定が不正です')
-    if enabled and not 5<=zone_end-zone_start<=500:raise ValueError('追い抜き区間は始点からの距離で5〜500 m、周回始点を跨がず指定してください')
+    zone_length=zone_end-zone_start+(course.total if zone_end<zone_start else 0)
+    if enabled and not 5<=zone_length<=500:raise ValueError('追い抜き区間の走行方向の長さは5〜500 mで指定してください')
     side=cfg.get('side','left')
     if side not in ('left','right'):raise ValueError('追い抜き側が不正です')
     offset=number(cfg,'offset',.65,width+2*margin,3)*(1 if side=='left' else -1)
@@ -227,9 +237,10 @@ def preview(request):
                 # Width is a search bound only: exact geometry is checked below.
                 x0,y0,yaw0,_=course.sample(s)
                 ego_d=-(pose[0]-x0)*math.sin(yaw0)+(pose[1]-y0)*math.cos(yaw0)
-                end=s-local+zone_end
+                in_zone,end=passing_window(s,course.total,zone_start,zone_end)
                 cap=min(vmax,min(course.sample(s+i*max(0,end-s)/100)[3] for i in range(101)))
-                allowed=enabled and (plan is not None or zone_start<=local<zone_end)
+                if plan is not None:end=max(end,plan[1])
+                allowed=enabled and (plan is not None or in_zone)
                 predictor.stdin.write(' '.join(map(str,[now,s,ego_d,v,os,0,ov,cap,end,abs(offset)+width if side=='left' else 0,abs(offset)+width if side=='right' else 0,int(allowed)]))+'\n');predictor.stdin.flush()
                 if not prediction_selector.select(2):raise ValueError('Predictive planner応答timeout')
                 values=predictor.stdout.readline().split()
@@ -270,8 +281,8 @@ def preview(request):
                 state='OPPORTUNITY_READY' if estimate is not None and vmax-estimate>=.5 else 'FOLLOW_OBSERVE'
                 note='速度優位なし' if estimate is not None and vmax-estimate<.5 else ('観測完了・区間待ち' if estimate is not None else '車間が安定するまで観測')
                 local=s%course.total
-                if enabled and state=='OPPORTUNITY_READY' and zone_start<=local<zone_end:
-                    end=s-local+zone_end
+                if enabled and state=='OPPORTUNITY_READY' and passing_window(s,course.total,zone_start,zone_end)[0]:
+                    in_zone,end=passing_window(s,course.total,zone_start,zone_end)
                     ramp=max(3.,vmax,math.sqrt(8*abs(offset)*wb/math.tan(steer_limit)))
                     own_cap=min(vmax,min(course.sample(s+i*(end-s)/100)[3] for i in range(101)))
                     advantage=own_cap-opponent_cap
