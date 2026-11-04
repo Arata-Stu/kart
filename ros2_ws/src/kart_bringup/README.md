@@ -891,7 +891,7 @@ AUTO中もステアを操作でき、△でSTOPを挟まずMANUALへ直接引き
 AUTO初回進入は0.3秒中立を配信してmux/bridgeのHOST handshakeを待つ。
 直接切替時は中立待ちを挟まない。×はSTOP、○は独立ブレーキ用MANUALへ引き継ぎ、解除時にSTOP。固定AUTO中のL2は中立＋STOP。
 入力途絶・異常・再起動後はSTOPから再armし、モード変更だけで異常解除しない。
-固定値は速度ではなく補正前の正規化要求。初期値は起動時指定し、有効時は新鮮なSTOP中のD-pad上下で0.01ずつ変更できる。
+固定値は速度ではなく補正前の正規化要求。初期値は起動時指定し、有効時は新鮮なSTOP中のD-pad上下で0.001ずつ変更できる。
 
 JoyManagerNodeが`/teleop/control_cmd`（kart_interfaces/msg/ControlCommand、reliable/depth1）へ
 元Joy stampで合成指令を出版する。bringupは固定設定からcommand_muxの
@@ -1642,7 +1642,7 @@ EVS有効時は`cuda_async` / `evt3_runs_gpu_direct`（5方式中4番目）を�
 ### 固定AUTO収集時のD-padスロットル調整
 
 `auto_fixed_throttle >= 0`のとき、D-pad上下（既存`throttle_trim_up_button=13` / `throttle_trim_down_button=14`）は
-スロットルトリムではなく固定AUTO値の調整に使う。1押し0.01（定数、parameter追加なし）、
+スロットルトリムではなく固定AUTO値の調整に使う。1押し0.001（定数、parameter追加なし）、
 範囲0..speed_scale。上下同時押し・長押し・再接続時の押下保持では変更しない。
 新鮮なSTOP、Joy/ready正常、中立入力、モードボタン解放、deadman有効時だけ受け付ける。
 走行中の変更は拒否し、次回□保持で選択値を使用する。MANUALのトリガー操作は従来どおり。

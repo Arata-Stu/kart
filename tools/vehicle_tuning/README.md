@@ -410,7 +410,7 @@ bash scripts/bringup.sh --mode collect --auto-fixed-throttle 0.10
 ```
 
 TUIでは「データ記録」→「制御 / AUTO」→「固定値で収集」を選び、初期値を入力する。
-STOPでモードボタンを離して入力を中立にし、D-pad上/下を押すと現在値が0.01増減する。
+STOPでモードボタンを離して入力を中立にし、D-pad上/下を押すと現在値が0.001増減する。
 INFOログの`AUTO fixed throttle selected`で現在値と上限を確認する。長押しの連続変更なし。
 □保持で固定AUTO＋手動ステア、△保持で通常MANUAL。録画はR1開始/L1停止で独立。
 現在値は既存`/teleop/fixed_config`へ記録する。MANUAL中も上下のトリム調整は無効となる。

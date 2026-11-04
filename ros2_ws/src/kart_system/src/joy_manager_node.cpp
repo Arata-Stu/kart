@@ -38,7 +38,7 @@ public:
       throw std::invalid_argument("auto_fixed_throttle must be -1 (disabled) or 0..speed_scale");
     }
     fixed_config_pub_=create_publisher<std_msgs::msg::String>("teleop/fixed_config",rclcpp::QoS(1).reliable());
-    RCLCPP_INFO(get_logger(),"AUTO fixed throttle (D-pad up/down: step 0.01 in STOP when enabled): %s; value=%.6f; limit(speed_scale)=%.6f",
+    RCLCPP_INFO(get_logger(),"AUTO fixed throttle (D-pad up/down: step 0.001 in STOP when enabled): %s; value=%.6f; limit(speed_scale)=%.6f",
       manual_fixed_.enabled() ? "enabled" : "disabled",manual_fixed_.throttle,teleop_.speed_scale);
     pub_=create_publisher<Control>("teleop/control_cmd",rclcpp::QoS(1).reliable());
     request_pub_=create_publisher<Request>("operation_mode/request",10);
@@ -217,7 +217,7 @@ private:
       const bool permitted=fresh_mode() && input_healthy() && neutral_input_ &&
         !actions->manual_held && !actions->auto_held && !actions->brake;
       if (manual_fixed_.adjust(actions->fixed_throttle_direction,teleop_.speed_scale,now().seconds(),permitted)) {
-        RCLCPP_INFO(get_logger(),"AUTO fixed throttle selected: %.3f (step=0.01, limit=%.3f); applies on next square hold",
+        RCLCPP_INFO(get_logger(),"AUTO fixed throttle selected: %.3f (step=0.001, limit=%.3f); applies on next square hold",
           manual_fixed_.throttle,teleop_.speed_scale);
         publish_fixed_config();
       } else {

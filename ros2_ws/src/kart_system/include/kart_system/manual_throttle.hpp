@@ -13,7 +13,7 @@ class ManualFixedThrottle {
 public:
   double throttle{-1.0};
   static constexpr double ENTRY_NEUTRAL_S=0.3;
-  static constexpr double ADJUST_STEP=0.01;
+  static constexpr double ADJUST_STEP=0.001;
   bool adjust(int direction, double limit, double ros, bool permitted) {
     if (!enabled() || !permitted || mode_!=STOP || !fresh_stamp(ros,mode_stamp_,0.3) ||
         (direction!=1 && direction!=-1) || !std::isfinite(limit) || limit<0.01 || limit>1 ||

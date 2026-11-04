@@ -386,7 +386,7 @@ class Editor:
                 a.auto_fixed_throttle = -1.0
             else:
                 current = value if value >= 0 else ''
-                a.auto_fixed_throttle = float(input(f'固定スロットル初期値 0..{settings["speed_scale"]}（起動後はSTOP中のD-pad上下で0.01調整）[{current}] > ').strip() or current)
+                a.auto_fixed_throttle = float(input(f'固定スロットル初期値 0..{settings["speed_scale"]}（起動後はSTOP中のD-pad上下で0.001調整）[{current}] > ').strip() or current)
 
     def edit_evs(self):
         from kart_bringup.evs import BACKENDS, BACKEND_LABELS, AGGREGATIONS, AGGREGATION_LABELS, DEFAULT_BIAS, bias_files
