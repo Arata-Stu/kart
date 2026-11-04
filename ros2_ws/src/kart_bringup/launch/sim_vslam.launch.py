@@ -42,7 +42,13 @@ def build(context):
     if rate and not bag: raise ValueError('rate requires bag')
     mode=overrides.get('tracking_mode',parameters['tracking_mode'])
     command=playback(root,bag,rate,extra_topics=imu_topics(root,mode)) if bag else None
-    actions=[LogInfo(msg=f'cuVSLAM config={config}, overrides={overrides}; no saved map is loaded; live kart_sim publish_truth_tf must be false'),
+    from kart_bringup.evaluation_recording import recording_plan, start_recording
+    record = recording_plan(root, LaunchConfiguration('eval_record').perform(context), LaunchConfiguration('eval_output').perform(context))
+    if record and not bag:
+        raise ValueError('eval_record requires offline bag')
+    actions = start_recording(root, record, dict(source_bag=bag, rate=rate or yaml.safe_load((root/'evaluation/replay.yaml').read_text())['rate'],
+        parameters={'cuvslam': dict(parameters, **overrides)}, map_dir='')) if record else []
+    actions += [LogInfo(msg=f'cuVSLAM config={config}, overrides={overrides}; no saved map is loaded; live kart_sim publish_truth_tf must be false'),
         ComposableNodeContainer(name='kart_sim_vslam_container',namespace='',package='rclcpp_components',
             executable='component_container_mt',output='screen',on_exit=Shutdown(),composable_node_descriptions=[
                 ComposableNode(package='isaac_ros_cuvslam',plugin='nvidia::isaac_ros::visual_slam::VisualSlamNode',
@@ -60,10 +66,10 @@ def build(context):
         actions += [LogInfo(msg=f'Sim bag replay (filtered, initially paused): {command}'),
             ExecuteProcess(cmd=command,output='screen'),
             Node(package='kart_bringup',executable='replay_ready',name='replay_ready',output='screen',
-                parameters=[str(root/'evaluation/replay_ready.yaml'),{'subscriber_nodes':['visual_slam'],'imu_topic':imu_topics(root,mode)[0] if mode==1 else ''}])]
+                parameters=[str(root/'evaluation/replay_ready.yaml'),{'recorder_node':record['node_name'] if record else '', 'record_topics':record['topics'] if record else ['/clock'], 'subscriber_nodes':['visual_slam'],'imu_topic':imu_topics(root,mode)[0] if mode==1 else ''}])]
     return actions
 
 
 def generate_launch_description():
     return LaunchDescription([*[DeclareLaunchArgument(name,default_value='') for name in
-        ('tracking_mode','base_frame','imu_frame','multicam_mode','visualize','rviz','bag','rate')],OpaqueFunction(function=build)])
+        ('tracking_mode','base_frame','imu_frame','multicam_mode','visualize','rviz','bag','rate','eval_record','eval_output')],OpaqueFunction(function=build)])

@@ -1831,3 +1831,19 @@ Studioの距離可視化は、共通C++ plannerが評価した候補の開始・
 許可区間残長との差と、横移動完了前に並走が始まる場合を表示する。候補未評価時は
 設定上の下限のみと明示し、曲率・追い抜き距離は未算入とする。
 診断値はStudio用native出力で伝え、ROSメッセージの契約は変更しない。
+
+### 制御時間・入力年齢のライブグラフ
+
+パラメータ調整の「横制御（Pure Pursuit / MPC）」ではprocessing_msとpose_age_ms、
+「速度PID」ではprocessing_msとtarget_age_ms・measurement_age_msを直近60秒の折れ線で表示する。
+処理時間と入力年齢は別グラフ（ms）、色見本・項目名・最新値付き。入力年齢は指令作成時点の
+入力stampとの差であり、画面表示時点までの経過時間ではない。未来stampの負値は保持する。
+処理時間はTF待機を含む実経過時間で、通信・基板・アクチュエータ応答は含まない。
+
+既存HDMapノードのtuning_bridgeは追加で `/control/lateral_diagnostics`
+（diagnostic_msgs/msg/DiagnosticArray、reliable/volatile/depth10）を購読する。
+既存 `/control/speed_diagnostics` と併せ、各系列を約10 Hz・最大650件・60秒保持しstatus HTTPで返す。
+新規ROSノード・出力topic・パラメータはない。受信stampが0.5秒以内の有限値のみ採用し、
+入力年齢は横制御の正常診断／PIDのactive診断のみ採用。処理時間の負値は未計測扱い。
+欠落キー・無効・古い診断は欠測、stamp巻戻りは履歴リセット、受信停止では最新値を「—」表示する。
+表示用サンプリングのため全制御周期のピークは保証しない。制御判断には使用しない。

@@ -17,7 +17,7 @@ spec.loader.exec_module(module)
 
 class PropagationTests(unittest.TestCase):
     def test_depth_profile_forwarded_and_offline_rejected(self):
-        output = self.run_cli('--mode', 'collect', '--depth-profile', '424x240x60')
+        output = self.run_cli('--mode', 'collect', '--depth-profile', '424x240x60', '--infra-profile', '424x240x60')
         self.assertIn('depth_profile:=424x240x60', output)
         self.assertIn('Depth: 424x240x60', output)
         with self.assertRaisesRegex(ValueError, '不一致'):
@@ -95,6 +95,7 @@ class PropagationTests(unittest.TestCase):
 
     def test_unsupported_options_fail_before_assets_or_ros_are_touched(self):
         cases = [
+            ('collect', '--eval-record', 'true'), ('e2e-latency', '--eval-record', 'true'),
             ('collect', '--bag', '/tmp/bag'), ('collect', '--rate', '.5'),
             ('collect', '--map-file', '/tmp/map.json'), ('collect', '--model-dir', '/tmp/model'),
             ('collect', '--e2e-model-dir', '/tmp/model'), ('collect', '--eval-localization', 'vgl'),
@@ -129,7 +130,7 @@ class PropagationTests(unittest.TestCase):
                      'evs_image', 'evs_serial', 'evs_tensor_config', 'evs_bias_file', 'foxglove',
                      'no_bridge', 'joy_max_throttle', 'auto_fixed_throttle', 'e2e_fixed_throttle', 'e2e_throttle_mode', 'recovery',
                      'run_name', 'e2e_model_dir', 'eval_localization', 'multicam_mode', 'parking_site', 'parking_slot',
-                     'tracking_mode', 'base_frame', 'imu_frame', 'latency_output', 'bag', 'rate'}
+                     'tracking_mode', 'base_frame', 'imu_frame', 'latency_output', 'bag', 'rate', 'eval_record', 'eval_output'}
         actual = {action.dest for action in parsers[0]._actions}
         self.assertEqual(actual, selector | forwarded)
 

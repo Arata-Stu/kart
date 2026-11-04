@@ -6,3 +6,5 @@
     subscriber_nodes: [visual_slam, visual_global_localization]
     resume_service: /rosbag2_player/resume
     timeout_s: 120.0
+    recorder_node: ''  # Optional offline recorder; wait for its subscriptions before resume
+    record_topics: [/clock]  # Launch passes selected recording topics; wait for advertised topics

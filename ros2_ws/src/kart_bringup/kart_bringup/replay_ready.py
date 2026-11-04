@@ -15,6 +15,8 @@ class ReplayReady(Node):
             "image_topics",
             ["/realsense/infra1/image_rect_raw", "/realsense/infra2/image_rect_raw"],
         ).value
+        self.recorder_node = self.declare_parameter("recorder_node", "").value
+        self.record_topics = self.declare_parameter("record_topics", ["/clock"]).value
         self.imu_topic=self.declare_parameter("imu_topic", "").value
         self.nodes = set(
             self.declare_parameter(
@@ -61,7 +63,12 @@ class ReplayReady(Node):
             )
         elif self.future is None and self.client.service_is_ready():
             imu_ready=not self.imu_topic or any(s.node_name=='visual_slam' for s in self.get_subscriptions_info_by_topic(self.imu_topic))
-            if imu_ready and all(
+            recorder = getattr(self, "recorder_node", "")
+            record_ready = not recorder or all(
+                any(s.node_name == recorder for s in self.get_subscriptions_info_by_topic(t))
+                for t in self.record_topics
+                if t == "/clock" or self.get_publishers_info_by_topic(t))
+            if record_ready and imu_ready and all(
                 self.nodes
                 <= {s.node_name for s in self.get_subscriptions_info_by_topic(topic)}
                 for topic in self.topics

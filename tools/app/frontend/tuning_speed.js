@@ -22,7 +22,8 @@ function render() {
   $('tuning-speed-chart').innerHTML=`<g fill="#64748b" font-size="11">${lines.join('')}<text x="4" y="12">m/s</text></g><path d="${plot.target}" fill="none" stroke="#2563eb" stroke-width="2"/><path d="${plot.measured}" fill="none" stroke="#d97706" stroke-width="2"/>`;
   const last=plot.last;
   const live=connected && last && now-last.t<2 && Number.isFinite(last.target) && Number.isFinite(last.measured);
-  $('tuning-speed-values').textContent=live ? `目標 ${last.target.toFixed(2)} / 現在 ${last.measured.toFixed(2)} m/s` : '目標 — / 現在 —';
+  $('tuning-speed-target').textContent=live ? last.target.toFixed(2) : '—';
+  $('tuning-speed-measured').textContent=live ? last.measured.toFixed(2) : '—';
   $('tuning-speed-note').textContent=!connected ? '未接続・受信停止' : !history ? '速度診断未対応・未受信（Jetson側の更新を確認）' : !live ? '速度制御が非active・診断無効・受信停止。欠測区間は線をつなぎません。' : 'PIDが使用する現在速度（後輪軸の前後速度）。約10 Hzの診断を約1秒ごとに取得。平滑化なし。';
 }
 function update() {

@@ -192,6 +192,17 @@ class ReplayTests(unittest.TestCase):
             ready.check();ready.client.call_async.assert_called_once()
 
 
+            ready.future=None; ready.client.reset_mock(); ready.imu_topic=''
+            ready.recorder_node='offline_eval_recorder'
+            ready.record_topics=['/clock','/result','/optional']
+            ready.get_publishers_info_by_topic=lambda topic: [object()] if topic=='/result' else []
+            subscribed={'/clock'}
+            ready.get_subscriptions_info_by_topic=lambda topic: [SimpleNamespace(node_name=n) for n in ready.nodes] if topic in ready.topics else ([SimpleNamespace(node_name=ready.recorder_node)] if topic in subscribed else [])
+            ready.check(); ready.client.call_async.assert_not_called()
+            subscribed.add('/result')
+            ready.check(); ready.client.call_async.assert_called_once()
+
+
     def test_runtime_metadata_exact_and_legacy_rejected(self):
         settings = {"fixed_throttle": 0.12, "max_throttle": 0.2}
         with tempfile.TemporaryDirectory() as directory:

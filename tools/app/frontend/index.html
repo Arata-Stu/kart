@@ -87,7 +87,7 @@
           <canvas id="coverage-chart" width="1000" height="340" aria-label="走行条件の分布。セルを選択すると数値を表示"></canvas>
           <p id="coverage-cell" role="status">棒・セルをクリックすると記録時間と繰り返しを確認できます。</p>
           <h3>評価走行の時系列</h3><label>走行<select id="coverage-recording"></select></label>
-          <p>線は操舵指令、下の色帯は教師の「曲率 × 速度」分布との比較です。緑：閾値を満たす／橙：少ない／赤：未観測／灰：判定不能。</p>
+          <div class="plot-legend"><span class="plot-key plot-steering">操舵指令（青・正規化値）</span></div><p>下の色帯は教師の「曲率 × 速度」分布との比較です。緑：閾値を満たす／橙：少ない／赤：未観測／灰：判定不能。</p>
           <canvas id="coverage-timeline" width="1000" height="220" aria-label="評価走行の操舵と分布支持の時系列"></canvas>
           <p id="coverage-time" role="status">時系列をクリックすると時刻・速度・判定を確認できます。</p>
           <h3>指定イベントの直前区間</h3><div id="coverage-events" class="coverage-table"></div>
@@ -112,7 +112,7 @@
       <p id="esc-message" role="status">未接続。「Jetson起動」でESC信号列試験を起動してから接続してください。</p>
       <p id="esc-current"></p>
       <canvas id="esc-chart" width="1100" height="260" aria-label="要求出力と基板報告ESC PWMの時系列"></canvas>
-      <p class="small">青＝要求入力（左軸）、橙＝基板報告PWM（右軸、µs）。時刻は試験ノードでの受信・生成時刻。PWMは基板の報告値であり実測波形ではありません。</p>
+      <div class="plot-legend"><span class="plot-key plot-blue">要求入力（青・左軸、−1〜1）</span><span class="plot-key plot-orange">基板報告ESC PWM（橙・右軸、µs）</span></div><p class="small">時刻は試験ノードでの受信・生成時刻。PWMは基板の報告値であり実測波形ではありません。</p>
       <p class="small">ESC状態は送信指令からの推定です。状態遷移表のmode・board_path・pwmは受信した値、bridgeのesc_command_stateは推定値です。全受信履歴はJSONに保存できます。</p>
       <div class="esc-events-wrap"><table><thead><tr><th>相対時刻（秒）</th><th>種類</th><th>状態／遷移</th></tr></thead><tbody id="esc-events"></tbody></table></div>
     </section>
@@ -1501,7 +1501,7 @@
   <div class="actions"><h2 id="e2e-loss-title">損失カーブ</h2><button id="e2e-loss-close">閉じる</button></div>
   <p id="e2e-loss-summary"></p>
   <label id="e2e-loss-metric-label">表示指標<select id="e2e-loss-metric"><option value="mse">MSE · 比較・best.pt選定</option><option value="loss">学習loss · 最適化・scheduler監視</option></select></label>
-  <p class="loss-legend"><span id="e2e-loss-train-label">● 学習MSE</span><span id="e2e-loss-val-label">● 検証MSE</span> · 破線＝最良epoch</p>
+  <p class="loss-legend plot-legend"><span class="plot-key" id="e2e-loss-train-label">● 学習MSE</span><span class="plot-key" id="e2e-loss-val-label">● 検証MSE</span> · 破線＝最良epoch</p>
   <svg id="e2e-loss-chart" viewBox="0 0 880 300" role="img" aria-label="epochごとの学習損失と検証損失"></svg>
   <p id="e2e-loss-note" class="help">平均二乗誤差（MSE）、平滑化なし。学習損失だけが低下して検証損失が上がる場合は、過学習の可能性があります。学習時と検証時ではDropout等の動作が異なります。同じbagを両方に使った場合は未知データへの汎化を評価できません。</p>
   <details><summary>epochごとの数値</summary><div class="loss-table"><table><thead><tr><th>Epoch</th><th id="e2e-loss-train-heading">学習MSE</th><th id="e2e-loss-val-heading">検証MSE</th><th>学習率</th><th>次epoch学習率</th></tr></thead><tbody id="e2e-loss-rows"></tbody></table></div></details>
@@ -1516,9 +1516,19 @@
   </select></label><button id="tuning-parameters-refresh" type="button">現在値を再取得</button></div>
   <p id="tuning-parameters-status" role="status"></p>
   <section id="tuning-speed-panel" hidden>
-    <div class="actions"><strong>速度 · 直近60秒</strong><span style="color:#2563eb">━ 目標</span><span style="color:#d97706">━ 現在</span><span id="tuning-speed-values"></span></div>
+    <div class="actions"><strong>速度 · 直近60秒</strong><span id="tuning-speed-values" class="plot-legend"><span class="plot-key plot-blue">目標速度（青） <b id="tuning-speed-target">—</b> m/s</span><span class="plot-key plot-orange">現在速度（橙） <b id="tuning-speed-measured">—</b> m/s</span></span></div>
     <svg id="tuning-speed-chart" viewBox="0 0 760 170" role="img" aria-label="直近60秒の目標速度と現在速度、単位m/s"></svg>
     <p id="tuning-speed-note" class="help">速度診断を待っています</p>
+  </section>
+  <section id="tuning-timing-panel" hidden>
+    <strong>処理時間 · 直近60秒</strong>
+    <div id="tuning-processing-legend" class="plot-legend"></div>
+    <svg id="tuning-processing-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="制御処理開始から指令publish直前までの時間、ms"></svg>
+    <strong>入力データの古さ · 直近60秒</strong>
+    <div id="tuning-age-legend" class="plot-legend"></div>
+    <svg id="tuning-age-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="制御が使用した入力データの古さ、ms"></svg>
+    <p id="tuning-timing-status" class="help">診断を待っています</p>
+    <p class="help">古さは指令作成時刻と入力stampとの差です。自己位置は横制御で使用したデータ、速度計測・目標指令はPIDで使用したデータです。現在までの経過時間ではありません。ROS時刻の差なので未来stampは負値になります。処理時間は実経過時間でTF待機を含み、通信・基板・実際の車体応答は含みません。</p>
   </section>
   <form id="tuning-parameters-form">
     <div class="tuning-parameter-scroll"><table><thead><tr><th>項目</th><th>現在値</th><th>変更値</th></tr></thead><tbody id="tuning-parameter-rows"></tbody></table></div>

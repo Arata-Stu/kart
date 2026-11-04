@@ -102,6 +102,7 @@ def validate_mode_options(args):
     groups = [
         (("rgb_fps", "infra_fps", "rgb_profile", "infra_profile", "depth_profile", "imu_profile", "device", "run_name"), not offline),
         (("bag", "rate"), offline),
+        (("eval_record", "eval_output"), args.mode == "eval"),
         (("e2e_throttle_mode",), args.mode == "e2e"),
         (("e2e_model_dir",), args.mode in ("e2e", "e2e-latency")),
         (("multicam_mode",), args.mode in ("drive", "eval")),
@@ -186,6 +187,8 @@ def argument_parser():
     parser.add_argument("--base-frame", default="", help="offline評価の基準TF frame（例: camera_link）")
     parser.add_argument("--imu-frame", default="", help="offline VIO評価のIMU TF frame")
     parser.add_argument("--latency-output", default="", help="E2E offline latencyの新規保存先（既定analysis/e2e_latency/日時）")
+    parser.add_argument("--eval-record", choices=("true", "false"), default="", help="offline結果rosbagの記録（未指定はYAML）")
+    parser.add_argument("--eval-output", default="", help="offline結果の新規保存先（eval-record=true）")
     parser.add_argument("--bag", default="")
     parser.add_argument("--rate", default="")
     return parser
@@ -433,6 +436,11 @@ def build_command(args, config):
                   "visualize": "true", "rviz": "true"}
     elif args.mode == "eval":
         values["enable_vgl"] = str(args.eval_localization == "vgl").lower()
+    if args.mode == "eval":
+        from kart_bringup.evaluation_recording import recording_plan
+        record = recording_plan(config, args.eval_record, args.eval_output)
+        values.update(eval_record=str(record is not None).lower(), eval_output=record["output"] if record else "")
+        print("評価結果記録:", record["output"] if record else "OFF")
     command = ["ros2", "launch", "kart_bringup", launch] + [
         f"{k}:={v}" for k, v in values.items() if v is not None and v != ""
     ]

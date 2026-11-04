@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {timingPlot} from '../frontend/timing_plot.js';
+const rows=[{t:1,a:2,b:-1},{t:1.1,a:null,b:3},{t:1.2,a:4,b:4},{t:2,a:5,b:null}];
+const p=timingPlot(rows,2,['a','b']);
+assert.equal((p.paths.a.match(/M/g)||[]).length,3);
+assert.equal((p.paths.b.match(/M/g)||[]).length,1);
+assert.equal((p.paths.b.match(/L/g)||[]).length,2);
+assert.ok(p.min<=-1);
+assert.ok(!p.paths.a.includes('NaN'));
+assert.equal(timingPlot(rows,63,['a']).paths.a,'');
+assert.equal(timingPlot([{t:1,a:Infinity}],1,['a']).paths.a,'');

@@ -187,6 +187,8 @@ class Editor:
             rows['bag'] = f'再生bag: {a.bag or "未選択"}'
             rows['rate'] = f'再生倍率: {a.rate or "設定値（YAML）"}'
         if a.mode == 'eval':
+            active = a.eval_record or str(yaml.safe_load((self.config / 'evaluation/recording.yaml').read_text())['enabled']).lower()
+            rows['eval_record'] = f'評価結果rosbag記録: {active} / {a.eval_output or "自動保存先"}'
             rows['tracking'] = f'追跡方式: {"VIO" if a.tracking_mode == "1" else "VO"}'
         if a.mode in ('drive', 'eval'):
             from kart_bringup.multicam import LABELS
@@ -343,6 +345,13 @@ class Editor:
                     value = input(f'記録保存先 [{a.record_dir}] > ').strip()
                     if value:
                         a.record_dir = str(Path(value).expanduser())
+        elif action == 'eval_record':
+            a.eval_record = self.pick('評価結果rosbagを記録', ['true', 'false'], a.eval_record or 'false',
+                                      lambda v: '記録する' if v == 'true' else '記録しない')
+            if a.eval_record == 'true':
+                a.eval_output = input(f'新規保存先（空欄=自動） [{a.eval_output}] > ').strip()
+            else:
+                a.eval_output = ''
         elif action == 'bag':
             a.bag = str(self.pick('再生rosbag', mission.discover(a.record_dir, 'bag'), Path(a.bag)))
         elif action == 'rate':

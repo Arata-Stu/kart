@@ -19,6 +19,9 @@ def add_replay(args):
     overrides = (
         {} if boolean(args.enable_vgl) else {"subscriber_nodes": ["visual_slam"]}
     )
+    import json
+    overrides["recorder_node"] = getattr(args, "recorder_node", "")
+    overrides["record_topics"] = json.loads(getattr(args, "record_topics_json", "[]")) or ["/clock"]
     if imu:overrides['imu_topic']=imu[0]
     player=ExecuteProcess(cmd=command,output="screen")
     completion=[]
@@ -50,6 +53,8 @@ def generate_launch_description():
     args.add_arg("section_camera_info_topic", "", cli=True)
     args.add_arg("exit_when_done", "false", cli=True)
     args.add_arg("completion_file", "", cli=True)
+    args.add_arg("recorder_node", "", cli=True)
+    args.add_arg("record_topics_json", "[]", cli=True)
     args.add_arg("bag", cli=True)
     args.add_arg("enable_vgl", "true", cli=True)
     args.add_arg("rate", "", cli=True)

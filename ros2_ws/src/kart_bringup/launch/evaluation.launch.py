@@ -1,4 +1,6 @@
-"""Bag-only localization review: no vehicle, sensor drivers, recording, or control."""
+"""Bag-only localization review: optional output recording, no vehicle, sensor drivers, or control."""
+
+import json
 
 import isaac_ros_launch_utils as lu
 from kart_bringup.launch_arguments import LaunchArguments
@@ -38,7 +40,15 @@ def add_evaluation(args):
             forwarding=False,
         )
 
-    actions = [
+    from kart_bringup.evaluation_recording import recording_plan, start_recording
+    record = recording_plan(root, getattr(args, "eval_record", ""), getattr(args, "eval_output", ""))
+    actions = []
+    if record:
+        for key in ("enable_slam_visualization", "enable_landmarks_view", "enable_observations_view"):
+            parameters["cuvslam"][key] = True
+        actions += start_recording(root, record, dict(source_bag=str(args.bag), rate=args.rate or settings["rate"],
+            map_dir=args.map_dir, model_dir=args.model_dir, map_file=args.map_file, parameters=parameters))
+    actions += [
         include(
             "localization.launch.py",
             {
@@ -73,7 +83,9 @@ def add_evaluation(args):
     actions.append(
         include(
             "modules/evaluation/replay.launch.py",
-            {"bag": args.bag, "rate": args.rate, "enable_vgl": args.enable_vgl,"tracking_mode":str(mode)},
+            {"bag": args.bag, "rate": args.rate, "enable_vgl": args.enable_vgl,"tracking_mode":str(mode),
+             "recorder_node": record["node_name"] if record else "",
+             "record_topics_json": json.dumps(record["topics"] if record else [])},
         )
     )
     return actions
@@ -91,5 +103,7 @@ def generate_launch_description():
     args.add_arg("tracking_mode", "", cli=True)
     args.add_arg("imu_frame", "", cli=True)
     args.add_arg("rviz", "", cli=True)
+    args.add_arg("eval_record", "", cli=True)
+    args.add_arg("eval_output", "", cli=True)
     args.add_opaque_function(add_evaluation)
     return lut.LaunchDescription(args.get_launch_actions())

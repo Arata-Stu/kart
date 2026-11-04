@@ -1,0 +1,21 @@
+# Offline output recorder CLI settings (not ROS node parameters).
+enabled: false
+output_root: analysis/localization
+storage_id: sqlite3
+node_name: offline_eval_recorder
+# No input images or growing Path/cloud messages. Receipt stamps use wall time;
+# message header stamps and /clock retain the source bag timeline.
+topics:
+  - /clock
+  - /tf
+  - /tf_static
+  - /visual_slam/tracking/odometry
+  - /visual_slam/vis/slam_odometry
+  - /visual_slam/status
+  - /localization/vslam/diagnostics
+  - /localization/vgl/diagnostics
+  - /diagnostics
+  - /localization/pose_hint
+  - /visual_localization/trigger_localization
+  - /rosout
+  - /parameter_events

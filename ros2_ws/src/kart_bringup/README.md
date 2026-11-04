@@ -1658,3 +1658,70 @@ ROS parameterとYAMLは初期設定のまま。再起動では初期値へ戻る
 `/racing/observation`（kart_interfaces/msg/HeadToHeadObservation）を受け、
 `/racing/shadow_plan`（kart_interfaces/msg/HeadToHeadPlan）へ結果を出す。
 画像観測frontend、実車制御への接続は未実装。全parameterはkart_racing README参照。
+
+## Offline localization結果の記録と定量解析
+
+`bash scripts/bringup.sh` → オフライン評価（保存地図VSLAM / VSLAM＋VGL / 新規SLAM）→
+設定一覧の **評価結果rosbag記録** で「記録する」を選択できる。E2E latencyは従来の専用出力を使う。
+CLIでは既存の評価引数に `--eval-record true --eval-output /workspaces/analysis/localization/run-300` を追加する。
+`--eval-record` / launch `eval_record` は未指定なら `config/evaluation/recording.yaml` の
+`enabled: false`、`--eval-output` / launch `eval_output` は空なら同YAMLの`output_root`（作業ディレクトリ基準の
+`analysis/localization`）配下にUTC日時＋識別子で新規作成する。既存保存先は拒否し、再利用・上書きしない。
+`--dry-run`では作成しない。記録対象は出力topicだけで、元bagの画像を複製しない。
+
+保存先には `bag/`（sqlite3）、`manifest.json`（入力bag・地図・再生倍率・起動時の解決済みパラメータ）、
+`config/`（実際にlaunchが読んだ設定のコピー）、`process_output.log`（ネイティブcuVSLAM stderrを含む子process出力）、
+`recorder_exit.json`（録画processの終了コード）を保存する。manifestのparametersは起動時の値で、動的変更の実測値ではない。
+録画ノード`/offline_eval_recorder`の購読準備後に再生を再開する。途中でrecorderが終了すると評価launchも停止する。
+**bag終端後もRViz確認用にlaunchと録画は残る。Ctrl-Cでbringupを終了し、recorderの終了を待ってから解析する。**
+録画負荷を含む比較になるため、比較する全条件で同じ録画設定を使う。
+
+録画設定はCLI設定でROS parameterではない。`storage_id: sqlite3`、`node_name: offline_eval_recorder`、
+`topics`は以下の全リスト。通常はpublisher提供QoSに自動適応し、`recording_qos.yaml`で
+`/tf_static`をreliable/transient_local/depth1、`/clock`をbest_effort/volatile/depth100へ明示する。
+receipt timestampはwall time、各メッセージheaderと`/clock`は元bagの時刻。異なる時計を直接引かない。
+
+| 記録入力topic | 型 | 内容 |
+| --- | --- | --- |
+| `/clock` | `rosgraph_msgs/msg/Clock` | 再生時計 |
+| `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | 動的・静的座標変換 |
+| `/visual_slam/tracking/odometry` | `nav_msgs/msg/Odometry` | odom座標のVO |
+| `/visual_slam/vis/slam_odometry` | `nav_msgs/msg/Odometry` | map座標のSLAM pose（twistは評価しない） |
+| `/visual_slam/status` | `isaac_ros_visual_slam_interfaces/msg/VisualSlamStatus` | 追跡状態 |
+| `/localization/vslam/diagnostics`, `/localization/vgl/diagnostics`, `/diagnostics` | `diagnostic_msgs/msg/DiagnosticArray` | 保存地図／新規SLAMの診断 |
+| `/localization/pose_hint` | `geometry_msgs/msg/PoseWithCovarianceStamped` | VGL hint |
+| `/visual_localization/trigger_localization` | `geometry_msgs/msg/PoseWithCovarianceStamped` | topic経由の再要求。**同名Triggerサービス要求そのものは記録されない** |
+| `/rosout` | `rcl_interfaces/msg/Log` | ROSログ |
+| `/parameter_events` | `rcl_interfaces/msg/ParameterEvent` | パラメータ変更イベント |
+
+`replay_ready`へ追加したparameterは`recorder_node: ''`（空=待機なし）、`record_topics: [/clock]`。
+評価launchは記録有効時に上表のtopicを渡し、`/clock`と既にpublisherが存在するtopicのrecorder購読を確認する。
+未生成topicを永遠に待たない。ready timeoutは既存`timeout_s: 120.0`に従い、未準備ならbagを停止状態に保つ。
+
+解析CLI（新規ROSノード・独自topic/serviceは追加しない）:
+
+```bash
+ros2 run kart_bringup analyze_localization /workspaces/analysis/localization/run-300
+# 参照TUMと同じ座標系・基準点であることを確認した場合のみ:
+ros2 run kart_bringup analyze_localization /workspaces/analysis/localization/run-300 \
+  --output /workspaces/analysis/localization/run-300/reference-analysis \
+  --reference-tum /workspaces/map/EXAMPLE/poses/keyframe_pose_optimized.tum \
+  --reference-parent-frame map --reference-child-frame camera_link
+```
+
+`RUN/analysis/summary.json`、`samples.json`、外部ネット不要の`report.html`を生成する。
+既存解析先は上書きしない。`--output`で別の新規出力先を指定する。
+集計はpose件数・header/receipt更新間隔の中央値/P95/最大、更新gap、時刻逆行、観測されたLost区間数・時間、
+hint件数、localize成功/失敗ログ件数、native再インデックスエラー件数。
+`--max-gap`既定0.25秒を超える診断間隔はunknownとし、最後のLostの継続時間は打ち切り扱い。
+無診断・無poseもunknownとして警告し、正常や精度ゼロと扱わない。
+pose間の移動量は自動で異常ジャンプとは判定しない。
+参照比較はheader timestampで対応し、`--reference-max-gap`既定0.1秒以内のみ位置と最短yawを補間する。
+frame名不一致・参照の非有限値・時刻重複/逆行は拒否。座標変換・軌跡の後付けalignmentは行わない。
+対応数と未対応数を併記し、XY/yaw誤差は参照との整合性であって独立ground truthによる精度ではない。
+VOとSLAMは異なる座標系なので同じXY図へ重ねない。
+サービス受付時刻や実際の復帰完了をpose hint/成功ログから推測しない。復帰時間の自動判定は未対応で、
+`events`・`hints`・`diagnostics`をsamples.jsonに残す。定量比較前に入力bagと参照TUMの由来・時計・frameを確認する。
+
+検証: portable unit testsで出力先保護、Lost欠測区間、TUM対応・yaw補間・frame不一致を確認。
+ROSでの録画準備・Ctrl-C終了・実bag読み取り、GPUでの実時間負荷、Jetson/実車は別途確認が必要。
