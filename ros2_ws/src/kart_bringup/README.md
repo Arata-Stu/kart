@@ -1725,3 +1725,7 @@ VOとSLAMは異なる座標系なので同じXY図へ重ねない。
 
 検証: portable unit testsで出力先保護、Lost欠測区間、TUM対応・yaw補間・frame不一致を確認。
 ROSでの録画準備・Ctrl-C終了・実bag読み取り、GPUでの実時間負荷、Jetson/実車は別途確認が必要。
+
+設定スナップショット時、symlink-installに残ったリンク切れの旧YAML/JSONはスキップし、
+`manifest.json`の`skipped_config_symlinks`に記録する。現行launchが必要とする設定の欠落は
+通常どおりエラーとなる。失敗時の保存先は保持するため、再試行には新規保存先を指定する。

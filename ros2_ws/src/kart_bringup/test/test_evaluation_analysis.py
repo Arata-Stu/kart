@@ -6,6 +6,7 @@ from unittest.mock import patch
 from types import SimpleNamespace
 from kart_bringup import evaluation_analysis as analysis
 import tempfile
+import shutil
 import unittest
 
 from kart_bringup.evaluation_analysis import compare_reference, reference_rows, summarize, SLAM
@@ -59,8 +60,13 @@ class EvaluationTests(unittest.TestCase):
             'launch.events':SimpleNamespace(Shutdown=factory),
         }):
             root=Path(directory)/'run'
-            plan=recording_plan(CONFIG,'true',str(root))
-            io, exit_handler, recorder=start_recording(CONFIG,plan,{'source_bag':'/original'})
+            config=Path(directory)/'installed_config'
+            shutil.copytree(CONFIG,config)
+            stale=config/'localization/fixed_localization.yaml'
+            stale.symlink_to(config/'removed.yaml')
+            plan=recording_plan(config,'true',str(root))
+            io, exit_handler, recorder=start_recording(config,plan,{'source_bag':'/original'})
+            self.assertEqual(json.loads((root/'manifest.json').read_text())['skipped_config_symlinks'],[str(stale)])
             io.on_stderr(SimpleNamespace(text=b'Failed to reindex pose graph'))
             self.assertIn('reindex',(root/'process_output.log').read_text())
             self.assertEqual(len(exit_handler.on_exit(SimpleNamespace(returncode=1),SimpleNamespace(is_shutdown=False))),1)

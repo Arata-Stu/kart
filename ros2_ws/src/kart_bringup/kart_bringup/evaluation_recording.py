@@ -33,15 +33,20 @@ def start_recording(config, plan, manifest):
     root.mkdir(parents=True, exist_ok=False)
     snapshot = root / 'config'
     snapshot.mkdir()
+    skipped = []
     for folder in ('evaluation', 'localization', 'sim'):
         for source in (Path(config) / folder).glob('*'):
             if source.suffix in ('.yaml', '.json'):
+                # symlink-install can retain links to removed, unused configs.
+                if source.is_symlink() and not source.exists():
+                    skipped.append(str(source))
+                    continue
                 target = snapshot / folder / source.name
                 target.parent.mkdir(exist_ok=True)
                 target.write_bytes(source.read_bytes())
     (root / 'manifest.json').write_text(json.dumps(dict(
         schema_version=1, created_utc=datetime.now(timezone.utc).isoformat(),
-        recording=plan, **manifest), indent=2, ensure_ascii=False))
+        recording=plan, skipped_config_symlinks=skipped, **manifest), indent=2, ensure_ascii=False))
     command = ['ros2', 'bag', 'record', '--node-name', plan['node_name'],
                '--storage', plan['storage_id'], '--output', str(root / 'bag'),
                '--disable-keyboard-controls', '--qos-profile-overrides-path',
