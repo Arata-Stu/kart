@@ -9,14 +9,14 @@ Isaac ROS release-5.0を対象に、既存地図への再局在と追跡だけ�
 
 ## 構成と出典
 
-| ノード | package / Component | container |
+| ノード | package / Component | localization単体の既定container |
 |---|---|---|
 | visual_slam | isaac_ros_cuvslam / nvidia::isaac_ros::visual_slam::VisualSlamNode | kart_vslam_container |
 | visual_global_localization | isaac_ros_visual_global_localization / nvidia::isaac_ros::visual_global_localization::VisualGlobalLocalizationNode | kart_vgl_container |
 
 両方`rclcpp_components/component_container_mt`。VSLAMのinitial_pose callbackが
 localize終了を待つ間も画像callbackを動かすためmulti-thread executorを使用する。
-VGLとVSLAMは別process。可視化を止めても推定用画像の入力・画像処理は必要。
+実車missionでは両方ともRealSenseと同じsensor containerにロードする。localization単体の既定は表のとおり。可視化を止めても推定用画像の入力・画像処理は必要。
 
 2026-10-08に確認した一次資料:
 

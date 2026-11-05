@@ -462,6 +462,8 @@ class MissionCompositionTests(unittest.TestCase):
             localization = lu.include.call_args_list[2].kwargs["launch_arguments"]
             self.assertEqual(localization["vslam_container"], "/external/sensors")
             self.assertEqual(localization["create_vslam_container"], "false")
+            self.assertEqual(localization["vgl_container"], "/external/sensors")
+            self.assertEqual(localization["create_vgl_container"], "false")
             self.assertEqual(localization['multicam_mode'],'2')
             camera_args = lu.include.call_args_list[0].kwargs["launch_arguments"]
             self.assertEqual(camera_args["rgb_profile"], "1280x720x30")

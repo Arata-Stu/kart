@@ -139,3 +139,8 @@ section selector → E2E decoderへ送信する。headerは判定対象画像と
 元stamp、reference_id（地図/ラインrevision）、同一周回原点のs、左正d、相手IDと分散を保持。
 observed=falseと空いたコースを混同しない。出力は空間スプラインと速度目標のshadow情報。
 有効期限は元観測時刻から計算し、時刻付き動的安全軌道や車両指令とは扱わない。
+
+`InfraStampResult` はInfra時刻検証の受信1件分。streamは左画像=0、右画像=1、
+左CameraInfo=2、右CameraInfo=3。stamp_nsは元の撮影時刻、sequenceは入力別の受信連番、
+interval_nsは前回との符号付き時間差、expected_frames_missingは公称周期換算の推定欠け数、
+seen_maskは同じstampでここまで観測したstreamのビット集合。

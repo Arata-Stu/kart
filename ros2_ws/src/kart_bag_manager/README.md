@@ -276,3 +276,21 @@ JSON応答に`progress`を追加。ノード名・topic・parameterの追加や�
 録画中、欠落、破損、1 MiBを超えるmetadataではnull（未取得）。不明値を0として表示しない。
 UIは取得時点の値を表示し、切断後に時計を進めない。旧managerでは未取得表示になる。
 ファイル計測失敗は録画制御を止めない。ROS/Jetsonでの負荷・実録画は別途確認が必要。
+
+## Infra timestamp検証
+
+C++ Component `kart_bag_manager::InfraStampValidator`（ノード `/infra_stamp_validator`） はD455の4トピックをsensor-data QoSで購読し、
+受信1件ごとに `/validation/infra_stamps`（kart_interfaces/msg/InfraStampResult、reliable）へ結果を出す。
+入力は `/realsense/infra{1,2}/image_rect_raw`（sensor_msgs/msg/Image）と
+`/realsense/infra{1,2}/camera_info`（sensor_msgs/msg/CameraInfo）。
+missionのvalidate_infra:=trueでRealSenseと同じcontainerへロードし、intra-process通信を有効にする。
+ConstSharedPtrでHeaderのみ参照し、画素をコピー・保持しない。単体起動はros2 run kart_bag_manager infra_stamp_validator。
+parameterは `expected_hz`（double、既定90.0）。撮影周期の評価基準でありカメラの設定は変更しない。
+
+結果には入力種別、撮影stamp(ns)、種別ごとの受信連番（1始まり）、前回との差(ns、初回0)、
+周期から推定した欠け数、同一stampで受信済みの種別のビットマスクを記録する。
+直近512種類のstampを照合する。各stampの最後のマスクの下位2ビットがともに立てば左右画像が一致した。
+これは完全一致の検査で、5 ms許容の評価には保存したstampを使う。
+負の間隔は時刻逆行、初回以外のゼロは重複。推定欠け数は間隔を公称周期で割って丸め、1を引き下限を0とした値。
+結果連番が飛んだ場合、検証ノードは受け取ったが結果bagに入らなかったことを区別できる。
+両モードの起動手順はkart_bringupの「Infra時刻検証録画」を参照。

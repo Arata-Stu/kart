@@ -41,6 +41,7 @@ localizationはIsaac ROS 5.0のmapping/localization系に合わせ、
   所有権/executor設定の矛盾は拒否する。
 - 下位には検証済みparameter/remapを明示的に渡す。includeの引数scopeを分離する。
 - 外部所有containerは停止・自動unload・既存Component置換をしない。ライフサイクルは所有側の責務。
+- 実車missionでカメラ画像を配信・購読する処理Componentは、カメラと同じsensor containerへロードし、intra-process通信を有効にする。VSLAM・VGL・Infra時刻検証・RGB E2Eに適用する。録画・外部可視化は独立購読者として扱う。
 - VSLAMを入れるcontainerにはmultithread executorが必要。別moduleを追加する際も、
   executor要件・TF配信者・processを共有する影響を最上位で判断する。
 

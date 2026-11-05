@@ -7,7 +7,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/E2EHeadSelection.msg"
   "msg/HeadToHeadObservation.msg" "msg/HeadToHeadPlan.msg"
   "msg/ReferenceLine.msg" "msg/TrackingReference.msg"
-  "msg/BagRequest.msg" "msg/BagStatus.msg"
+  "msg/InfraStampResult.msg" "msg/BagRequest.msg" "msg/BagStatus.msg"
   "msg/ControlTrim.msg" "msg/ControlCommand.msg" "msg/OperationModeRequest.msg" "msg/OperationModeState.msg"
   DEPENDENCIES std_msgs geometry_msgs)
 ament_export_dependencies(rosidl_default_runtime)

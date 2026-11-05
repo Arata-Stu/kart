@@ -1,0 +1,3 @@
+/infra_stamp_validator:
+  ros__parameters:
+    expected_hz: 90.0

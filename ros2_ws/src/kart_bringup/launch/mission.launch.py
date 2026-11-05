@@ -158,6 +158,18 @@ def add_mission(args):
                 },
             )
         )
+    if getattr(args, "validate_infra", "false") == "true":
+        if not params["enable_infra1"] or not params["enable_infra2"]:
+            raise ValueError("validate_infra requires both Infra streams")
+        actions.append(lu.load_composable_nodes(
+            "/" + cfg["sensor_container"].lstrip("/"),
+            [lut.ComposableNode(
+                package="kart_bag_manager", plugin="kart_bag_manager::InfraStampValidator",
+                name="infra_stamp_validator",
+                parameters=[str(root / "recording/infra_validator.yaml")],
+                extra_arguments=[{"use_intra_process_comms": True}],
+            )],
+        ))
     if cfg["enable_evs"]:
         actions.append(
             include(
@@ -178,6 +190,8 @@ def add_mission(args):
                     "multicam_mode": args.multicam_mode,
                     "vslam_container": "/" + cfg["sensor_container"].lstrip("/"),
                     "create_vslam_container": "false",
+                    "vgl_container": "/" + cfg["sensor_container"].lstrip("/"),
+                    "create_vgl_container": "false",
                 },
             )
         )
@@ -222,6 +236,7 @@ def add_mission(args):
 
 def generate_launch_description():
     args = LaunchArguments()
+    args.add_arg("validate_infra", "false", choices=["true", "false"], cli=True)
     args.add_arg("mode", "collect", choices=["collect", "environment", "drive", "e2e"], cli=True)
     for key in (
         *OVERRIDES,

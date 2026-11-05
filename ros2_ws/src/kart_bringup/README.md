@@ -410,8 +410,8 @@ driveには`--map-file`、`--map-dir`、`--model-dir`、`--lane-id`、`--line-ty
 `config/mission.yaml`の`sensor_container_type=multithreaded`を使用。
 各modeのlocalization/tracking/e2eはcollect=false/false/false、drive=true/true/false、
 e2e=false/false/true。e2e_drive_enabled=trueでdecoderを有効化するが、AUTO操作までは出力しない。
-missionはsensor containerを一度だけ作成し、RealSense/OpenEBとVSLAMまたはE2Eの
-image encoder・TensorRT・decoderを同じcontainerへloadする。VGL、vehicle、trackingは別所有。
+missionはRealSenseと、有効にしたVSLAM・VGL・Infra時刻検証・RGB E2E処理を同じsensor containerへloadする。
+vehicle、tracking、録画プロセス、任意のOpenEB pipelineは個別に起動する。
 下位moduleはcontainerを作らない。evalは実センサを使わず、localizationがcontainerを所有する。
 二重起動しないこと。追加で独立launchを起動する場合はcontainer所有権とnode重複を確認する。
 
@@ -1729,3 +1729,22 @@ ROSでの録画準備・Ctrl-C終了・実bag読み取り、GPUでの実時間�
 設定スナップショット時、symlink-installに残ったリンク切れの旧YAML/JSONはスキップし、
 `manifest.json`の`skipped_config_symlinks`に記録する。現行launchが必要とする設定の欠落は
 通常どおりエラーとなる。失敗時の保存先は保持するため、再試行には新規保存先を指定する。
+
+## Infra時刻検証録画
+
+mission.launch.pyの通常の起動引数に `validate_infra:=true`（既定false）を追加する。
+RealSenseと同じsensor_containerに検証Componentがロードされる。別端末で以下のどちらかを実行する。
+録画launchはMCAP recorderのみ起動し、Ctrl-Cでその録画を終了する。
+保存先は新規ディレクトリを指定する。output省略時はrosbag2の既定名を使う。
+
+```bash
+ros2 launch kart_bringup infra_validation.launch.py mode:=results_only output:=/workspaces/record/infra_check_01
+ros2 launch kart_bringup infra_validation.launch.py mode:=with_camera output:=/workspaces/record/infra_check_02
+```
+
+results_only（既定）は `/validation/infra_stamps` のみ、with_cameraはさらに左右Infraの
+image_rect_raw・camera_infoを保存する。RGB・Depth・IMUは対象外。
+カメラ起動時に通常の走行bag録画も開始するとそちらは別途画像を書き込むため、
+結果だけを保存する試験では通常録画を停止しておく。
+設定はconfig/recording/infra_validator.yamlのexpected_hz（90.0）。
+ノード・トピック型・結果の読み方はkart_bag_manager README「Infra timestamp検証」を参照。
