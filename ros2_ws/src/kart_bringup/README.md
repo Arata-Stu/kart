@@ -1742,6 +1742,7 @@ ros2 launch kart_bringup infra_validation.launch.py mode:=results_only output:=/
 ros2 launch kart_bringup infra_validation.launch.py mode:=with_camera output:=/workspaces/record/infra_check_02
 ```
 
+録画対象はLyricalの `ros2 bag record --topics` で明示する。
 results_only（既定）は `/validation/infra_stamps` のみ、with_cameraはさらに左右Infraの
 image_rect_raw・camera_infoを保存する。RGB・Depth・IMUは対象外。
 カメラ起動時に通常の走行bag録画も開始するとそちらは別途画像を書き込むため、

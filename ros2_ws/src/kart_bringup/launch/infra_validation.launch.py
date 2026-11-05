@@ -14,7 +14,7 @@ def start(context):
     if output:
         recorder.extend(['-o', output])
     return [
-        ExecuteProcess(cmd=recorder + topics, output='screen', on_exit=Shutdown()),
+        ExecuteProcess(cmd=[*recorder, '--topics', *topics], output='screen', on_exit=Shutdown()),
     ]
 
 
