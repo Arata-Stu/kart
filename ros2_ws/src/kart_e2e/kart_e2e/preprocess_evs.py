@@ -123,12 +123,16 @@ def discover_raw(bag, timings):
         raise ValueError('RAW自動検出: 空ファイル・シンボリックリンクは使用できません')
     identities = {(r['stream_id'], r['sensor_epoch']) for r in timings}
     if len(identities) != 1:
-        raise ValueError('RAW自動検出: bagのstream/epochが一意ではありません。RAW manifestを指定してください')
+        raise ValueError(f'RAW自動検出: RAW={raw} は検出しましたが、timing {len(timings)}件の'
+                         f'stream/epochが一意ではありません: {sorted(identities)}。'
+                         'timingがない場合は記録topicを確認し、複数の場合はRAW manifestを指定してください')
     stream_id, epoch = next(iter(identities))
     return [dict(path=str(raw), stream_id=stream_id, sensor_epoch=epoch)]
 
 
 def load_manifest(path):
+    if Path(path).suffix.lower() == '.raw':
+        raise ValueError('--raw-manifestはJSON専用です。RAWファイルは--rawで指定してください')
     data = json.loads(Path(path).read_text())
     if data.get('schema') != 'kart.evs_raw_manifest.v1' or not data.get('files'):
         raise ValueError('Expected kart.evs_raw_manifest.v1 with files')

@@ -40,6 +40,19 @@ class RawDiscoveryTests(unittest.TestCase):
             (bag/'camera.raw').write_bytes(b'changed raw')
             self.assertNotEqual(before, bag_signature(bag))
 
+    def test_renamed_bag_and_binary_manifest_error(self):
+        from kart_e2e.preprocess_evs import discover_raw, load_manifest
+        with tempfile.TemporaryDirectory() as directory:
+            bag = Path(directory) / 'original'
+            bag.mkdir()
+            raw_name = 'openeb_camera_19700101_092904_000000.raw'
+            (bag / raw_name).write_bytes(b'\x9a\xffRAW')
+            bag = bag.rename(bag.with_name('collect_rgbOFF_infraOFF_evsT250Hz-I25fps'))
+            result = discover_raw(bag, [dict(stream_id='camera', sensor_epoch=0)])
+            self.assertEqual(result[0]['path'], str((bag / raw_name).resolve()))
+            with self.assertRaisesRegex(ValueError, '--rawで指定'):
+                load_manifest(bag / raw_name)
+
     def test_single_raw_identity_and_ambiguous_sources(self):
         from kart_e2e.preprocess_evs import discover_raw
         with tempfile.TemporaryDirectory() as directory:

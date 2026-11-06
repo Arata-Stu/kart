@@ -256,11 +256,15 @@ class Learning:
                     raise ValueError("学習環境のEVS encoder JSONを確認してください")
                 manifest_value = body.get("raw_manifest", "")
                 if not isinstance(manifest_value, str):
-                    raise ValueError("RAW manifestはパス文字列で指定してください")
-                manifest = Path(manifest_value).expanduser() if manifest_value.strip() else None
+                    raise ValueError("RAWまたはmanifest JSONはパス文字列で指定してください")
+                manifest = Path(manifest_value.strip()).expanduser() if manifest_value.strip() else None
                 if manifest is not None and (not manifest.is_absolute() or not manifest.is_file()):
-                    raise ValueError("RAW manifestの絶対パスを指定してください")
-                raw_args = ["--raw-manifest", str(manifest)] if manifest is not None else []
+                    raise ValueError("RAWまたはmanifest JSONの絶対パスを指定してください")
+                raw_args = []
+                if manifest is not None:
+                    if manifest.suffix.lower() not in (".raw", ".json"):
+                        raise ValueError(".rawファイルまたはmanifest .jsonを指定してください")
+                    raw_args = ["--raw" if manifest.suffix.lower() == ".raw" else "--raw-manifest", str(manifest)]
                 stride = self.integer(body.get("sample_stride", 10), 1, 100000)
                 reorder = self.integer(body.get("max_reorder_us", 5000), 0, 100000)
                 return {**common, "kind":"datasets", "target":target,

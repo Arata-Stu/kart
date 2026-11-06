@@ -100,6 +100,13 @@ class LearningTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "evs_raw_python"):
                 self.service.prepare("dataset", dict(name="bad-env",bag="bag",modality="evs"))
             self.assertEqual(self.service.prepare("dataset", dict(name="rgb-env",bag="bag"))["python"], sys.executable)
+        raw = self.records / "bag" / "openeb_camera_19700101_092904_000000.RAW"
+        raw.write_bytes(b"\x9a\xffRAW")
+        manual = self.service.prepare("dataset", dict(name="manual-events", bag="bag", modality="evs",
+                                                       raw_manifest=" " + str(raw) + " "))
+        self.assertIn("--raw", manual["args"])
+        self.assertNotIn("--raw-manifest", manual["args"])
+        self.assertEqual(manual["args"][manual["args"].index("--raw") + 1], str(raw))
         self.assertNotIn("--raw-manifest", auto["args"])
         self.assertEqual(auto["args"][auto["args"].index("--max-reorder-us")+1], "5000")
         with self.assertRaises(ValueError):
