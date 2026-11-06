@@ -1550,3 +1550,6 @@ RAW自体の小逆順は従来のmax_reorder_usで検査し、補正で回避し
 EVS抽出が0件の場合は、例外に教師採否理由、command/mode欠落・鮮度切れ、
 RAW範囲外の件数、記録mode分布、各ROS時刻範囲をJSONで表示する。
 診断のために教師選択条件や時計を変更しない。skippedの詳細理由カウンタは重複し得る。
+
+0件診断の`raw_coverage`はRAWごとの要求窓範囲・デコード済み時刻範囲・読込件数・EOF状態を示す。
+`reader_done=false`の場合、decoded_last_usはファイル全体の終端ではない。

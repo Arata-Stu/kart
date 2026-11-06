@@ -344,6 +344,7 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
     signatures = {f['path']: (Path(f['path']).stat().st_size, Path(f['path']).stat().st_mtime_ns)
                   for f in files}
     raw_provenance = []
+    coverage = []
     with tempfile.TemporaryDirectory(prefix='.evs-dataset-', dir=output.parent) as tmp:
         stage = Path(tmp) / 'output'
         (stage / 'counts').mkdir(parents=True)
@@ -354,6 +355,7 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
                     raise ValueError('RAW sensor size differs from encoder metadata')
                 rows = [row for epoch in file.get('sensor_epochs', [file['sensor_epoch']])
                         for row in groups[(file['stream_id'], epoch)][::sample_stride]]
+                requested_start = requested_end = None
                 for row in rows:
                     stamp = row['tensor_stamp_ros_ns']
                     record = previous_record(commands, stamp, int(max_skew_ms * 1e6))
@@ -372,6 +374,8 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
                     offset = file.get('epoch_offsets_us', {}).get(str(row['sensor_epoch']), 0)
                     start = row['window_start_sensor_us'] + offset
                     end = row['window_end_sensor_us'] + offset
+                    requested_start = start if requested_start is None else min(requested_start, start)
+                    requested_end = end if requested_end is None else max(requested_end, end)
                     events = raw.window(start, end)
                     if events is None:
                         counters['outside_raw_coverage'] += 1
@@ -388,11 +392,15 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
                                   throttle=command.throttle, timing=row, raw=file['path'],
                                   raw_time_offset_us=offset, raw_window_start_us=start, raw_window_end_us=end)
                     stream.write(json.dumps(sample) + '\n')
+                coverage.append(dict(path=file['path'],
+                                     requested_start_us=requested_start, requested_end_us=requested_end,
+                                     decoded_first_us=raw.first, decoded_last_us=raw.last,
+                                     events_read=raw.events_read, reader_done=bool(raw.reader.is_done())))
                 with Path(file['path']).open('rb') as source:
                     sha = hashlib.file_digest(source, 'sha256').hexdigest()
                 raw_provenance.append(dict(file, sha256=sha, max_observed_reorder_us=raw.max_observed_reorder_us))
         if not used:
-            detail = dict(skipped=dict(counters), teacher_selection=selection.metadata(),
+            detail = dict(skipped=dict(counters), raw_coverage=coverage, teacher_selection=selection.metadata(),
                           command_records=len(commands), mode_records=len(modes),
                           timing_records=len(timings),
                           mode_counts=dict(Counter(str(mode.mode) for _, mode in modes)),
