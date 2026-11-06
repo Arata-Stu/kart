@@ -100,6 +100,7 @@ def validate_mode_options(args):
     """Reject runtime selections that would otherwise disappear from argv."""
     offline = args.mode in ("eval", "e2e-latency")
     groups = [
+        (("record_profile",), args.mode == "collect"),
         (("rgb_fps", "infra_fps", "rgb_profile", "infra_profile", "depth_profile", "imu_profile", "device", "run_name"), not offline),
         (("bag", "rate"), offline),
         (("eval_record", "eval_output"), args.mode == "eval"),
@@ -138,6 +139,7 @@ def argument_parser():
     parser.add_argument("--model-root", type=Path, default=ROOT / "models")
     parser.add_argument("--rgb-fps", choices=("0", "30", "60", "90"))
     parser.add_argument("--infra-fps", choices=("0", "30", "60", "90"))
+    parser.add_argument("--record-profile", choices=("standard", "vslam-map"), default="", help="記録profile: standard=通常 / vslam-map=stereo VO地図用最小構成")
     parser.add_argument("--rgb-profile", default="", help="RGB WIDTHxHEIGHTxFPS; 0 disables")
     parser.add_argument("--imu-profile", choices=("low", "high", "off"), default="", help="IMU: low=accel100/gyro200Hz, high=accel200/gyro400Hz, off=なし; 未指定はYAML")
     parser.add_argument("--depth-profile", default="", help="Depth Z16 WIDTHxHEIGHTxFPS; 0 disables; Infra同時使用時は同じ解像度・FPS")
@@ -264,9 +266,11 @@ def build_command(args, config):
             args.evs_bias_file = bias_selection(args.evs_bias_file)
         print(f"EVS: {overrides}; packet topic OFF; configs={paths}")
     sensors = sensor_parameters(
-        camera_config(config, args.mode), args.rgb_fps or "", args.infra_fps or "",
+        camera_config(config, args.mode, args.record_profile), args.rgb_fps or "", args.infra_fps or "",
         args.rgb_profile, args.infra_profile, args.imu_profile, getattr(args, "depth_profile", "")
     )
+    from kart_bringup.mission import validate_record_profile
+    validate_record_profile(args.record_profile, args.mode, sensors, args.evs)
     if section_routing:
         from kart_bringup.localization import resolve
         from kart_bringup.vehicle_tf import load_transforms
@@ -371,6 +375,7 @@ def build_command(args, config):
         "parking_site": parking_site,
         "parking_slot": parking_slot,
         "mode": args.mode,
+        "record_profile": args.record_profile,
         "recovery": args.recovery,
         "joy_max_throttle": None if args.joy_max_throttle is None else str(args.joy_max_throttle),
         "auto_fixed_throttle": None if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle),
@@ -463,8 +468,10 @@ def build_command(args, config):
         print("環境記録: Depth Z16:", sensors["depth_module.depth_profile"] if sensors["enable_depth"] else "OFF",
               "IMU: accel=", sensors["enable_accel"], "gyro=", sensors["enable_gyro"],
               "unite_imu_method=", sensors["unite_imu_method"])
-        print("センサ設定:", camera_config(config, args.mode))
-        print("録画設定:", recording_config(config, args.mode, args.evs))
+    if args.mode not in ("eval", "e2e-latency"):
+        print("記録profile:", args.record_profile or "standard")
+        print("センサ設定:", camera_config(config, args.mode, args.record_profile))
+        print("録画設定:", recording_config(config, args.mode, args.evs, args.record_profile))
     print(shlex.join(command))
     if fresh:
         print("mapを読み込まず新規SLAMで追跡。RViz: 左右画像・観測点・ランドマーク・軌跡。終了はCtrl-C。")

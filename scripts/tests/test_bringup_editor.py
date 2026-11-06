@@ -236,3 +236,20 @@ def test_record_joy_limit_rejects_invalid_input(value):
     assert not err
     assert '変更できません' in out
     assert 'joy_max_throttle:=' not in out
+
+
+def test_vslam_map_profile_tui_and_return_to_standard():
+    steps = [('用途', 'record'), (REVIEW, 'record_profile'),
+             ('記録profile', 'vslam-map'), (REVIEW, 'start')]
+    out, err = run_tui(steps, '--evs', '--rgb-profile', '1280x720x30', '--imu-profile', 'high')
+    assert not err
+    assert 'record_profile:=vslam-map' in out
+    assert 'RGB: OFF' in out and 'IMU: OFF' in out and 'Depth: OFF' in out
+    assert 'enable_evs:=false' in out
+    assert 'bag_manager_vslam_map.yaml' in out
+    steps = [('用途', 'record'), (REVIEW, 'record_profile'), ('記録profile', 'vslam-map'),
+             (REVIEW, 'record_profile'), ('記録profile', 'standard'), (REVIEW, 'start')]
+    out, err = run_tui(steps)
+    assert not err
+    assert 'RGB: 640x480x30' in out
+    assert 'record_profile:=standard' in out

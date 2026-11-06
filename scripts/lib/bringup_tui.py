@@ -53,7 +53,7 @@ class Editor:
 
     def sensors(self):
         a = self.args
-        return sensor_parameters(camera_config(self.config, a.mode), a.rgb_fps or '',
+        return sensor_parameters(camera_config(self.config, a.mode, getattr(a, "record_profile", "")), a.rgb_fps or '',
                                  a.infra_fps or '', a.rgb_profile, a.infra_profile, a.imu_profile, getattr(a, "depth_profile", ""))
 
     def pick(self, title, values, current=None, label=str):
@@ -169,6 +169,8 @@ class Editor:
                         evs=f'センサ / EVS: {"有効" if a.evs else "無効"}（詳細設定）')
             if a.evs:
                 print('EVS詳細:', self.evs_summary())
+            if a.mode == 'collect':
+                rows['record_profile'] = '記録profile: ' + (getattr(a, 'record_profile', '') or 'standard')
             if a.mode in ('collect', 'environment'):
                 limit = self.params('input/joy_manager.yaml', 'kart_joy_manager')['speed_scale'] if a.joy_max_throttle is None else a.joy_max_throttle
                 rows['joy_limit'] = f'制御 / Joy最大スロットル: {limit}'
@@ -287,7 +289,7 @@ class Editor:
             try:
                 sensors = self.sensors()
             except ValueError:
-                sensors = sensor_parameters(camera_config(self.config, a.mode))
+                sensors = sensor_parameters(camera_config(self.config, a.mode, getattr(a, "record_profile", "")))
             key, enabled = ('rgb_camera.color_profile', 'enable_color') if action == 'rgb' else ('depth_module.infra_profile', 'enable_infra1')
             if action == 'depth': key, enabled = 'depth_module.depth_profile', 'enable_depth'
             current = sensors[key] if sensors[enabled] else '0'
@@ -305,6 +307,19 @@ class Editor:
                     if other == 'infra': a.infra_fps = None
             if action != 'depth': setattr(a, action + '_fps', None)
             self.inferred.pop(action + '_profile', None)
+        elif action == 'record_profile':
+            a.record_profile = self.pick('記録profile', ['standard', 'vslam-map'],
+                getattr(a, 'record_profile', '') or 'standard',
+                lambda v: '通常記録' if v == 'standard' else 'VSLAM map最小（stereo VO / Infra＋TFのみ）')
+            if a.record_profile == 'vslam-map':
+                a.rgb_fps = a.infra_fps = None
+                a.rgb_profile = a.depth_profile = a.imu_profile = ''
+                if a.infra_profile == '0':
+                    a.infra_profile = ''
+                a.evs, a.no_evs = False, True
+                for key in ('evs_backend', 'evs_aggregation', 'evs_serial', 'evs_tensor_config', 'evs_bias_file'):
+                    setattr(a, key, '')
+                a.evs_image = None
         elif action == 'imu':
             a.imu_profile = self.pick('IMU 取得レート', ['', 'low', 'high', 'off'], a.imu_profile,
                 lambda v: {'': '設定を保持（YAML）', 'low': '低Hz（加速度100 / ジャイロ200Hz）',

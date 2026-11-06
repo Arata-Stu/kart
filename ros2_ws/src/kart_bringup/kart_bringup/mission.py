@@ -57,14 +57,18 @@ def validate_camera_profile(stream, profile):
         raise ValueError(f"{stream}: unsupported D455 profile: {profile}")
 
 
-def camera_config(root, mode):
+def camera_config(root, mode, record_profile=""):
     """Select the full static sensor config, shared by CLI and launch."""
+    if record_profile == "vslam-map":
+        return Path(root) / "sensors/realsense_vslam_map.yaml"
     return Path(root) / "sensors" / (
         "realsense_environment.yaml" if mode == "environment" else "realsense.yaml"
     )
 
 
-def recording_config(root, mode, evs=False):
+def recording_config(root, mode, evs=False, record_profile=""):
+    if record_profile == "vslam-map":
+        return Path(root) / "recording/bag_manager_vslam_map.yaml"
     suffix = "_environment" if mode == "environment" else ""
     suffix += "_openeb" if evs else ""
     return Path(root) / "recording" / f"bag_manager{suffix}.yaml"
@@ -280,3 +284,16 @@ def validate_localization_imu(parameters, sensors):
         sensors["enable_accel"] and sensors["enable_gyro"] and sensors["unite_imu_method"] == 2
     ):
         raise ValueError("VIO requires IMU: choose low or high (imu_profile)")
+
+
+def validate_record_profile(profile, mode, sensors, evs):
+    if profile not in ("", "standard", "vslam-map"):
+        raise ValueError(f"Unknown record profile: {profile}")
+    if profile in ("", "standard"):
+        return
+    if mode != "collect":
+        raise ValueError("vslam-map profileはcollect専用です")
+    if evs or any(sensors[k] for k in ("enable_color", "enable_depth", "enable_accel", "enable_gyro")):
+        raise ValueError("vslam-map: RGB・Depth・IMU・EVSはOFFにしてください（通常記録はstandard）")
+    if not (sensors["enable_infra1"] and sensors["enable_infra2"]):
+        raise ValueError("vslam-map requires both Infra streams")

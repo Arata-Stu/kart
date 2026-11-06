@@ -16,6 +16,18 @@ spec.loader.exec_module(module)
 
 
 class PropagationTests(unittest.TestCase):
+    def test_map_profile_cli_and_conflicts(self):
+        out = self.run_cli('--mode', 'collect', '--record-profile', 'vslam-map', '--infra-profile', '424x240x60')
+        self.assertIn('record_profile:=vslam-map', out)
+        self.assertIn('Infra: 424x240x60', out)
+        for options in (('--rgb-profile', '640x480x30'), ('--infra-profile', '0'),
+                        ('--imu-profile', 'high'), ('--evs',)):
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                self.run_cli('--mode', 'collect', '--record-profile', 'vslam-map', *options)
+        for mode in ('environment', 'drive', 'eval'):
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                self.run_cli('--mode', mode, '--record-profile', 'vslam-map')
+
     def test_depth_profile_forwarded_and_offline_rejected(self):
         output = self.run_cli('--mode', 'collect', '--depth-profile', '424x240x60', '--infra-profile', '424x240x60')
         self.assertIn('depth_profile:=424x240x60', output)
@@ -124,7 +136,7 @@ class PropagationTests(unittest.TestCase):
             self.run_cli('--mode', 'collect')
         # Search roots and dry_run are local selector behavior, not ROS parameters.
         selector = {'help', 'map_root', 'model_root', 'bias_root', 'dry_run'}
-        forwarded = {'mode', 'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
+        forwarded = {'record_profile', 'mode', 'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
                      'device', 'map_file', 'map_dir', 'model_dir', 'lane_id', 'line_type',
                      'tuning', 'record_dir', 'evs', 'no_evs', 'evs_backend', 'evs_aggregation',
                      'evs_image', 'evs_serial', 'evs_tensor_config', 'evs_bias_file', 'foxglove',

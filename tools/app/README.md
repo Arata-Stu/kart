@@ -1876,3 +1876,23 @@ manifestの各files要素に任意の`epoch_offsets_us`を指定できる。
 サンプルにraw_time_offset_us/raw_window_start_us/raw_window_end_us、metadataのraw_filesに
 明示対応を保存する。受信時刻だけから補正を自動推定しない。
 RAW自体の小逆順は従来のmax_reorder_usで検査し、補正で回避しない。
+
+
+### Dataset作成時のEVT3時刻自動補正
+
+単一RAW・単一streamでは、manifest未指定時（単一`--raw`も含む）に自動補正する。
+RAWをshift無効で全走査し、記録開始・終了の両端とTensorTimingの最新イベント時刻が
+それぞれ1秒以内で一致する16,777,216usの整数倍を一意に選ぶ。単なる範囲重複では選ばない。
+epoch間はsensor_to_ros_offset_nsの差から整数周回差を求め、全timingの残差が1秒以内、
+同一epoch内の補正値一定、補正後時系列の前進を検査する。
+この1秒は周回候補の検査幅であり、任意の1秒補正や同期精度の保証ではない。
+RAW自体の逆行はmax_reorder_us（既定5000us）を超えれば停止する。
+RAW.metadata.yamlがあればRAW名と録画開始ROS時刻を照合し、最初のtimingと2秒以上離れていれば拒否する。
+古い記録でsidecarがなければ両端とoffset系列の検査で判定する（根拠の欠如をmetadataに記録）。
+異なる録画の同じ長さ・周回差を区別するイベント一致の証明ではないため、初回はRGB比較等で検証する。
+複数stream/RAWや長い先頭末尾欠落、整数周回で説明できないresetは明示manifestが必要。
+手動manifestは優先し、自動補正を二重適用しない。
+補正値と判定根拠はdataset metadata.jsonのraw_files[].epoch_offsets_us / auto_alignmentへ保存する。
+元RAW・bag・TensorTiming・教師ROS時刻は変更しない。UIのRAW手動指定欄を空欄にして利用できる。
+既存datasetは変わらず、再作成時に適用する。RAW全走査が1回増えるため抽出時間は増える。
+新規ROSノード/topic/parameterはなく、既存CLIの標準処理として実行する。

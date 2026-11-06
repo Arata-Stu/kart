@@ -507,3 +507,12 @@ UIのStereo profileは共通選択とし、Depth／InfraのON・OFFを分離す�
 起動時と受理した各押下（上下限到達を含む）で現在値をINFOログへ出し、値は
 既存`/teleop/fixed_config`（std_msgs/msg/String、reliable/volatile/depth1、10Hzおよび変更時）へ記録する。
 ROS parameterとYAMLは初期設定のまま。再起動では初期値へ戻る。独自service/actionは追加しない。
+
+
+### VSLAM map最小録画
+
+collectの明示record_profile=vslam-mapでは、左右Infra rectified画像・CameraInfo・
+/tf・/tf_staticのみを記録する。全parameterを記載した専用センサー／bag YAMLを使い、
+RGB・Depth・IMU・EVSを無効化する。必要な左右Infraが無効、または不要センサーが有効なら起動前に拒否する。
+通常記録の既定値と既存録画操作は維持する。これはstereo VO用で、VIO・密な再構成・
+E2E学習用データを兼ねるとは扱わない。単体検証と実機の欠落低減確認は区別する。

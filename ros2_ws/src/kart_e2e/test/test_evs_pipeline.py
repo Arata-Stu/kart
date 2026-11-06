@@ -246,6 +246,24 @@ class RawTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, '逆行・重複'):
                     discover_raw(path, [rows[0], self.timing(1, start, epoch=2)])
 
+    def test_auto_alignment_to_extraction_without_manifest(self):
+        from kart_e2e.evs_alignment import auto_align, WRAP_US
+        from kart_e2e.preprocess_evs import extract
+        rows = [self.timing(start=4*WRAP_US), self.timing(1, 4*WRAP_US+4000)]
+        teacher = types.SimpleNamespace(steering=0.2, throttle=0.1, brake=0, reverse=0)
+        commands = [(r['tensor_stamp_ros_ns'], teacher) for r in rows]
+        modes = [(commands[0][0], types.SimpleNamespace(mode=2))]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)
+            raw = path / 'camera.raw'
+            raw.write_bytes(b'% format EVT3;width=640;height=480\n% end\nfixture')
+            file = auto_align(raw, rows, factory=self.reader())
+            self.assertEqual(file['epoch_offsets_us'], {'0': -4*WRAP_US})
+            result = extract([file], commands, modes, rows, metadata(), path / 'out',
+                             sample_stride=1, reader_factory=self.reader())
+            self.assertEqual(result['samples'], 2)
+            self.assertIn('auto_alignment', result['raw_files'][0])
+
     def test_explicit_epoch_offset_preserves_teacher_and_timing(self):
         from kart_e2e.preprocess_evs import load_manifest, extract
         rows = [self.timing(start=40000), self.timing(1, 4000, epoch=2)]

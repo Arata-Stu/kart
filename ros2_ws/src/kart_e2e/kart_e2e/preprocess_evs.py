@@ -111,7 +111,7 @@ def bag_signature(bag):
     return files
 
 
-def discover_raw(bag, timings):
+def discover_raw(bag, timings, *, auto_alignment=False, max_reorder_us=5000):
     """Use only an unambiguous closed RAW beside the bag metadata."""
     bag = Path(bag).resolve(strict=True)
     candidates = sorted(p for p in bag.iterdir() if p.suffix.lower() == '.raw')
@@ -121,6 +121,9 @@ def discover_raw(bag, timings):
     raw = candidates[0]
     if raw.is_symlink() or not raw.is_file() or raw.stat().st_size == 0:
         raise ValueError('RAW自動検出: 空ファイル・シンボリックリンクは使用できません')
+    if auto_alignment:
+        from .evs_alignment import auto_align
+        return [auto_align(raw, [validate_timing(r) for r in timings], max_reorder_us)]
     return map_raw_files([raw], timings)
 
 
@@ -388,7 +391,8 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
                                        (spec['height'], spec['width']), row['latest_event_sensor_us'] + offset)
                     name = f'counts/{len(used)-1:08d}.npy'
                     np.save(stage / name, counts, allow_pickle=False)
-                    sample = dict(counts=name, stamp_ns=stamp, teacher_source=source, steering=command.steering,
+                    sample = dict(counts=name, stamp_ns=stamp, command_stamp_ns=record[0],
+                                  command_age_ns=stamp-record[0], teacher_source=source, steering=command.steering,
                                   throttle=command.throttle, timing=row, raw=file['path'],
                                   raw_time_offset_us=offset, raw_window_start_us=start, raw_window_end_us=end)
                     stream.write(json.dumps(sample) + '\n')
@@ -468,10 +472,17 @@ def main():
     if a.raw_manifest:
         files = load_manifest(a.raw_manifest)
     elif not a.raw:
-        files = discover_raw(a.bag, timings)
+        files = discover_raw(a.bag, timings, auto_alignment=True, max_reorder_us=a.max_reorder_us)
         print(f"RAW auto-detected: {files[0]['path']}")
     else:
-        files = map_raw_files(a.raw, timings)
+        if len(a.raw) == 1:
+            from .evs_alignment import auto_align
+            files = [auto_align(a.raw[0], timings, a.max_reorder_us)]
+        else:
+            files = map_raw_files(a.raw, timings)
+    for file in files:
+        if "auto_alignment" in file:
+            print("RAW auto-alignment: " + json.dumps(file, ensure_ascii=False), flush=True)
     provenance = {k: ([str(p.resolve()) for p in v] if isinstance(v, list) else
                       str(v) if isinstance(v, Path) else v) for k, v in vars(a).items()}
     result = extract(files, commands, modes, timings, meta, a.output,

@@ -6,7 +6,7 @@ import isaac_ros_launch_utils.all_types as lut
 from ament_index_python.packages import get_package_share_directory
 from kart_bringup.configuration import load
 from kart_bringup.localization import resolve
-from kart_bringup.mission import composition, hdmap_choices, sensor_parameters, camera_config, recording_config, validate_localization_imu
+from kart_bringup.mission import composition, hdmap_choices, sensor_parameters, camera_config, recording_config, validate_localization_imu, validate_record_profile
 from kart_bringup.vehicle_tf import load_transforms
 
 OVERRIDES = (
@@ -23,10 +23,12 @@ def add_mission(args):
     cfg = composition(
         root / "mission.yaml", args.mode, {k: getattr(args, k) for k in OVERRIDES}
     )
+    record_profile = getattr(args, "record_profile", "")
     params = sensor_parameters(
-        camera_config(root, args.mode), args.rgb_fps, args.infra_fps,
+        camera_config(root, args.mode, record_profile), args.rgb_fps, args.infra_fps,
         getattr(args, "rgb_profile", ""), getattr(args, "infra_profile", ""), getattr(args, "imu_profile", ""), getattr(args, "depth_profile", "")
     )
+    validate_record_profile(record_profile, args.mode, params, cfg["enable_evs"])
     section_routing = None
     if cfg['e2e']:
         from kart_e2e.contract import routing_settings, input_contract
@@ -45,8 +47,8 @@ def add_mission(args):
         "joy_max_throttle": getattr(args, "joy_max_throttle", ""),
         "auto_fixed_throttle": getattr(args, "auto_fixed_throttle", ""),
     }
-    if args.mode == "environment" or cfg["enable_evs"]:
-        vehicle["bag_config"] = str(recording_config(root, args.mode, cfg["enable_evs"]))
+    if args.mode == "environment" or cfg["enable_evs"] or record_profile:
+        vehicle["bag_config"] = str(recording_config(root, args.mode, cfg["enable_evs"], record_profile))
     if cfg['e2e']:
         # Collection's Joy throttle must never take ownership of E2E steering.
         vehicle['auto_fixed_throttle'] = '-1'
@@ -148,7 +150,7 @@ def add_mission(args):
                 "modules/sensors/realsense.launch.py",
                 {
                     "container_name": "/" + cfg["sensor_container"].lstrip("/"),
-                    "camera_config": str(camera_config(root, args.mode)),
+                    "camera_config": str(camera_config(root, args.mode, record_profile)),
                     "rgb_profile": getattr(args, "rgb_profile", ""),
                     "depth_profile": getattr(args, "depth_profile", ""),
                     "infra_profile": getattr(args, "infra_profile", ""),
@@ -243,6 +245,7 @@ def generate_launch_description():
         "device",
         "record_dir",
         "run_name",
+        "record_profile",
         "auto_fixed_throttle",
         "joy_max_throttle",
         "recovery",

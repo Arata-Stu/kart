@@ -1,0 +1,38 @@
+# Minimal offline stereo VO map inputs; no IMU, RGB, Depth or EVS RAW.
+/**/kart_bag_manager:
+  ros__parameters:
+    output_dir: /workspaces/record
+    recording_name: ''
+    session_layout: true  # date/time/run_name layout; directories created only on START
+    record_all: false
+    topics:
+    - /realsense/infra1/image_rect_raw
+    - /realsense/infra1/camera_info
+    - /realsense/infra2/image_rect_raw
+    - /realsense/infra2/camera_info
+    - /tf
+    - /tf_static
+    exclude_topics: []
+    storage_id: mcap
+    serialization_format: ''
+    max_bag_size: 0
+    recording_split_duration_s: 0
+    max_cache_size: 0
+    compression_mode: ''
+    compression_format: ''
+    compression_queue_size: 0
+    compression_threads: 0
+    qos_profile_overrides_path: ''
+    include_hidden_topics: false
+    no_discovery: false
+    snapshot_mode: false
+    start_paused: false
+    extra_args: []
+    status_period_s: 1.0
+    raw_recording_request_topic: ''
+    raw_recording_driver_node: ''
+    raw_recording_service_timeout_s: 5.0
+    recording_start_timeout_s: 5.0
+    stop_timeout_s: 10.0
+    terminate_timeout_s: 5.0
+    use_sim_time: false

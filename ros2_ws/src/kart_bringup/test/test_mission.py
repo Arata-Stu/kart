@@ -418,6 +418,35 @@ class MissionCompositionTests(unittest.TestCase):
             vehicle_args = lu.include.call_args_list[-1].kwargs['launch_arguments']
             self.assertEqual(vehicle_args['auto_fixed_throttle'], '0.10')
             self.assertEqual(lu.include.call_args_list[0].kwargs["launch_arguments"]["depth_profile"], "424x240x60")
+            saved = vars(args).copy()
+            args.record_profile = "vslam-map"
+            args.rgb_profile = args.depth_profile = ""
+            lu.include.reset_mock()
+            module.add_mission(args)
+            camera_args = lu.include.call_args_list[0].kwargs["launch_arguments"]
+            vehicle_args = lu.include.call_args_list[1].kwargs["launch_arguments"]
+            self.assertTrue(camera_args["camera_config"].endswith("realsense_vslam_map.yaml"))
+            self.assertTrue(vehicle_args["bag_config"].endswith("bag_manager_vslam_map.yaml"))
+            self.assertEqual(camera_args["infra_profile"], "424x240x60")
+            import yaml
+            from kart_bringup.mission import validate_record_profile
+            sensors = sensor_parameters(camera_args["camera_config"], infra_profile=camera_args["infra_profile"])
+            validate_record_profile("vslam-map", "collect", sensors, False)
+            bag = yaml.safe_load(Path(vehicle_args["bag_config"]).read_text())["/**/kart_bag_manager"]["ros__parameters"]
+            workflow = json.loads((CONFIG / "mapping/workflow.json").read_text())
+            self.assertEqual(set(bag["topics"]), {workflow[k] for k in
+                ("left_image", "right_image", "left_info", "right_info", "tf_static")} | {"/tf"})
+            self.assertFalse(bag["record_all"])
+            self.assertFalse(bag["raw_recording_driver_node"])
+            for key in ("enable_color", "enable_depth", "enable_accel", "enable_gyro"):
+                self.assertFalse(sensors[key])
+                with self.assertRaises(ValueError):
+                    validate_record_profile("vslam-map", "collect", dict(sensors, **{key: True}), False)
+            with self.assertRaises(ValueError):
+                validate_record_profile("vslam-map", "collect", sensors, True)
+            with self.assertRaises(ValueError):
+                validate_record_profile("vslam-map", "collect", dict(sensors, enable_infra2=False), False)
+            args = SimpleNamespace(**saved)
             args.depth_profile = ""
             lu.component_container.assert_not_called()
             lu.include.reset_mock()

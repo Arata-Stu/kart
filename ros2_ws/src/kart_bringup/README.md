@@ -1749,3 +1749,50 @@ image_rect_raw・camera_infoを保存する。RGB・Depth・IMUは対象外。
 結果だけを保存する試験では通常録画を停止しておく。
 設定はconfig/recording/infra_validator.yamlのexpected_hz（90.0）。
 ノード・トピック型・結果の読み方はkart_bag_manager README「Infra timestamp検証」を参照。
+
+
+## VSLAM map用の最小録画profile
+
+`bash scripts/bringup.sh` →「データ記録」→「記録profile」→
+「VSLAM map最小（stereo VO / Infra＋TFのみ）」を選択する。
+CLIでは次のとおり（ROS開発コンテナで実行）:
+
+```bash
+bash scripts/bringup.sh --mode collect --record-profile vslam-map --run-name map_capture
+# 起動せず構成を確認
+bash scripts/bringup.sh --mode collect --record-profile vslam-map --dry-run
+```
+
+独自CLI/launch引数 `--record-profile` / `record_profile` は既定空文字（従来設定）。
+`standard` は通常記録、`vslam-map` はcollect専用のstereo VO地図入力記録。
+ノードやserviceは追加しない。既存`realsense`と`kart_bag_manager`を使用し、
+録画はR1開始／L1停止または既存UIから操作する。自動録画・SLAMの同時起動はしない。
+
+`config/sensors/realsense_vslam_map.yaml` と
+`config/recording/bag_manager_vslam_map.yaml` が全parameterを保持する静的設定。
+センサーはRGB・Depth・IMUをOFF、左右Infra Y8をON（既定640×480・90fps）、
+emitter OFF、static TF ON。`--infra-profile WIDTHxHEIGHTxFPS` で変更可能。
+その他のRealSense・bag manager parameterは通常設定と同値で、既存のパラメータ説明に従う。
+record_all=false、MCAP、RAW連携なしで、次の6 topicだけを記録する。
+
+| bag manager入力topic | 型 | 内容 |
+| --- | --- | --- |
+| `/realsense/infra1/image_rect_raw` | `sensor_msgs/msg/Image` | 左rectified画像 |
+| `/realsense/infra2/image_rect_raw` | `sensor_msgs/msg/Image` | 右rectified画像 |
+| `/realsense/infra1/camera_info` | `sensor_msgs/msg/CameraInfo` | 左校正 |
+| `/realsense/infra2/camera_info` | `sensor_msgs/msg/CameraInfo` | 右校正 |
+| `/tf` | `tf2_msgs/msg/TFMessage` | 配信がある場合の動的TF |
+| `/tf_static` | `tf2_msgs/msg/TFMessage` | カメラ間・車体取付の静的TF |
+
+InfraとCameraInfoのpublisherはSENSOR_DATA。rosbagのQoS自動選択を維持し、
+`/tf_static`はtransient-local publisherから取得する。収録後は校正とstatic TFの格納も確認する。
+固定カメラの既定map工程は画像2本・CameraInfo2本・static TFを使用し、動的TFは通常必須ではない。
+`/tf`は低帯域の補助入力として残す（publisherがなければbagに現れない）。
+
+最小profileではRGB・Depth・IMU・EVSの有効化、左右Infraの無効化を起動前に拒否する。
+TUIでこのprofileへ切り替えると不要センサーの明示指定も解除する。
+通常記録へ戻す場合はstandardを選び、必要に応じセンサー設定を選び直す。
+VIO（tracking_mode=1）にはIMUが別途必要なため、このbagはstereo VO（tracking_mode=0）用。
+RGB/Depthを必要とする密な再構成やE2E学習用の記録にはstandardを使う。
+topic削減は欠落防止の保証ではない。収録後に左右のstamp・フレーム数・欠落区間を確認する。
+portable testとdry-runで設定選択・競合拒否を検証。ROS結合・Jetson実機録画は未確認。

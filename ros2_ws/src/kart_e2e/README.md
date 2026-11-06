@@ -1553,3 +1553,58 @@ RAW範囲外の件数、記録mode分布、各ROS時刻範囲をJSONで表示す
 
 0件診断の`raw_coverage`はRAWごとの要求窓範囲・デコード済み時刻範囲・読込件数・EOF状態を示す。
 `reader_done=false`の場合、decoded_last_usはファイル全体の終端ではない。
+
+
+## EVS / action / RGBの時間軸（2026-11-06確認）
+
+- RAW reader: `do_time_shifting=False`のデコード時刻（us）。オンラインdecoderと周回原点が一致する保証はない。
+- TensorTimingのwindow_start/end_sensor_us、latest_event_sensor_us: オンラインdecoderのセンサー時刻（us）。
+- Tensor header / tensor_stamp_ros_ns: ROS時刻（ns）。窓終了ではない。最新適用packetのROS時刻と
+  予定出版時刻の小さい方を基に、前回headerより1ns以上進める。
+- packet header: driverがpending packetを作成した際の`now()`。露光時刻・ハードウェア同期時刻ではない。
+- sensor_to_ros_offset_ns: packet header ROS時刻 − 最新decoded eventセンサー時刻×1000。
+  受信由来の推定で、パケットごとに変わり得る。
+- action（/teleop/control_cmd）header: Joy managerが指令を出版するときのROS `now()`。
+  モードheaderもROS `now()`。実車応答の時刻ではない。
+- RGB: 比較ツールではImage.header.stampをROS時間軸の値として使用する。
+  実機ドライバの時計変換・露光との遅延は別途確認が必要。
+
+manifestのepoch_offsets_usをΔとすると:
+
+```
+raw_decoder_us = online_sensor_us + Δ
+ros_ns = (raw_decoder_us - Δ) * 1000 + sensor_to_ros_offset_ns
+```
+
+RAWをshift有効で読む別経路では、まずSDK timestamp shiftを足してshift無効の座標へ戻す。
+SDK shiftとΔは異なる値であり、二重加算しない。既存RAW shiftツールのsensor_usという名前は
+RAW decoder側の座標を意味し、オンライン時刻への一致を保証しない。
+学習教師はtensor_stamp_ros_ns以前の最新指令を選び、既定100ms以内。
+新しいsamples.jsonlにはcommand_stamp_ns / command_age_nsも保存する。
+`--clock header`を比較の基準とし、bag時計はcommand/modeにbag受信時刻を使う別方式として扱う。
+固定AUTO設定のStringにはheaderがないためbag受信時刻を使う。
+
+最初の検証目標はoffsetレベルの整合。窓の重なり、処理・露光・受信遅延をゼロと仮定しない。
+RGBとEVSに共通して写る物体を左右に数回動かし、開始・中間・終了で位置と動きの対応を見る。
+一定のずれはoffset、増大するずれはclock drift、途中の飛びはreset等として切り分ける。
+視点・解像度・40ms集積の差を考慮し、これをマイクロ秒同期や空間校正の証明としない。
+
+
+### Dataset作成時のEVT3時刻自動補正
+
+単一RAW・単一streamでは、manifest未指定時（単一`--raw`も含む）に自動補正する。
+RAWをshift無効で全走査し、記録開始・終了の両端とTensorTimingの最新イベント時刻が
+それぞれ1秒以内で一致する16,777,216usの整数倍を一意に選ぶ。単なる範囲重複では選ばない。
+epoch間はsensor_to_ros_offset_nsの差から整数周回差を求め、全timingの残差が1秒以内、
+同一epoch内の補正値一定、補正後時系列の前進を検査する。
+この1秒は周回候補の検査幅であり、任意の1秒補正や同期精度の保証ではない。
+RAW自体の逆行はmax_reorder_us（既定5000us）を超えれば停止する。
+RAW.metadata.yamlがあればRAW名と録画開始ROS時刻を照合し、最初のtimingと2秒以上離れていれば拒否する。
+古い記録でsidecarがなければ両端とoffset系列の検査で判定する（根拠の欠如をmetadataに記録）。
+異なる録画の同じ長さ・周回差を区別するイベント一致の証明ではないため、初回はRGB比較等で検証する。
+複数stream/RAWや長い先頭末尾欠落、整数周回で説明できないresetは明示manifestが必要。
+手動manifestは優先し、自動補正を二重適用しない。
+補正値と判定根拠はdataset metadata.jsonのraw_files[].epoch_offsets_us / auto_alignmentへ保存する。
+元RAW・bag・TensorTiming・教師ROS時刻は変更しない。UIのRAW手動指定欄を空欄にして利用できる。
+既存datasetは変わらず、再作成時に適用する。RAW全走査が1回増えるため抽出時間は増える。
+新規ROSノード/topic/parameterはなく、既存CLIの標準処理として実行する。
