@@ -246,6 +246,42 @@ class RawTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, '逆行・重複'):
                     discover_raw(path, [rows[0], self.timing(1, start, epoch=2)])
 
+    def test_explicit_epoch_offset_preserves_teacher_and_timing(self):
+        from kart_e2e.preprocess_evs import load_manifest, extract
+        rows = [self.timing(start=40000), self.timing(1, 4000, epoch=2)]
+        teacher = types.SimpleNamespace(steering=0.2, throttle=0.1, brake=0, reverse=0)
+        commands = sorted((r['tensor_stamp_ros_ns'], teacher) for r in rows)
+        modes = [(commands[0][0], types.SimpleNamespace(mode=2))]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)
+            (path / 'camera.raw').write_bytes(b'fixture')
+            manifest = path / 'manifest.json'
+            data = dict(schema='kart.evs_raw_manifest.v1', files=[dict(
+                path='camera.raw', stream_id='camera-stream', sensor_epoch=0,
+                epoch_offsets_us={'0': 0, '2': 76000})])
+            manifest.write_text(json.dumps(data))
+            files = load_manifest(manifest)
+            events = self.events.copy()
+            events['t'] = [0, 40000, 70000, 85000, 100000, 130000]
+            report = extract(files, commands, modes, rows, metadata(), path / 'out',
+                             sample_stride=1, reader_factory=self.reader([events]))
+            self.assertEqual(report['samples'], 2)
+            samples = [json.loads(line) for line in (path / 'out/samples.jsonl').read_text().splitlines()]
+            self.assertEqual(samples[1]['timing'], rows[1])
+            self.assertEqual(samples[1]['stamp_ns'], rows[1]['tensor_stamp_ros_ns'])
+            self.assertEqual(samples[1]['raw_window_start_us'], 80000)
+            self.assertEqual(samples[1]['raw_time_offset_us'], 76000)
+            files[0]['epoch_offsets_us']['2'] = 0
+            with self.assertRaisesRegex(ValueError, 'Mapped RAW'):
+                extract(files, commands, modes, rows, metadata(), path / 'bad',
+                        sample_stride=100, reader_factory=self.reader([events]))
+            self.assertFalse((path / 'bad').exists())
+            for offsets in ({'2': 1}, {'0': True}, {'00': 0}, {'0': 0.5}):
+                data['files'][0]['epoch_offsets_us'] = offsets
+                manifest.write_text(json.dumps(data))
+                with self.assertRaisesRegex(ValueError, 'epoch_offsets_us'):
+                    load_manifest(manifest)
+
     def test_causal_labels_epoch_mapping_atomic_output_and_gaps(self):
         import numpy as np
         from kart_e2e.preprocess_evs import extract

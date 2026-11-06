@@ -50,3 +50,17 @@ RAWは同じreaderで順に読み、既存の時刻逆行検査を維持する�
 複数stream、センサー窓終了の逆行・同値、epoch境界のlatest event逆行、
 複数RAWと複数epochの組合せは自動対応しない。拒否時は前後のsequence・epoch・時刻を表示する。
 単体テストで連続epoch・重なる窓の抽出と逆行・同一終了時刻の拒否を確認。実bag・SDKでの結合確認は別途必要。
+
+
+### RAWのepoch別時刻対応を明示する場合
+
+RAW SDKの連続時刻と記録TensorTimingの時刻原点が異なると実データで確認できた場合、
+manifestの各files要素に任意の`epoch_offsets_us`を指定できる。
+例: `"sensor_epoch": 0, "epoch_offsets_us": {"0": 0, "2": 33554432}`。
+キーは対象epochの10進文字列、値はRAW座標へ加算する整数マイクロ秒。
+同じRAWを複数行にせず、1行で対象epochを列挙する。指定しない従来manifestは補正0を維持する。
+窓の開始・終了・latest eventにのみ加算し、教師のROS時刻と元timingは変更しない。
+補正後の全窓をstride・教師選択前に検査し、逆行や同一終了時刻は拒否する。
+サンプルにraw_time_offset_us/raw_window_start_us/raw_window_end_us、metadataのraw_filesに
+明示対応を保存する。受信時刻だけから補正を自動推定しない。
+RAW自体の小逆順は従来のmax_reorder_usで検査し、補正で回避しない。

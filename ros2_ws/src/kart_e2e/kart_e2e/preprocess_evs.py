@@ -189,8 +189,17 @@ def load_manifest(path):
         raw = raw.resolve(strict=True)
         if raw.suffix.lower() != '.raw' or not raw.is_file():
             raise ValueError('Expected a closed RAW file')
-        files.append(dict(path=str(raw), stream_id=row['stream_id'],
-                          sensor_epoch=row['sensor_epoch']))
+        file = dict(path=str(raw), stream_id=row['stream_id'], sensor_epoch=row['sensor_epoch'])
+        offsets = row.get('epoch_offsets_us')
+        if offsets is not None:
+            if (not isinstance(offsets, dict) or not offsets
+                    or any(not isinstance(k, str) or not k.isdecimal() or str(int(k)) != k
+                           or type(v) is not int for k, v in offsets.items())
+                    or str(row['sensor_epoch']) not in offsets):
+                raise ValueError('epoch_offsets_us requires canonical epoch keys and integer microsecond offsets')
+            file['sensor_epochs'] = sorted(int(k) for k in offsets)
+            file['epoch_offsets_us'] = offsets
+        files.append(file)
     if len({r['path'] for r in files}) != len(files):
         raise ValueError('RAW file listed more than once')
     return files
@@ -310,6 +319,22 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
         if any((file['stream_id'], epoch) not in groups
                for epoch in file.get('sensor_epochs', [file['sensor_epoch']])):
             raise ValueError('RAW stream/epoch absent from bag timing')
+    # Validate every mapped window, including rows skipped by stride/teacher selection.
+    for file in files:
+        previous_end = None
+        previous_latest = None
+        previous_epoch = None
+        for epoch in file.get('sensor_epochs', [file['sensor_epoch']]):
+            offset = file.get('epoch_offsets_us', {}).get(str(epoch), 0)
+            for row in groups[(file['stream_id'], epoch)]:
+                start = row['window_start_sensor_us'] + offset
+                end = row['window_end_sensor_us'] + offset
+                latest = row['latest_event_sensor_us'] + offset
+                if (start < 0 or (previous_end is not None and end <= previous_end)
+                        or (previous_epoch is not None and epoch != previous_epoch
+                            and latest < previous_latest)):
+                    raise ValueError('Mapped RAW windows reverse or overlap at the same end timestamp; check epoch_offsets_us')
+                previous_end, previous_latest, previous_epoch = end, latest, epoch
     output = Path(output)
     if output.exists():
         raise FileExistsError(output)
@@ -338,7 +363,9 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
                     if source is None:
                         counters['invalid_teacher'] += 1
                         continue
-                    start, end = row['window_start_sensor_us'], row['window_end_sensor_us']
+                    offset = file.get('epoch_offsets_us', {}).get(str(row['sensor_epoch']), 0)
+                    start = row['window_start_sensor_us'] + offset
+                    end = row['window_end_sensor_us'] + offset
                     events = raw.window(start, end)
                     if events is None:
                         counters['outside_raw_coverage'] += 1
@@ -348,11 +375,12 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
                         raise ValueError('Overlapping RAW files cover the same training window')
                     used.add(key)
                     counts = histogram(events, start, end, raw.shape,
-                                       (spec['height'], spec['width']), row['latest_event_sensor_us'])
+                                       (spec['height'], spec['width']), row['latest_event_sensor_us'] + offset)
                     name = f'counts/{len(used)-1:08d}.npy'
                     np.save(stage / name, counts, allow_pickle=False)
                     sample = dict(counts=name, stamp_ns=stamp, teacher_source=source, steering=command.steering,
-                                  throttle=command.throttle, timing=row, raw=file['path'])
+                                  throttle=command.throttle, timing=row, raw=file['path'],
+                                  raw_time_offset_us=offset, raw_window_start_us=start, raw_window_end_us=end)
                     stream.write(json.dumps(sample) + '\n')
                 with Path(file['path']).open('rb') as source:
                     sha = hashlib.file_digest(source, 'sha256').hexdigest()
