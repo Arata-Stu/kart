@@ -1545,3 +1545,8 @@ manifestの各files要素に任意の`epoch_offsets_us`を指定できる。
 サンプルにraw_time_offset_us/raw_window_start_us/raw_window_end_us、metadataのraw_filesに
 明示対応を保存する。受信時刻だけから補正を自動推定しない。
 RAW自体の小逆順は従来のmax_reorder_usで検査し、補正で回避しない。
+
+
+EVS抽出が0件の場合は、例外に教師採否理由、command/mode欠落・鮮度切れ、
+RAW範囲外の件数、記録mode分布、各ROS時刻範囲をJSONで表示する。
+診断のために教師選択条件や時計を変更しない。skippedの詳細理由カウンタは重複し得る。

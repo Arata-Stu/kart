@@ -14,7 +14,7 @@ import tempfile
 import numpy as np
 
 from .contract import evs_spec
-from .data import previous, previous_record
+from .data import previous, previous_record, valid_label
 from .teacher_selection import TeacherSelection, read_fixed_configs
 
 
@@ -359,6 +359,12 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
                     record = previous_record(commands, stamp, int(max_skew_ms * 1e6))
                     command = record[1] if record is not None else None
                     mode = previous(modes, stamp, 300_000_000)
+                    if command is None:
+                        counters['missing_or_stale_command'] += 1
+                    elif not valid_label(command):
+                        counters['invalid_command'] += 1
+                    if mode is None:
+                        counters['missing_or_stale_mode'] += 1
                     source = selection.select(command, mode, stamp, record[0] if record else None)
                     if source is None:
                         counters['invalid_teacher'] += 1
@@ -386,7 +392,16 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
                     sha = hashlib.file_digest(source, 'sha256').hexdigest()
                 raw_provenance.append(dict(file, sha256=sha, max_observed_reorder_us=raw.max_observed_reorder_us))
         if not used:
-            raise ValueError('No usable human teacher EVS windows; check RAW coverage/timing/teachers')
+            detail = dict(skipped=dict(counters), teacher_selection=selection.metadata(),
+                          command_records=len(commands), mode_records=len(modes),
+                          timing_records=len(timings),
+                          mode_counts=dict(Counter(str(mode.mode) for _, mode in modes)),
+                          command_stamp_range_ns=[commands[0][0], commands[-1][0]] if commands else [],
+                          mode_stamp_range_ns=[modes[0][0], modes[-1][0]] if modes else [],
+                          timing_stamp_range_ns=[min(r['tensor_stamp_ros_ns'] for r in timings),
+                                                 max(r['tensor_stamp_ros_ns'] for r in timings)])
+            raise ValueError('No usable human teacher EVS windows; diagnostic: '
+                             + json.dumps(detail, ensure_ascii=False))
         for path, signature in signatures.items():
             stat = Path(path).stat()
             if (stat.st_size, stat.st_mtime_ns) != signature:
