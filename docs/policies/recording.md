@@ -64,3 +64,19 @@ manifestの各files要素に任意の`epoch_offsets_us`を指定できる。
 サンプルにraw_time_offset_us/raw_window_start_us/raw_window_end_us、metadataのraw_filesに
 明示対応を保存する。受信時刻だけから補正を自動推定しない。
 RAW自体の小逆順は従来のmax_reorder_usで検査し、補正で回避しない。
+
+
+### Forward packet gap recovery (2026-11-06)
+
+`evt3_runs`, `evt3_runs_gpu`, `evt3_runs_gpu_direct` のdirect histogram経路は、
+パケット連番が前方へ飛んだ場合（stale queue破棄を含む）、座標・LOW時刻・集計履歴を
+破棄してHIGH/LOWを再取得する一方、HIGH時刻と24-bit折り返し累積を保持する。
+短い欠落がTensorTimingの時刻を33.554432秒等巻き戻すことを防ぐ。
+epochは引き続き更新し、欠落イベントや不完全な履歴を補完しない。
+連番逆転・再開始、geometry変更、decode例外は従来のfull resetのまま。
+連番不連続時はprevious/current/preserve_clockをWARNへ出力する（1秒throttle）。
+新規parameter/topicはなし。20ms queue age、4000us逆順許容など既存設定は変更しない。
+これは短いforward gapの復旧であり、複数周（1周16.777216秒）を跨ぐ長い入力断や、
+連番を維持したセンサー時計resetの自動識別を保証しない。grouped_gpu経路は対象外。
+`evt3_runs_histogram_test`で2周累積後の欠落、欠落中のwrap、再取得、full resetを検証。
+ROS/CUDA結合・実機録画は未確認。既存RAW/timingは書き換えず、過去記録のmanifest補正は引き続き必要。
