@@ -2,14 +2,18 @@
 """Compare extracted EVS samples with RGB headers, without changing timestamps."""
 import argparse
 import base64
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 import html
 import io
 import json
+import math
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageOps
 
 
 def rgb_image(msg):
@@ -44,26 +48,92 @@ def embed(image):
     return '<img src="data:image/png;base64,' + base64.b64encode(buffer.getvalue()).decode() + '">'
 
 
+def write_video(rows, best, dataset, output, fps, max_age_ms):
+    """Constant-rate presentation on the original ROS timeline; gaps stay gaps."""
+    stamps = [r['stamp_ns'] for r in rows]
+    frames = math.ceil((stamps[-1]-stamps[0])/1e9*fps)+1
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.rgb-evs-', dir=output.parent) as tmp:
+        target = Path(tmp)/'output.mp4'
+        command = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-f', 'rawvideo',
+                   '-pix_fmt', 'rgb24', '-s', '1280x560', '-r', str(fps), '-i', '-',
+                   '-an', '-c:v', 'libx264', '-preset', 'fast', '-crf', '20',
+                   '-pix_fmt', 'yuv420p', '-movflags', '+faststart', str(target)]
+        with (Path(tmp)/'ffmpeg.log').open('w+') as log:
+            process = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=log)
+            cached_index, cached = None, None
+            try:
+                for frame in range(frames):
+                    stamp = stamps[0]+round(frame*1e9/fps)
+                    i = bisect_right(stamps, stamp)-1
+                    canvas = Image.new('RGB', (1280, 560), '#171717')
+                    draw = ImageDraw.Draw(canvas)
+                    draw.text((12, 8), f't={frame/fps:.3f}s  RGB (left) / EVS 40ms (right)', fill='white')
+                    if i < 0 or stamp-stamps[i] > max_age_ms*1e6:
+                        draw.text((12, 45), 'No dataset sample near this time (gap; not interpolated)', fill='yellow')
+                    else:
+                        if cached_index != i:
+                            row = rows[i]
+                            counts = (dataset/row['counts']).resolve()
+                            if not counts.is_relative_to(dataset.resolve()):
+                                raise ValueError('Counts path escapes dataset')
+                            evs = evs_image(np.load(counts, allow_pickle=False))
+                            rgb = None
+                            if best[i] is not None:
+                                with Image.open(best[i][2]) as image:
+                                    rgb = image.convert('RGB')
+                            cached = (rgb, evs); cached_index = i
+                        for panel, image in enumerate(cached):
+                            if image is not None:
+                                image = ImageOps.contain(image, (640, 480))
+                                canvas.paste(image, (panel*640+(640-image.width)//2, 40+(480-image.height)//2))
+                        row = rows[i]
+                        delta = f'{best[i][0]/1e6:+.3f}ms' if best[i] else 'NO RGB MATCH'
+                        draw.text((12, 525), f'RGB - Tensor: {delta} | sample age={(stamp-stamps[i])/1e6:.1f}ms | '
+                                  f'steering={row["steering"]:.3f} throttle={row["throttle"]:.3f}', fill='white')
+                        draw.text((12, 542), f'Tensor ROS ns={stamps[i]} | RAW offset us={row.get("raw_time_offset_us", 0)}', fill='white')
+                    process.stdin.write(canvas.tobytes())
+                process.stdin.close()
+                if process.wait() != 0:
+                    raise RuntimeError('ffmpeg failed')
+            except Exception as error:
+                if process.poll() is None:
+                    process.kill()
+                process.wait()
+                log.seek(0)
+                raise RuntimeError(f'Video generation failed: {error}\n{log.read()}') from error
+        target.rename(output)
+    print(f'{output}: {frames} frames at {fps} fps; original time gaps retained')
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('bag', type=Path)
     p.add_argument('dataset', type=Path)
     p.add_argument('output', type=Path)
     p.add_argument('--rgb-topic', default='/realsense/color/image_raw')
-    p.add_argument('--samples', type=int, default=12)
+    p.add_argument('--samples', type=int, default=12, help='HTML only; MP4 uses all dataset samples')
+    p.add_argument('--fps', type=int, default=25, help='MP4 presentation rate (not sensor rate)')
     p.add_argument('--max-delta-ms', type=float, default=100)
     a = p.parse_args()
     if not 1 <= a.samples <= 100 or not 0 < a.max_delta_ms <= 1000:
         p.error('samples: 1..100; max-delta-ms: 0..1000')
+    video = a.output.suffix.lower() == '.mp4'
+    if not 1 <= a.fps <= 60:
+        p.error('fps must be 1..60')
+    if video and shutil.which('ffmpeg') is None:
+        p.error('MP4 requires ffmpeg with libx264; install ffmpeg first')
     if a.output.exists():
         p.error('Output exists; choose a new file')
     rows = [json.loads(line) for line in (a.dataset/'samples.jsonl').read_text().splitlines() if line.strip()]
     if not rows:
         p.error('Empty dataset')
     rows.sort(key=lambda r: r['stamp_ns'])
-    rows = [rows[i] for i in np.unique(np.linspace(0, len(rows)-1, min(len(rows), a.samples), dtype=int))]
+    if not video:
+        rows = [rows[i] for i in np.unique(np.linspace(0, len(rows)-1, min(len(rows), a.samples), dtype=int))]
     stamps = [r['stamp_ns'] for r in rows]
     best = [None]*len(rows)
+    cache = tempfile.TemporaryDirectory(prefix='rgb-evs-cache-') if video else None
     import rosbag2_py
     from rclpy.serialization import deserialize_message
     from sensor_msgs.msg import Image as RosImage
@@ -85,7 +155,20 @@ def main():
             if delta < -a.max_delta_ms*1e6:
                 break
             if best[i] is None or abs(delta) < abs(best[i][0]):
-                best[i] = (delta, stamp, rgb_image(msg))
+                image = rgb_image(msg)
+                if video:
+                    image.thumbnail((640, 480))
+                    cached = Path(cache.name)/f'{i}.png'
+                    image.save(cached)
+                    best[i] = (delta, stamp, cached)
+                else:
+                    best[i] = (delta, stamp, image)
+    if video:
+        try:
+            write_video(rows, best, a.dataset, a.output, a.fps, a.max_delta_ms)
+        finally:
+            cache.cleanup()
+        return
     cards = []
     for row, match in zip(rows, best):
         timing = row['timing']

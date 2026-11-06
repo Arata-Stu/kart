@@ -90,3 +90,14 @@ RGB topic既定/realsense/color/image_raw、比較12点、最大header差100ms�
 自己完結HTMLを出力し、RGBなし・範囲内候補なしを明示する。画像はsensor_msgs/Imageの
 rgb8/bgr8/rgba8/bgra8/mono8に対応。入力は変更せず、出力の上書きは禁止。
 ROSノードではないのでCMake install対象外。Pythonで直接実行する。
+
+### MP4動画出力
+
+出力拡張子を`.mp4`にすると、全datasetサンプルを使ったRGB/EVS左右比較動画を生成する。
+`--fps 25`が既定（1..60）。ffmpegとlibx264が必要。`--samples`はHTML専用。
+元のROS時刻間隔を維持し、各再生時刻以前のサンプルを最大`--max-delta-ms`（既定100ms）まで保持する。
+それ以上の教師除外・記録欠落区間は空白表示し、時間を詰めたり補間したりしない。
+RGBは各EVSサンプルheaderに最も近い画像で、差とsample age、操作値、RAW補正値を表示する。
+動画FPSを増やしてもdatasetのEVS更新頻度は増えない。RGBフレームのキャッシュは一時ディスクへ保存し、
+動画は正常終了後に出力先へ移動する。入力と既存出力は変更しない。
+ローカルの合成データで実MP4生成・解像度・フレーム数を検証済み。実bagでの動画確認は未実施。
