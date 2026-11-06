@@ -231,7 +231,18 @@ class RawTests(unittest.TestCase):
             self.assertEqual(report['samples'], 2)
             samples = [json.loads(line) for line in (path / 'out/samples.jsonl').read_text().splitlines()]
             self.assertEqual([r['timing']['sensor_epoch'] for r in samples], [0, 2])
-            for start in (0, 20000):
+            # Sliding 40 ms windows may overlap across a processing reset too.
+            overlap = [rows[0], self.timing(1, 4000, epoch=2)]
+            mapped = discover_raw(path, overlap)
+            overlap_report = extract(mapped, commands, modes, overlap, metadata(), path / 'overlap',
+                                     sample_stride=1, reader_factory=self.reader([events]))
+            self.assertEqual(overlap_report['samples'], 2)
+            for field, value, reason in (
+                    ('sequence', 0, 'sequence_not_increasing'),
+                    ('latest_event_sensor_us', -1, 'latest_event_reversed_at_epoch')):
+                with self.assertRaisesRegex(ValueError, reason):
+                    discover_raw(path, [rows[0], dict(rows[1], **{field: value})])
+            for start in (0,):
                 with self.assertRaisesRegex(ValueError, '逆行・重複'):
                     discover_raw(path, [rows[0], self.timing(1, start, epoch=2)])
 

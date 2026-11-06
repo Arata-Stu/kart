@@ -138,13 +138,25 @@ def map_raw_files(paths, timings):
         for raw_row in timings:
             row = validate_timing(raw_row)
             if previous is not None:
-                if (row['sequence'] <= previous['sequence']
-                        or row['sensor_epoch'] < previous['sensor_epoch']
-                        or row['window_end_sensor_us'] <= previous['window_end_sensor_us']
-                        or (row['sensor_epoch'] != previous['sensor_epoch']
-                            and row['window_start_sensor_us'] < previous['window_end_sensor_us'])):
-                    raise ValueError('RAW対応: epoch間のセンサ時刻が逆行・重複しています。'
-                                     'RAW manifestで対応を指定してください')
+                checks = {
+                    'sequence_not_increasing': row['sequence'] <= previous['sequence'],
+                    'epoch_reversed': row['sensor_epoch'] < previous['sensor_epoch'],
+                    'sensor_window_not_increasing': row['window_end_sensor_us'] <= previous['window_end_sensor_us'],
+                    'latest_event_reversed_at_epoch': (
+                        row['sensor_epoch'] != previous['sensor_epoch']
+                        and row['latest_event_sensor_us'] < previous['latest_event_sensor_us']),
+                }
+                failed = [name for name, invalid in checks.items() if invalid]
+                if failed:
+                    fields = ('sequence', 'sensor_epoch', 'window_start_sensor_us',
+                              'window_end_sensor_us', 'latest_event_sensor_us',
+                              'tensor_stamp_ros_ns', 'sensor_to_ros_offset_ns')
+                    detail = dict(reason=failed, stream_id=row['stream_id'],
+                                  previous={key: previous[key] for key in fields},
+                                  current={key: row[key] for key in fields})
+                    raise ValueError('RAW対応: timingが逆行・重複しています。'
+                                     '同じRAWへの自動対応を停止しました。詳細: '
+                                     + json.dumps(detail, ensure_ascii=False))
             previous = row
     stream_id = next(iter(identities))[0]
     files = []
