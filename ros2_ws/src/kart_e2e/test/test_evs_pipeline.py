@@ -63,8 +63,7 @@ class RawDiscoveryTests(unittest.TestCase):
             raw = bag / 'events.RAW'; raw.write_bytes(b'raw')
             result = discover_raw(bag, timing * 2)
             self.assertEqual(result, [dict(path=str(raw.resolve()),stream_id='camera',sensor_epoch=3)])
-            for rows in ([], timing + [dict(stream_id='camera',sensor_epoch=4)],
-                         timing + [dict(stream_id='other',sensor_epoch=3)]):
+            for rows in ([], timing + [dict(stream_id='other',sensor_epoch=3)]):
                 with self.assertRaisesRegex(ValueError, '一意'):
                     discover_raw(bag, rows)
             other = bag / 'other.raw'; other.write_bytes(b'raw')
@@ -211,6 +210,30 @@ class RawTests(unittest.TestCase):
         raw = RawWindows('reset.raw', self.reader([descending]), max_reorder_us=5000)
         with self.assertRaisesRegex(ValueError, 'backward_us=6000'):
             raw.window(0, 40000)
+
+    def test_processing_epochs_share_continuous_raw(self):
+        from kart_e2e.preprocess_evs import discover_raw, map_raw_files, extract
+        rows = [self.timing(), self.timing(1, 40000, epoch=2)]
+        teacher = types.SimpleNamespace(steering=0.2, throttle=0.1, brake=0, reverse=0)
+        commands = [(r['tensor_stamp_ros_ns'], teacher) for r in rows]
+        modes = [(commands[0][0], types.SimpleNamespace(mode=2))]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)
+            raw = path / 'camera.raw'
+            raw.write_bytes(b'fixture')
+            files = discover_raw(path, rows)
+            self.assertEqual(files[0]['sensor_epochs'], [0, 2])
+            self.assertEqual(files, map_raw_files([raw], rows))
+            events = self.events.copy()
+            events['t'] = [0, 10000, 30000, 45000, 65000, 90000]
+            report = extract(files, commands, modes, rows, metadata(), path / 'out',
+                             sample_stride=1, reader_factory=self.reader([events]))
+            self.assertEqual(report['samples'], 2)
+            samples = [json.loads(line) for line in (path / 'out/samples.jsonl').read_text().splitlines()]
+            self.assertEqual([r['timing']['sensor_epoch'] for r in samples], [0, 2])
+            for start in (0, 20000):
+                with self.assertRaisesRegex(ValueError, '逆行・重複'):
+                    discover_raw(path, [rows[0], self.timing(1, start, epoch=2)])
 
     def test_causal_labels_epoch_mapping_atomic_output_and_gaps(self):
         import numpy as np

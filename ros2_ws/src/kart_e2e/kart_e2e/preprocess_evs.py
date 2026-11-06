@@ -121,13 +121,44 @@ def discover_raw(bag, timings):
     raw = candidates[0]
     if raw.is_symlink() or not raw.is_file() or raw.stat().st_size == 0:
         raise ValueError('RAW自動検出: 空ファイル・シンボリックリンクは使用できません')
+    return map_raw_files([raw], timings)
+
+
+def map_raw_files(paths, timings):
+    """Map one continuous sensor timeline, retaining processing reset epochs."""
     identities = {(r['stream_id'], r['sensor_epoch']) for r in timings}
-    if len(identities) != 1:
-        raise ValueError(f'RAW自動検出: RAW={raw} は検出しましたが、timing {len(timings)}件の'
-                         f'stream/epochが一意ではありません: {sorted(identities)}。'
-                         'timingがない場合は記録topicを確認し、複数の場合はRAW manifestを指定してください')
-    stream_id, epoch = next(iter(identities))
-    return [dict(path=str(raw), stream_id=stream_id, sensor_epoch=epoch)]
+    if not identities or len({stream for stream, _ in identities}) != 1:
+        raise ValueError(f'RAW対応: stream/epochが一意ではありません: {sorted(identities)}。'
+                         'timingの記録またはRAW manifestを確認してください')
+    epochs = sorted(epoch for _, epoch in identities)
+    if len(epochs) > 1:
+        if len(paths) != 1:
+            raise ValueError('複数RAW・複数epochはRAW manifestで対応を指定してください')
+        previous = None
+        for raw_row in timings:
+            row = validate_timing(raw_row)
+            if previous is not None:
+                if (row['sequence'] <= previous['sequence']
+                        or row['sensor_epoch'] < previous['sensor_epoch']
+                        or row['window_end_sensor_us'] <= previous['window_end_sensor_us']
+                        or (row['sensor_epoch'] != previous['sensor_epoch']
+                            and row['window_start_sensor_us'] < previous['window_end_sensor_us'])):
+                    raise ValueError('RAW対応: epoch間のセンサ時刻が逆行・重複しています。'
+                                     'RAW manifestで対応を指定してください')
+            previous = row
+    stream_id = next(iter(identities))[0]
+    files = []
+    for path in paths:
+        path = Path(path).resolve(strict=True)
+        if path.suffix.lower() != '.raw' or not path.is_file() or path.stat().st_size == 0:
+            raise ValueError('空でないRAWファイルを指定してください')
+        file = dict(path=str(path), stream_id=stream_id, sensor_epoch=epochs[0])
+        if len(epochs) > 1:
+            file['sensor_epochs'] = epochs
+        files.append(file)
+    if len({f['path'] for f in files}) != len(files):
+        raise ValueError('RAW file listed more than once')
+    return files
 
 
 def load_manifest(path):
@@ -264,7 +295,8 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
     if not groups:
         raise ValueError('No TensorTiming records')
     for file in files:
-        if (file['stream_id'], file['sensor_epoch']) not in groups:
+        if any((file['stream_id'], epoch) not in groups
+               for epoch in file.get('sensor_epochs', [file['sensor_epoch']])):
             raise ValueError('RAW stream/epoch absent from bag timing')
     output = Path(output)
     if output.exists():
@@ -283,7 +315,8 @@ def extract(files, commands, modes, timings, meta, output, *, sample_stride=10,
                 raw = RawWindows(file['path'], reader_factory, max_reorder_us=max_reorder_us)
                 if list(raw.shape) != spec['sensor_shape']:
                     raise ValueError('RAW sensor size differs from encoder metadata')
-                rows = groups[(file['stream_id'], file['sensor_epoch'])][::sample_stride]
+                rows = [row for epoch in file.get('sensor_epochs', [file['sensor_epoch']])
+                        for row in groups[(file['stream_id'], epoch)][::sample_stride]]
                 for row in rows:
                     stamp = row['tensor_stamp_ros_ns']
                     record = previous_record(commands, stamp, int(max_skew_ms * 1e6))
@@ -375,16 +408,7 @@ def main():
         files = discover_raw(a.bag, timings)
         print(f"RAW auto-detected: {files[0]['path']}")
     else:
-        identities = {(r['stream_id'], r['sensor_epoch']) for r in timings}
-        if len(identities) != 1:
-            p.error(f'RAW stream/epoch mapping required; use --raw-manifest. Bag identities: {sorted(identities)}')
-        stream_id, epoch = next(iter(identities))
-        files = [dict(path=str(path.resolve(strict=True)), stream_id=stream_id,
-                      sensor_epoch=epoch) for path in a.raw]
-        if any(Path(f['path']).suffix.lower() != '.raw' for f in files):
-            p.error('--raw expects RAW files')
-        if len({f['path'] for f in files}) != len(files):
-            p.error('RAW file listed more than once')
+        files = map_raw_files(a.raw, timings)
     provenance = {k: ([str(p.resolve()) for p in v] if isinstance(v, list) else
                       str(v) if isinstance(v, Path) else v) for k, v in vars(a).items()}
     result = extract(files, commands, modes, timings, meta, a.output,

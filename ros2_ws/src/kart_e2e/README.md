@@ -1517,3 +1517,15 @@ ROSノード・topic・parameterの追加なし。自動選択はCLI層で行い
 pose未指定bagは公式offline VSLAMを実行し、既存odom_poses.tumも明示指定で再利用可能。
 学習・推論ノード、topic、parameterの変更はない。学習splitは自動再現せず指定samples.jsonlを集計する。
 分布閾値の充足を学習十分性や衝突原因の証明とは扱わない。
+
+
+### 単一RAW内の処理epoch（2026-11-06）
+
+bag直下にRAWが1件あり、TensorTimingが同じstreamの場合、複数sensor_epochでも
+sequence・epoch・窓終了の前進と、epoch境界での窓の非重複を確認して自動対応する。
+`--raw`で単一RAWを指定した場合も同じ規則を使う。これは上記の複数epochに対する
+manifest必須規則の例外で、Tensor処理履歴のresetでもepochが増えることに対応する。
+窓や時刻は補正せず、各サンプルの元epochを保持し、metadataのraw_filesにsensor_epochsを記録する。
+RAWは同じreaderで順に読み、既存の時刻逆行検査を維持する。
+複数stream、epoch境界の逆行・窓重複、複数RAWと複数epochの組合せは自動対応しない。
+単体テストで連続epochの抽出と逆行・重複の拒否を確認。実bag・SDKでの結合確認は別途必要。
