@@ -516,3 +516,7 @@ collectの明示record_profile=vslam-mapでは、左右Infra rectified画像・C
 RGB・Depth・IMU・EVSを無効化する。必要な左右Infraが無効、または不要センサーが有効なら起動前に拒否する。
 通常記録の既定値と既存録画操作は維持する。これはstereo VO用で、VIO・密な再構成・
 E2E学習用データを兼ねるとは扱わない。単体検証と実機の欠落低減確認は区別する。
+
+Studioからの明示的なモード切替は既存のoperation_mode/requestを1回使用する。
+Studio起点の通常AUTOではJoy切断・モードボタン解放を停止条件にせず、自律指令の鮮度・
+中立での取得・基板制御権の判定を維持する。Joy起点の走行は従来の保持操作に従う。

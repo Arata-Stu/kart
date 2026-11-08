@@ -1896,3 +1896,8 @@ RAW.metadata.yamlがあればRAW名と録画開始ROS時刻を照合し、最初
 元RAW・bag・TensorTiming・教師ROS時刻は変更しない。UIのRAW手動指定欄を空欄にして利用できる。
 既存datasetは変わらず、再作成時に適用する。RAW全走査が1回増えるため抽出時間は増える。
 新規ROSノード/topic/parameterはなく、既存CLIの標準処理として実行する。
+
+「起動」の「走行モード」で、選択したJetson・DockerからAUTO／MANUAL／STOPを1回要求できる。
+「状態を取得」と操作後の表示は取得時点のモードとsource。通常AUTOへの移行には自律ノードの
+新鮮な中立指令が必要。MANUALの操舵・スロットルにはJoyが必要で、UIは走行指令を生成しない。
+Studio起点の通常AUTOはDualSenseやブラウザを切断しても継続する。終了時はSTOPを明示する。

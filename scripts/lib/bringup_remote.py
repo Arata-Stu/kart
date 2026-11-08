@@ -291,6 +291,9 @@ def worker(run):
 
 def dispatch(body):
     action = body.get('action')
+    if action in ('mode_status', 'mode_auto', 'mode_manual', 'mode_stop'):
+        from mode_remote import request
+        return request(action)
     if action in ('recording_status', 'recording_start', 'recording_stop'):
         from recording_remote import request
         return request(action, body.get('recording_service'))

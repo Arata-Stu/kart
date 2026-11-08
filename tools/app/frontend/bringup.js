@@ -1,6 +1,7 @@
 import { $, state, api, on, toast } from './api.js';
 import { profilePicker } from './profile_picker.js';
 import { stereoState, setStereo } from './stereo.js';
+import { setModeTarget } from './operation_mode.js';
 import { connectRecording, disconnectRecording } from './recording.js';
 
 const ui = {preview:false,connection:null, container:null, catalog:null, values:{mode:'esc-trial'},
@@ -213,6 +214,7 @@ async function guarded(fn) {
   } finally {if(epoch===ui.epoch){ui.busy=false;renderButtons();}}
 }
 function reset() {
+  setModeTarget(null);
   disconnectRecording();
   ui.preview=false;
   ui.epoch++;clearTimeout(ui.timer);ui.catalog=null;ui.snapshot=null;ui.revision=null;
@@ -236,6 +238,7 @@ async function loadContainer(epoch) {
   if(!ui.container) return;
   const data=await request('catalog');if(epoch!==ui.epoch)return;
   ui.catalog=data;$('bringup-workspace').hidden=false;
+  setModeTarget({connection:ui.connection,container:ui.container});
   connectRecording({connection:ui.connection,container:ui.container});
   $('bringup-mode').replaceChildren(...Object.entries(data.modes).map(([v,l])=>new Option(l,v)));
   renderFields();renderStatus(data.status);schedule(epoch);
@@ -264,6 +267,7 @@ $('bringup-preview-exit').onclick=()=>{
 };
 $('bringup-connect').onclick=()=>{
   if(ui.preview)return;
+  setModeTarget(null);
   disconnectRecording();
   // A fresh epoch binds every response to this explicit connection selection.
   clearTimeout(ui.timer);ui.epoch++;ui.busy=false;
@@ -284,6 +288,7 @@ $('bringup-connect').onclick=()=>{
   });
 };
 async function selectContainer(epoch) {
+  setModeTarget(null);
   disconnectRecording();
   const selected=ui.containers?.find(c=>c.id===$('bringup-container').value);
   ui.container=selected?.id;ui.catalog=null;ui.snapshot=null;invalidate();

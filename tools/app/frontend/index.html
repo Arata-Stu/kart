@@ -30,6 +30,11 @@
         <p id="bringup-status" role="status">未接続。上部「接続設定」でJetsonを指定してください。</p>
         <pre id="bringup-existing"></pre>
       </div>
+      <div class="bringup-card">
+        <h3>走行モード</h3>
+        <div class="actions"><button id="mode-auto" disabled>AUTO</button><button id="mode-manual" disabled>MANUAL</button><button id="mode-stop" disabled>STOP</button><button id="mode-status" disabled>状態を取得</button></div>
+        <p id="mode-feedback" role="status"></p>
+      </div>
       <div class="bringup-card" id="recording-card">
         <div class="actions"><h3>rosbag録画</h3><button id="recording-refresh" disabled>録画状態を再取得</button></div>
         <p id="recording-state" role="status">JetsonとDockerを選択すると録画状態を取得します。</p>

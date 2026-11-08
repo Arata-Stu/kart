@@ -156,10 +156,14 @@ private:
     Control msg; msg.header.stamp=now(); set_values(msg,command); pub_->publish(msg);
     if (steady_now()-last_stop_>=0.1) {request(*this,request_pub_,STOP,reason); last_stop_=steady_now();}
   }
+  bool studio_mode() const {
+    return mode_source_.rfind("kart_studio:",0)==0;
+  }
   void lose_input() {
     const bool pending=mode_hold_.active() || brake_hold_.active();
     reset_brake_pulse("input_unavailable"); buttons_.reset(); mode_hold_.reset(); neutral_input_=false; manual_fixed_.trip();
-    if (host_mode(mode_) || pending) {
+    const bool independent_auto=studio_mode() && mode_==AUTO && !manual_fixed_.enabled();
+    if ((host_mode(mode_) && !independent_auto) || pending) {
       if (manual_fixed_.enabled() && mode_==AUTO) {stop_fixed({},"joy_manager:fixed_throttle_input_unavailable"); return;}
       blocked_=true;
       if (steady_now()-last_stop_>=0.1) {request(*this,request_pub_,STOP,"joy_manager:input_unavailable"); last_stop_=steady_now();}
@@ -207,7 +211,7 @@ private:
       return;
     }
     const auto requested=mode_hold_.update(*actions);
-    if (requested==STOP || (host_mode(mode_) && !mode_hold_.active())) {
+    if (requested==STOP || (host_mode(mode_) && !studio_mode() && !mode_hold_.active())) {
       stop_hold(actions->manual_held && actions->auto_held ?
         "joy_manager:mode_buttons_conflict" : "joy_manager:mode_button_released");
       return;

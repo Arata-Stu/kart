@@ -41,6 +41,11 @@ assert.equal(calls.length,0,'opening page must not SSH');
 el('bringup-connect').onclick();await flush();
 assert.equal(el('bringup-workspace').hidden,false);
 assert.equal(el('bringup-start').disabled,true);
+for (const action of ['status', 'auto', 'manual', 'stop']) {
+  await el('mode-' + action).onclick();
+  assert.equal(calls.at(-1).url, '/api/bringup/mode_' + action);
+  assert.equal(calls.at(-1).body.container, id);
+}
 el('bringup-mode').value='collect';el('bringup-mode').onchange();
 for(const key of ['rgb_profile','stereo_profile']) assert.equal(el('bringup-field-'+key).type,'hidden');
 el('bringup-field-depth_enabled').value='true';el('bringup-field-depth_enabled').onchange();

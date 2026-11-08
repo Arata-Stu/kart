@@ -259,3 +259,12 @@ MANUALのtrim・Joy配信を通した○操作の実機確認は区別する。
 起動時と受理した各押下（上下限到達を含む）で現在値をINFOログへ出し、値は
 既存`/teleop/fixed_config`（std_msgs/msg/String、reliable/volatile/depth1、10Hzおよび変更時）へ記録する。
 ROS parameterとYAMLは初期設定のまま。再起動では初期値へ戻る。独自service/actionは追加しない。
+
+### Studioからの走行モード要求
+
+Studioは既存の `/operation_mode/request`（kart_interfaces/msg/OperationModeRequest）に
+操作ごとに1件送信し、`/operation_mode/state`（kart_interfaces/msg/OperationModeState）を確認する。
+両topicともreliable/volatile、要求depth 10、状態depth 1。namespaceは対象の管理ノードに合わせる。
+`operation_mode_manager`の状態sourceが `kart_studio:` で始まる間、`joy_manager`はモードボタンの
+保持を要求しない。通常AUTOではJoy切断後も自律指令を使用できる。MANUAL・Joy固定スロットルAUTOは
+引き続きJoy入力を必要とする。×によるSTOPとcommand_muxの中立・鮮度判定は有効。追加パラメータなし。
