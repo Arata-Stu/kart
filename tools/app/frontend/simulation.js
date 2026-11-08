@@ -102,8 +102,14 @@ function draw() {
   const stateLine = $("simulation-racing-state");
   stateLine.hidden = !sim?.car.h2h;
   if (!stateLine.hidden) {
-    const interrupted = sim.car.done && !["completed", "overtake_completed", "time_limit", "stopped_target"].includes(sim.h2hResult.reason);
-    stateLine.textContent = "試走の判断　" + (interrupted ? "試走中断 · " + sim.car.reason : racingLabel(sim.car.h2h.state));
+    const interrupted = sim.car.done && !["completed", "overtake_completed", "time_limit", "stopped_target", "blocked_stopped"].includes(sim.h2hResult.reason);
+    const h=sim.car.h2h;
+    const checks=Object.entries(h.side_checks||{}).map(([side,ok])=>
+      (side==="left"?"左":"右")+(ok?"：通過可能":"：余裕不足")).join(" ／ ");
+    const chosen=h.side==="left"?"左から":h.side==="right"?"右から":"";
+    const maneuver=["PASS","AVOID_STATIC"].includes(h.state)?chosen:"";
+    stateLine.textContent = "試走の判断　" + (interrupted ? "試走中断 · " + sim.car.reason :
+      maneuver+racingLabel(h.state)) + (checks?"　"+checks:"");
   }
   if (!snapshot) return;
   if(sim)$("simulation-time").value=sim.car.time;

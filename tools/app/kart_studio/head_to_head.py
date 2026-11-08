@@ -179,6 +179,7 @@ def preview(request):
     side=cfg.get('side','left')
     if side not in ('left','right'):raise ValueError('追い抜き側が不正です')
     offset=number(cfg,'offset',.65,width+2*margin,3)*(1 if side=='left' else -1)
+    search_width=abs(offset)+width
     duration=number(cfg,'duration',120,5,300)
     accel=1.5;brake=2.5;dt=1/30
     s=0.;os=initial_gap+length;v=ov=steer=0.
@@ -189,17 +190,17 @@ def preview(request):
         raise ValueError('開始位置の車体が境界・障害物・相手と干渉しています')
     frames=[];rivals=[];metrics=[];events=[];plan=None;stable=0.;estimate=None;state='FOLLOW_OBSERVE';reason='time_limit';maxerror=0.;passed=False;note='車間が安定するまで観測';minimum=initial_gap
 
-    def offset_at(station, candidate):
+    def offset_at(station, candidate, lateral=None):
         if not candidate:return 0.
         start,end,ramp=candidate
         u=min(1.,max(0.,(station-start)/ramp),max(0.,(end-station)/ramp))
-        return offset*(10*u**3-15*u**4+6*u**5)
+        return (offset if lateral is None else lateral)*(10*u**3-15*u**4+6*u**5)
 
-    def route_point(station,candidate):
-        x,y,yaw,speed=course.sample(station);d=offset_at(station,candidate)
+    def route_point(station,candidate,lateral=None):
+        x,y,yaw,speed=course.sample(station);d=offset_at(station,candidate,lateral)
         return x-math.sin(yaw)*d,y+math.cos(yaw)*d,speed
 
-    def clear_plan(candidate):
+    def clear_plan(candidate,lateral):
         start,end,_=candidate
         direction=course.sample(start)[2]
         previous=None;previous_pose=None
@@ -207,7 +208,7 @@ def preview(request):
             station=min(end,start+i*.1)
             yaw_ref=course.sample(station)[2]
             if abs(math.atan2(math.sin(yaw_ref-direction),math.cos(yaw_ref-direction)))>.1:return False
-            a=route_point(station,candidate);b=route_point(station+.02,candidate)
+            a=route_point(station,candidate,lateral);b=route_point(station+.02,candidate,lateral)
             yaw=math.atan2(b[1]-a[1],b[0]-a[0]);p=(a[0],a[1],yaw)
             shape=body_shape(p,length,width,rear)
             if not usable.contains(shape):return False
@@ -219,6 +220,7 @@ def preview(request):
             previous=shape;previous_pose=p
         return True
 
+    side_checks={}
     predictor=None;prediction_selector=None;prediction=None
     predictor_binary=predictive_executable() if planner_kind=='predictive_spliner' else None
     proc=subprocess.Popen([str(executable())],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,bufsize=1)
@@ -228,7 +230,7 @@ def preview(request):
         if predictor_binary:
             predictor=subprocess.Popen([str(predictor_binary)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,bufsize=1)
             prediction_selector=selectors.DefaultSelector();prediction_selector.register(predictor.stdout,selectors.EVENT_READ)
-            predictor.stdin.write(' '.join(map(str,[course.total,length,width,margin,min_gap,headway,.8*math.tan(steer_limit)/wb,transition_min_distance,transition_time]))+'\n');predictor.stdin.flush()
+            predictor.stdin.write(' '.join(map(str,[course.total,length,width,margin,min_gap,headway,.8*math.tan(steer_limit)/wb,transition_min_distance,transition_time,1 if side=='left' else -1]))+'\n');predictor.stdin.flush()
         proc.stdin.write(' '.join(map(str,[int(method=='mpc'),int(course.step),wb,steer_limit,*controls,*lookahead_config]))+'\n');proc.stdin.flush()
         diagnostic=None
         terminal_time=0.
@@ -244,9 +246,19 @@ def preview(request):
                 cap=min(vmax,min(course.sample(s+i*max(0,end-s)/100)[3] for i in range(101)))
                 if plan is not None:end=max(end,plan[1])
                 allowed=enabled and (plan is not None or in_zone)
-                predictor.stdin.write(' '.join(map(str,[now,s,ego_d,v,os,0,ov,cap,end,abs(offset)+width if side=='left' else width/2+margin,abs(offset)+width if side=='right' else width/2+margin,int(allowed)]))+'\n');predictor.stdin.flush()
-                if not prediction_selector.select(2):raise ValueError('Predictive planner応答timeout')
-                values=predictor.stdout.readline().split()
+                predictor.stdin.write(' '.join(map(str,[now,s,ego_d,v,os,0,ov,cap,end,search_width,search_width,int(allowed)]))+'\n');predictor.stdin.flush()
+                checked_sides={}
+                while True:
+                    if not prediction_selector.select(2):raise ValueError('Predictive planner応答timeout')
+                    values=predictor.stdout.readline().split()
+                    if values[:1]!=['candidate']:break
+                    start,finish,ramp,lateral=map(float,values[1:])
+                    ok=clear_plan((start,finish,ramp),lateral)
+                    direction='left' if lateral>0 else 'right'
+                    checked_sides[direction]=checked_sides.get(direction,False) or ok
+                    predictor.stdin.write('1\n' if ok else '0\n');predictor.stdin.flush()
+                if not plan:
+                    side_checks=checked_sides
                 if len(values)!=19:raise ValueError('Predictive planner出力不正')
                 if not all(math.isfinite(float(values[i])) for i in (0,1,2,5,6,7,8,9,10,11,12,13,14,15,16,17,18)):raise ValueError('Predictive planner出力が非有限です')
                 prediction=dict(valid=bool(int(values[0])),speed=float(values[1]),coverage=float(values[2]),state=values[3],reason=values[4],active=bool(int(values[5])),start=float(values[6]),end=float(values[7]),ramp=float(values[8]),offset=float(values[9]),roc=[float(values[10]),float(values[11])])
@@ -277,9 +289,14 @@ def preview(request):
                     if prediction['active']:
                         candidate=(prediction['start'],prediction['end'],prediction['ramp'])
                         offset=prediction['offset']
-                        if not clear_plan(candidate):
-                            reason='predictive_geometry_rejected';note='予測経路の車体境界・曲率検査で中断';break
-                        plan=candidate;events.append(dict(time=now,state=prediction['state'],station=s,roc=prediction['roc']))
+                        chosen='left' if offset>0 else 'right'
+                        note=('左' if offset>0 else '右')+'から回避・追い越し'
+                        plan=candidate;events.append(dict(time=now,state=prediction['state'],station=s,
+                                                          roc=prediction['roc'],side=chosen,candidates=checked_sides))
+                    elif checked_sides and not any(checked_sides.values()):
+                        note='左右の候補とも車体の通過余裕なし'
+                        if state=='BLOCKED' and v<.001:
+                            reason='blocked_stopped';break
             if not predictor and not plan and not passed:
                 desired_gap=min_gap+headway*v
                 stable=stable+dt if abs(gap-desired_gap)<.4 and abs(v-ov)<.2 else 0.
@@ -300,9 +317,13 @@ def preview(request):
                     candidate=(s,end,ramp)
                     if advantage<.5 or needed>end-s or end-s<2*ramp+1:
                         note='残距離または速度差不足・追従継続'
-                    elif not clear_plan(candidate):note='追い抜き経路の幅・曲率不足'
                     else:
-                        plan=candidate;state='PASS';note='モデル上の追い抜き実行';events.append(dict(time=now,state=state,station=s))
+                        choices=[d for d in (offset,-offset) if clear_plan(candidate,d)]
+                        if choices:
+                            offset=choices[0];plan=candidate;state='PASS'
+                            note=('左' if offset>0 else '右')+'から追い越し'
+                            events.append(dict(time=now,state=state,station=s,side='left' if offset>0 else 'right'))
+                        else:note='左右とも通過余裕なし・前車追従'
             if plan:
                 start,end,ramp=plan
                 state='MERGE' if s>=end-ramp else (prediction['state'] if prediction else 'PASS')
@@ -335,7 +356,7 @@ def preview(request):
             s,error=course.project(pose,s,max(1.,v*dt*3));maxerror=max(maxerror,error)
             frames.append([now,*pose,v,steer,error,maxerror,tx,ty,ms,target,lookahead])
             rivals.append([*opose,ov])
-            metrics.append(dict(state=state,gap=gap,opponent_speed=ov,estimate=estimate,stable_seconds=stable,note=note,station=s%course.total,coverage=prediction['coverage'] if prediction else None,distance_plan=prediction['distance_plan'] if prediction else None))
+            metrics.append(dict(state=state,gap=gap,opponent_speed=ov,estimate=estimate,stable_seconds=stable,note=note,station=s%course.total,side=('left' if offset>0 else 'right') if plan else None,side_checks=side_checks,coverage=prediction['coverage'] if prediction else None,distance_plan=prediction['distance_plan'] if prediction else None))
             if time.monotonic()>deadline:reason='compute_timeout';break
             if tick==int(duration*30):break
             # Substeps bound translation and heading changes for swept geometry.
@@ -375,7 +396,7 @@ def preview(request):
         terminal[6:8]=[terminal_error,max(maxerror,terminal_error)]
         if terminal_time<=frames[-1][0]+1e-9:
             frames.pop();rivals.pop();metrics.pop()
-        frames.append(terminal);rivals.append([*opose,ov]);metrics.append(dict(state=state,gap=os-s-length,opponent_speed=ov,estimate=estimate,stable_seconds=stable,note=note,station=s%course.total,coverage=prediction['coverage'] if prediction else None,distance_plan=prediction['distance_plan'] if prediction else None))
+        frames.append(terminal);rivals.append([*opose,ov]);metrics.append(dict(state=state,gap=os-s-length,opponent_speed=ov,estimate=estimate,stable_seconds=stable,note=note,station=s%course.total,side=('left' if offset>0 else 'right') if plan else None,side_checks=side_checks,coverage=prediction['coverage'] if prediction else None,distance_plan=prediction['distance_plan'] if prediction else None))
         return dict(diagnostic=diagnostic,planner=planner_kind,observation='ideal',frames=frames,opponents=rivals,h2h=metrics,events=events,reason=reason,controller=method,total=course.total,zone=[zone_start,zone_end],minimum_follow_gap=minimum,vehicle=dict(length=length,width=width,rear=rear),planned_route=[list(route_point(plan[0]+i*(plan[1]-plan[0])/200,plan)[:2]) for i in range(201)] if plan else [])
     finally:
         if predictor is not None:

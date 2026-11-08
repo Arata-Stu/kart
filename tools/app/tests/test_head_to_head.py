@@ -197,3 +197,23 @@ def test_stopped_opponent_bypass_without_gp_lap():
     assert result["reason"] == "overtake_completed", result["h2h"][-1]
     assert {"AVOID_STATIC", "MERGE", "PASSED"} <= {h["state"] for h in result["h2h"]}
     assert result["h2h"][-1]["coverage"] < .1
+
+
+@pytest.mark.parametrize("sides,chosen", [([], "left"), ([1], "right"), ([-1], "left"), ([1, -1], None)])
+def test_box_blocks_one_or_both_passes(sides, chosen):
+    body = request()
+    body["head_to_head"].update(planner="predictive_spliner", opponent_speed=0, initial_gap=8,
+                                zone_start=0, zone_end=40, side="left")
+    body["obstacles"] = [{"polygon": [[x, sign*y] for x,y in
+                         [(7.8,.24),(8.3,.24),(8.3,.64),(7.8,.64)]]} for sign in sides]
+    result = preview(body)
+    if chosen:
+        assert result["reason"] == "overtake_completed"
+        first = result["events"][0]
+        assert first["side"] == chosen
+        assert first["candidates"] == {"left": 1 not in sides, "right": -1 not in sides}
+    else:
+        assert result["reason"] == "blocked_stopped"
+        assert not result["events"]
+        assert result["h2h"][-1]["state"] == "BLOCKED"
+        assert result["frames"][-1][4] < .001

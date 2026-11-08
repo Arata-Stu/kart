@@ -3,11 +3,13 @@
 // Local Gaussian processes + bounded spline candidate search (NOT paper SQP).
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <utility>
 
 namespace kart_racing {
 inline bool finite(double v) { return std::isfinite(v); }
@@ -110,6 +112,9 @@ struct Plan {
 struct Output { bool valid=false;double speed=0,coverage=0;std::string state="FAULT",reason="invalid_input";Plan plan;Plan evaluated; };
 class Planner {
   Settings cfg_;OpponentModel model_;Plan active_;double last_time_=-1,pass_cap_=0;std::uint64_t id_=0;bool passed_=false;
+  // Studio supplies a map/swept-body check. ROS uses verified corridor widths.
+  std::function<bool(const Plan&)> geometry_check_;
+  int preferred_side_=1;
   bool static_pass_=false;
   double last_station_stamp_=-1,last_station_s_=0,last_station_d_=0;
   double still_since_=-1,anchor_s_=0,anchor_d_=0;
@@ -138,15 +143,18 @@ class Planner {
     if(!a.passing_allowed || speed<=0 || a.left_width<cfg_.width/2+cfg_.margin ||
        a.right_width<cfg_.width/2+cfg_.margin || std::abs(a.ego_d)>.15)return out;
     double best=std::numeric_limits<double>::infinity();
-    for(int side:{-1,1}){
+    for(int side:{preferred_side_,-preferred_side_}){
       const double offset=a.opponent_d+side*clearance;
-      if(side*offset<=0 || std::abs(offset)>=best)continue;
+      if(side*offset<=0)continue;
       const double ramp=std::max({cfg_.transition_min_distance,speed*cfg_.transition_time,
                                   std::sqrt(6*std::abs(offset)/cfg_.curvature)});
       if(entry-a.ego_s<ramp || exit+ramp>a.zone_end ||
          offset+cfg_.width/2+cfg_.margin>a.left_width ||
          offset-cfg_.width/2-cfg_.margin < -a.right_width)continue;
-      active_={true,a.ego_s,exit+ramp,ramp,offset,entry,exit};
+      Plan candidate{true,a.ego_s,exit+ramp,ramp,offset,entry,exit};
+      if(geometry_check_ && !geometry_check_(candidate))continue;
+      if(std::abs(offset)>=best)continue;
+      active_=candidate;
       best=std::abs(offset);
     }
     if(active_.valid){
@@ -157,6 +165,9 @@ class Planner {
   }
 public:
   Planner(double length,Settings settings={}):cfg_(settings),model_(length){if(!cfg_.valid())throw std::invalid_argument("settings");}
+  void set_geometry_check(std::function<bool(const Plan&)> check,int preferred_side){
+    geometry_check_=std::move(check);preferred_side_=preferred_side<0?-1:1;
+  }
   const OpponentModel& model()const{return model_;}
   void reset(){model_.clear();active_={};last_time_=-1;passed_=false;still_since_=-1;static_pass_=false;last_station_stamp_=-1;}
   Output update(const Scene& a){
@@ -224,7 +235,7 @@ public:
     double best=std::numeric_limits<double>::infinity();
     // Bounded candidate optimization, conservatively restricted to straight
     // passing corridors. GP inference is outside this search.
-    for(int side:{-1,1})for(double stretch:{1.,1.25,1.5}){
+    for(int side:{preferred_side_,-preferred_side_})for(double stretch:{1.,1.25,1.5}){
       double offset=side>0?max_d+cfg_.width+cfg_.margin:min_d-cfg_.width-cfg_.margin;
       double ramp=std::max({cfg_.transition_min_distance,a.speed_cap*cfg_.transition_time,std::sqrt(6*std::abs(offset)/cfg_.curvature)})*stretch;
       Plan p{true,a.ego_s,end+ramp,ramp,offset,begin,end};
@@ -234,6 +245,7 @@ public:
       longitudinal_candidate=true;
       if(offset+cfg_.width/2+cfg_.margin>a.left_width || offset-cfg_.width/2-cfg_.margin< -a.right_width)continue;
       const double score=std::abs(offset)*(p.end-p.start)+2/ramp;
+      if(geometry_check_ && !geometry_check_(p))continue;
       if(score<best){best=score;active_=p;pass_cap_=a.speed_cap;}
     }
     if(active_.valid){out.plan=active_;out.evaluated=active_;out.speed=a.speed_cap;out.state="PASS";out.reason="learned_prediction";}
