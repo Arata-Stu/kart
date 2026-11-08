@@ -2,7 +2,8 @@
 
 単一クラス（相手車両、class_id="0"）の2D検出をByteTrackで関連付ける。
 MITの[ByteTrack-cpp](https://github.com/Vertical-Beach/ByteTrack-cpp)を
-`packages.repos`の固定commitから取得し、Eigenを使う共有ライブラリをこのpackageと一緒にビルドする。
+`docker/Dockerfile.kart` の `BYTETRACK_COMMIT` で固定し、イメージ作成時にビルドする。
+ヘッダは `/usr/local/include/ByteTrack`、共有ライブラリは `/usr/local/lib/libbytetrack.so` に配置する。
 ノード・実行ファイルは `opponent_tracker`、componentは `kart_opponent_tracker::OpponentTracker`。
 
 |方向|既定topic|型|QoS|内容|
@@ -24,7 +25,7 @@ track IDはステレオ距離・世界座標・実車IDを表さない。標準R
 |reset_gap_s|0.5|連続入力の撮影時刻差がこの秒数を超えるとリセット|
 
 パッケージ基準値はconfig/tracker.yaml。ROS共通use_sim_timeはfalse。
-ホストで `bash scripts/repos.sh import`、EigenとROS依存を含むkartイメージ作成後、
+ホストで `bash scripts/repos.sh import`、ByteTrack-cppを含むkartイメージを再ビルドし、そのコンテナ内で、
 `bash scripts/build.sh --packages-up-to kart_bringup`。単体起動はsource後に
 `ros2 run kart_opponent_tracker opponent_tracker --ros-args -r detections:=/racing/detections`。
 RGBからの起動とengine準備は[bringup設定](../kart_bringup/config/racing/README.md)。

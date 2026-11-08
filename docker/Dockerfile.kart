@@ -171,3 +171,16 @@ RUN if [ "$(dpkg --print-architecture)" = "amd64" ] && \
         'numpy==1.26.4' 'h5py==3.11.0' \
       && /opt/evs-raw/bin/python -c 'import numpy, h5py; from metavision_core.event_io import RawReader; assert numpy.__version__ == "1.26.4"; print("EVS RAW runtime:", numpy.__version__, h5py.__version__)'; \
     fi
+
+# Upstream has no CMake install rules at this revision.
+ARG BYTETRACK_COMMIT=d43805d461a714f65da039981bd5f5d21cf5cf59
+RUN git init /tmp/bytetrack \
+    && git -C /tmp/bytetrack fetch --depth 1 https://github.com/Vertical-Beach/ByteTrack-cpp.git "${BYTETRACK_COMMIT}" \
+    && git -C /tmp/bytetrack checkout --detach FETCH_HEAD \
+    && cmake -S /tmp/bytetrack -B /tmp/bytetrack/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build /tmp/bytetrack/build --parallel 2 \
+    && install -m 755 /tmp/bytetrack/build/libbytetrack.so /usr/local/lib/ \
+    && cp -R /tmp/bytetrack/include/ByteTrack /usr/local/include/ \
+    && install -Dm644 /tmp/bytetrack/LICENSE /usr/local/share/licenses/bytetrack/LICENSE \
+    && ldconfig \
+    && rm -rf /tmp/bytetrack

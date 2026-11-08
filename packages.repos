@@ -9,7 +9,3 @@ repositories:
     url: https://github.com/carbuncle01/openeb_ros2.git
     # Follow the kart development branch (requested 2026-10-10).
     version: kart
-  ros2_ws/src/kart_opponent_tracker/vendor/ByteTrack-cpp:
-    type: git
-    url: https://github.com/Vertical-Beach/ByteTrack-cpp.git
-    version: d43805d461a714f65da039981bd5f5d21cf5cf59
