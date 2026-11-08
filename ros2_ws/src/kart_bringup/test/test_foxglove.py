@@ -28,6 +28,9 @@ class FoxgloveTests(unittest.TestCase):
     def test_telemetry(self):
         for name in (
             "/tf_static",
+            "/racing/rgb",
+            "/racing/detection_boxes",
+            "/racing/ground_markers",
             "/hdmap/markers",
             "/visual_slam/tracking/slam_path",
             "/system/jetson/diagnostics",
@@ -39,6 +42,7 @@ class FoxgloveTests(unittest.TestCase):
             self.assertTrue(allowed("topic_whitelist", name), name)
         for name in (
             "/realsense/color/image_raw",
+            "/racing/network_input",
             "/visual_slam/vis/landmarks_cloud",
             "/e2e/tensor_output",
             "/hdmap/document",

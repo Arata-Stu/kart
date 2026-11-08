@@ -2,7 +2,7 @@
 
 相手1台の追従・GP相手モデル・予測スプラインのC++17実験実装。
 90 Hz VO、既存PP/PIDは変更しない。ROS非依存の共通headerをStudio試走とROS componentで使う。
-**ROS出力はshadow専用。実車の制御経路への接続、画像検出・距離推定・追跡・Frenet投影は未実装。**
+**ROS出力はshadow専用。画像検出・2D追跡は別起動の[kart_opponent_tracker](../kart_opponent_tracker/README.md)とbringupが担当。平面仮定の接地点を撮影時刻のTFで地図に変換し、Frenet状態を推定する。実車の制御経路への接続は未実装。**
 
 ## アルゴリズムと範囲
 
@@ -44,7 +44,7 @@ sは両車で同じ周回原点を共有した連続距離、dは左正、速度
 observed=falseは喪失であり自由空間ではない。passing_allowedは直線、全区間幅、障害物なし、
 合流までの相手観測可能性を確認した供給元だけがtrueにできる。
 RGB/Infraは候補、Depthは任意。単眼bboxだけから無条件にメートル距離を作らない。
-実画像frontendは未提供のため、現状実センサーからこのtopicは自動生成されない。
+racing_observerが有効な接地点と閉じた参照ラインからこのtopicを生成する。
 
 出力valid_for_secは元stampからの有効時間。publish時刻で鮮度を延長しない。
 stations/offsetsは空間経路であり時刻付きの実行可能軌道ではない。
@@ -112,3 +112,26 @@ Studioの距離可視化は、共通C++ plannerが評価した候補の開始・
 許可区間残長との差と、横移動完了前に並走が始まる場合を表示する。候補未評価時は
 設定上の下限のみと明示し、曲率・追い抜き距離は未算入とする。
 診断値はStudio用native出力で伝え、ROSメッセージの契約は変更しない。
+
+## 停止車両の回避とFrenet観測
+
+起動時固定planner設定: stationary_speed=0.12 m/s（速度+2σの上限）、stationary_hold=0.7 s
+（同じIDのs,dがほぼ一定の継続時間）、avoidance_speed=1.0 m/s（停止車両迂回中の速度上限）。
+進路上に停止車両があれば、既知の直線区間で左右の横移動、車幅、追従誤差用余裕、復帰距離を確認して
+AVOID_STATIC→MERGE→PASSEDを出す。周回学習は不要。余裕不足はBLOCKED（目標0）、
+通路失効・相手再発進・喪失は計画を破棄。対象は既定寸法のカート1台。
+移動相手には従来の追従・学習済み追い越しを使う。接地点は車体中心の近似であり誤差は実測が必要。
+
+Pythonノード/実行ファイル racing_observer は以下を使用する。絶対topic名、標準TF・ROS管理topicは省略。
+独自service/actionなし。起動時固定 position_sigma_m=0.03 m は位置誤差の仮の下限。
+|方向|topic|型|QoS|
+|---|---|---|---|
+|入|/planning/reference_line|kart_interfaces/msg/ReferenceLine|reliable / transient_local / 1|
+|入|/racing/ground_points|kart_interfaces/msg/OpponentGroundPoints|best effort / volatile / 5|
+|入|/racing/passing_corridor|kart_interfaces/msg/PassingCorridor|best effort / volatile / 5|
+|出|/racing/observation|kart_interfaces/msg/HeadToHeadObservation|best effort / volatile / 5|
+
+閉じた参照ライン・撮影時刻の地図→base_link TFが必要。0.35〜0.8秒の位置列から縦速度を推定。
+0台/複数台・投影の曖昧さ・古い観測では観測無効。通路入力は参照revision・track_id・frame一致かつ
+観測時刻以前0.2秒未満のみ採用。直線全区間の通行可能性と並走観測を確認する外部入力であり、
+現状この認定を実車センサから行うpublisherはない。既定では静止車両手前でBLOCKEDになる。

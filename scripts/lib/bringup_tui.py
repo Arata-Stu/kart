@@ -179,6 +179,8 @@ class Editor:
                 from kart_bringup.recovery import configuration, LABELS
                 enabled, settings = configuration(self.config / 'recovery', a.recovery)
                 rows['recovery'] = '補助 / 自動復帰: ' + LABELS[settings['sensor_profile'] if enabled else 'off']
+            perception = a.perception or mission.composition(self.config / 'mission.yaml', a.mode)['perception_engine']
+            rows['perception'] = '認識 / 相手車: ' + (Path(perception).name if perception and perception != 'off' else '無効')
             rows['foxglove'] = f'補助 / Foxglove: {"有効" if self.foxglove_enabled() else "無効"}'
             if a.mode == 'drive':
                 enabled = self.params('hdmap/hdmap.yaml', 'hdmap_server')['tuning_enabled'] if a.tuning is None else a.tuning
@@ -334,6 +336,16 @@ class Editor:
                 if not math.isfinite(value) or not 0.01 <= value <= 1:
                     raise ValueError('Joy最大スロットルは0.01..1の有限値を指定してください')
                 a.joy_max_throttle = value
+        elif action == 'perception':
+            plans = sorted((self.root / 'weights/racing/yolov8s/engines').glob('*/opponent.plan'))
+            choices = ['off', *map(str, plans), 'custom']
+            selected = self.pick('相手車認識用engine', choices, a.perception or 'off',
+                                 lambda v: {'off': '無効', 'custom': 'パスを入力'}.get(v, v))
+            if selected == 'custom':
+                selected = input('TensorRT engineのパス > ').strip()
+                if not selected:
+                    return
+            a.perception = selected
         elif action == 'control':
             self.edit_control()
         elif action == 'recovery':

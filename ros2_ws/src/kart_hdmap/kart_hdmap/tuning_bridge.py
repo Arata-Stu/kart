@@ -16,7 +16,7 @@ from .tuning import MAX_BYTES, StopGate, digest, encoded, map_identity, validate
 
 class TuningBridge:
     def __init__(self, node):
-        from kart_interfaces.msg import OperationModeState, TrackingReference
+        from kart_interfaces.msg import HeadToHeadPlan, OperationModeState, TrackingReference
         from nav_msgs.msg import Odometry
         from std_msgs.msg import String
         from .vehicle_status import VehicleStatus
@@ -62,6 +62,7 @@ class TuningBridge:
         self.buffer = DisplayBuffer()
         self.listener = TransformListener(self.buffer, node)
         self.subscriptions = [
+            node.create_subscription(HeadToHeadPlan, 'racing/shadow_plan', self.vehicle.racing, 1),
             node.create_subscription(String, 'recovery/status', lambda m: self.vehicle.recovery(m.data), 1),
             node.create_subscription(DiagnosticArray, 'control/lateral_diagnostics', self.lateral_diagnostics, 10),
             node.create_subscription(DiagnosticArray, 'control/speed_diagnostics', self.speed_diagnostics, 10),
@@ -206,6 +207,7 @@ class TuningBridge:
         if hasattr(self, 'vehicle'):
             result['vehicle'] = self.vehicle.view(self.node.get_clock().now().nanoseconds / 1e9,
                 dict(bridge=int(self.node.count_publishers('diagnostics') > 0),
+                     racing=self.node.count_publishers('racing/shadow_plan'),
                      recovery=self.node.count_publishers('recovery/status')))
         if revision != known:
             result['active'] = self.active()

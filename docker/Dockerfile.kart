@@ -31,6 +31,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ros-lyrical-isaac-ros-foundationstereo-models-install \
         ros-lyrical-nvblox-ros \
         ros-lyrical-isaac-ros-launch-utils \
+        libeigen3-dev ros-lyrical-isaac-ros-yolov8 ros-lyrical-message-filters ros-lyrical-tf2-ros-py \
         ros-lyrical-isaac-ros-dnn-image-encoder \
         ros-lyrical-isaac-ros-tensor-rt \
     && if [ "$(dpkg --print-architecture)" = arm64 ]; then \

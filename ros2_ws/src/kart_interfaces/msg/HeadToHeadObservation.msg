@@ -3,6 +3,8 @@
 # s is unwrapped metres along reference_id, d is left positive. Both vehicles
 # must use the SAME lap origin. A projection/tracking frontend must provide this.
 std_msgs/Header header
+# Epoch of kinematic estimates. Zero uses header.stamp for legacy producers.
+builtin_interfaces/Time measurement_stamp
 string reference_id
 uint64 track_id
 float64 course_length

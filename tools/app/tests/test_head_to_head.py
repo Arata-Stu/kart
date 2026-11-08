@@ -187,3 +187,13 @@ def test_short_zone_configurable():
     result=preview(body)
     assert result['reason']=='time_limit'
     assert not result['events']  # Input acceptance does not bypass feasibility.
+
+
+def test_stopped_opponent_bypass_without_gp_lap():
+    body = request()
+    body["head_to_head"].update(planner="predictive_spliner", opponent_speed=0, initial_gap=8,
+                                zone_start=0, zone_end=40)
+    result = preview(body)
+    assert result["reason"] == "overtake_completed", result["h2h"][-1]
+    assert {"AVOID_STATIC", "MERGE", "PASSED"} <= {h["state"] for h in result["h2h"]}
+    assert result["h2h"][-1]["coverage"] < .1

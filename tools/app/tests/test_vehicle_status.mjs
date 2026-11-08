@@ -23,3 +23,7 @@ status.vehicle.recovery={availability:'stale'};renderVehicle(status);
 assert.match(el('recovery').textContent,/受信停止/);assert.doesNotMatch(el('recovery').textContent,/後退中/);
 renderVehicle(null);assert.equal(el('mode').textContent,'モード不明');assert.match(el('host').textContent,/未接続/);
 console.log('Vehicle panel separates mode, authority, inferred contact, recovery, current faults and stale data');
+status.vehicle.racing={availability:'fresh',valid:true,state:'FOLLOW_OBSERVE'};
+renderVehicle(status);assert.match(el('racing').textContent,/前車に追従中/);
+status.vehicle.racing={availability:'stale'};
+renderVehicle(status);assert.doesNotMatch(el('racing').textContent,/追従中/);

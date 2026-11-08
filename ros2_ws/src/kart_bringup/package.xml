@@ -31,6 +31,8 @@
   <exec_depend>kart_hdmap</exec_depend>
   <exec_depend>kart_parking</exec_depend>
   <exec_depend>kart_control</exec_depend>
+  <exec_depend>kart_opponent_tracker</exec_depend>
+  <exec_depend>isaac_ros_yolov8</exec_depend>
   <exec_depend>kart_racing</exec_depend>
   <exec_depend>kart_recovery</exec_depend>
   <exec_depend>kart_e2e</exec_depend>

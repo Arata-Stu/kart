@@ -113,6 +113,7 @@ def validate_mode_options(args):
         (("latency_output",), args.mode == "e2e-latency"),
         (("tuning",), args.mode == "drive"),
         (("foxglove",), not offline),
+        (("perception",), not offline),
     ]
     for keys, allowed in groups:
         if allowed:
@@ -165,6 +166,7 @@ def argument_parser():
     parser.add_argument("--evs-tensor-config", default="", help="Full OpenEB tensor YAML; E2E defaults to model_dir/openeb_tensor.yaml")
     parser.add_argument("--evs-bias-file", default="", help=".bias path; @defaultでカメラ既定")
     parser.add_argument("--bias-root", type=Path, default=ROOT / "bias/evs")
+    parser.add_argument("--perception", metavar="ENGINE|off", default="", help="相手車認識のTensorRT plan。未指定はmission YAML（既定OFF）")
     parser.add_argument("--foxglove", action=argparse.BooleanOptionalAction, default=None, help="Foxglove。未指定は用途のYAML既定（地図走行はON）")
     parser.add_argument("--no-bridge", action="store_true", help="車両基板なしの確認用")
     parser.add_argument(
@@ -269,6 +271,13 @@ def build_command(args, config):
         camera_config(config, args.mode, args.record_profile), args.rgb_fps or "", args.infra_fps or "",
         args.rgb_profile, args.infra_profile, args.imu_profile, getattr(args, "depth_profile", "")
     )
+    if args.mode != "eval":
+        from kart_bringup.mission import composition, perception_engine
+        selected = composition(config / "mission.yaml", args.mode,
+                               {"perception_engine": args.perception})["perception_engine"]
+        engine = perception_engine(selected, sensors)
+        if engine:
+            print(f"相手車認識: {engine} (RealSenseと同一container)")
     from kart_bringup.mission import validate_record_profile
     validate_record_profile(args.record_profile, args.mode, sensors, args.evs)
     if section_routing:
@@ -396,6 +405,7 @@ def build_command(args, config):
         "evs_tensor_config": args.evs_tensor_config,
         "evs_aggregation": args.evs_aggregation,
         "evs_image": "" if args.evs_image is None else str(args.evs_image).lower(),
+        "perception_engine": (engine or args.perception) if args.mode != "eval" else "",
         "enable_foxglove": "" if args.foxglove is None else str(args.foxglove).lower(),
         "record_dir": args.record_dir,
         "run_name": recording_name if args.mode != "eval" else "",

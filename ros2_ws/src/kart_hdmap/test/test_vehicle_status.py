@@ -77,3 +77,18 @@ def test_invalid_bridge_level_clears_old_status_and_allows_next_valid_sample():
         status.level = b'\x02'
         cache.bridge(10, [status])
         assert cache.view(10.1, dict(bridge=1, recovery=0))['bridge']['level'] == 2
+
+
+def test_shadow_plan_expires_and_timeout_fault_replaces_follow():
+    cache = VehicleStatus()
+    pubs = dict(racing=1)
+    msg = NS(header=NS(stamp=NS(sec=10, nanosec=0)), state='FOLLOW_OBSERVE',
+             valid=True, reason='learning', valid_for_sec=.2)
+    with patch('kart_hdmap.vehicle_status.time.monotonic', return_value=20):
+        cache.racing(msg)
+        assert cache.view(10.1, pubs)['racing']['valid']
+        assert cache.view(10.3, pubs)['racing']['availability'] == 'stale'
+        msg.valid, msg.state, msg.reason = False, 'FAULT', 'observation_timeout'
+        cache.racing(msg)
+        assert cache.view(10.4, pubs)['racing']['reason'] == 'observation_timeout'
+        assert cache.view(10.4, dict(racing=2))['racing']['availability'] == 'conflict'

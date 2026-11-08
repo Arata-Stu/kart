@@ -12,3 +12,6 @@
     max_curvature: 1.2
     prediction_horizon: 15.0
     input_timeout: 0.2
+    stationary_speed: 0.12
+    stationary_hold: 0.7
+    avoidance_speed: 1.0

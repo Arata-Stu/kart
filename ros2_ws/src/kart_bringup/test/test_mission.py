@@ -419,6 +419,22 @@ class MissionCompositionTests(unittest.TestCase):
             self.assertEqual(vehicle_args['auto_fixed_throttle'], '0.10')
             self.assertEqual(lu.include.call_args_list[0].kwargs["launch_arguments"]["depth_profile"], "424x240x60")
             saved = vars(args).copy()
+            import tempfile
+            with tempfile.NamedTemporaryFile() as engine:
+                engine.write(b"fixture")
+                engine.flush()
+                args.perception_engine = engine.name
+                with self.assertRaisesRegex(ValueError, "640x480"):
+                    module.add_mission(args)
+                args.rgb_profile = "640x480x30"
+                lu.include.reset_mock()
+                module.add_mission(args)
+                camera, perception, _ = lu.include.call_args_list
+                self.assertEqual(perception.args[1], "launch/racing_perception.launch.py")
+                self.assertEqual(perception.kwargs["launch_arguments"]["target_container"],
+                                 camera.kwargs["launch_arguments"]["container_name"])
+                lu.component_container.assert_not_called()
+            args = SimpleNamespace(**saved)
             args.record_profile = "vslam-map"
             args.rgb_profile = args.depth_profile = ""
             lu.include.reset_mock()

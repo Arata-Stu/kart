@@ -620,3 +620,6 @@ EVSの非同期イベント自体にFPSは付けません。値は設定値で�
 地図走行のFoxgloveとStudio動的調整は既定ONです。`--no-foxglove`、`--no-tuning`でOFF。
 RGB既定は640×480・30 FPS、Infra既定は640×480・90 FPSです。
 EVS有効時の既定はcuda_async＋evt3_runs_gpu_direct（集計方式一覧の4番目）です。
+
+通常bringupの `--perception ENGINE|off` は相手車の2D認識（640×480 RGB）を選ぶ。
+既定OFF。RealSenseと同じcontainerで実行する。[認識手順](../ros2_ws/src/kart_bringup/config/racing/README.md)。

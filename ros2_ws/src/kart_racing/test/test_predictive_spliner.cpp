@@ -41,5 +41,44 @@ int main(){
   // Stopped rival produces a zero target near the standstill gap.
   Planner stop(40);Scene b;b.speed_cap=5;b.ego_v=1;b.opponent_s=1.35;
   auto stopped=stop.update(b);assert(stopped.valid&&stopped.speed<1e-6);
+  Scene static_scene;
+  static_scene.opponent_s=8;static_scene.ego_v=1;static_scene.speed_cap=3;
+  static_scene.zone_end=20;static_scene.left_width=static_scene.right_width=1;
+  static_scene.d_variance=.0009;
+  Planner waiting(40);
+  for(int i=0;i<=20;++i){static_scene.time=i*.05;r=waiting.update(static_scene);}
+  assert(r.state=="BLOCKED" && r.speed==0 && !r.plan.valid);
+  auto uncertain=waiting;
+  auto uncertain_scene=static_scene;
+  uncertain_scene.time+=.05;uncertain_scene.v_variance=.1;
+  assert(uncertain.update(uncertain_scene).state=="FOLLOW_OBSERVE");
+  auto lateral=waiting;
+  for(int i=0;i<20;++i){
+    uncertain_scene.time+=.05;uncertain_scene.v_variance=0;
+    uncertain_scene.opponent_d+=.04;uncertain_scene.passing_allowed=true;
+    assert(lateral.update(uncertain_scene).state!="AVOID_STATIC");
+  }
+  static_scene.passing_allowed=true;static_scene.time+=.05;
+  auto right_only=waiting;
+  auto narrow_scene=static_scene;narrow_scene.left_width=.18;
+  assert(right_only.update(narrow_scene).plan.offset<0);
+  auto no_room=waiting;narrow_scene.right_width=.18;
+  assert(no_room.update(narrow_scene).state=="BLOCKED");
+  auto run=waiting;r=run.update(static_scene);
+  assert(r.state=="AVOID_STATIC" && r.plan.valid && r.speed==1 && r.coverage<.9);
+  auto active=run;
+  auto moved=static_scene;moved.time+=.05;moved.opponent_v=.5;
+  assert(!active.update(moved).valid);
+  active=run;moved=static_scene;moved.time+=.05;moved.passing_allowed=false;
+  assert(!active.update(moved).valid);
+  const Plan route=r.plan;
+  for(double s=.1;s<route.end+.3;s+=.1){
+    static_scene.time+=.1;static_scene.ego_s=s;static_scene.ego_d=route.at(s);
+    r=run.update(static_scene);assert(r.valid);
+    if(std::abs(s-static_scene.opponent_s)<=cfg.length){
+      assert(std::abs(static_scene.ego_d)>=cfg.width+cfg.margin);
+    }
+  }
+  assert(r.state=="PASSED");
   std::cout<<"GP, seam, identity, coverage, RoC, spline, loss, NaN, following: passed\n";
 }

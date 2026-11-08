@@ -186,6 +186,7 @@
           </div>
           <section class="vehicle-state" aria-label="車両状態" aria-live="polite">
             <strong id="vehicle-mode">モード不明</strong><span id="vehicle-host">HOST: 未受信</span>
+            <strong id="vehicle-racing">レース判断（shadow）: 未接続</strong>
             <span id="vehicle-recovery">復帰: 未受信</span>
             <div id="vehicle-esc" class="small"></div>
             <div id="vehicle-health" class="small"></div>
@@ -1474,6 +1475,7 @@
         </div>
         <p class="small">区間は選択ラインの始点からの距離。閉コース専用・合流位置が開始より小さい場合は次周に合流。青＝自車、橙＝相手。両車に選択ラインの速度上限が適用されます。認識・実車PID・タイヤは再現しません。失敗時の退避制御は未実装で、抵触や合流不能を検出すると試走を中断します。</p>
       </details>
+      <div id="h2h-inspection" class="actions" hidden><button id="h2h-inspect" type="button" aria-pressed="false">地図で並走幅を測る</button><button id="h2h-clear-inspect" type="button" hidden>寸法表示を閉じる</button><span id="h2h-section-reading" role="status"></span></div>
       <p id="h2h-pick-help" role="status" hidden></p>
       <canvas
         id="simulation-canvas"
@@ -1489,6 +1491,7 @@
       <input id="simulation-time" type="range" min="0" max="0" value="0" step="any" aria-label="試走の再生位置">
       <p id="simulation-parking-feedback" class="parking-feedback" role="status" aria-live="polite" hidden></p>
       <p id="h2h-distance-summary" class="small" hidden></p>
+      <strong id="simulation-racing-state" hidden></strong>
       <p id="simulation-metrics" aria-live="off"></p>
       <p class="help">
         地図はホイールで拡大縮小、ドラッグで移動。「全体表示」で戻せます。実車と共通のPure Pursuit／MPC計算＋理想車両モデル（30 Hz）。設定変更で再計算します。実車設定は変更しません。境界・障害物との干渉検査はHead-to-head／駐車試走で行います。実車PID・タイヤ・認識は未再現です。

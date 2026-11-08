@@ -53,3 +53,9 @@ __pycache__/
 
 # Shared bringup ownership and persistent remote session logs.
 /.kart-runtime/
+/ros2_ws/src/kart_opponent_tracker/vendor/ByteTrack-cpp/
+!/weights/racing/
+/weights/racing/*
+!/weights/racing/yolov8s/
+/weights/racing/yolov8s/*
+!/weights/racing/yolov8s/README.md

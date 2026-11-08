@@ -37,7 +37,11 @@ class PredictiveSplinerNode:public rclcpp::Node {
       planner_=std::make_unique<Planner>(a->course_length,cfg_);
       reference_=a->reference_id;frame_=a->header.frame_id;course_=a->course_length;
     }
-    Scene s;s.time=stamp;s.ego_s=a->ego_s;s.ego_d=a->ego_d;s.ego_v=a->ego_speed;
+    if(a->measurement_stamp.sec<0){invalidate("negative_measurement_stamp");return;}
+    const auto measured=rclcpp::Time(a->measurement_stamp);
+    const double epoch=measured.nanoseconds()==0?stamp:measured.seconds();
+    if(epoch<stamp||epoch>now){invalidate("invalid_measurement_epoch");return;}
+    Scene s;s.time=epoch;s.ego_s=a->ego_s;s.ego_d=a->ego_d;s.ego_v=a->ego_speed;
     s.opponent_s=a->opponent_s;s.opponent_d=a->opponent_d;s.opponent_v=a->opponent_speed;
     s.d_variance=a->opponent_d_variance;s.v_variance=a->opponent_speed_variance;
     s.speed_cap=a->speed_cap;s.zone_end=a->zone_end_s;s.left_width=a->left_width;s.right_width=a->right_width;
@@ -60,6 +64,9 @@ public:
     cfg_.transition_min_distance=param("transition_min_distance",3.0);
     cfg_.transition_time=param("transition_time",1.0);
     cfg_.curvature=param("max_curvature",1.2);cfg_.horizon=param("prediction_horizon",15);
+    cfg_.stationary_speed=param("stationary_speed",.12);
+    cfg_.stationary_hold=param("stationary_hold",.7);
+    cfg_.avoidance_speed=param("avoidance_speed",1);
     timeout_=param("input_timeout",.2);
     if(!cfg_.valid()||!finite(timeout_)||timeout_<=0||timeout_>.5)throw std::invalid_argument("invalid planner parameters");
     pub_=create_publisher<Message>("racing/shadow_plan",rclcpp::QoS(1).reliable());

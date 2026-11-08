@@ -1,0 +1,5 @@
+/**/opponent_ground:
+  ros__parameters:
+    target_frame: base_link
+    ground_z_m: .nan  # Required measured value at startup.
+    max_range_m: 10.0

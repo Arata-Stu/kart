@@ -390,3 +390,8 @@ STOP・1秒以上の計測停車中のみ適用可能で、他の走行中調整
 入力年齢は横制御の正常診断／PIDのactive診断のみ採用。処理時間の負値は未計測扱い。
 欠落キー・無効・古い診断は欠測、stamp巻戻りは履歴リセット、受信停止では最新値を「—」表示する。
 表示用サンプリングのため全制御周期のピークは保証しない。制御判断には使用しない。
+
+Studio調整bridge有効時、hdmap_serverは/racing/shadow_plan
+（kart_interfaces/msg/HeadToHeadPlan、reliable / volatile / depth 1、相対名racing/shadow_plan）
+を購読し、レース判断を車両状態に表示する。追加parameterなし。publisher数・元stamp・受信時刻・
+valid_for_secで状態を確認する。計画無効通知は直近の受信として表示する。

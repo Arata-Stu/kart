@@ -6,6 +6,9 @@
   <license>Apache-2.0</license>
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
   <depend>rclcpp</depend><depend>rclcpp_components</depend><depend>rcl_interfaces</depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend><exec_depend>tf2_ros_py</exec_depend><exec_depend>python3-numpy</exec_depend>
   <depend>kart_interfaces</depend>
+  <test_depend>ament_cmake_pytest</test_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>

@@ -49,15 +49,29 @@ class VehicleStatus:
         self.samples['bridge'] = (stamp, time.monotonic(), dict(
             level=level, message=status.message[:200], values=fields))
 
+    def racing(self, msg):
+        stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        self.samples['racing'] = (stamp, time.monotonic(), dict(
+            state=msg.state[:64], reason=msg.reason[:160], valid=msg.valid,
+            valid_for_sec=msg.valid_for_sec))
+
     def view(self, now, publishers):
         result = {}
-        for key, limit in [('bridge', 2.5), ('recovery', .8)]:
-            count = publishers[key]
+        for key, limit in [('bridge', 2.5), ('recovery', .8), ('racing', .5)]:
+            count = publishers.get(key, 0)
             sample = self.samples.get(key)
             state = 'absent' if count == 0 else 'conflict' if count != 1 else 'waiting'
             if count == 1 and sample:
                 stamp, received, data = sample
-                if stamp > 0 and -.05 <= now - stamp <= limit and 0 <= time.monotonic()-received <= limit:
+                if key == 'racing' and not data['valid']:
+                    # Faults often carry the stale input stamp that caused rejection.
+                    if 0 <= time.monotonic()-received <= limit:
+                        result[key] = dict(availability='fresh', **data)
+                        continue
+                    state = 'stale'
+                if key == 'racing':
+                    limit = min(data['valid_for_sec'], limit)
+                if stamp > 0 and (0 if key == 'racing' else -.05) <= now - stamp <= limit and 0 <= time.monotonic()-received <= limit:
                     result[key] = dict(availability='fresh', **data)
                     continue
                 state = 'stale'

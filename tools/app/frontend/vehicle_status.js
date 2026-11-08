@@ -1,3 +1,4 @@
+import { racingLabel } from './racing_state.js';
 import { $ } from './api.js';
 const phases={inactive:'待機',driving:'通常走行監視',suspect:'接触・スタックの疑い',
   braking:'制動中',reverse_neutral:'後退前の中立',reversing:'後退中',post_reverse_pulse:'後退後の制動準備（正パルス）',post_reverse_braking:'後退後の制動・停車確認',resume_neutral:'再開前の中立',fault:'復帰中断・異常'};
@@ -5,6 +6,11 @@ const availability={absent:'未起動',waiting:'受信待ち・無効',stale:'�
 export function renderVehicle(status) {
   const bridge=status?.vehicle?.bridge, recovery=status?.vehicle?.recovery;
   const b=bridge?.availability==='fresh'?bridge:null, r=recovery?.availability==='fresh'?recovery:null;
+  const racing=status?.vehicle?.racing;
+  const racingText=racing?.availability==='fresh'
+    ? (racing.valid ? racingLabel(racing.state) : '計画無効') + (racing.reason ? ' · '+racing.reason : '')
+    : availability[racing?.availability] || '未接続';
+  $('vehicle-racing').textContent='レース判断（shadow）: '+racingText;
   const mode={1:'AUTO',2:'MANUAL',3:'STOP',4:'PROPO'}[status?.mode];
   $('vehicle-mode').textContent=mode || 'モード不明';
   $('vehicle-mode').dataset.tone=mode==='STOP'?'neutral':mode?'ok':'unknown';

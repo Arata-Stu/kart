@@ -36,7 +36,7 @@ vehicle/localization/e2e launchへ重複includeしない。ROS namespaceはroot�
 | ROS→表示 | /vehicle/vbec | std_msgs/msg/Float32 | BEC電圧 |
 | ROS→表示 | /vehicle/active_path | std_msgs/msg/UInt8 | 基板の経路 |
 
-画像・特徴点・tensor・HDMap全文JSON・rosout・parameter_eventsなどは非公開。
+相手車両評価用の/racing/rgbを除く画像・特徴点・tensor・HDMap全文JSON・rosout・parameter_eventsなどは非公開。
 `connectionGraph`も無効にして、除外topicをグラフ経由で一覧化しない。
 Clientからの書込みは上記2topicと1serviceだけ。TF、AUTO指令、モード変更、録画操作、
 SetSlamPose、パラメータ変更、ファイル取得は公開しない。
@@ -98,3 +98,5 @@ macOSの`open`、Linuxの`xdg-open`とPython 3標準ライブラリを使用す�
 [公式deep link](https://docs.foxglove.dev/docs/visualization/shareable-links)の
 `openIn=desktop`でアプリを開く。未導入なら公式の案内ページが表示される。
 Bridgeの起動・SSH接続・localization要求はこのスクリプトでは行わない。
+
+相手車両認識は/racing/rgbと撮影stampの一致する/racing/detection_boxesをImageパネルで重ね、/racing/ground_markersを3Dで表示する。/racing/detections、tracks、ground_pointsは値の確認用。

@@ -28,6 +28,17 @@ class PropagationTests(unittest.TestCase):
             with self.subTest(mode=mode), self.assertRaises(ValueError):
                 self.run_cli('--mode', mode, '--record-profile', 'vslam-map')
 
+    def test_perception_forwarding(self):
+        import tempfile
+        self.assertNotIn("perception_engine:=", self.run_cli("--mode", "collect"))
+        with tempfile.NamedTemporaryFile() as engine:
+            engine.write(b"fixture")
+            engine.flush()
+            output = self.run_cli("--mode", "collect", "--perception", engine.name)
+            self.assertIn(f"perception_engine:={Path(engine.name).resolve()}", output)
+            with self.assertRaisesRegex(ValueError, "640x480"):
+                self.run_cli("--mode", "collect", "--perception", engine.name, "--rgb-profile", "0")
+
     def test_depth_profile_forwarded_and_offline_rejected(self):
         output = self.run_cli('--mode', 'collect', '--depth-profile', '424x240x60', '--infra-profile', '424x240x60')
         self.assertIn('depth_profile:=424x240x60', output)
@@ -136,7 +147,7 @@ class PropagationTests(unittest.TestCase):
             self.run_cli('--mode', 'collect')
         # Search roots and dry_run are local selector behavior, not ROS parameters.
         selector = {'help', 'map_root', 'model_root', 'bias_root', 'dry_run'}
-        forwarded = {'record_profile', 'mode', 'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
+        forwarded = {'perception', 'record_profile', 'mode', 'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
                      'device', 'map_file', 'map_dir', 'model_dir', 'lane_id', 'line_type',
                      'tuning', 'record_dir', 'evs', 'no_evs', 'evs_backend', 'evs_aggregation',
                      'evs_image', 'evs_serial', 'evs_tensor_config', 'evs_bias_file', 'foxglove',

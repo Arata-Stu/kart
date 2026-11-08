@@ -244,7 +244,7 @@ def preview(request):
                 cap=min(vmax,min(course.sample(s+i*max(0,end-s)/100)[3] for i in range(101)))
                 if plan is not None:end=max(end,plan[1])
                 allowed=enabled and (plan is not None or in_zone)
-                predictor.stdin.write(' '.join(map(str,[now,s,ego_d,v,os,0,ov,cap,end,abs(offset)+width if side=='left' else 0,abs(offset)+width if side=='right' else 0,int(allowed)]))+'\n');predictor.stdin.flush()
+                predictor.stdin.write(' '.join(map(str,[now,s,ego_d,v,os,0,ov,cap,end,abs(offset)+width if side=='left' else width/2+margin,abs(offset)+width if side=='right' else width/2+margin,int(allowed)]))+'\n');predictor.stdin.flush()
                 if not prediction_selector.select(2):raise ValueError('Predictive planner応答timeout')
                 values=predictor.stdout.readline().split()
                 if len(values)!=19:raise ValueError('Predictive planner出力不正')
@@ -258,6 +258,9 @@ def preview(request):
                 if not plan:
                     state=prediction['state']
                     reasons={
+                        'stationary_corridor_verified':'停止車両の回避経路成立',
+                        'no_verified_bypass':'停止車両：回避できる区間なし',
+                        'outside_reference_path':'停止物体は走路外',
                         'learning':'GP観測中（被覆90%以上・観測進行95%以上を待機）',
                         'passing_not_allowed':'追い越し無効' if not enabled else '追い越し許可区間の外',
                         'speed_advantage_insufficient':'追い越し待機：速度差不足（必要0.50 m/s）',
@@ -276,7 +279,7 @@ def preview(request):
                         offset=prediction['offset']
                         if not clear_plan(candidate):
                             reason='predictive_geometry_rejected';note='予測経路の車体境界・曲率検査で中断';break
-                        plan=candidate;events.append(dict(time=now,state='PASS',station=s,roc=prediction['roc']))
+                        plan=candidate;events.append(dict(time=now,state=prediction['state'],station=s,roc=prediction['roc']))
             if not predictor and not plan and not passed:
                 desired_gap=min_gap+headway*v
                 stable=stable+dt if abs(gap-desired_gap)<.4 and abs(v-ov)<.2 else 0.
@@ -302,7 +305,7 @@ def preview(request):
                         plan=candidate;state='PASS';note='モデル上の追い抜き実行';events.append(dict(time=now,state=state,station=s))
             if plan:
                 start,end,ramp=plan
-                state='MERGE' if s>=end-ramp else 'PASS'
+                state='MERGE' if s>=end-ramp else (prediction['state'] if prediction else 'PASS')
                 if state=='MERGE' and s-os-length<min_gap:
                     reason='merge_unavailable';note='合流車間不足・試走中断（退避制御は未実装）';break
                 if s>=end:

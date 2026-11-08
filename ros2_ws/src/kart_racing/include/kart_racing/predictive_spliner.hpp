@@ -87,8 +87,9 @@ struct Settings {
   double length=.35,width=.19,margin=.08,min_gap=1,headway=.7;
   double transition_min_distance=3,transition_time=1;
   double acceleration=1.5,deceleration=2.5,curvature=1.2,horizon=15;
+  double stationary_speed=.12,stationary_hold=.7,avoidance_speed=1;
   bool valid() const {
-    for(double x:{length,width,margin,min_gap,headway,acceleration,deceleration,curvature,horizon,transition_min_distance,transition_time})if(!finite(x)||x<=0)return false;
+    for(double x:{stationary_speed,stationary_hold,avoidance_speed,length,width,margin,min_gap,headway,acceleration,deceleration,curvature,horizon,transition_min_distance,transition_time})if(!finite(x)||x<=0)return false;
     return transition_min_distance<=20&&transition_time<=5&&length<=2&&width<=1&&horizon<=30&&curvature<=10;
   }
 };
@@ -109,10 +110,55 @@ struct Plan {
 struct Output { bool valid=false;double speed=0,coverage=0;std::string state="FAULT",reason="invalid_input";Plan plan;Plan evaluated; };
 class Planner {
   Settings cfg_;OpponentModel model_;Plan active_;double last_time_=-1,pass_cap_=0;std::uint64_t id_=0;bool passed_=false;
+  bool static_pass_=false;
+  double last_station_stamp_=-1,last_station_s_=0,last_station_d_=0;
+  double still_since_=-1,anchor_s_=0,anchor_d_=0;
+  bool stationary(const Scene& a){
+    // The upper speed bound and BOTH map-relative coordinates must stay small.
+    const bool displaced=last_station_stamp_>=0 &&
+      std::hypot(a.opponent_s-last_station_s_,a.opponent_d-last_station_d_)>
+        cfg_.stationary_speed*(a.time-last_station_stamp_)+.02;
+    last_station_s_=a.opponent_s;last_station_d_=a.opponent_d;last_station_stamp_=a.time;
+    if(displaced || a.opponent_v+2*std::sqrt(a.v_variance)>cfg_.stationary_speed){
+      still_since_=-1;return false;
+    }
+    if(still_since_<0 || std::hypot(a.opponent_s-anchor_s_,a.opponent_d-anchor_d_)>
+        cfg_.stationary_speed*cfg_.stationary_hold){
+      still_since_=a.time;anchor_s_=a.opponent_s;anchor_d_=a.opponent_d;
+    }
+    return a.time-still_since_>=cfg_.stationary_hold;
+  }
+  Output avoid_stopped(const Scene& a,Output out){
+    out.speed=0;out.state="BLOCKED";out.reason="no_verified_bypass";
+    // Reserve one margin for vehicle clearance and another for path tracking error.
+    const double clearance=cfg_.width+2*cfg_.margin+2*std::sqrt(a.d_variance);
+    const double longitudinal=cfg_.length+cfg_.min_gap;
+    const double entry=a.opponent_s-longitudinal,exit=a.opponent_s+longitudinal;
+    const double speed=std::min(cfg_.avoidance_speed,a.speed_cap);
+    if(!a.passing_allowed || speed<=0 || a.left_width<cfg_.width/2+cfg_.margin ||
+       a.right_width<cfg_.width/2+cfg_.margin || std::abs(a.ego_d)>.15)return out;
+    double best=std::numeric_limits<double>::infinity();
+    for(int side:{-1,1}){
+      const double offset=a.opponent_d+side*clearance;
+      if(side*offset<=0 || std::abs(offset)>=best)continue;
+      const double ramp=std::max({cfg_.transition_min_distance,speed*cfg_.transition_time,
+                                  std::sqrt(6*std::abs(offset)/cfg_.curvature)});
+      if(entry-a.ego_s<ramp || exit+ramp>a.zone_end ||
+         offset+cfg_.width/2+cfg_.margin>a.left_width ||
+         offset-cfg_.width/2-cfg_.margin < -a.right_width)continue;
+      active_={true,a.ego_s,exit+ramp,ramp,offset,entry,exit};
+      best=std::abs(offset);
+    }
+    if(active_.valid){
+      pass_cap_=speed;static_pass_=true;out.plan=out.evaluated=active_;
+      out.state="AVOID_STATIC";out.reason="stationary_corridor_verified";out.speed=speed;
+    }
+    return out;
+  }
 public:
   Planner(double length,Settings settings={}):cfg_(settings),model_(length){if(!cfg_.valid())throw std::invalid_argument("settings");}
   const OpponentModel& model()const{return model_;}
-  void reset(){model_.clear();active_={};last_time_=-1;passed_=false;}
+  void reset(){model_.clear();active_={};last_time_=-1;passed_=false;still_since_=-1;static_pass_=false;last_station_stamp_=-1;}
   Output update(const Scene& a){
     Output out;
     for(double x:{a.time,a.ego_s,a.ego_d,a.ego_v,a.opponent_s,a.opponent_d,a.opponent_v,a.d_variance,a.v_variance,a.speed_cap,a.zone_end,a.left_width,a.right_width})if(!finite(x)){reset();return out;}
@@ -128,16 +174,31 @@ public:
       out.reason=out.valid?"complete":"opponent_reapproached";return out;
     }
     out.speed=std::min({a.speed_cap,std::max(0.,a.opponent_v+.8*(gap-cfg_.min_gap-cfg_.headway*a.ego_v)),std::sqrt(std::max(0.,a.opponent_v*a.opponent_v+2*cfg_.deceleration*(gap-cfg_.min_gap)))});
+    const bool stopped=stationary(a);
     if(active_.valid){
       out.evaluated=active_;
-      if(!model_.ready() || !a.passing_allowed || a.speed_cap<pass_cap_-.05 || active_.end>a.zone_end || active_.offset+cfg_.width/2+cfg_.margin>a.left_width || active_.offset-cfg_.width/2-cfg_.margin< -a.right_width){active_={};out.valid=false;out.speed=0;out.state="FAULT";out.reason="pass_prediction_invalid";return out;}
+      const double side=active_.offset>=0?1.:-1.;
+      const bool obstacle_clear=side*(active_.offset-a.opponent_d)>=
+        cfg_.width+cfg_.margin+2*std::sqrt(a.d_variance)-1e-8 &&
+        a.opponent_s-cfg_.length>=active_.roc_start && a.opponent_s+cfg_.length<=active_.roc_end;
+      if((static_pass_ ? (!stopped || !obstacle_clear) : (!model_.ready() || stopped)) ||
+         !a.passing_allowed || a.speed_cap<pass_cap_-.05 || active_.end>a.zone_end || active_.offset+cfg_.width/2+cfg_.margin>a.left_width || active_.offset-cfg_.width/2-cfg_.margin< -a.right_width){reset();out.valid=false;out.speed=0;out.state="FAULT";out.reason="pass_prediction_invalid";return out;}
       if(a.ego_s>=active_.end){
         if(a.ego_s-a.opponent_s-cfg_.length>=cfg_.min_gap && std::abs(a.ego_d)<.15){passed_=true;out.state="PASSED";out.reason="complete";out.speed=a.speed_cap;active_={};return out;}
         out.valid=false;out.speed=0;out.state="FAULT";out.reason="merge_incomplete";active_={};return out;
       }
       // Never command an inward merge while still alongside the opponent.
       if(a.ego_s>=active_.end-active_.ramp && a.ego_s-a.opponent_s-cfg_.length<cfg_.min_gap){out.valid=false;out.speed=0;out.state="FAULT";out.reason="merge_unavailable";active_={};return out;}
-      out.plan=active_;out.evaluated=active_;out.speed=a.speed_cap;out.state=a.ego_s>=active_.end-active_.ramp?"MERGE":"PASS";out.reason="prediction_valid";return out;
+      out.plan=active_;out.evaluated=active_;out.speed=static_pass_?std::min(pass_cap_,a.speed_cap):a.speed_cap;out.state=a.ego_s>=active_.end-active_.ramp?"MERGE":static_pass_?"AVOID_STATIC":"PASS";out.reason="prediction_valid";return out;
+    }
+    if(stopped && a.opponent_s+cfg_.length+cfg_.margin>=a.ego_s &&
+       a.opponent_d>=std::min(0.,a.ego_d)-cfg_.width-cfg_.margin-2*std::sqrt(a.d_variance) &&
+       a.opponent_d<=std::max(0.,a.ego_d)+cfg_.width+cfg_.margin+2*std::sqrt(a.d_variance)){
+      return avoid_stopped(a,out);
+    }
+    if(stopped){
+      out.state="STATIC_CLEAR";out.reason="outside_reference_path";out.speed=a.speed_cap;
+      return out;
     }
     if(!model_.ready())return out;
     if(!a.passing_allowed){out.reason="passing_not_allowed";return out;}

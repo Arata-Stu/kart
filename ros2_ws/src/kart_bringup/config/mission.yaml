@@ -2,6 +2,7 @@
 sensor_container: kart_sensor_container
 create_sensor_container: true
 sensor_container_type: multithreaded
+perception_engine: ""  # Empty disables racing perception; otherwise local YOLOv8s TensorRT plan.
 enable_evs: false
 enable_foxglove: false
 enable_bridge: true

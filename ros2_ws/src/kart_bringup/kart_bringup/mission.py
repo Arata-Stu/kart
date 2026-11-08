@@ -137,12 +137,24 @@ def sensor_parameters(path, rgb_fps="", infra_fps="", rgb_profile="", infra_prof
     return params
 
 
+def perception_engine(value, sensors):
+    if not value or value == "off":
+        return ""
+    plan = Path(value).expanduser().resolve()
+    if not plan.is_file() or not plan.stat().st_size:
+        raise ValueError(f"認識用TensorRT engineがありません: {plan}")
+    if not sensors["enable_color"] or sensors["rgb_camera.color_profile"].split("x")[:2] != ["640", "480"]:
+        raise ValueError("認識には640x480のRGBが必要です。--rgb-profile 640x480x30 等を指定してください")
+    return str(plan)
+
+
 def composition(path, mode, overrides=None):
     cfg = yaml.safe_load(Path(path).read_text())
     allowed = {
         "sensor_container",
         "create_sensor_container",
         "sensor_container_type",
+        "perception_engine",
         "enable_evs",
         "enable_foxglove",
         "enable_bridge",

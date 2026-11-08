@@ -1,3 +1,5 @@
+import { passingSection, drawPassingSection } from './passing_clearance.js';
+import { racingLabel } from './racing_state.js';
 import { $, state, action, on, remember, emit, toast, api } from "./api.js";
 import { reverseLane } from "./direction.js";
 import { replaySimulation } from "./simulation_replay.js";
@@ -6,7 +8,13 @@ let sim=null, snapshot=null, trail=[], running=false, last=0, accumulator=0, raf
 let parkingFeedbackTimer=null;
 let view=null, projection=null, drag=null;
 let originalSimulation=null;
-let zonePick=null;
+let zonePick=null, measurePick=false, sectionStation=null, measuredLine=null;
+function setMeasurePick(value){
+  measurePick=value;
+  $('h2h-inspect').setAttribute('aria-pressed',String(value));
+  $('h2h-inspect').textContent=value?'ライン上の測定位置をクリック':'地図で並走幅を測る';
+  canvas.style.cursor=value?'crosshair':'grab';
+}
 function stopZonePick(){
   zonePick=null;canvas.style.cursor='grab';
   $('h2h-pick-zone').setAttribute('aria-pressed','false');
@@ -21,7 +29,7 @@ function stationOnLine(points,query){
     if(!length)continue;
     const u=Math.max(0,Math.min(1,((query[0]-a[0])*dx+(query[1]-a[1])*dy)/(length*length)));
     const distance=Math.hypot(query[0]-a[0]-u*dx,query[1]-a[1]-u*dy);
-    if(distance<best.distance)best={distance,station:station+u*length};
+    if(distance<best.distance)best={distance,station:station+u*length,x:a[0]+u*dx,y:a[1]+u*dy};
     station+=length;
   }
   return best;
@@ -45,10 +53,12 @@ function clearParkingFeedback() {
 const dialog=$("simulation-dialog"), canvas=$("simulation-canvas"), ctx=canvas.getContext("2d");
 function pause() {running=false; cancelAnimationFrame(raf); raf=0; $("simulation-play").textContent="再生";}
 async function reset() {
-  stopZonePick();pause();clearParkingFeedback();parkingRoute=null;parkingMessage="";
+  stopZonePick();setMeasurePick(false);pause();clearParkingFeedback();parkingRoute=null;parkingMessage="";
   const serial=++requestSerial;sim=null;
+  $("simulation-racing-state").hidden=true;
   const h2h=$("simulation-mode").value==="head_to_head";
   $("simulation-h2h-settings").hidden=!h2h;
+  $("h2h-inspection").hidden=!h2h;
   $("simulation-parking").disabled=h2h;
   for(const id of ["simulation-parking","simulation-parking-slot","simulation-parking-note"])$(id).hidden=h2h;
   $("simulation-time").disabled=true;
@@ -87,6 +97,14 @@ async function reset() {
 
 }
 function draw() {
+  const isH2h=$('simulation-mode').value==='head_to_head';
+  $('h2h-inspection').hidden=!isH2h;
+  const stateLine = $("simulation-racing-state");
+  stateLine.hidden = !sim?.car.h2h;
+  if (!stateLine.hidden) {
+    const interrupted = sim.car.done && !["completed", "overtake_completed", "time_limit", "stopped_target"].includes(sim.h2hResult.reason);
+    stateLine.textContent = "試走の判断　" + (interrupted ? "試走中断 · " + sim.car.reason : racingLabel(sim.car.h2h.state));
+  }
   if (!snapshot) return;
   if(sim)$("simulation-time").value=sim.car.time;
   const w=canvas.clientWidth, h=canvas.clientHeight, dpr=devicePixelRatio||1;
@@ -153,6 +171,27 @@ function draw() {
       const q=project(at((start+end)/2));ctx.font='bold 12px sans-serif';ctx.fillStyle=color;ctx.fillText(label,q[0]+8,q[1]-20);ctx.restore();
     }
     const d=sim?.car.h2h?.distance_plan;
+    if(measuredLine!==line){sectionStation=null;measuredLine=line;}
+    $('h2h-clear-inspect').hidden=sectionStation===null;
+    const reading=$('h2h-section-reading');
+    if(sectionStation!==null && total>0){
+      const s=sectionStation,origin=at(s),ahead=at(s+.001);
+      const dx=ahead[0]-origin[0],dy=ahead[1]-origin[1],norm=Math.hypot(dx,dy);
+      if(norm>0){
+        const tangent=[dx/norm,dy/norm],v=sim?.h2hResult?.vehicle??{
+          width:line.settings?.vehicle_width??.19,length:line.settings?.vehicle_length??.35,
+          rear:line.settings?.rear_axle_to_rear??.1065};
+        const margin=Number($('h2h-margin').value);
+        const offset=d?.offset??Number($('h2h-offset').value)*($('h2h-side').value==='left'?1:-1);
+        const section=passingSection(origin,tangent,snapshot,v.width,offset,margin);
+        drawPassingSection(ctx,project,origin,tangent,section,v,offset);
+        const cm=v=>(100*v).toFixed(1);
+        const source=d?(d.accepted?'採用候補の横移動量':'未採用候補の横移動量'):'設定の横移動量';
+        reading.textContent=section.usable?
+          `地点 ${s.toFixed(1)} m｜${source}で仮配置：${section.fits?'この断面に収まる':'この断面では余裕不足'}。ラインから追い越し側へ 必要 ${cm(section.needed)} cm（紫）／境界・障害物まで ${cm(section.available)} cm（青緑）。車幅 ${cm(v.width)} cm、車体間 ${cm(section.between)} cm、設定余裕 ${cm(margin)} cm。`:
+          'この位置は走行面外・障害物内・境界上、または境界不明です。';
+      }
+    }else reading.textContent='ラインをクリックして、選んだ断面に2台を仮配置します。';
     if(d){
       distanceBand(d.start,d.start+d.ramp,'#1678c7',`横へ出る ${d.ramp.toFixed(1)}m`);
       distanceBand(d.start+d.ramp,d.end-d.ramp,'#9d45ae','追い抜き');
@@ -215,8 +254,8 @@ function draw() {
   const debug=failure?` · ${failure.reason} · 失敗時 ${failure.elapsed_ms.toFixed(2)} ms / ${failure.iterations}反復 · 残差 ${failure.primal.toExponential(2)} / ${failure.dual.toExponential(2)}`:'';
   $("simulation-metrics").textContent=`${phase}${debug} · ${parkingRoute?"駐車試走（理想車両モデル） · ":""}${diagnostic?`水色:走行可能領域 / 赤:車体・抵触箇所 / 橙:余裕 ${diagnostic.margin_m.toFixed(3)} m${diagnostic.hits.length?"":" / 壁・領域の抵触なし"} · `:""}${parkingMessage || c.reason || (running?"試走中":"停止中")} · ${c.time.toFixed(1)} s · ${c.speed.toFixed(2)} m/s${sim.cfg.controller==="pure_pursuit"?` · 先読み ${c.lookahead.toFixed(2)} m`:""} · 目標 ${c.targetSpeed.toFixed(2)} m/s · 計算 ${c.solverMs.toFixed(2)} ms · 舵角 ${(c.steering*180/Math.PI).toFixed(1)}° · 誤差 ${c.error.toFixed(2)} m / 最大 ${c.maxError.toFixed(2)} m`;
   if(c.h2h){
-    const h=c.h2h,label={FOLLOW_OBSERVE:"追従・観測",OPPORTUNITY_READY:"追い越し条件を評価",PASS:"追い抜き中",MERGE:"合流中",PASSED:"合流完了"}[h.state]||h.state;
-    $("simulation-metrics").textContent=`Head-to-head（理想観測） · ${label} · ${diagnostic?.summary||[c.reason,h.note].filter(Boolean).join(" / ")} · ${c.time.toFixed(1)} s · 自車 ${c.speed.toFixed(2)} / 相手 ${h.opponent_speed.toFixed(2)} m/s · 経路上の車間 ${h.gap.toFixed(2)} m · ${h.coverage==null?`観測 ${h.stable_seconds.toFixed(1)} s`:`GP被覆 ${(100*h.coverage).toFixed(0)}%`}${h.coverage==null?` · 推定 ${h.estimate===null?"未確定":h.estimate.toFixed(2)+" m/s"}`:""} · 位置 ${h.station.toFixed(1)} / ${sim.h2hResult.total.toFixed(1)} m · 先読み ${c.lookahead.toFixed(2)} m · 追従誤差 ${c.error.toFixed(2)} m${diagnostic?" · 赤:抵触した掃引領域 / 橙:余裕境界":""}`;
+    const h=c.h2h;
+    $("simulation-metrics").textContent=`Head-to-head（理想観測） · ${diagnostic?.summary||[c.reason,h.note].filter(Boolean).join(" / ")} · ${c.time.toFixed(1)} s · 自車 ${c.speed.toFixed(2)} / 相手 ${h.opponent_speed.toFixed(2)} m/s · 経路上の車間 ${h.gap.toFixed(2)} m · ${h.coverage==null?`観測 ${h.stable_seconds.toFixed(1)} s`:`GP被覆 ${(100*h.coverage).toFixed(0)}%`}${h.coverage==null?` · 推定 ${h.estimate===null?"未確定":h.estimate.toFixed(2)+" m/s"}`:""} · 位置 ${h.station.toFixed(1)} / ${sim.h2hResult.total.toFixed(1)} m · 先読み ${c.lookahead.toFixed(2)} m · 追従誤差 ${c.error.toFixed(2)} m${diagnostic?" · 赤:抵触した掃引領域 / 橙:余裕境界":""}`;
   }
 }
 // View operations do not change simulation geometry or trigger recomputation.
@@ -232,7 +271,7 @@ canvas.addEventListener('wheel',event=>{
   draw();
 },{passive:false});
 canvas.addEventListener('pointerdown',event=>{
-  if(zonePick && !event.altKey)return;
+  if((zonePick||measurePick) && !event.altKey)return;
   if(!snapshot || !projection || event.button!==0)return;
   drag={id:event.pointerId,x:event.clientX,y:event.clientY,view:{...projection}};
   canvas.setPointerCapture(event.pointerId);canvas.style.cursor='grabbing';
@@ -243,11 +282,16 @@ canvas.addEventListener('pointermove',event=>{
   view={x:p.x-(event.clientX-drag.x)/p.scale,y:p.y+(event.clientY-drag.y)/p.scale,zoom:p.zoom};
   draw();
 });
-function endPan(){drag=null;canvas.style.cursor=zonePick?'crosshair':'grab';}
+function endPan(){drag=null;canvas.style.cursor=(zonePick||measurePick)?'crosshair':'grab';}
 canvas.addEventListener('pointerup',endPan);
 canvas.addEventListener('pointercancel',endPan);
 canvas.addEventListener('lostpointercapture',endPan);
+action('h2h-inspect',()=>{
+  stopZonePick();pause();setMeasurePick(!measurePick);draw();
+});
+action('h2h-clear-inspect',()=>{sectionStation=null;setMeasurePick(false);draw();});
 action('h2h-pick-zone',()=>{
+  setMeasurePick(false);
   if(zonePick){stopZonePick();draw();return;}
   if(!snapshot?.lines[$('simulation-line').value]){toast('ラインを選択してください');return;}
   pause();zonePick={start:null};canvas.style.cursor='crosshair';
@@ -258,10 +302,18 @@ action('h2h-pick-zone',()=>{
   $('h2h-pick-help').textContent='① ライン上の開始位置をクリック。ホイールで拡大、Alt＋ドラッグで移動できます。';
 });
 canvas.addEventListener('click',async event=>{
-  if(!zonePick || !projection || event.altKey)return;
+  if((!zonePick && !measurePick) || !projection || event.altKey)return;
   const rect=canvas.getBoundingClientRect(),p=projection;
   const query=[p.x+(event.clientX-rect.left-p.w/2)/p.scale,p.y-(event.clientY-rect.top-p.h/2)/p.scale];
   const nearest=stationOnLine(snapshot.lines[$('simulation-line').value].points,query);
+  if(measurePick){
+    if(nearest.distance*p.scale>25){toast('ラインの近くをクリックしてください');return;}
+    sectionStation=nearest.station;
+    measuredLine=snapshot.lines[$('simulation-line').value];
+    const zoom=Math.max(p.zoom,Math.min(40,Math.min(p.w,p.h)*p.zoom/(4*p.scale)));
+    view={x:nearest.x,y:nearest.y,zoom};
+    setMeasurePick(false);draw();return;
+  }
   if(nearest.distance*p.scale>25){$('h2h-pick-help').textContent='ラインの近くをクリックしてください（拡大して選択できます）。';return;}
   const station=Math.floor(nearest.station*10)/10;
   if(zonePick.start===null){
@@ -336,7 +388,7 @@ action("simulation-original-map",async()=>{
   pause();restoreOriginalSimulation();await reset();
 });
 action("simulation-pass-jump",()=>{
-  const event=sim?.h2hResult?.events.find(e=>e.state==='PASS');
+  const event=sim?.h2hResult?.events.find(e=>e.state==='PASS'||e.state==='AVOID_STATIC');
   if(!event){toast('この試走には追い越し開始がありません');return;}
   pause();sim.seek(Math.max(0,event.time-5));trail=[];draw();
 });

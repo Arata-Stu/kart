@@ -1,0 +1,61 @@
+# Isaac ROS 5.0; target apt revisions unverified. Verified 2026-11-07.
+# ros-lyrical-isaac-ros-{image-proc,tensor-proc,tensor-rt,yolov8}
+# https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_image_pipeline/tree/release-5.0/isaac_ros_image_proc
+# https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_dnn_inference/tree/release-5.0
+# https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_object_detection/tree/release-5.0/isaac_ros_yolov8
+# Fixed 640x480 RGB; /255 exactly once. No resize/crop/mean subtraction.
+# Internal topics reliable. Only standard ROS runtime parameters omitted.
+format:
+  encoding_desired: rgb8
+  image_width: 640
+  image_height: 480
+  yuv_color_spec: bt601
+  input_qos: SENSOR_DATA
+  output_qos: DEFAULT
+to_tensor:
+  scale: true
+  tensor_name: images
+  input_qos: DEFAULT
+  output_qos: DEFAULT
+planar:
+  input_tensor_shape: [480, 640, 3]
+  output_tensor_name: images
+  input_qos: DEFAULT
+  output_qos: DEFAULT
+reshape:
+  input_tensor_layout: NCHW
+  output_tensor_layout: NCHW
+  input_tensor_shape: [1, 3, 480, 640]
+  output_tensor_shape: [1, 3, 480, 640]
+  output_tensor_name: images
+  batch: 1
+  input_qos: DEFAULT
+  output_qos: DEFAULT
+trt:
+  model_file_path: ""
+  engine_file_path: ""  # Required launch argument, prebuilt target engine.
+  custom_plugin_lib: ""
+  input_tensor_names: [images]
+  input_binding_names: [images]
+  output_tensor_names: [output0]
+  output_binding_names: [output0]
+  force_engine_update: false
+  verbose: false
+  max_workspace_size: 1073741824
+  dla_core: -1
+  max_batch_size: 1
+  enable_fp16: false  # Precision is encoded in the prebuilt engine.
+  relaxed_dimension_check: false
+  input_queue_size: 1
+  output_queue_size: 1
+  input_qos: DEFAULT
+  output_qos: DEFAULT
+decoder:
+  tensor_name: output0
+  num_classes: 1
+  confidence_threshold: 0.1  # Preserve ByteTrack low-score candidates.
+  nms_threshold: 0.45
+  input_queue_size: 1
+  output_queue_size: 1
+  input_qos: DEFAULT
+  output_qos: DEFAULT

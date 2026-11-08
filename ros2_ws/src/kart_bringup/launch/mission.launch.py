@@ -13,6 +13,7 @@ OVERRIDES = (
     "sensor_container",
     "create_sensor_container",
     "enable_evs",
+    "perception_engine",
     "enable_foxglove",
     "enable_bridge",
 )
@@ -28,6 +29,8 @@ def add_mission(args):
         camera_config(root, args.mode, record_profile), args.rgb_fps, args.infra_fps,
         getattr(args, "rgb_profile", ""), getattr(args, "infra_profile", ""), getattr(args, "imu_profile", ""), getattr(args, "depth_profile", "")
     )
+    from kart_bringup.mission import perception_engine
+    engine = perception_engine(cfg["perception_engine"], params)
     validate_record_profile(record_profile, args.mode, params, cfg["enable_evs"])
     section_routing = None
     if cfg['e2e']:
@@ -160,6 +163,11 @@ def add_mission(args):
                 },
             )
         )
+    if engine:
+        actions.append(include("racing_perception.launch.py", {
+            "engine": engine,
+            "target_container": "/" + cfg["sensor_container"].lstrip("/"),
+        }))
     if getattr(args, "validate_infra", "false") == "true":
         if not params["enable_infra1"] or not params["enable_infra2"]:
             raise ValueError("validate_infra requires both Infra streams")

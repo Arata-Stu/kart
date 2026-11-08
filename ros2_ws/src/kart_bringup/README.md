@@ -1657,7 +1657,7 @@ ROS parameterとYAMLは初期設定のまま。再起動では初期値へ戻る
 設定は[config/racing](config/racing/README.md)。標準driveのPP/PID/localizationは変更しない。
 `/racing/observation`（kart_interfaces/msg/HeadToHeadObservation）を受け、
 `/racing/shadow_plan`（kart_interfaces/msg/HeadToHeadPlan）へ結果を出す。
-画像観測frontend、実車制御への接続は未実装。全parameterはkart_racing README参照。
+画像から2D追跡までは独立起動の[racing_perception.launch.pyと設定手順](config/racing/README.md)を参照。走行時の観測・停止車両の回避計画はracing_ground_shadow.launch.pyで別起動する。実車制御への接続は未実装。全parameterはkart_racing README参照。
 
 ## Offline localization結果の記録と定量解析
 
@@ -1796,3 +1796,9 @@ VIO（tracking_mode=1）にはIMUが別途必要なため、このbagはstereo V
 RGB/Depthを必要とする密な再構成やE2E学習用の記録にはstandardを使う。
 topic削減は欠落防止の保証ではない。収録後に左右のstamp・フレーム数・欠落区間を確認する。
 portable testとdry-runで設定選択・競合拒否を検証。ROS結合・Jetson実機録画は未確認。
+
+相手車両の重み配置・TensorRT build・録画RGBの検出ギャラリー・任意のbase_link接地点推定は[racing設定](config/racing/README.md)参照。
+
+`scripts/bringup.sh --mode collect --perception /path/to/opponent.plan`（TUIでも選択可）は
+640×480のRGBを使い、RealSenseと同じsensor_containerに認識componentをロードする。
+mission.yamlのperception_engine既定は空（OFF）。[認識設定](config/racing/README.md)参照。

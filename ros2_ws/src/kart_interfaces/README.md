@@ -144,3 +144,12 @@ observed=falseと空いたコースを混同しない。出力は空間スプラ
 左CameraInfo=2、右CameraInfo=3。stamp_nsは元の撮影時刻、sequenceは入力別の受信連番、
 interval_nsは前回との符号付き時間差、expected_frames_missingは公称周期換算の推定欠け数、
 seen_maskは同じstampでここまで観測したstreamのビット集合。
+
+`OpponentGroundPoints`: 撮影時刻と車体frameのheader、および
+`OpponentGroundPoint[] tracks`（string track_id、geometry_msgs/Point point、単位m）。
+平坦路仮定の可視接地点。空配列は推定点なし。
+
+PassingCorridor は直線区間の実測/外部認定。地図frame・時刻・参照revision・対象ID、unwrapped sの
+開始/終了[m]、区間全体の左右空き幅[m]、速度上限[m/s]、clearを持つ。側方・合流まで観測可能な場合だけclear=true。
+
+HeadToHeadObservation.measurement_stampは位置速度の撮影時刻。header.stampは通路情報も含む最古時刻。measurement_stamp=0はheader.stampを用いる。
