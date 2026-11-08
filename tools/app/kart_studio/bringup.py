@@ -11,7 +11,7 @@ from .storage import atomic_json, read_json
 from .transfers import profile, SSH_OPTIONS
 
 HOST_AGENT = Path(__file__).with_name('bringup_host.py').read_text()
-ACTIONS = {'containers', 'container_start', 'catalog', 'status', 'assets', 'plan', 'start', 'stop',
+ACTIONS = {'bluetooth_status', 'containers', 'container_start', 'catalog', 'status', 'assets', 'plan', 'start', 'stop',
            'mode_status', 'mode_auto', 'mode_manual', 'mode_stop',
            'recording_status', 'recording_start', 'recording_stop'}
 
@@ -24,7 +24,7 @@ def remote(connection, body):
         response = subprocess.run(['ssh', *SSH_OPTIONS, '-p', str(p['port']),
                                    f"{p['user']}@{p['host']}", 'python3 -c ' + shlex.quote(HOST_AGENT)],
                                   input=json.dumps(body), text=True, capture_output=True,
-                                  timeout=12 if body['action'].startswith(('recording_', 'mode_')) else 60)
+                                  timeout=12 if body['action'] == 'bluetooth_status' or body['action'].startswith(('recording_', 'mode_')) else 60)
     except subprocess.TimeoutExpired as exc:
         raise ValueError('接続がタイムアウトしました。操作は自動再送しません。状態を再取得してください') from exc
     try:

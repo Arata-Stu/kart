@@ -1,9 +1,12 @@
 """Fixed SSH host protocol, streamed as code; requests are JSON on stdin."""
 import json
+import os
 from pathlib import Path
 import re
+import select
 import subprocess
 import sys
+import time
 
 
 def command(argv, **kwargs):
@@ -44,8 +47,76 @@ def launches():
     return found
 
 
+def controller_rssi(address):
+    # hcitool reads the active BR/EDR link. This is a relative RSSI, not dBm.
+    if not re.fullmatch(r'(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}', address):
+        return None
+    try:
+        result = subprocess.run(['hcitool', 'rssi', address], capture_output=True,
+                                text=True, timeout=1)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    match = re.search(r'RSSI return value:\s*(-?\d+)', result.stdout)
+    if result.returncode == 0 and match and int(match[1]) != 127:
+        return int(match[1])
+    return None
+
+
+def sample_reports(fd, duration=0.5):
+    previous = latest = maximum = None
+    count = 0
+    deadline = time.monotonic() + duration
+    while (remaining := deadline - time.monotonic()) > 0:
+        if not select.select([fd], [], [], remaining)[0]:
+            break
+        report = os.read(fd, 128)
+        if not report:
+            raise OSError('HID切断')
+        if report[0] not in (0x01, 0x31):
+            continue
+        now = time.monotonic()
+        latest = time.time_ns() // 1_000_000
+        if previous is not None:
+            maximum = max(maximum or 0, (now - previous) * 1000)
+        previous = now
+        count += 1
+    age = (time.monotonic() - previous) * 1000 if previous is not None else None
+    return dict(last_report_ms=latest, report_age_ms=age, max_gap_ms=maximum, reports=count)
+
+
+def bluetooth_status():
+    devices = []
+    for entry in Path('/sys/class/hidraw').glob('hidraw*'):
+        try:
+            fields = dict(line.split('=', 1) for line in
+                          (entry / 'device/uevent').read_text().splitlines() if '=' in line)
+        except FileNotFoundError:
+            continue
+        if fields.get('HID_ID', '').upper() in ('0005:0000054C:00000CE6', '0005:0000054C:00000DF2'):
+            devices.append((entry.name, fields.get('HID_UNIQ', '')))
+    if len(devices) != 1:
+        return dict(state='Bluetooth DualSense未検出' if not devices else '複数のBluetooth DualSenseを検出',
+                    measured_ms=time.time_ns() // 1_000_000)
+    device, address = devices[0]
+    result = dict(state='Bluetooth HID検出', rssi=controller_rssi(address), address=address)
+    try:
+        fd = os.open('/dev/' + device, os.O_RDONLY | os.O_NONBLOCK)
+        try:
+            result.update(sample_reports(fd))
+        finally:
+            os.close(fd)
+    except PermissionError:
+        result['state'] = 'HID検出・読み取り権限なし'
+    except OSError as exc:
+        result['state'] = 'HID読み取り失敗: ' + str(exc)
+    result['measured_ms'] = time.time_ns() // 1_000_000
+    return result
+
+
 def dispatch(body):
     action = body.get('action')
+    if action == 'bluetooth_status':
+        return bluetooth_status()
     items = containers()
     if action == 'containers':
         return dict(containers=items)
