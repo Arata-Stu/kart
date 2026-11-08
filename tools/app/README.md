@@ -1909,3 +1909,11 @@ DualSense／Edgeが1台なら、SSHユーザーの権限でhidrawを読み取り
 応答後1秒で再取得するため観測窓の間に空白がある。読取時刻にはホストのスケジューリング遅延が含まれ、
 ボタン操作からの片道遅延は測定しない。hcitool rssiが利用可能なら同じ機器のBR/EDR相対RSSIを併記する。
 0 dBも有効な相対値。接続情報取得不可やhidraw権限不足は個別に表示する。
+
+「通信診断グラフ」は直近2分の相対RSSI、HIDの最大読取間隔、Joyと基板statusの最大受信間隔を
+それぞれ表示する。ROS側は展開中だけ選択コンテナ内で500 msずつ購読し、各topicに対応する
+配信元が一意な場合に計測する。Joyはsensor_msgs/msg/Joyのjoy、基板は有効statusごとに
+bridgeが配信するstd_msgs/msg/Int32MultiArrayのvehicle/output_channelsを使う。
+各点はJetsonでの観測終了時刻。HIDとROSは別の観測窓で、ROS値にはDDSと購読処理の遅延も含む。
+観測2件未満は間隔未取得。Joyは定期配信のため、Bluetooth入力停止中も正常な間隔で届き得る。
+基板statusは約20 Hzで、個々の操作のACKや物理応答時間を示すものではない。

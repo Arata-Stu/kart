@@ -1,5 +1,7 @@
 import { $, api } from './api.js';
 
+import { plotBluetooth, setPlotTarget } from './link_plots.js';
+
 let target = null;
 let linkTimer;
 let lastReport = null;
@@ -11,6 +13,7 @@ async function pollLink(selected) {
   try {
     const data = await api('bringup/bluetooth_status', selected);
     if (target !== selected) return;
+    plotBluetooth(data);
     const detail = [data.state];
     if (data.address) detail.push(data.address);
     detail.push('相対RSSI ' + (Number.isFinite(data.rssi) ? data.rssi + ' dB' : '取得不可'));
@@ -28,7 +31,10 @@ async function pollLink(selected) {
     detail.push('取得所要 ' + Math.round(performance.now() - started) + ' ms');
     $('dualsense-link').textContent = detail.join(' ｜ ');
   } catch (error) {
-    if (target === selected) $('dualsense-link').textContent = 'DualSense状態未確認：' + error.message;
+    if (target === selected) {
+      plotBluetooth(null);
+      $('dualsense-link').textContent = 'DualSense状態未確認：' + error.message;
+    }
   } finally {
     if (target === selected) linkTimer = setTimeout(() => pollLink(selected), 1000);
   }
@@ -41,6 +47,7 @@ function enable(enabled) {
 
 export function setModeTarget(selected) {
   target = selected && structuredClone(selected);
+  setPlotTarget(target);
   clearTimeout(linkTimer);
   lastReport = null;
   $('dualsense-link').textContent = target ? 'DualSense計測中…' : 'DualSense未取得';

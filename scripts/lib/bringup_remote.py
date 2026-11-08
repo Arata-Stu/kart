@@ -291,6 +291,9 @@ def worker(run):
 
 def dispatch(body):
     action = body.get('action')
+    if action == 'link_timing':
+        from link_timing import measure
+        return measure()
     if action in ('mode_status', 'mode_auto', 'mode_manual', 'mode_stop'):
         from mode_remote import request
         return request(action)

@@ -128,7 +128,7 @@ def dispatch(body):
             command(['docker', 'start', selected['id']])
         return dict(containers=containers())
     if action not in ('catalog', 'status', 'assets', 'plan', 'start', 'stop',
-                      'mode_status', 'mode_auto', 'mode_manual', 'mode_stop',
+                      'link_timing', 'mode_status', 'mode_auto', 'mode_manual', 'mode_stop',
            'recording_status', 'recording_start', 'recording_stop'):
         raise ValueError('Unknown action')
     if not selected['running']:

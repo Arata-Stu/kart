@@ -34,6 +34,10 @@
         <h3>走行モード</h3>
         <div class="actions"><button id="mode-auto" disabled>AUTO</button><button id="mode-manual" disabled>MANUAL</button><button id="mode-stop" disabled>STOP</button><button id="mode-status" disabled>状態を取得</button></div>
         <p id="dualsense-link">DualSense未取得</p>
+        <details id="link-diagnostics"><summary>通信診断グラフ（直近2分）</summary>
+          <p class="small">横軸はJetsonの計測時刻。各点は500 msの観測結果です。ROSの受信間隔はグラフを開いている間に計測します。</p>
+          <div id="link-plots"></div><p id="link-ros-state" class="small"></p>
+        </details>
         <p id="mode-feedback" role="status"></p>
       </div>
       <div class="bringup-card" id="recording-card">

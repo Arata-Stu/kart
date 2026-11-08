@@ -12,7 +12,7 @@ from .transfers import profile, SSH_OPTIONS
 
 HOST_AGENT = Path(__file__).with_name('bringup_host.py').read_text()
 ACTIONS = {'bluetooth_status', 'containers', 'container_start', 'catalog', 'status', 'assets', 'plan', 'start', 'stop',
-           'mode_status', 'mode_auto', 'mode_manual', 'mode_stop',
+           'link_timing', 'mode_status', 'mode_auto', 'mode_manual', 'mode_stop',
            'recording_status', 'recording_start', 'recording_stop'}
 
 
