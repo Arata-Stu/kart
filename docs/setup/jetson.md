@@ -78,74 +78,28 @@ sudo apt install -y nvidia-jetpack
 
 ## 2. DockerとNVIDIA Container Toolkit
 
-### 既存Dockerの確認
+Ubuntu 24.04.4 / L4T R39.2.1の実機では、フラッシュ直後からDocker CEとNVIDIA Container Toolkitが導入済みで、Dockerサービスも稼働している。
 
-JetPack導入時点でDockerとToolkitが入っている場合がある。まずJetsonホストで確認する。
-一般ユーザーのsocket権限が未設定でも導入状態を調べられるよう、Server確認はsudoで行う。
-
-```bash
-command -v docker || true
-command -v nvidia-ctk || true
-# dockerが存在する場合:
-docker --version
-sudo systemctl is-active docker
-sudo docker version
-```
-
-DockerのClient・Serverが表示されるなら、Dockerの再インストールは省略してruntime設定へ進む。
-`permission denied`だけで未導入と判断しない。`get.docker.com`のインストーラshは使用しない。
-
-### Docker未導入の場合のみ: 公式APT repositoryから導入
-
-既存Dockerを更新・置換する手順ではない。`docker.io`等が導入済みなら重ねて導入せず、
-既存Dockerの確認を先に行う。
+### NVIDIA runtimeの確認
 
 ```bash
-sudo apt update
-sudo apt install -y ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-sudo tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF
-Types: deb
-URIs: https://download.docker.com/linux/ubuntu
-Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
-Components: stable
-Architectures: $(dpkg --print-architecture)
-Signed-By: /etc/apt/keyrings/docker.asc
-EOF
-
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo docker info --format '{{json .Runtimes}} {{.DefaultRuntime}}'
 ```
 
-出典: [Docker公式Ubuntu APT手順](https://docs.docker.com/engine/install/ubuntu/#install-using-the-apt-repository)。
-
-### Toolkit・runtime設定
-
-`nvidia-ctk`がなければ、JetPack repositoryの対応パッケージを確認して導入する。
-存在する場合は再インストール不要。
-
-```bash
-# nvidia-ctk未導入の場合のみ
-sudo apt update
-sudo apt install -y nvidia-container
-command -v nvidia-ctk
-```
-
-候補がない場合は[NVIDIA公式のAPT導入手順](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#with-apt-ubuntu-debian)を確認する。
-Toolkitのバージョンはkartでは固定していない。
+登録済みruntimeに`nvidia`があり、既定値も`nvidia`なら、次の設定・再起動を省略する。
 
 ```bash
 sudo nvidia-ctk runtime configure --runtime=docker --set-as-default
-sudo systemctl enable --now docker
-sudo systemctl daemon-reload
 sudo systemctl restart docker
-sudo usermod -aG docker "$USER"
 ```
 
 ### dockerグループを現在のセッションへ反映
+
+一般ユーザーをdockerグループへ追加するには、次を実行する。
+
+```bash
+sudo usermod -aG docker "$USER"
+```
 
 `usermod`を実行しても、現在のシェルの補助グループは自動更新されない。
 次のコマンドで新しいシェルへ入り、そのシェルで以降の確認を行う。
@@ -182,7 +136,6 @@ ps -eo pid,ppid,etime,args | grep -E '[a]pt-get|[u]nattended-upgrade'
 
 自動更新かどうかはログだけでは断定できない。確認時に出力がなければ、その時点の保持プロセスはない。
 失敗したAPT操作がまだ必要か確認してから、その操作だけ再実行する。
-Dockerが既に稼働している場合は再インストールせず、runtime設定・グループ反映・起動確認へ進む。
 
 ### 電力モード・クロック（性能確認時）
 
@@ -484,7 +437,7 @@ Jetson＋Docker経路を対象とする。Thor、venv、baremetal、未使用セ
 | Jetson Storage Setup | NVMeへrootfsを直接配置するため移行不要。容量・配置のみ確認 |
 | UTF-8 locale | 第1節で確認し、必要時のみ設定 |
 | MAXN・最大クロック | 第2節に性能測定時の操作。機種ごとのmode IDを確認 |
-| Docker・Toolkit・runtime・pre-flight | 第2節。既存導入確認または公式APT導入、NVIDIA既定runtime、グループ反映、GPU指定の起動確認 |
+| Docker・Toolkit・runtime・pre-flight | 第2節。NVIDIA既定runtime、グループ反映、GPU指定の起動確認 |
 | workspace・ISAAC_ROS_WS | 第3節と`dev.sh`でkart配置へ置換 |
 | ホストのIsaac ROS APT repository・公式CLI導入 | 第4節でローカルdebへ置換。ホストのIsaac ROS APT repository登録は不要 |
 | ROS・Isaac ROS APT repository・rosdep | コンテナ基底の`Dockerfile.isaac_ros`で設定。ホストへROS導入不要 |
