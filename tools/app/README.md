@@ -3,6 +3,14 @@
 Notebookでbagを受信し、Isaac ROS cuVSLAMの地図・点群からHDMapと走行ラインを作成する。
 地図・転送・学習・解析・分布解析に加え、**Jetson起動 / ESC試験**から起動管理・試験を操作できる。
 学習画面からデータセット作成・DINOv3学習・ONNX export・オフライン評価・RGB特徴量確認・Jetsonモデル転送を実行できる。
+「RCカー検出」ではRCカー専用YOLOv8sの追加学習を扱う。RGB rosbagから画像を抽出し、
+bboxの作成・移動・サイズ変更、対象なしの確認、候補bboxの修正、学習、kart用ONNX exportまでUIで操作する。
+完成ONNXのJetson転送と、YOLO／DINOv3による未確認train画像の選定も扱う。
+YOLO選定では多検出・大きな枠を要確認候補にし、score下限0.10・想定最大3件・画像内の面積比0.40をUIで調整できる。
+件数は想定値超、面積比は設定値以上で判定し、通常・背景・探索の候補も混ぜる。正解やnegativeは手動で確認する。
+転送は既存SCPキューを共用し、SHA256検証後に新規directoryへ公開する。buildはJetsonで手動実行する。
+学習と検証は別bag、確認済み画像だけを固定snapshotにして使う。
+手順・既定値・保存場所・APIは[RCカー検出の追加学習](../../docs/perception_training.md)を参照。
 [設計方針](../../docs/policies/ui_app.md)に対象と座標契約を記載。
 
 ## 起動

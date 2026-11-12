@@ -6,6 +6,7 @@
     <title>Kart Map Studio</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css?v=20261008-paired" />
+    <link rel="stylesheet" href="perception.css" />
   </head>
   <body>
     <header>
@@ -14,6 +15,7 @@
         <button class="nav active" id="nav-map">地図</button
         ><button class="nav" id="nav-transfer">転送</button
         ><button class="nav" id="nav-learning">学習</button
+        ><button class="nav" id="nav-perception">RCカー検出</button
         ><button class="nav" id="nav-audit">解析</button>
         <button class="nav" id="nav-coverage">分布解析</button>
         <button class="nav" id="nav-esc">ESC試験</button>
@@ -22,6 +24,71 @@
       <span class="local-tag"><i></i> Notebook · Local</span
       ><button class="quiet" id="connection-open">接続設定</button>
     </header>
+    <main id="perception-page" hidden>
+      <div class="perception-heading actions"><div><h1>RCカーを見つけるモデルを作る</h1><p>録画 → 枠を確認 → 1クラス学習 → ONNX。画像の確認・編集はJetson未接続でもできます。</p></div><button id="perception-refresh">一覧を更新</button><button id="perception-jobs">ログ・履歴を開く</button></div>
+      <nav class="perception-stages" aria-label="RCカー学習の工程"><button id="perception-tab-data" aria-pressed="true">1 データ準備</button><button id="perception-tab-annotate" aria-pressed="false">2 枠を確認</button><button id="perception-tab-train" aria-pressed="false">3 学習・ONNX</button></nav>
+      <p id="perception-message" role="status">プロジェクトを作成するか、保存済みのプロジェクトを選んでください。</p>
+      <div class="perception-preparation" id="perception-pane-data">
+        <section class="perception-card">
+          <h2><span class="perception-step">1</span> 録画とプロジェクト</h2>
+          <p>「Jetson起動」でデータ記録を起動し、録画開始・停止。次に「転送」でbagをNotebookへ受信します。</p>
+          <div class="actions"><button id="perception-open-bringup">Jetson起動・録画へ</button><button id="perception-open-transfer">bagの転送へ</button></div>
+          <label>プロジェクト<select id="perception-project"><option value="">選択してください</option></select></label>
+          <div class="actions"><input id="perception-project-name" maxlength="80" placeholder="例：室内コースのRCカー" aria-label="新しいプロジェクト名" /><button id="perception-create">新規作成</button></div>
+          <p id="perception-project-summary" class="small"></p>
+        </section>
+        <section class="perception-card">
+          <h2>bagから画像を取り出す</h2>
+          <div class="perception-fields"><label>Notebookのbag<select id="perception-bag"></select></label><label>用途<select id="perception-extract-split"><option value="train">学習用（train）</option><option value="val">検証用（val）</option></select></label><label>画像topic<input id="perception-topic" value="/realsense/color/image_raw" /></label><label>抽出頻度（Hz）<input id="perception-sample-hz" type="number" min="0.1" max="30" step="0.1" value="2" /></label><label>最大画像数<input id="perception-max-frames" type="number" min="1" max="500" value="500" /></label></div>
+          <button id="perception-extract" class="primary">選択bagの画像を抽出</button>
+          <p class="small">学習用と検証用には別のbagを使います。同じ走行の似た画像を両方へ混ぜず、RCカーがいない場面やダクトだけの画像も含めてください。</p>
+        </section>
+        <section class="perception-card perception-selection-card"><details id="perception-selection-details"><summary>確認画像を選ぶ · 学習用の未確認画像から優先順位を付ける</summary>
+          <p>trainの未確認画像を、見た目の違いや検出の不確かさから選びます。選定だけでは枠や確認済み状態を変更しません。valの画像・正解は選定用のseedに使いません。</p>
+          <div class="perception-fields"><label>方式<select id="perception-selection-method"><option value="yolo">YOLO · 検出結果＋未検出も探索</option><option value="dinov3">DINOv3 · 画像特徴による選定</option></select></label><label>優先画像数<input id="perception-selection-limit" type="number" min="1" max="500" value="100" /></label><label>調べる画像数の上限<input id="perception-selection-max-images" type="number" min="1" max="500" value="500" /></label><label id="perception-selection-yolo-fields">YOLOの重み<select id="perception-selection-weights-source"><option value="official">公式YOLOv8sの重み</option></select></label></div>
+          <details id="perception-selection-yolo-details"><summary>YOLO選定詳細</summary><p><strong>誤検出を重点確認する目安（誤りの断定ではありません）</strong></p><p>scoreが下限以上の枠を対象に、想定数を超える画像や大きすぎる枠のある画像を優先します。正解枠・確認済み状態を変更するのは、人が画像を確認して保存した場合だけです。</p><div class="perception-fields"><label>重点確認で数える枠のscore下限<input id="perception-selection-review-confidence" type="number" min="0.05" max="1" step="0.05" value="0.10" /></label><label>1画像の想定検出数（整数・0〜100）<input id="perception-selection-expected-max-detections" type="number" min="0" max="100" step="1" value="3" /></label><label>大きすぎる枠の目安（枠面積 ÷ 画像面積）<input id="perception-selection-large-bbox-area-ratio" type="number" min="0.01" max="1" step="0.01" value="0.40" /></label></div><p class="small">枠面積は画像内に収めてから計算します。面積比0.40は画像面積の40%です。scoreはモデルの出力値で、正解の確率としては扱いません。</p></details>
+          <div id="perception-selection-dino-fields" hidden><p>DINOv3は、確認済みtrainのRCカー枠と、ダクトだけなどの対象なし画像がそれぞれ1件以上必要です。まず数枚ずつ確認してください。リポジトリ・重みは手元のものを指定し、自動ダウンロードはしません。</p><div class="perception-fields"><label>DINOv3リポジトリ<input id="perception-encoder-repo" placeholder="ローカルDINOv3リポジトリの絶対パス" /></label><label>DINOv3重み<input id="perception-encoder-weights" placeholder="ローカル重みの絶対パス" /></label></div></div>
+          <div class="actions"><button id="perception-select" class="primary">確認画像の優先順位を計算</button><button id="perception-selection-refresh">選定結果を再取得</button><button id="perception-selection-save-settings">選定・転送先の設定を保存</button></div><p id="perception-selection-summary" role="status">選定結果はまだありません。通常の全画像からも確認できます。</p>
+        </details></section>
+      </div>
+      <section class="perception-card perception-annotation" id="perception-pane-annotate" hidden>
+        <div class="actions"><h2><span class="perception-step">2</span> 画像の枠を確認</h2><strong id="perception-progress">画像なし</strong></div>
+        <p class="perception-annotation-help">正解は <code>rc_car</code> だけです。見えているRCカーを全て囲みます。ダクト・人・台車には枠を付けず、RCカーがいない画像は「対象なしとして保存」で確認済みにします。</p>
+        <div class="actions perception-frame-controls"><label>表示<select id="perception-filter"><option value="all">全画像</option><option value="unreviewed">未確認</option><option value="reviewed">確認済み</option><option value="positive">確認済み・RCカーあり</option><option value="negative">確認済み・対象なし</option></select></label><label>用途<select id="perception-filter-split"><option value="all">train / val</option><option value="train">train</option><option value="val">val</option></select></label><label class="perception-selection-toggle"><input id="perception-selection-order" type="checkbox" />選定順で確認</label><button id="perception-prev">← 前</button><select id="perception-frame" aria-label="確認する画像"></select><button id="perception-next">次 →</button></div>
+        <p id="perception-selection-frame" class="small" role="status"></p>
+        <p id="perception-frame-info" class="small">抽出した画像を選択してください。</p>
+        <div id="perception-draft-warning" class="perception-draft-warning" hidden><strong>未保存の編集があります。</strong> ページを切り替えても編集は保持されます。別画像・プロジェクトへ進む前に保存してください。<button id="perception-discard">この画像の編集を破棄</button></div>
+        <div class="perception-editor">
+          <div>
+            <div class="actions perception-tools"><button id="perception-tool-edit" aria-pressed="true">選択・移動</button><button id="perception-tool-box" aria-pressed="false">矩形を追加</button><button id="perception-undo">元に戻す</button><button id="perception-redo">やり直す</button><button id="perception-delete">選択枠を削除</button><button id="perception-fit">全体表示</button></div>
+            <div class="perception-canvas-wrap"><canvas id="perception-canvas" tabindex="0" aria-label="RCカーの矩形編集。ドラッグで追加・移動、ハンドルでサイズ変更。"></canvas><div id="perception-image-empty">画像を抽出し、確認する画像を選んでください。</div></div>
+            <p class="small perception-shortcuts">ホイールで拡大・縮小、Space＋ドラッグで表示を移動。Deleteで枠削除、Ctrl/Cmd＋Zで元に戻す、[ / ]で前後の画像。座標は元画像のpixelです。</p>
+          </div>
+          <aside class="perception-box-sidebar"><strong id="perception-box-count">正解枠 0個</strong><div id="perception-boxes"></div><p id="perception-suggestions-note" class="small">候補なし</p><button id="perception-accept">候補で正解枠を置き換える</button><p class="small">橙の点線は自動候補です。採用・修正して保存するまで正解には使いません。</p><label>候補score下限<input id="perception-confidence" type="number" min="0.01" max="0.95" step="0.01" value="0.1" /></label><button id="perception-prelabel">未確認画像の候補を生成</button><details><summary>枠付け・キー操作</summary><p class="small">RCカーを全て囲み、ダクト・人・台車は囲みません。RCカーがいない画像は「対象なしとして保存」。ホイールで拡大、Space＋ドラッグで表示移動。Deleteで削除、Ctrl/Cmd＋Zで元に戻す、[ / ]で前後へ進みます。座標は元画像のpixelです。</p></details></aside>
+        </div>
+        <div class="actions perception-save-actions"><button id="perception-save" class="primary">枠を確認して保存</button><button id="perception-save-next" class="primary">枠を保存して次へ →</button><button id="perception-negative">対象なしとして保存</button><span id="perception-save-state" role="status"></span></div>
+      </section>
+      <div class="perception-training" id="perception-pane-train" hidden>
+        <section class="perception-card">
+          <h2><span class="perception-step">3</span> RCカー1クラスで学習</h2>
+          <p>YOLOv8sを <code>rc_car</code> の1クラスへ学習し直します。COCOの80クラスを維持する学習ではありません。</p>
+          <details><summary>Notebookの学習環境</summary><div class="perception-fields"><label>Python<input id="perception-python" placeholder="学習用Pythonの絶対パス" /></label><label>初期重み<input id="perception-weights" placeholder="yolov8s.ptの絶対パス" /></label><label>device<input id="perception-device" value="auto" placeholder="auto / cpu / cuda:0 / mps" /></label></div><div class="actions"><button id="perception-settings-save">設定を保存</button><button id="perception-setup">学習環境をセットアップ</button></div></details>
+          <p id="perception-environment" role="status">学習環境を確認中…</p>
+          <div class="perception-fields"><label>学習名<input id="perception-train-name" maxlength="80" placeholder="例：rc-car-indoor-v1" /></label><label>epoch<input id="perception-epochs" type="number" min="1" max="1000" value="50" /></label><label>batch<input id="perception-batch" type="number" min="1" max="128" value="8" /></label><label>画像サイズ<input id="perception-imgsz" type="number" min="320" max="1280" step="32" value="640" /></label><label>初期学習率<input id="perception-lr0" type="number" min="0.000001" max="0.1" step="0.0001" value="0.001" /></label></div>
+          <button id="perception-train" class="primary">このプロジェクトで学習を開始</button><p id="perception-job-status" role="status">処理の進捗・中止は下部の「ログ・履歴」から確認できます。</p>
+        </section>
+        <section class="perception-card">
+          <h2><span class="perception-step">4</span> 検証結果とONNX</h2>
+          <label>学習実験<select id="perception-run"></select></label><p id="perception-run-status"></p>
+          <div class="perception-metrics-scroll"><table class="perception-metrics"><thead><tr><th>epoch</th><th>precision</th><th>recall</th><th>mAP50</th><th>mAP50–95</th></tr></thead><tbody id="perception-metrics"></tbody></table></div>
+          <p class="small">検証値は選択したval画像と正解枠に対する値です。実車での認識性能やTensorRTの動作確認は別途必要です。</p>
+          <div class="actions"><input id="perception-export-name" maxlength="80" placeholder="ONNXモデル名" aria-label="ONNXモデル名" /><button id="perception-export" class="primary">選択実験をONNXへ書き出す</button></div>
+          <details class="perception-push-settings"><summary>Jetsonへの転送先</summary><p id="perception-push-target" class="small">接続先は上部の「接続設定」と共通です。</p><div class="perception-fields"><label>SSHホスト上の保存先<input id="perception-model-root" value="/home/kart/workspaces/kart/weights/racing/yolov8s/finetuned" /></label><label>Docker内で対応する保存先<input id="perception-container-model-root" value="/workspaces/weights/racing/yolov8s/finetuned" /></label></div><p class="small">共有マウントの対応する2つのパスを指定します。モデルごとの新しいフォルダーへ転送し、既存成果物を上書きしません。</p><button id="perception-push-connection">接続設定を開く</button></details>
+          <div id="perception-models"></div>
+          <section id="perception-push-result" class="perception-push-result" hidden><strong>完了した転送の保存先</strong><p>SSHホスト: <code id="perception-push-host-path"></code></p><p>Docker内: <code id="perception-push-container-path"></code></p><label>JetsonのDocker内で実行するbuildコマンド<textarea id="perception-push-build-command" readonly rows="3"></textarea></label><button id="perception-push-copy">コマンドをコピー</button><p class="small">コマンドは表示だけです。TensorRTのbuild・認識ノード起動は自動実行しません。</p></section>
+        </section>
+      </div>
+    </main>
     <section id="bringup-page" hidden>
       <div class="bringup-card">
         <div class="actions"><h2>Jetsonの起動管理</h2><button id="bringup-connect" class="primary">接続先を確認</button><button id="bringup-preview">未接続でUIを試す</button><button id="bringup-preview-exit" hidden>プレビューを終了</button><strong id="bringup-target"></strong></div>

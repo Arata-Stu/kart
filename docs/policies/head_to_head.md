@@ -66,6 +66,13 @@ RCカーの検出精度とTensorRTの実行速度は実データ・対象GPUで�
 画像はPC内の推論入力に維持する。Studioも件数・ID・scoreの有界な表示だけを行う。
 未受信・入力失効を0件と扱わず、撮影時刻と受信時刻の期限を守って古い一覧を消す。
 
+RCカーへの追加学習は公式YOLOv8sを初期値とする1クラス`rc_car`として別成果物に保存する。
+bag由来画像に人がbboxまたは対象なしを確認し、未確認の推論候補を正解として使わない。
+オレンジダクト等の誤検出場面は確認済みnegativeとして扱う。
+train/valを独立bagに分けてannotation revisionを固定し、COCO80の元モデルを上書きしない。
+exportは固定640×480のraw Detect出力5channel、既存opponent profile/class0へ接続する。
+UI手順は[追加学習](../perception_training.md)を参照する。
+
 既存のViT-S/16事前学習重みを出発点に、空間patch特徴→neck→軽量検出headを候補とする。
 head候補はFCOS型等。まずbackboneを凍結してneck/headを学習し、検証結果に応じて
 backboneの部分fine-tuningを比較する。具体的headの採用は小物体検出と遅延の測定後に決定する。

@@ -30,6 +30,7 @@ __pycache__/
 
 # Learning UI generated datasets, checkpoints and ONNX bundles.
 /e2e/
+/perception/
 
 /docker/silky_evcam_plugin_source/*
 !/docker/silky_evcam_plugin_source/README.md

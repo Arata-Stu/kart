@@ -11,7 +11,7 @@ from .jobs import Job, Jobs, ACTIVE, Cancelled, process_identity, unpack
 from .storage import read_json
 
 ACTIONS = {'coverage', 'command', 'audit', 'learning', 'model_push', 'record_pull', 'map_push',
-           'map_copy', 'line_generate', 'vgl', 'mesh_color', 'dense_step', 'capture', 'map_build'}
+           'map_copy', 'line_generate', 'vgl', 'mesh_color', 'dense_step', 'capture', 'map_build', 'perception', 'perception_push'}
 
 
 def perform(job, work):
@@ -30,6 +30,12 @@ def execute(action, args, job, repo, base):
     if action == 'command':
         job.run(args[0])  # Internal/test API only; no HTTP endpoint accepts commands.
         return {'exit_code': 0}
+    if action == 'perception':
+        from .perception import Perception
+        return Perception(repo, base, base / 'record', base / '.kart-studio').execute(job, *args)
+    if action == 'perception_push':
+        from .perception_transfer import PerceptionTransfer
+        return PerceptionTransfer(repo, base / 'perception').push(job, *args)
     from .maps import Maps
     from .mapping import Mapping
     from .e2e import Learning

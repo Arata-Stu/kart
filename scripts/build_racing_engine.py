@@ -82,8 +82,11 @@ def main():
     parser.add_argument("--model", choices=("coco", "opponent"), default="coco",
                         help="Official COCO80 YOLOv8s (default), or a custom opponent1class model")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--model-root", type=Path,
+                        default=Path(__file__).resolve().parents[1] / "weights/racing/yolov8s",
+                        help="Directory containing the profile's ONNX; engines are cached below this directory")
     args = parser.parse_args()
-    root = Path(__file__).resolve().parents[1] / "weights/racing/yolov8s"
+    root = args.model_root.expanduser().resolve()
     print(build(root, get_profile(args.model), args.force))
 
 

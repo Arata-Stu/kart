@@ -56,12 +56,15 @@ class RacingMenuTests(unittest.TestCase):
                 path = cache / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b'' if name.endswith('empty.plan') else b'fixture')
+            tuned = root / 'weights/racing/yolov8s/finetuned/model-a/engines/opponent/gpu-11/opponent.plan'
+            tuned.parent.mkdir(parents=True)
+            tuned.write_bytes(b'fine-tuned engine fixture')
             target = str(cache / relative[0])
             args = SimpleNamespace(perception='', record_profile='')
 
             def choose(title, values, label, default):
                 self.assertEqual(title, '物体検出用engine')
-                self.assertEqual(set(values), {'off', 'custom', *(str(cache / name) for name in relative[:3])})
+                self.assertEqual(set(values), {'off', 'custom', str(tuned), *(str(cache / name) for name in relative[:3])})
                 self.assertEqual(values[default], 'off')
                 return target
 

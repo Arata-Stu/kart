@@ -1,5 +1,13 @@
 # Racing shadow
 
+RCカー専用の1クラスモデルを追加学習する場合は、Studioの「RCカー検出」を使う。
+RGB bag抽出・手動bbox/negative確認・YOLOv8s学習・kart用ONNX exportの
+手順は[RCカー検出の追加学習](../../../../../docs/perception_training.md)を参照。
+完成した`opponent.onnx`は既存`opponent`profile（num_classes=1、tracked_class_id="0"）を使う。
+Studioからの転送後はJetson側で`bash scripts/racing_trt.sh --model opponent --model-root <転送モデルdirectory>`を実行する。
+入力ONNXと生成engineのcacheはこのdirectory配下へ置き、公式COCOや他の学習版と分離する。
+`--model-root`未指定は従来の`weights/racing/yolov8s`。finetuned配下の生成planもTUIで選択できる。
+
 `predictive_spliner.yaml`は`kart_racing::PredictiveSplinerNode`（node名predictive_spliner）の全独自parameter。
 全既定値・意味・topic契約は[kart_racing README](../../../kart_racing/README.md)を参照。
 `racing_shadow.launch.py`で明示起動する。既存drive/collectには自動追加しない。

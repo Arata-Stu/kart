@@ -3,10 +3,28 @@
 ## 対象と画面
 
 Notebook側で記録から地図を作成・編集してJetsonへ渡すローカルWebアプリ。
-画面は「地図」「転送」「学習」「解析」「分布解析」「ESC試験」「Jetson起動」。
+画面は「地図」「転送」「学習」「RCカー検出」「解析」「分布解析」「ESC試験」「Jetson起動」。
 E2Eとbringup管理は独立したbackend/frontend moduleで実装する。
 Jetsonのbringup起動・終了をUIから扱う。通常走行のモード操作は既存Joy契約を維持する。録画開始停止はJoyとUIから同じkart_bag_managerを操作する。
 学習画面はデータセット作成・学習・ONNX export・オフライン評価・特徴量確認・モデル転送を扱う。
+物体検出は独立したfrontend/backendで、RGB bag抽出・1クラスRCカーのbbox annotation・YOLOv8s追加学習を扱う。
+未確認画像と明示確認したnegativeを区別し、前者を学習へ含めない。
+候補bboxは手動確認前の提案とし、自動で正解へ昇格しない。
+実際に写る全RCカーを正しいbboxで付け、RCカーがいない画像だけを人がnegativeと確認する。
+train/valはbag単位で分離し、コピーbagも検査して連続フレームの評価漏れを防ぐ。
+学習前にannotation revisionとsource由来を固定snapshotに保存する。
+canvasは元画像のpixel座標を正本とし、CSS拡縮やdevicePixelRatioをbboxへ二重適用しない。
+未保存draftをフレーム・project切替や非同期更新で黙って破棄しない。
+学習ジョブは既存の永続supervisorと中止処理を共用し、モデル適用や車両モード操作へ自動接続しない。
+確認画像の選定は未確認trainに対する優先順位とし、YOLO無検出や多様な背景も探索に含める。
+YOLOのscore下限・想定検出数・画像内にclipしたbbox面積比はUIで調整し、多検出・巨大枠を
+誤検出確定ではなく要確認候補とする。10枚ごとの1・3番目に要確認、5番目に背景、10番目に探索を割り当て、
+通常枠は要確認以外を優先する。該当候補不足時は補完し、同bagの時刻・外観の重複も抑える。
+DINOv3を使う場合の参照例は確認済みtrainのRCカーcrop／negativeだけ。valラベルを参照例へ混ぜない。
+類似度・優先度を確率や正解と表示せず、順位外の画像や未保存編集を維持する。
+画像集合の変更では順位を失効し、annotationの追加だけなら以前の順位を継続し再計算を案内する。
+ONNX転送は共通の接続設定・永続SCPキューを使い、検証したpayloadだけを新規directoryへ公開する。
+SSHホストとDockerのパスを明示的に分け、buildコマンドの表示と実行を区別する。buildは自動実行しない。
 
 - 高さ付きVSLAM点群を背景に左右境界を編集し、centerline、raceline、customlineを生成する。
 - 画面全体を縦に伸ばさず、キャンバスを主役にする。工程ごとに右パネルを切り替える。

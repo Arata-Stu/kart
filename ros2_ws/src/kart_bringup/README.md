@@ -1909,6 +1909,9 @@ mission.yamlのperception_engine既定は空（OFF）、perception_mode既定は
 未指定はYAMLを保持する。TUIの「認識 / 物体検出」でengine／OFFを、
 「認識 / モード」で検出のみ／検出＋車両追跡を切り替える。
 「認識 / bbox画像」で画像デバッグを選ぶ。`--no-perception-debug-image`は明示OFF。
+追加学習ONNXをStudioから転送した場合は、Jetsonで`racing_trt.sh --model opponent --model-root <転送先>`を実行する。
+標準weights/racing/yolov8s/finetuned配下のplanもTUIのengine一覧へ含める。画像選定・転送は
+[追加学習手順](../../../docs/perception_training.md)を参照。StudioはTensorRT buildを自動実行しない。
 未指定はYAMLを保持する。既に起動中なら`ros2 launch kart_bringup racing_debug.launch.py`で
 画像確認だけを追加できる（通常bringupのdebug ONとの重複起動はしない）。
 `racing_ground.launch.py`は`/racing/ground_diagnostics`（diagnostic_msgs/msg/DiagnosticArray、1Hz）も出し、

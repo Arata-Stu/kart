@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -69,6 +70,66 @@ def model_manifest(path):
     return result
 
 
+def perception_manifest(path, transfer_required=True):
+    """Verify the RC-car export contract using only the remote Python stdlib."""
+    expected = {'opponent.onnx', 'report.json', 'artifact.json'}
+    if transfer_required:
+        expected.add('transfer.json')
+    if path.is_symlink() or not path.is_dir():
+        raise ValueError('perception bundle contains unexpected or missing files')
+    entries = {item.name for item in path.iterdir()}
+    caches = set() if transfer_required else {'.ultralytics', '.matplotlib'}
+    if not expected <= entries or entries - expected - caches:
+        raise ValueError('perception bundle contains unexpected or missing files')
+    # The local export runtime owns these cache directories. They are not model
+    # payloads and are never copied; reject links even inside a known cache.
+    for directory in entries & caches:
+        cache = path / directory
+        if cache.is_symlink() or not cache.is_dir():
+            raise ValueError('invalid perception runtime cache directory')
+        signature(cache)
+    hashes = {}
+    for filename in sorted(expected):
+        target = path / filename
+        if target.is_symlink() or not target.is_file() or target.stat().st_size <= 0:
+            raise ValueError('perception file missing, empty or symlink')
+        if filename.endswith('.json') and target.stat().st_size > 4 * 1024 * 1024:
+            raise ValueError('perception metadata is too large')
+        digest = hashlib.sha256()
+        with target.open('rb') as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b''):
+                digest.update(block)
+        hashes[filename] = digest.hexdigest()
+    report = json.loads((path / 'report.json').read_text())
+    artifact = json.loads((path / 'artifact.json').read_text())
+    if not isinstance(report, dict) or not isinstance(artifact, dict):
+        raise ValueError('invalid perception metadata')
+    if (report.get('schema') != 'kart.perception.export.v1' or report.get('model_profile') != 'opponent' or
+            type(report.get('num_classes')) is not int or
+            report.get('num_classes') != 1 or report.get('class_names') != ['rc_car'] or
+            report.get('onnx_sha256') != hashes['opponent.onnx']):
+        raise ValueError('perception ONNX checksum or class contract mismatch')
+    if (report.get('input') != dict(name='images', shape=[1, 3, 480, 640], dtype='float32') or
+            report.get('output') != dict(name='output0', shape=[1, 5, 6300], dtype='float32')):
+        raise ValueError('perception ONNX binding/shape contract mismatch')
+    if any(type(value) is not int for binding in ('input', 'output') for value in report[binding]['shape']):
+        raise ValueError('perception ONNX shape must contain integers')
+    if (artifact.get('status') != 'succeeded' or artifact.get('model_profile') != 'opponent' or
+            type(artifact.get('num_classes')) is not int or
+            artifact.get('num_classes') != 1 or artifact.get('class_names') != ['rc_car'] or
+            not isinstance(artifact.get('id'), str) or
+            not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', artifact['id'])):
+        raise ValueError('perception export is incomplete or has invalid class metadata')
+    if transfer_required:
+        transfer = json.loads((path / 'transfer.json').read_text())
+        payload = {key: value for key, value in hashes.items() if key != 'transfer.json'}
+        if (not isinstance(transfer, dict) or transfer.get('schema') != 'kart.perception.transfer.v1' or
+                transfer.get('model') != artifact['id'] or transfer.get('payload_sha256') != payload or
+                transfer.get('source_sha256') != hashes['opponent.onnx']):
+            raise ValueError('perception transfer manifest mismatch')
+    return hashes
+
+
 def execute(data):
     root, relative = data["root"], data.get("relative", "")
     path = confined(root, relative)
@@ -106,6 +167,42 @@ def execute(data):
             raise ValueError("map root does not exist")
         path.mkdir()
         return dict(stage=relative)
+    if action == 'reserve-perception':
+        if not re.fullmatch(r'\.kart-upload-[a-f0-9]{32}', relative):
+            raise ValueError('invalid staging name')
+        Path(root).mkdir(parents=True, exist_ok=True)
+        path = confined(root, relative)
+        path.mkdir(mode=0o700)
+        return dict(stage=relative)
+    if action == 'discard-perception':
+        if not re.fullmatch(r'\.kart-upload-[a-f0-9]{32}', relative):
+            raise ValueError('invalid staging name')
+        if path.exists():
+            if not path.is_dir():
+                raise ValueError('invalid staging directory')
+            shutil.rmtree(path)
+        return dict(discarded=relative)
+    if action == 'publish-perception':
+        if not re.fullmatch(r'\.kart-upload-[a-f0-9]{32}', relative):
+            raise ValueError('invalid staging name')
+        destination = data['destination']
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', destination):
+            raise ValueError('invalid destination')
+        target = confined(root, destination)
+        source = confined(root, relative + '/bundle')
+        if target.exists() or {item.name for item in path.iterdir()} != {'bundle'}:
+            raise ValueError('destination exists or staging contains unexpected files')
+        hashes = perception_manifest(source)
+        if hashes != data['hashes']:
+            raise ValueError('perception payload SHA-256 mismatch')
+        os.rename(source, target)
+        try:
+            path.rmdir()
+        except BaseException:
+            # A leftover staging directory is not a completed publication.
+            os.rename(target, source)
+            raise
+        return dict(path=str(target), model=destination, published=True, hashes=hashes)
     if action == "publish-model":
         if not re.fullmatch(r"\.kart-upload-[a-f0-9]{32}", relative):
             raise ValueError("invalid staging name")

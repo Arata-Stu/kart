@@ -393,7 +393,7 @@ class Editor:
                     raise ValueError('Joy最大スロットルは0.01..1の有限値を指定してください')
                 a.joy_max_throttle = value
         elif action == 'perception':
-            plans = sorted(path for path in (self.root / 'weights/racing/yolov8s/engines').rglob('*.plan')
+            plans = sorted(path for path in (self.root / 'weights/racing/yolov8s').rglob('*.plan')
                            if path.is_file() and path.stat().st_size > 0
                            and not any(part.startswith('.') for part in path.relative_to(self.root).parts))
             choices = ['off', *map(str, plans), 'custom']

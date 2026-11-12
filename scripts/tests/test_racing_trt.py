@@ -160,6 +160,15 @@ class BuilderTests(unittest.TestCase):
                 self.assertEqual(build.call_args.args[1]['name'], name)
                 self.assertEqual(build.call_args.args[2], name == 'opponent')
 
+    def test_cli_accepts_a_transferred_model_directory_without_copying_over_existing_weights(self):
+        target = self.root / 'finetuned' / 'version-a'
+        with patch.object(sys, 'argv', ['build_racing_engine.py', '--model', 'opponent', '--model-root', str(target)]), \
+                patch.object(builder, 'build', return_value=Path('model.plan')) as build, \
+                contextlib.redirect_stdout(io.StringIO()):
+            builder.main()
+        self.assertEqual(build.call_args.args[0], target.resolve())
+        self.assertEqual(build.call_args.args[1]['name'], 'opponent')
+
 
 class BindingTests(unittest.TestCase):
     def test_engine_output_must_match_selected_profile_and_have_fp32_bindings(self):

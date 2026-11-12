@@ -15,6 +15,7 @@ from . import capture, registration, vgl, dense, dense_steps, mesh_color
 from .copies import copy_map
 from .e2e import Learning
 from .coverage import Coverage
+from .perception import Perception
 from .jobs import Jobs, Task
 from .mapping import Mapping, local_records
 from .maps import Maps
@@ -49,6 +50,7 @@ class Studio:
         self.bringup = Bringup(self.state)
         self.audit = Audit(repo, base, self.records)
         self.coverage = Coverage(repo, base, self.records)
+        self.perception = Perception(repo, base, self.records, self.state)
         self.profile_file = self.state / "connection.json"
 
     def connection_defaults(self):
@@ -64,6 +66,14 @@ class Studio:
         )
 
     def get(self, path, q):
+        if path == '/api/perception':
+            return self.perception.catalog()
+        if path == '/api/perception/project':
+            return self.perception.datasets.load(q.get('id'))
+        if path == '/api/perception/selection':
+            return self.perception.selections.get(q.get('id'))
+        if path == '/api/perception/metrics':
+            return self.perception.metrics(q.get('id'))
         if path == '/api/bringup/preview':
             return preview_catalog(self.repo)
         key = q.get("id", "")
@@ -154,6 +164,31 @@ class Studio:
         raise KeyError("Not found")
 
     def post(self, path, b):
+        if path == '/api/perception/settings':
+            with self.jobs.guard('perception:environment', 'perception:compute'):
+                return self.perception.save_settings(b)
+        if path == '/api/perception/tools-settings':
+            return self.perception.save_tools_settings(b)
+        if path == '/api/perception/push':
+            from .perception_transfer import PerceptionTransfer
+            plan = PerceptionTransfer(self.repo, self.perception.root).prepare(b)
+            self.perception.save_tools_settings({key: b[key] for key in ('model_root', 'container_model_root') if key in b})
+            target = plan['connection']
+            resource = f"perception-remote:{target['user']}@{target['host']}:{plan['model_root']}"
+            return self.jobs.start('RCカー検出ONNXをJetsonへ転送',
+                ['read:perception:model:' + plan['id'], resource], Task('perception_push', [plan]), queue='scp')
+        if path == '/api/perception/create':
+            return self.perception.create(b)
+        if path == '/api/perception/annotate':
+            with self.jobs.guard('perception:project:' + name(b.get('id'))):
+                return self.perception.annotate(b)
+        if path.startswith('/api/perception/') and path.rsplit('/', 1)[1] in ('setup', 'extract', 'prelabel', 'select', 'train', 'export'):
+            action = path.rsplit('/', 1)[1]
+            plan = self.perception.prepare(action, b)
+            title = {'setup': '認識の学習環境を準備', 'extract': 'RGB画像を抽出', 'prelabel': 'bbox候補を生成',
+                     'select': '確認する学習画像を選定', 'train': 'RCカー検出を学習', 'export': 'RCカー検出のONNXを書き出し'}[action]
+            job = self.jobs.start(title, plan['resources'], Task('perception', [plan]))
+            return dict(job, artifact_id=plan['key']) if action in ('train', 'export') else job
         if path.startswith("/api/bringup/"):
             return self.bringup.request(b, path.rsplit("/", 1)[1])
         if path == "/api/coverage/run":
@@ -426,6 +461,21 @@ class Handler(BaseHTTPRequestHandler):
             url = urlsplit(self.path)
             query = {k: v[-1] for k, v in parse_qs(url.query).items()}
             self.trusted(query.get('token') if url.path == '/audit-file' else None)
+            if url.path == '/perception-image':
+                image_path = self.server.studio.perception.datasets.image_path(query.get('id'), query.get('frame'))
+                return self.reply(200, image_path.read_bytes(), mimetypes.guess_type(image_path.name)[0] or 'image/jpeg')
+            if url.path == '/perception-file':
+                artifact = self.server.studio.perception.artifact(query.get('id'), query.get('file', 'opponent.onnx'))
+                with artifact.open('rb') as stream:
+                    self.send_response(200)
+                    self.send_header('Content-Type', mimetypes.guess_type(artifact.name)[0] or 'application/octet-stream')
+                    self.send_header('Content-Length', str(artifact.stat().st_size))
+                    self.send_header('Content-Disposition', f'attachment; filename="{artifact.name}"')
+                    self.send_header('X-Content-Type-Options', 'nosniff')
+                    self.send_header('Cache-Control', 'no-store')
+                    self.end_headers()
+                    shutil.copyfileobj(stream, self.wfile, length=1024 * 1024)
+                return
             if url.path == '/audit-file':
                 query = {k: v[-1] for k, v in parse_qs(url.query).items()}
                 filename = query.get('file', 'report.html')

@@ -1,0 +1,72 @@
+#perception-page{display:block;flex:1;min-height:0;overflow:auto;padding:20px clamp(12px,2vw,30px)}
+#perception-page[hidden]{display:none!important}
+.perception-heading{justify-content:space-between;gap:12px;margin-bottom:12px}
+.perception-heading>div{flex:1;min-width:260px}
+.perception-heading h1{font-size:23px;margin:0 0 6px}
+.perception-heading p{margin:0;color:var(--muted)}
+.perception-stages{display:flex;gap:8px;align-self:stretch;flex:none;min-height:36px;margin:4px 0 8px}
+.perception-stages [aria-pressed=true]{background:#e1efec;border-color:#9dc9c0;color:#126d64}
+.perception-preparation,.perception-training{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:14px 0}
+.perception-card{background:white;border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.perception-card h2{font-size:17px;display:flex;align-items:center;gap:8px;margin:0 0 12px}
+.perception-card p{line-height:1.65;margin:8px 0}
+.perception-step{display:inline-grid;place-items:center;background:#e2f1ed;border-radius:50%;color:#126d64;width:27px;height:27px;flex:none;font-size:14px}
+.perception-card label{display:grid;gap:5px;margin:8px 0;min-width:0}
+.perception-card input,.perception-card select{max-width:100%;min-width:0;width:100%}
+.perception-card .actions{flex-wrap:wrap;gap:8px}
+.perception-card .actions input{flex:1;width:auto;min-width:140px}
+.perception-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
+.perception-fields label:first-child{grid-column:1/-1}
+.perception-card summary{font-weight:600;cursor:pointer}
+.perception-frame-controls label{display:flex;align-items:center;gap:6px}
+.perception-frame-controls select{width:auto;min-width:120px}
+#perception-frame{flex:1;max-width:440px}
+.perception-editor{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:14px}
+.perception-tools{margin:8px 0}
+.perception-tools button{padding:7px 10px}
+.perception-tools [aria-pressed=true]{background:#e1efec;border-color:#9dc9c0;color:#126d64}
+.perception-canvas-wrap{position:relative;height:clamp(320px,50vh,680px);min-width:0;background:#14212b;border-radius:8px;overflow:hidden}
+#perception-canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+#perception-image-empty{position:absolute;inset:0;display:grid;place-items:center;color:#d6e1e6;text-align:center;padding:25px;pointer-events:none}
+.perception-box-sidebar{padding:12px;background:#f6f8fa;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.perception-box-sidebar>button{width:100%;white-space:normal;margin:4px 0}
+#perception-boxes{max-height:230px;overflow:auto;margin:8px 0}
+#perception-boxes button{display:block;width:100%;white-space:normal;text-align:left;font-size:12px;margin:4px 0;padding:7px}
+.perception-draft-warning{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;background:#fff4dc;border:1px solid #edd6a8;border-radius:7px;margin:10px 0}
+.perception-save-actions{padding-top:10px;border-top:1px solid var(--line)}
+#perception-save-state{color:var(--muted)}
+#perception-frame-info,#perception-project-summary,#perception-message{overflow-wrap:anywhere}
+.perception-metrics-scroll{max-height:230px;overflow:auto;margin:10px 0}
+.perception-metrics{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.perception-metrics th,.perception-metrics td{text-align:right;padding:7px;border-bottom:1px solid var(--line);white-space:nowrap}
+.perception-model{padding:10px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}
+.perception-model a{display:inline-block;margin:6px 12px 0 0;color:var(--accent)}
+.perception-model>button{display:block;margin-top:8px}
+.perception-selection-card{grid-column:1/-1}
+.perception-selection-toggle input{width:auto!important;flex:none}
+#perception-selection-frame{margin:2px 0 5px;overflow-wrap:anywhere;color:#805b1d}
+#perception-selection-frame:empty{display:none}
+.perception-push-settings{padding:10px 0;border-top:1px solid var(--line)}
+.perception-push-result{padding:12px;margin-top:10px;border:1px solid #b7d8cd;border-radius:8px;background:#f2faf7;overflow-wrap:anywhere}
+.perception-push-result textarea{width:100%;resize:vertical;font:12px/1.6 ui-monospace,monospace;padding:8px}
+@media(min-width:1051px){
+  #perception-page[data-step=annotate]{display:flex;flex-direction:column;overflow:hidden;padding:10px 14px}
+  #perception-page[data-step=annotate] .perception-heading{flex:none;margin-bottom:4px}
+  #perception-page[data-step=annotate] .perception-heading h1{font-size:18px;margin:0}
+  #perception-page[data-step=annotate] .perception-heading p{display:none}
+  #perception-page[data-step=annotate] #perception-message{flex:none;margin:3px 0 7px}
+  #perception-page[data-step=annotate] .perception-annotation{flex:1;min-height:0;display:flex;flex-direction:column;padding:10px 12px}
+  #perception-page[data-step=annotate] .perception-annotation h2{margin-bottom:5px;font-size:15px}
+  #perception-page[data-step=annotate] .perception-annotation-help,#perception-page[data-step=annotate] .perception-shortcuts{display:none}
+  #perception-page[data-step=annotate] .perception-frame-controls{margin:0;flex:none}
+  #perception-page[data-step=annotate] .perception-frame-controls label{margin:0}
+  #perception-page[data-step=annotate] #perception-frame-info{margin:4px 0;flex:none}
+  #perception-page[data-step=annotate] #perception-selection-frame{flex:none;font-size:11px}
+  #perception-page[data-step=annotate] .perception-editor{flex:1;min-height:0}
+  #perception-page[data-step=annotate] .perception-editor>div{display:flex;flex-direction:column;min-height:0}
+  #perception-page[data-step=annotate] .perception-canvas-wrap{height:auto;flex:1;min-height:140px}
+  #perception-page[data-step=annotate] .perception-box-sidebar{overflow:auto}
+  #perception-page[data-step=annotate] .perception-save-actions{flex:none;margin-top:7px}
+}
+@media(max-width:1050px){.perception-editor{grid-template-columns:minmax(0,1fr)}.perception-box-sidebar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px}.perception-box-sidebar>strong,.perception-box-sidebar>#perception-boxes{grid-column:1/-1}}
+@media(max-width:760px){.perception-preparation,.perception-training{grid-template-columns:minmax(0,1fr)}.perception-card{padding:12px}.perception-heading h1{font-size:20px}.perception-fields{grid-template-columns:minmax(0,1fr)}.perception-frame-controls{align-items:stretch}.perception-frame-controls label{flex:1}.perception-save-actions>button{flex:1;white-space:normal}.perception-box-sidebar{display:block}}
