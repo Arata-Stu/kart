@@ -15,6 +15,20 @@ CONFIG = ROOT / 'ros2_ws/src/kart_bringup/config'
 
 
 class RacingMenuTests(unittest.TestCase):
+    def test_bbox_jpeg_is_opt_in_and_does_not_change_detection_or_tracking(self):
+        args = argument_parser().parse_args(['--mode', 'drive', '--perception', '/models/yolov8s.plan',
+                                             '--perception-mode', 'track'])
+        def choose(title, values, label, default):
+            self.assertEqual(values[default], False)
+            return True
+        editor = Editor(args, CONFIG, ROOT, choose)
+        self.assertIn('無効', editor.rows()['perception_debug_image'])
+        editor.edit('perception_debug_image')
+        self.assertTrue(args.perception_debug_image)
+        self.assertIn('有効', editor.rows()['perception_debug_image'])
+        self.assertEqual(args.perception, '/models/yolov8s.plan')
+        self.assertEqual(args.perception_mode, 'track')
+
     def test_drive_mode_can_switch_detection_and_car_tracking_without_changing_engine(self):
         args = argument_parser().parse_args(['--mode', 'drive', '--perception', '/models/yolov8s.plan',
                                              '--perception-mode', 'detect'])

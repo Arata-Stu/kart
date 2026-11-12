@@ -1894,16 +1894,25 @@ ROS結合・Jetsonでの処理負荷・実車収録は未確認。
 car（class_id="2"）だけを`/racing/tracks`（同型）へ追跡出力する。
 自身のROSノードは追加せず、既存のIsaac ROS decoderとopponent_tracker componentを組み合わせる。
 decoderの基準値はnum_classes=80・confidence_threshold=0.1・nms_threshold=0.45、trackerはtracked_class_id="2"。
-Foxgloveは画像を公開せず、`/racing/detections`・`/racing/tracks`の結果だけをRaw Messages／Tableで確認する。
-RGB・CameraInfo・ImageMarkerは公開しない。カメラからYOLOへのPC内入力は維持する。
+通常は`/racing/detections`・`/racing/tracks`の結果をRaw Messages／Tableで確認する。
+元RGB・CameraInfo・ImageMarkerは公開しない。カメラからYOLOへのPC内入力は維持する。
+デバッグ時のみ`--perception-debug-image`で`/racing/debug_image/compressed`
+（sensor_msgs/msg/CompressedImage）のbbox付きJPEGを最大5Hzで公開できる。既定OFF、quality 70。
+画像と結果の撮影stamp/frame完全一致を確認し、0件と未着を画像上で区別する。
+FoxgloveのImageパネルで表示し、CameraInfo・別annotationは不要。
 engineのbuild.jsonに従い、専用opponentモデルではnum_classes=1・tracked_class_id="0"を選ぶ。
 
 `scripts/bringup.sh --mode collect --perception /path/to/yolov8s.plan`（地図走行drive・TUIでも選択可）は
 640×480のRGBを使い、RealSenseと同じsensor_containerに認識componentをロードする。
-mission.yamlのperception_engine既定は空（OFF）、perception_mode既定はtrack。
+mission.yamlのperception_engine既定は空（OFF）、perception_mode既定はtrack、perception_debug_image既定はfalse。
 起動時の`--perception-mode detect`は全80クラスの検出のみ、`track`は検出＋COCO carだけの追跡。
 未指定はYAMLを保持する。TUIの「認識 / 物体検出」でengine／OFFを、
 「認識 / モード」で検出のみ／検出＋車両追跡を切り替える。
+「認識 / bbox画像」で画像デバッグを選ぶ。`--no-perception-debug-image`は明示OFF。
+未指定はYAMLを保持する。既に起動中なら`ros2 launch kart_bringup racing_debug.launch.py`で
+画像確認だけを追加できる（通常bringupのdebug ONとの重複起動はしない）。
+`racing_ground.launch.py`は`/racing/ground_diagnostics`（diagnostic_msgs/msg/DiagnosticArray、1Hz）も出し、
+追跡0件・CameraInfo・同期・TF・全投影除外・投影成功を区別する。
 地図走行のライン追従を表すtracking構成とは独立しており、detectでも通常のライン追従は維持する。
 対象GPUコンテナの`/workspaces`で`ENGINE=$(bash scripts/racing_trt.sh --model coco) || exit 1`によりbuildし、
 `bash scripts/bringup.sh --perception "$ENGINE" --perception-mode detect`から用途「地図走行」を選べる。

@@ -39,6 +39,22 @@ class PropagationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "640x480"):
                 self.run_cli("--mode", "collect", "--perception", engine.name, "--rgb-profile", "0")
 
+    def test_debug_image_requires_engine_and_preserves_explicit_off(self):
+        import tempfile
+        self.assertNotIn('perception_debug_image:=', self.run_cli('--mode', 'collect'))
+        with self.assertRaisesRegex(ValueError, 'engine'):
+            self.run_cli('--mode', 'collect', '--perception-debug-image')
+        with tempfile.NamedTemporaryFile() as engine:
+            engine.write(b'fixture')
+            engine.flush()
+            for flag, value in (('--perception-debug-image', 'true'), ('--no-perception-debug-image', 'false')):
+                with self.subTest(flag=flag):
+                    output = self.run_cli('--mode', 'collect', '--perception', engine.name, flag)
+                    self.assertIn('perception_debug_image:=' + value, output)
+                    self.assertIn('perception_engine:=' + str(Path(engine.name).resolve()), output)
+        with self.assertRaisesRegex(ValueError, 'perception-debug-image'):
+            self.run_cli('--mode', 'eval', '--perception-debug-image')
+
     def test_perception_modes_are_forwarded_for_map_drive_and_offline_is_rejected(self):
         import tempfile
         with tempfile.NamedTemporaryFile() as engine:
@@ -169,7 +185,7 @@ class PropagationTests(unittest.TestCase):
             self.run_cli('--mode', 'collect')
         # Search roots and dry_run are local selector behavior, not ROS parameters.
         selector = {'help', 'map_root', 'model_root', 'bias_root', 'dry_run'}
-        forwarded = {'perception', 'perception_mode', 'record_profile', 'mode', 'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
+        forwarded = {'perception', 'perception_mode', 'perception_debug_image', 'record_profile', 'mode', 'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
                      'device', 'map_file', 'map_dir', 'model_dir', 'lane_id', 'line_type',
                      'tuning', 'record_dir', 'evs', 'no_evs', 'evs_backend', 'evs_aggregation',
                      'evs_image', 'evs_serial', 'evs_tensor_config', 'evs_bias_file', 'foxglove',

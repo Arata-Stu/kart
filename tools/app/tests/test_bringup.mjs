@@ -35,6 +35,8 @@ globalThis.fetch=async(url,options)=>{
     fields:[{key:'device',kind:'text'},{key:'rgb_profile',choices:['0','640x480x30']},
       {key:'infra_profile',choices:['0','640x480x90']},{key:'depth_profile',choices:['0','640x480x90']},
       {key:'auto_fixed_throttle',kind:'text'},
+      {key:'perception',kind:'text'}, {key:'perception_mode',choices:['detect','track']},
+      {key:'perception_debug_image',kind:'boolean',default:null},
       ...(remoteSupportsGate?[{key:'auto_fixed_throttle_r2_gate',kind:'boolean',default:null}]:[])],
     status:snapshot,
   };
@@ -60,6 +62,13 @@ for(const key of ['rgb_profile','stereo_profile']) assert.equal(el('bringup-fiel
 el('bringup-field-depth_enabled').value='true';el('bringup-field-depth_enabled').onchange();
 const profile=el('bringup-field-rgb_profile');
 profile.value='640x480x30';profile.onchange();
+const perception=el('bringup-field-perception');
+perception.value='/models/yolov8s.plan';perception.onchange();
+const perceptionMode=el('bringup-field-perception_mode');
+perceptionMode.value='track';perceptionMode.onchange();
+const debugImage=el('bringup-field-perception_debug_image');
+assert.equal(debugImage.value,'','debug JPEG must stay opt-in');
+debugImage.value='true';debugImage.onchange();
 el('bringup-tab-log').onclick();
 assert.equal(el('bringup-pane-basic').hidden,true);
 assert.equal(el('bringup-pane-log').hidden,false);
@@ -69,6 +78,9 @@ el('bringup-plan').onclick();await flush();
 assert.equal(calls.find(c=>c.url.endsWith('/plan')).body.values.rgb_profile,'640x480x30');
 assert.equal(calls.find(c=>c.url.endsWith('/plan')).body.values.infra_profile,'640x480x90');
 assert.equal(calls.find(c=>c.url.endsWith('/plan')).body.values.depth_profile,'640x480x90');
+assert.equal(calls.find(c=>c.url.endsWith('/plan')).body.values.perception,'/models/yolov8s.plan');
+assert.equal(calls.find(c=>c.url.endsWith('/plan')).body.values.perception_mode,'track');
+assert.equal(calls.find(c=>c.url.endsWith('/plan')).body.values.perception_debug_image,true);
 assert.equal(el('bringup-pane-review').hidden,false);
 assert.equal(el('bringup-start').disabled,false);
 el('bringup-field-device').value='/dev/new';el('bringup-field-device').onchange();

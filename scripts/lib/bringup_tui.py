@@ -25,7 +25,7 @@ RECORD_LABELS = {
 PROFILE_FIELDS = (
     'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
     'evs', 'no_evs', 'evs_backend', 'evs_aggregation', 'evs_serial', 'evs_tensor_config',
-    'evs_bias_file', 'evs_image', 'perception', 'perception_mode', 'auto_fixed_throttle', 'auto_fixed_throttle_r2_gate',
+    'evs_bias_file', 'evs_image', 'perception', 'perception_mode', 'perception_debug_image', 'auto_fixed_throttle', 'auto_fixed_throttle_r2_gate',
 )
 PERCEPTION_LABELS = {'detect': '物体検出のみ', 'track': '物体検出＋車両追跡'}
 
@@ -198,6 +198,10 @@ class Editor:
             rows['perception'] = '認識 / 物体検出: ' + (Path(perception).name if perception and perception != 'off' else '無効')
             perception_mode = getattr(a, 'perception_mode', '') or mission.composition(self.config / 'mission.yaml', a.mode)['perception_mode']
             rows['perception_mode'] = '認識 / モード: ' + PERCEPTION_LABELS[perception_mode]
+            debug_image = getattr(a, 'perception_debug_image', None)
+            if debug_image is None:
+                debug_image = mission.composition(self.config / 'mission.yaml', a.mode)['perception_debug_image']
+            rows['perception_debug_image'] = '認識 / bbox画像: ' + ('有効（JPEG・最大5Hz）' if debug_image else '無効')
             rows['foxglove'] = f'補助 / Foxglove: {"有効" if self.foxglove_enabled() else "無効"}'
             if a.mode == 'drive':
                 enabled = self.params('hdmap/hdmap.yaml', 'hdmap_server')['tuning_enabled'] if a.tuning is None else a.tuning
@@ -355,6 +359,7 @@ class Editor:
                 a.rgb_fps = a.infra_fps = None
                 a.rgb_profile = a.infra_profile = a.depth_profile = a.imu_profile = ''
                 a.perception = 'off'
+                a.perception_debug_image = False
                 a.evs, a.no_evs = False, True
                 for key in ('evs_backend', 'evs_aggregation', 'evs_serial', 'evs_tensor_config', 'evs_bias_file'):
                     setattr(a, key, '')
@@ -399,9 +404,17 @@ class Editor:
                 if not selected:
                     return
             a.perception = selected
+            if selected == 'off':
+                a.perception_debug_image = False
         elif action == 'perception_mode':
             current = getattr(a, 'perception_mode', '') or mission.composition(self.config / 'mission.yaml', a.mode)['perception_mode']
             a.perception_mode = self.pick('物体認識モード', PERCEPTION_LABELS, current, PERCEPTION_LABELS.__getitem__)
+        elif action == 'perception_debug_image':
+            current = getattr(a, 'perception_debug_image', None)
+            if current is None:
+                current = mission.composition(self.config / 'mission.yaml', a.mode)['perception_debug_image']
+            a.perception_debug_image = self.pick('bbox付きデバッグ画像（JPEG・最大5Hz）', [False, True], current,
+                lambda value: '有効' if value else '無効')
         elif action == 'control':
             self.edit_control()
         elif action == 'recovery':

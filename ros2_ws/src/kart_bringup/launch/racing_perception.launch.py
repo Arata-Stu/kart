@@ -6,7 +6,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import ComposableNodeContainer, LoadComposableNodes
+from launch_ros.actions import ComposableNodeContainer, LoadComposableNodes, Node
 from launch_ros.descriptions import ComposableNode
 from launch_ros.parameter_descriptions import ParameterValue
 
@@ -61,8 +61,14 @@ def pipeline(context):
         action = ComposableNodeContainer(name="racing_perception", namespace="", output="screen",
                                          package="rclcpp_components", executable="component_container_mt",
                                          composable_node_descriptions=nodes)
-    return [LogInfo(msg=f"Racing perception: {root}, container={target or '/racing_perception'}, "
-                        f"image={image}, model={model['name']}, tracked_class_id={model['track_class_id']}, {settings}"), action]
+    actions = [LogInfo(msg=f"Racing perception: {root}, container={target or '/racing_perception'}, "
+                          f"image={image}, model={model['name']}, tracked_class_id={model['track_class_id']}, {settings}"), action]
+    if boolean(LaunchConfiguration("debug_image").perform(context)):
+        actions.append(Node(package="kart_opponent_tracker", executable="opponent_debug_image",
+            namespace="/racing", name="opponent_debug_image", output="screen",
+            parameters=[str(root / "debug_image.yaml"), {"class_names": model["class_names"]}],
+            remappings=[("rgb", image)]))
+    return actions
 
 
 def generate_launch_description():
@@ -71,6 +77,7 @@ def generate_launch_description():
         DeclareLaunchArgument("engine", description="Prebuilt YOLOv8 Detect engine with FP32 bindings"),
         DeclareLaunchArgument("model_profile", default_value="", description="coco/opponent; empty reads engine build.json or defaults to coco"),
         DeclareLaunchArgument("tracking_enabled", default_value="", description="true/false; empty preserves tracker.yaml (detect-only uses false)"),
+        DeclareLaunchArgument("debug_image", default_value="false", description="Publish bounded-rate bbox JPEG for debugging"),
         DeclareLaunchArgument("image_topic", default_value="/realsense/color/image_raw"),
         OpaqueFunction(function=pipeline),
     ])

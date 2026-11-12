@@ -99,13 +99,13 @@ class PerceptionLaunchTests(unittest.TestCase):
         self.config = self.root / 'config/racing'
         self.config.mkdir(parents=True)
         package = Path(__file__).resolve().parents[1]
-        for filename in ('perception.yaml', 'tracker.yaml'):
+        for filename in ('perception.yaml', 'tracker.yaml', 'debug_image.yaml'):
             (self.config / filename).write_text((package / 'config/racing' / filename).read_text())
         self.engine = self.root / 'yolov8s.plan'
         self.engine.write_bytes(b'launch fixture, not a TensorRT engine')
         self.launch_file = package / 'launch/racing_perception.launch.py'
 
-    def pipeline(self, override):
+    def pipeline(self, override, debug='false'):
         modules = {name: ModuleType(name) for name in (
             'ament_index_python', 'ament_index_python.packages', 'launch', 'launch.actions',
             'launch.substitutions', 'launch_ros', 'launch_ros.actions', 'launch_ros.descriptions',
@@ -125,16 +125,29 @@ class PerceptionLaunchTests(unittest.TestCase):
         modules['launch.substitutions'].LaunchConfiguration = Configuration
         modules['launch_ros.actions'].ComposableNodeContainer = lambda **kwargs: kwargs
         modules['launch_ros.actions'].LoadComposableNodes = lambda **kwargs: kwargs
+        modules['launch_ros.actions'].Node = lambda **kwargs: kwargs
         modules['launch_ros.descriptions'].ComposableNode = lambda **kwargs: kwargs
         modules['launch_ros.parameter_descriptions'].ParameterValue = Value
         context = dict(engine=str(self.engine), model_profile='', tracking_enabled=override,
-                       image_topic='/camera/rgb', target_container='')
+                       image_topic='/camera/rgb', target_container='', debug_image=debug)
         with patch.dict(sys.modules, modules):
             spec = importlib.util.spec_from_file_location('racing_mode_launch_test', self.launch_file)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
-            _, container = module.pipeline(context)
+            self.actions = module.pipeline(context)
+            container = self.actions[1]
         return {node['name']: node['parameters'][0] for node in container['composable_node_descriptions']}
+
+    def test_debug_image_only_starts_when_enabled_and_uses_same_image_source(self):
+        self.pipeline('true')
+        self.assertEqual(len(self.actions), 2)
+        self.pipeline('true', debug='true')
+        self.assertEqual(len(self.actions), 3)
+        preview = self.actions[2]
+        self.assertEqual(preview['executable'], 'opponent_debug_image')
+        self.assertEqual(preview['namespace'], '/racing')
+        self.assertEqual(preview['remappings'], [('rgb', '/camera/rgb')])
+        self.assertEqual(preview['parameters'][1]['class_names'], get_profile('coco')['class_names'])
 
     def test_explicit_modes_are_ros_bools_and_keep_all_class_detections(self):
         for raw, expected in (('false', False), ('true', True)):

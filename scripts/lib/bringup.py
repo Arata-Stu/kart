@@ -113,7 +113,7 @@ def validate_mode_options(args):
         (("latency_output",), args.mode == "e2e-latency"),
         (("tuning",), args.mode == "drive"),
         (("foxglove",), not offline),
-        (("perception", "perception_mode"), not offline),
+        (("perception", "perception_mode", "perception_debug_image"), not offline),
     ]
     for keys, allowed in groups:
         if allowed:
@@ -169,6 +169,8 @@ def argument_parser():
     parser.add_argument("--perception", metavar="ENGINE|off", default="", help="物体検出のTensorRT plan。未指定はmission YAML（既定OFF）")
     parser.add_argument("--perception-mode", choices=("detect", "track"), default="",
                         help="detect=物体検出のみ / track=検出＋車両追跡。未指定はmission YAML（既定track）")
+    parser.add_argument("--perception-debug-image", action=argparse.BooleanOptionalAction, default=None,
+                        help="bbox付きJPEGをデバッグ配信（既定OFF、5Hz）。未指定はmission YAML")
     parser.add_argument("--foxglove", action=argparse.BooleanOptionalAction, default=None, help="Foxglove。未指定は用途のYAML既定（地図走行はON）")
     parser.add_argument("--no-bridge", action="store_true", help="車両基板なしの確認用")
     parser.add_argument(
@@ -286,10 +288,14 @@ def build_command(args, config):
     if args.mode != "eval":
         from kart_bringup.mission import composition, perception_engine
         perception = composition(config / "mission.yaml", args.mode,
-                                 {"perception_engine": args.perception, "perception_mode": args.perception_mode})
+                                 {"perception_engine": args.perception, "perception_mode": args.perception_mode,
+                                  "perception_debug_image": "" if args.perception_debug_image is None else args.perception_debug_image})
         engine = perception_engine(perception["perception_engine"], sensors)
+        if perception["perception_debug_image"] and not engine:
+            raise ValueError("認識デバッグ画像には--perceptionでengineを指定してください")
         if engine:
             print(f"物体認識: {engine}; mode={perception['perception_mode']} (RealSenseと同一container)")
+            print(f"認識デバッグ画像: {'ON /racing/debug_image/compressed（JPEG、最大5Hz）' if perception['perception_debug_image'] else 'OFF'}")
     from kart_bringup.mission import validate_record_profile
     validate_record_profile(args.record_profile, args.mode, sensors, args.evs)
     if args.record_profile == 'vehicle-model':
@@ -438,6 +444,7 @@ def build_command(args, config):
         "evs_image": "" if args.evs_image is None else str(args.evs_image).lower(),
         "perception_engine": (engine or args.perception) if args.mode != "eval" else "",
         "perception_mode": args.perception_mode if args.mode != "eval" else "",
+        "perception_debug_image": "" if args.perception_debug_image is None else str(args.perception_debug_image).lower(),
         "enable_foxglove": "" if args.foxglove is None else str(args.foxglove).lower(),
         "record_dir": args.record_dir,
         "run_name": recording_name if args.mode != "eval" else "",

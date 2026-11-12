@@ -20,6 +20,8 @@ const labels = {
   auto_fixed_throttle_r2_gate:'車両同定：R2で固定駆動／惰行',
   e2e_throttle_mode:'E2Eスロットル方式', e2e_fixed_throttle:'E2E固定スロットル',
   recovery:'自動復帰', tuning:'Studioからの動的調整', foxglove:'Foxglove', no_bridge:'車両基板を起動しない',
+  perception:'物体検出engine（空欄は設定値、offは無効）', perception_mode:'物体検出／車両追跡モード',
+  perception_debug_image:'bbox付きデバッグ画像（JPEG・最大5Hz）',
   parking_site:'駐車用地図（任意上書き）', parking_slot:'駐車区画',
   eval_localization:'評価方式', bag:'再生bag', rate:'再生速度', tracking_mode:'追跡方式',
   multicam_mode:'VSLAM速度・精度', base_frame:'基準frame', imu_frame:'IMU frame', latency_output:'遅延評価の保存先',
@@ -42,9 +44,11 @@ const modeKeys = {
   eval_localization:['eval'], bag:['eval','e2e-latency'], rate:['eval','e2e-latency'],
   tracking_mode:['eval'], base_frame:['eval'], imu_frame:['eval'], latency_output:['e2e-latency'],
   foxglove:live,
+  perception:live, perception_mode:live, perception_debug_image:live,
 };
 const essentials = new Set(['device','rgb_profile','infra_profile','depth_profile','imu_profile','evs','run_name',
-  'joy_max_throttle','auto_fixed_throttle','auto_fixed_throttle_r2_gate','e2e_throttle_mode','e2e_fixed_throttle','recovery','tuning','eval_localization','tracking_mode','rate']);
+  'joy_max_throttle','auto_fixed_throttle','auto_fixed_throttle_r2_gate','e2e_throttle_mode','e2e_fixed_throttle','recovery','tuning','eval_localization','tracking_mode','rate',
+  'perception','perception_mode','perception_debug_image']);
 const assetKeys = new Set(['map_file','map_dir','model_dir','e2e_model_dir','lane_id','line_type','bag']);
 const panes = ['basic','assets','details','review','log'];
 function showPane(name) {

@@ -126,11 +126,13 @@ flat-road推定点を/racing/ground_pointsへ出力する。2Dのみのbag評価
 同一ROS domainで `ros2 launch kart_bringup foxglove.launch.py` を起動し、Raw Messagesパネルで
 `/racing/detections`と`/racing/tracks`を選ぶ。class ID・score・bbox・追跡ID・撮影時刻を確認できる。
 Tableパネルでは`/racing/detections.detections`と`/racing/tracks.detections`で物体ごとに1行を表示する。
-帯域を抑えるため、RGB画像・CameraInfo・ImageMarkerはFoxgloveへ送らない。
+帯域を抑えるため、通常は画像を配信せず、元RGB画像・CameraInfo・ImageMarkerはFoxgloveへ公開しない。
 `/racing/rgb`は元の`/realsense/color/image_raw`をRGB8へ形式変換した640×480のPC内YOLO入力。
 YOLO用の画像入力は維持し、Bridgeの公開対象から画像を除外する。
 Raw Messages／TableにはCameraInfoは不要なので、旧Imageパネルは閉じるか削除する。
 ground起動時は3Dパネルでframeをbase_link、topicを/racing/ground_markersにする。
+地図に重ねる場合はFixed frameとDisplay frameをmapにし、HDMapも有効化する。
+撮影時刻のmap〜base_linkまでのTFが必要。投影のtarget_frame自体はbase_linkのままにする。
 評価器と一緒に見る場合はbridgeも評価domain（既定ROS_DOMAIN_ID=91）で起動する。
 
 base_link原点は後車軸中央、zは上向き。平坦路上で走行時の荷重・タイヤの状態にして、
@@ -170,6 +172,47 @@ bash scripts/bringup.sh --perception "$ENGINE" --perception-mode detect
 missionはRealSenseと同じsensor_containerをtarget_containerとして渡し、encoder・TensorRT・decoder・
 ByteTrackの全componentをそこにロードする。単独起動でtarget_container未指定時のみ専用containerを作る。
 車体座標投影は別起動（上記参照）。認識の有効化だけで車両への制御指令は生成されない。
+
+### 推論と投影を切り分ける画像デバッグ
+
+`mission.yaml`の`perception_debug_image: false`が既定。
+`--perception-debug-image`／`--no-perception-debug-image`で明示ON／OFF、未指定はYAMLを保持する。
+engine指定が必須。TUI「認識 / bbox画像」、Studioの起動設定でも切り替えられる。
+ON時だけ`opponent_debug_image`を別プロセスで起動し、`config/racing/debug_image.yaml`を適用する。
+認識launch単独では`debug_image:=true`を指定できる。
+
+既に認識が動いているときは、同じROS環境の別ターミナルから次だけでも確認できる。
+
+```bash
+ros2 launch kart_bringup racing_debug.launch.py
+```
+
+このlaunchはカメラ・YOLO・車両制御を起動せず、デバッグノードのみを起動する。
+通常bringupのdebug ONとの同時起動はしない。単独launch引数は`model_profile=coco`（`opponent`も可）、
+`image_topic=/realsense/color/image_raw`。統合起動では認識に指定したimage_topicを同じように渡す。
+class_namesは選択したモデルの名前一覧で上書きする。
+ImageパネルのTopicを`/racing/debug_image/compressed`にし、別annotation・Sync timestamps・RectifyをOFFにする。
+CameraInfo不要のbbox描画済みJPEGで、緑は検出・青は追跡。既定640×480・最大5Hz・quality 70。
+同じ撮影stamp/frameの結果だけを描画し、`DETECTIONS: 0`と`MISSING`を区別する。
+画像入力待ち・途絶・不正画像では撮影画像と区別した`NO SOURCE IMAGE`画面になる。
+ノード・全parameter・QoSは[kart_opponent_tracker](../../../kart_opponent_tracker/README.md)を参照。
+
+路面投影を起動すると`/racing/ground_diagnostics`（diagnostic_msgs/msg/DiagnosticArray、1Hz）も出る。
+`reason`と件数で次を切り分ける。未検出だけから推論失敗とは断定しない。
+
+| reason | 意味・確認箇所 |
+|---|---|
+| waiting_tracks / tracks_stale | 追跡入力がない／途絶。認識・追跡起動と入力を確認 |
+| waiting_camera_info / camera_info_stale | 車体内のCameraInfo未受信／途絶 |
+| not_synchronized | tracksとCameraInfoの撮影stamp完全一致なし |
+| zero_tracks | 追跡対象0件。画像の検出結果・car選別・track開始scoreを確認 |
+| invalid_stamp / invalid_frame / invalid_image_shape / invalid_calibration | 撮影header・640×480/ROI/ビニング・内部校正条件不一致 |
+| tf_unavailable | 撮影時刻のRGB optical→base_linkのTFがない |
+| all_rejected | trackはあるが全投影を除外。画像下端の切れ・取付姿勢・路面高さ・距離上限等を確認 |
+| projected | 接地点を生成済み。表示されなければmap〜base_linkのTFとFoxglove設定を確認 |
+
+最新入力・同期の鮮度はmonotonicで1秒、入力停止時に前の成功を維持しない。
+topic自体がない場合は投影ノード未起動または起動エラーも確認する。
 
 ### 追従・停止車両回避のshadow評価
 

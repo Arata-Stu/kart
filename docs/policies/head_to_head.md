@@ -57,8 +57,12 @@ engineのshape・クラス数・hashをモデルprofileと照合し、異なる�
 RCカーの検出精度とTensorRTの実行速度は実データ・対象GPUで評価する。検出だけで車両制御へ接続しない。
 通常の地図走行でも認識を選択可能とし、起動TUIで検出のみ／検出＋car追跡を切り替える。
 参照ラインへの追従設定と物体追跡の設定は独立させる。認識OFFはengine未選択で表す。
-Foxgloveは画像を送らず、全クラスの検出とcarの追跡をDetection2DArrayの結果だけで確認する。
-RGB・CameraInfo・ImageMarkerをBridgeへ公開せず、Raw Messages／Tableを使う。
+通常のFoxgloveは全クラスの検出とcarの追跡をDetection2DArrayで確認し、画像配信は既定OFFとする。
+明示的なデバッグ選択時だけ、撮影stamp・frameが一致したbboxを描いた有界rateのJPEGを公開する。
+元RGB・CameraInfo・ImageMarkerをBridgeへ公開せず、デバッグ画像の確認にCameraInfoを要求しない。
+空の検出結果と未着結果を画像上で区別し、別フレームのbboxを流用しない。
+路面投影は入力・完全同期・校正・TF・0 tracks・全投影拒否・成功を診断topicで区別する。
+診断が正常でも地図上に表示できない場合は、mapまでのTFと表示設定を別に確認する。
 画像はPC内の推論入力に維持する。Studioも件数・ID・scoreの有界な表示だけを行う。
 未受信・入力失効を0件と扱わず、撮影時刻と受信時刻の期限を守って古い一覧を消す。
 

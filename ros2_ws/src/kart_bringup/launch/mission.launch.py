@@ -17,6 +17,7 @@ OVERRIDES = (
     "enable_evs",
     "perception_engine",
     "perception_mode",
+    "perception_debug_image",
     "enable_foxglove",
     "enable_bridge",
 )
@@ -34,6 +35,8 @@ def add_mission(args):
     )
     from kart_bringup.mission import perception_engine
     engine = perception_engine(cfg["perception_engine"], params)
+    if cfg["perception_debug_image"] and not engine:
+        raise ValueError("認識デバッグ画像にはperception_engineを指定してください")
     validate_record_profile(record_profile, args.mode, params, cfg["enable_evs"])
     section_routing = None
     if cfg['e2e']:
@@ -193,6 +196,7 @@ def add_mission(args):
         actions.append(include("racing_perception.launch.py", {
             "engine": engine,
             "tracking_enabled": str(cfg["perception_mode"] == "track").lower(),
+            "debug_image": str(cfg["perception_debug_image"]).lower(),
             "target_container": "/" + cfg["sensor_container"].lstrip("/"),
         }))
     if getattr(args, "validate_infra", "false") == "true":

@@ -165,6 +165,7 @@ def composition(path, mode, overrides=None):
         "sensor_container_type",
         "perception_engine",
         "perception_mode",
+        "perception_debug_image",
         "enable_evs",
         "enable_foxglove",
         "enable_bridge",
@@ -183,6 +184,7 @@ def composition(path, mode, overrides=None):
             cfg[key] = value
     for key in (
         "create_sensor_container",
+        "perception_debug_image",
         "enable_evs",
         "enable_foxglove",
         "enable_bridge",

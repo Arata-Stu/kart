@@ -1,0 +1,11 @@
+/**/opponent_debug_image:
+  ros__parameters:
+    use_sim_time: false
+    max_fps: 5.0  # Input admission and JPEG output ceiling, wall-clock Hz.
+    jpeg_quality: 70  # 1..100; no encoding without a subscriber.
+    match_wait_s: 0.20  # Wait for exact source stamp+frame results, then label missing channels.
+    cache_size: 8  # Maximum sampled images and results per channel, each 1..32.
+    cache_ttl_s: 1.0  # Result-cache lifetime; must be >= match_wait_s.
+    max_boxes: 100  # Bound extraction and drawing work per result array.
+    image_timeout_s: 1.0  # Replace stalled images with an explicitly labeled placeholder.
+    class_names: ['']  # Empty name falls back to class ID; launch can supply the model's names.

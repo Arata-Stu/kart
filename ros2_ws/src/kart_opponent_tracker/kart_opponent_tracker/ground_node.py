@@ -1,7 +1,9 @@
 import math
 import message_filters
 import rclpy
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from rcl_interfaces.msg import ParameterDescriptor
+from rclpy.clock import Clock, ClockType
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
@@ -11,6 +13,7 @@ from visualization_msgs.msg import Marker
 from vision_msgs.msg import Detection2DArray
 from kart_interfaces.msg import OpponentGroundPoint, OpponentGroundPoints
 from .ground import ground_point
+from .ground_status import GroundStatus, projection_issue, stamp_ns
 
 
 class GroundNode(Node):
@@ -26,24 +29,49 @@ class GroundNode(Node):
         self.listener = TransformListener(self.tf, self)
         self.output = self.create_publisher(OpponentGroundPoints, "ground_points", qos_profile_sensor_data)
         self.markers = self.create_publisher(Marker, "ground_markers", qos_profile_sensor_data)
+        self.diagnostics = self.create_publisher(DiagnosticArray, "ground_diagnostics", 1)
+        self.status = GroundStatus()
         inputs = [message_filters.Subscriber(self, cls, topic, qos_profile=qos_profile_sensor_data)
                   for cls, topic in [(Detection2DArray, "tracks"), (CameraInfo, "camera_info")]]
+        # Register before TimeSynchronizer so even unmatched input is visible,
+        # and a synchronized callback observes both raw receive counters.
+        inputs[0].registerCallback(self.receive_tracks)
+        inputs[1].registerCallback(self.receive_info)
         self.sync = message_filters.TimeSynchronizer(inputs, 60)
         self.sync.registerCallback(self.project)
+        self.diagnostic_timer = self.create_timer(
+            1.0, self.publish_diagnostics, clock=Clock(clock_type=ClockType.STEADY_TIME))
+
+    def receive_tracks(self, msg):
+        self.status.tracks(stamp_ns(msg.header.stamp), msg.header.frame_id, len(msg.detections))
+
+    def receive_info(self, msg):
+        self.status.camera_info(stamp_ns(msg.header.stamp), msg.header.frame_id)
+
+    def publish_diagnostics(self):
+        snapshot = self.status.view()
+        status = DiagnosticStatus(level=snapshot['level'], name='opponent_ground/projection',
+                                  message=snapshot['message'], hardware_id='opponent_ground')
+        status.values = [KeyValue(key=key, value=value) for key, value in snapshot['values'].items()]
+        msg = DiagnosticArray(status=[status])
+        msg.header.stamp = self.get_clock().now().to_msg()
+        self.diagnostics.publish(msg)
 
     def project(self, msg, info):
         result = OpponentGroundPoints()
         result.header.stamp = msg.header.stamp
         result.header.frame_id = self.base
-        if (msg.header.frame_id == info.header.frame_id and msg.header.frame_id and
-                (info.width, info.height) == (640, 480) and max(info.binning_x, info.binning_y) <= 1 and
-                not (info.roi.x_offset or info.roi.y_offset) and
-                (info.roi.width, info.roi.height) in ((0, 0), (640, 480)) and Time.from_msg(msg.header.stamp).nanoseconds):
+        reason = projection_issue(msg, info)
+        detail = ''
+        if reason is None and not msg.detections:
+            reason = 'zero_tracks'
+        if reason is None:
             try:
                 tf = self.tf.lookup_transform(self.base, msg.header.frame_id,
                                               Time.from_msg(msg.header.stamp)).transform
             except TransformException as exc:
                 self.get_logger().warning(str(exc), throttle_duration_sec=5.0)
+                reason, detail = 'tf_unavailable', str(exc)
             else:
                 t, q = tf.translation, tf.rotation
                 for det in msg.detections:
@@ -59,6 +87,8 @@ class GroundNode(Node):
                         entry = OpponentGroundPoint(track_id=det.id)
                         entry.point.x, entry.point.y, entry.point.z = map(float, point)
                         result.tracks.append(entry)
+                reason = 'projected' if result.tracks else 'all_rejected'
+        self.status.synchronized(stamp_ns(msg.header.stamp), reason, len(result.tracks), detail)
         self.output.publish(result)
         marker = Marker(header=result.header, ns="opponent_contact", id=0, type=Marker.SPHERE_LIST)
         marker.action = Marker.ADD if result.tracks else Marker.DELETE

@@ -4,8 +4,8 @@
 # Source: https://github.com/ros2-gbp/foxglove_bridge-release/tree/release/lyrical/foxglove_bridge/3.6.0-1
 # Complete parameters from src/param_utils.cpp and include/foxglove_bridge/param_utils.hpp.
 # kart: exact telemetry allowlist, two client topics, VGL service only; no graph,
-# parameters, assets, images, camera calibration, image annotations, feature
-# clouds, tensors, cloud remote access or sysinfo. Racing publishes result data only.
+# parameters, assets, raw images, camera calibration, image annotations, feature
+# clouds, tensors, cloud remote access or sysinfo. Optional bbox JPEG only for debugging.
 # Standard ROS-managed parameters omitted except use_sim_time. num_threads is not
 # declared by this release. Empty string arrays use the upstream never-match idiom.
 /**/foxglove_bridge:
@@ -21,7 +21,8 @@
       - '^/tf$'
       - '^/tf_static$'
       - '^/clock$'
-      - '^/racing/(ground_markers|detections|tracks|ground_points)$'
+      - '^/racing/(ground_markers|detections|tracks|ground_points|ground_diagnostics)$'
+      - '^/racing/debug_image/compressed$'  # No publisher unless debug image is explicitly enabled.
       - '^/hdmap/(markers|centerline|raceline|customline|selected_lane)$'
       - '^/planning/reference_line$'
       - '^/visual_slam/tracking/(odometry|vo_pose|vo_pose_covariance|vo_path|slam_path)$'
