@@ -1894,6 +1894,8 @@ ROS結合・Jetsonでの処理負荷・実車収録は未確認。
 car（class_id="2"）だけを`/racing/tracks`（同型）へ追跡出力する。
 自身のROSノードは追加せず、既存のIsaac ROS decoderとopponent_tracker componentを組み合わせる。
 decoderの基準値はnum_classes=80・confidence_threshold=0.1・nms_threshold=0.45、trackerはtracked_class_id="2"。
+Foxgloveは画像を公開せず、`/racing/detections`・`/racing/tracks`の結果だけをRaw Messages／Tableで確認する。
+RGB・CameraInfo・ImageMarkerは公開しない。カメラからYOLOへのPC内入力は維持する。
 engineのbuild.jsonに従い、専用opponentモデルではnum_classes=1・tracked_class_id="0"を選ぶ。
 
 `scripts/bringup.sh --mode collect --perception /path/to/yolov8s.plan`（地図走行drive・TUIでも選択可）は

@@ -57,7 +57,9 @@ engineのshape・クラス数・hashをモデルprofileと照合し、異なる�
 RCカーの検出精度とTensorRTの実行速度は実データ・対象GPUで評価する。検出だけで車両制御へ接続しない。
 通常の地図走行でも認識を選択可能とし、起動TUIで検出のみ／検出＋car追跡を切り替える。
 参照ラインへの追従設定と物体追跡の設定は独立させる。認識OFFはengine未選択で表す。
-Foxgloveは全クラスの検出枠と確認済みの追跡枠を分け、Studioは件数・ID・scoreの有界な表示だけを行う。
+Foxgloveは画像を送らず、全クラスの検出とcarの追跡をDetection2DArrayの結果だけで確認する。
+RGB・CameraInfo・ImageMarkerをBridgeへ公開せず、Raw Messages／Tableを使う。
+画像はPC内の推論入力に維持する。Studioも件数・ID・scoreの有界な表示だけを行う。
 未受信・入力失効を0件と扱わず、撮影時刻と受信時刻の期限を守って古い一覧を消す。
 
 既存のViT-S/16事前学習重みを出発点に、空間patch特徴→neck→軽量検出headを候補とする。

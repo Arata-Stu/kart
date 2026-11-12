@@ -28,9 +28,7 @@ class FoxgloveTests(unittest.TestCase):
     def test_telemetry(self):
         for name in (
             "/tf_static",
-            "/racing/rgb",
-            "/racing/detection_boxes",
-            "/racing/tracking_boxes",
+            "/racing/detections",
             "/racing/tracks",
             "/racing/ground_markers",
             "/hdmap/markers",
@@ -44,6 +42,13 @@ class FoxgloveTests(unittest.TestCase):
             self.assertTrue(allowed("topic_whitelist", name), name)
         for name in (
             "/realsense/color/image_raw",
+            "/racing/rgb",
+            "/racing/rgb/compressed",
+            "/racing/detection_boxes",
+            "/racing/tracking_boxes",
+            "/realsense/color/camera_info",
+            "/realsense/color/camera_info/extra",
+            "/realsense/infra1/camera_info",
             "/racing/network_input",
             "/racing/tracking_boxes/extra",
             "/visual_slam/vis/landmarks_cloud",
@@ -69,6 +74,7 @@ class FoxgloveTests(unittest.TestCase):
             "/operation_mode/request",
             "/bag/request",
             "/racing/tracking_boxes",
+            "/realsense/color/camera_info",
             "/control/tracking_reference",
             "/control/tracking_markers",
             "/localization/pose_hint/extra",

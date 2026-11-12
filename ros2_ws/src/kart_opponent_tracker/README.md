@@ -66,11 +66,11 @@ max_range_m=10.0（水平距離上限、m）。RGB rawのplumb_bob/rational_poly
 640×480、ビニング・ROIなしを想定。地平線・画像下端・距離外・TF欠落は推定対象外。
 遮蔽、傾斜、取付姿勢のずれで誤差が出る。track IDを保持し、2D bboxの画像座標はそのまま残す。
 
-Foxglove用topic（bringupでは/racing配下）
+可視化用ROS topic（bringupでは/racing配下。ImageMarkerは通常のFoxglove Bridgeでは非公開）
 - opponent_tracker出力 /detection_boxes（visualization_msgs/msg/ImageMarker、best effort/volatile/depth 1）。
   各decoder入力のbboxを撮影stampの緑のLINE_LISTとして、購読者がいる間に出版する。空検出は空の点列。
 - opponent_tracker出力 /tracking_boxes（同型・QoS）。確認済みの追跡bboxを青のLINE_LISTで表示する。
-  FoxgloveのImageパネルで画像`/racing/rgb`へAnnotationsとして重ね、Sync timestampsを有効にする。
+  画像を使うPC内デバッグ向け。通常のFoxgloveへは画像・ImageMarkerを送らない。
   ID・class_id・scoreはRaw Messagesパネルの`/racing/tracks`で確認する。
   ImageMarkerはテキスト表示に使用せず、画像上の線枠と追跡データを分けて提供する。
 - opponent_ground出力 /ground_markers（visualization_msgs/msg/Marker、sensor data QoS）。

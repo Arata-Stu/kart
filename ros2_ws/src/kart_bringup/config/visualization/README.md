@@ -13,8 +13,6 @@ vehicle/localization/e2e launchへ重複includeしない。ROS namespaceはroot�
 |---|---|---|---|
 | ROS→表示 | /tf, /tf_static | tf2_msgs/msg/TFMessage | 地図・車体座標 |
 | ROS→表示 | /clock | rosgraph_msgs/msg/Clock | replay時計 |
-| ROS→表示 | /racing/rgb | sensor_msgs/msg/Image | 検出・追跡枠を重ねるRGB画像 |
-| ROS→表示 | /racing/{detection_boxes,tracking_boxes} | visualization_msgs/msg/ImageMarker | 全クラスの生検出枠（緑）／確認済みの車両追跡枠（青） |
 | ROS→表示 | /racing/{detections,tracks} | vision_msgs/msg/Detection2DArray | 検出のclass_id・score／追跡ID・class_id・score |
 | ROS→表示 | /racing/ground_markers | visualization_msgs/msg/Marker | 投影した路面接地点 |
 | ROS→表示 | /racing/ground_points | kart_interfaces/msg/OpponentGroundPoints | 路面接地点の座標とtrack ID |
@@ -41,7 +39,10 @@ vehicle/localization/e2e launchへ重複includeしない。ROS namespaceはroot�
 | ROS→表示 | /vehicle/vbec | std_msgs/msg/Float32 | BEC電圧 |
 | ROS→表示 | /vehicle/active_path | std_msgs/msg/UInt8 | 基板の経路 |
 
-相手車両評価用の/racing/rgbを除く画像・特徴点・tensor・HDMap全文JSON・rosout・parameter_eventsなどは非公開。
+画像・CameraInfo・画像注釈・特徴点・tensor・HDMap全文JSON・rosout・parameter_eventsなどは非公開。
+認識用RGBはPC内のYOLO入力へ使い、Foxgloveへは検出・追跡の結果データだけを送る。
+`/racing/rgb`、`/realsense/color/image_raw`、`/realsense/color/camera_info`、
+`/racing/detection_boxes`、`/racing/tracking_boxes`はBridgeが公開・購読しない。
 `connectionGraph`も無効にして、除外topicをグラフ経由で一覧化しない。
 Clientからの書込みは上記2topicと1serviceだけ。TF、AUTO指令、モード変更、録画操作、
 SetSlamPose、パラメータ変更、ファイル取得は公開しない。
@@ -104,10 +105,22 @@ macOSの`open`、Linuxの`xdg-open`とPython 3標準ライブラリを使用す�
 `openIn=desktop`でアプリを開く。未導入なら公式の案内ページが表示される。
 Bridgeの起動・SSH接続・localization要求はこのスクリプトでは行わない。
 
-物体検出・追跡はImageパネルの画像に`/racing/rgb`を選び、Annotationsへ
-`/racing/detection_boxes`（全クラスの生検出・緑）と`/racing/tracking_boxes`
-（確認済みの車両追跡・青）を追加する。Sync timestampsを有効にする。
-COCOモデルではcar（class_id=`"2"`）だけを追跡する。検出のみの起動では青枠と追跡配列は空になる。
-ID・class_id・scoreはRaw Messagesパネルの`/racing/tracks`、検出結果は`/racing/detections`で確認する。
-ImageMarkerの線枠に追跡IDの文字は描かず、IDはメッセージで確認する。
-路面投影を起動した場合は`/racing/ground_markers`を3Dで表示し、`/racing/ground_points`で座標を確認する。
+## 画像を送らずに認識結果を見る
+
+Raw Messagesパネルで`/racing/detections`（全80クラスの検出）、`/racing/tracks`（carの追跡）を選ぶ。
+COCOモデルではcar（class_id=`"2"`）だけを追跡する。検出のみの起動では追跡配列は空になる。
+`detections`配列を展開すると、各物体の次の値を確認できる。
+
+- `id`: 追跡ID（検出メッセージでは空の場合あり）
+- `results[0].hypothesis.class_id` / `score`: 検出クラスIDと信頼度
+- `bbox.center.position.x/y` / `bbox.size_x/y`: 画像内の中心・幅・高さ[pixel]
+- `header.stamp` / `frame_id`: 元画像の撮影時刻・frame
+
+Tableパネルでは`/racing/detections.detections`または`/racing/tracks.detections`を指定する。
+物体ごとに1行で表示され、`results`と`bbox`の入れ子を展開して確認できる。
+Raw Messages／Tableには画像・CameraInfoは不要。以前のImageパネルは閉じるか削除する。
+Bridgeを更新・再起動した後、`/racing/rgb`はFoxgloveのtopic一覧に出ない。
+路面投影を別途起動した場合は`/racing/ground_markers`を3Dで表示し、`/racing/ground_points`で座標を確認する。
+2D bboxだけを地面までの距離として扱わない。
+出典: [Raw Messages](https://docs.foxglove.dev/docs/visualization/panels/raw-messages)、
+[Table](https://docs.foxglove.dev/docs/visualization/panels/table)。

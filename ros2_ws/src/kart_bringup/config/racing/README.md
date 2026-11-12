@@ -123,9 +123,13 @@ flat-road推定点を/racing/ground_pointsへ出力する。2Dのみのbag評価
 
 ### Foxglove と取付高さ
 
-同一ROS domainで `ros2 launch kart_bringup foxglove.launch.py` を起動し、Imageパネルの
-画像に/racing/rgb、Annotationsに/racing/detection_boxesを選ぶ。Sync timestampsを有効にすると
-撮影時刻が同じ枠を確認できる。生検出のscoreは/racing/detections、追跡IDは/racing/tracksにある。
+同一ROS domainで `ros2 launch kart_bringup foxglove.launch.py` を起動し、Raw Messagesパネルで
+`/racing/detections`と`/racing/tracks`を選ぶ。class ID・score・bbox・追跡ID・撮影時刻を確認できる。
+Tableパネルでは`/racing/detections.detections`と`/racing/tracks.detections`で物体ごとに1行を表示する。
+帯域を抑えるため、RGB画像・CameraInfo・ImageMarkerはFoxgloveへ送らない。
+`/racing/rgb`は元の`/realsense/color/image_raw`をRGB8へ形式変換した640×480のPC内YOLO入力。
+YOLO用の画像入力は維持し、Bridgeの公開対象から画像を除外する。
+Raw Messages／TableにはCameraInfoは不要なので、旧Imageパネルは閉じるか削除する。
 ground起動時は3Dパネルでframeをbase_link、topicを/racing/ground_markersにする。
 評価器と一緒に見る場合はbridgeも評価domain（既定ROS_DOMAIN_ID=91）で起動する。
 
