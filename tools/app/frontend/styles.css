@@ -1372,6 +1372,8 @@ summary {
 .job-log-panel #job-log { font-size: 13px; line-height: 1.6; }
 
 .tuning-panel { padding: 8px 14px; border-bottom: 1px solid #b9c9d3; background: #f3f7fa; }
+.tuning-panel[open] { flex: none; max-height: min(48dvh, 420px); overflow-y: auto; overscroll-behavior: contain; }
+.tuning-panel > summary { position: sticky; top: -8px; padding: 4px 0; background: #f3f7fa; z-index: 1; }
 .tuning-panel summary { cursor: pointer; font-weight: 600; }
 .tuning-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
 .tuning-controls input { width: 72px; }
