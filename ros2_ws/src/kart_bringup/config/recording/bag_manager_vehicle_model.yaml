@@ -1,0 +1,70 @@
+# Vehicle-model recording: controller inputs/phases, vehicle state and mapless
+# odometry plus original stereo/IMU/TF for later offline pose reprocessing.
+# No RGB, Depth, EVS, VGL, E2E, planning or recovery topics. All recorder parameters
+# remain explicit, copied from recording/bag_manager.yaml.
+/**/kart_bag_manager:
+  ros__parameters:
+    output_dir: /workspaces/record
+    recording_name: ''
+    session_layout: true  # date/time/run_name layout; directories created only on START
+    record_all: false
+    topics:
+    - joy
+    - joy/connected
+    - joy/ready
+    - joy/status
+    - teleop/control_cmd
+    - teleop/fixed_config
+    - vehicle/control_cmd
+    - operation_mode/request
+    - operation_mode/state
+    - bag/request
+    - bag/status
+    - vehicle/trim/request
+    - vehicle/trim/state
+    - vehicle/rc_channels
+    - vehicle/output_channels
+    - vehicle/vbec
+    - vehicle/active_path
+    - diagnostics
+    - /system/jetson/diagnostics
+    - /tf
+    - /tf_static
+    - robot_description
+    - joint_states
+    - realsense/infra1/camera_info
+    - realsense/infra1/image_rect_raw
+    - realsense/infra2/camera_info
+    - realsense/infra2/image_rect_raw
+    - realsense/accel/imu_info
+    - realsense/gyro/imu_info
+    - realsense/imu
+    - realsense/accel/sample
+    - realsense/gyro/sample
+    - visual_slam/tracking/odometry
+    - /realsense/diagnostics
+    - /localization/vslam/diagnostics
+    exclude_topics: []
+    storage_id: mcap
+    serialization_format: ''
+    max_bag_size: 0
+    recording_split_duration_s: 0
+    max_cache_size: 0
+    compression_mode: ''
+    compression_format: ''
+    compression_queue_size: 0
+    compression_threads: 0
+    qos_profile_overrides_path: ''
+    include_hidden_topics: false
+    no_discovery: false
+    snapshot_mode: false
+    start_paused: false
+    extra_args: []
+    status_period_s: 1.0
+    raw_recording_request_topic: ''
+    raw_recording_driver_node: ''
+    raw_recording_service_timeout_s: 5.0
+    recording_start_timeout_s: 5.0
+    stop_timeout_s: 10.0
+    terminate_timeout_s: 5.0
+    use_sim_time: false

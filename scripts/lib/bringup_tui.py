@@ -17,6 +17,16 @@ EVALUATIONS = {
     'fresh': 'VSLAM（保存地図なし・新規SLAM）',
     'e2e_latency': 'E2E遅延（RGB bag → 推論 → 制御topic）',
 }
+RECORD_LABELS = {
+    'standard': '通常記録',
+    'vslam-map': 'VSLAM map最小（stereo VO / Infra＋TFのみ）',
+    'vehicle-model': '車両モデル用（地図なしVO・固定駆動／惰行）',
+}
+PROFILE_FIELDS = (
+    'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
+    'evs', 'no_evs', 'evs_backend', 'evs_aggregation', 'evs_serial', 'evs_tensor_config',
+    'evs_bias_file', 'evs_image', 'perception', 'auto_fixed_throttle', 'auto_fixed_throttle_r2_gate',
+)
 
 
 def select_purpose(args, choose):
@@ -43,6 +53,9 @@ class Editor:
         self.root = Path(root)
         self.choose = choose
         self.inferred = {}  # Only these values may be reset when changing assets.
+        self.profile_restore = None
+        if getattr(args, 'record_profile', '') == 'vehicle-model':
+            self.profile_restore = {k: deepcopy(getattr(args, k)) for k in PROFILE_FIELDS}
 
     @property
     def live(self):
@@ -170,7 +183,8 @@ class Editor:
             if a.evs:
                 print('EVS詳細:', self.evs_summary())
             if a.mode == 'collect':
-                rows['record_profile'] = '記録profile: ' + (getattr(a, 'record_profile', '') or 'standard')
+                profile = getattr(a, 'record_profile', '') or 'standard'
+                rows['record_profile'] = '記録profile: ' + RECORD_LABELS.get(profile, profile)
             if a.mode in ('collect', 'environment'):
                 limit = self.params('input/joy_manager.yaml', 'kart_joy_manager')['speed_scale'] if a.joy_max_throttle is None else a.joy_max_throttle
                 rows['joy_limit'] = f'制御 / Joy最大スロットル: {limit}'
@@ -211,12 +225,21 @@ class Editor:
             settings = runtime_settings(a.e2e_model_dir)
             value = settings['fixed_throttle'] if a.e2e_fixed_throttle is None else a.e2e_fixed_throttle
             return 'モデル出力' if a.e2e_throttle_mode == 'model' else f'モデル操舵＋固定スロットル {value}'
-        settings = self.params('input/joy_manager.yaml', 'kart_joy_manager')
+        settings = self.control_settings()
         value = settings['auto_fixed_throttle'] if a.auto_fixed_throttle is None else a.auto_fixed_throttle
         gate = settings['auto_fixed_throttle_r2_gate'] if getattr(a, 'auto_fixed_throttle_r2_gate', None) is None else a.auto_fixed_throttle_r2_gate
+        if getattr(a, 'record_profile', '') == 'vehicle-model' and (not gate or not math.isfinite(value) or value < 0):
+            return '車両モデル用：固定スロットル／R2切替を選び直してください'
         if a.mode in ('collect', 'environment') and gate and value >= 0:
             return f'車両同定：R2で固定 {value}／惰行＋手動操舵'
         return '通常AUTO' if value < 0 else f'固定スロットル {value}＋手動操舵'
+
+    def control_settings(self):
+        settings = dict(self.params('input/joy_manager.yaml', 'kart_joy_manager'))
+        if getattr(self.args, 'record_profile', '') == 'vehicle-model':
+            from kart_bringup.recording_profiles import vehicle_model_defaults
+            settings.update(vehicle_model_defaults(self.config))
+        return settings
 
     def foxglove_enabled(self):
         from kart_bringup.mission import composition
@@ -251,10 +274,12 @@ class Editor:
             if action in ('start', 'cancel'):
                 return action == 'start'
             before, inferred = deepcopy(self.args), dict(self.inferred)
+            profile_restore = deepcopy(self.profile_restore)
             try:
                 self.edit(action)
             except (ValueError, OSError, KeyError, TypeError, yaml.YAMLError) as error:
                 self.args, self.inferred = before, inferred
+                self.profile_restore = profile_restore
                 print(f'変更できません: {error}（変更前の設定を保持）')
 
     def edit(self, action):
@@ -314,10 +339,29 @@ class Editor:
             if action != 'depth': setattr(a, action + '_fps', None)
             self.inferred.pop(action + '_profile', None)
         elif action == 'record_profile':
-            a.record_profile = self.pick('記録profile', ['standard', 'vslam-map'],
+            previous = getattr(a, 'record_profile', '') or 'standard'
+            selected = self.pick('記録profile', RECORD_LABELS,
                 getattr(a, 'record_profile', '') or 'standard',
-                lambda v: '通常記録' if v == 'standard' else 'VSLAM map最小（stereo VO / Infra＋TFのみ）')
-            if a.record_profile == 'vslam-map':
+                RECORD_LABELS.__getitem__)
+            if previous == 'vehicle-model' and selected != previous and self.profile_restore is not None:
+                for key, value in self.profile_restore.items():
+                    setattr(a, key, value)
+                self.profile_restore = None
+            if selected == 'vehicle-model' and previous != selected:
+                self.profile_restore = {k: deepcopy(getattr(a, k)) for k in PROFILE_FIELDS}
+                a.rgb_fps = a.infra_fps = None
+                a.rgb_profile = a.infra_profile = a.depth_profile = a.imu_profile = ''
+                a.perception = 'off'
+                a.evs, a.no_evs = False, True
+                for key in ('evs_backend', 'evs_aggregation', 'evs_serial', 'evs_tensor_config', 'evs_bias_file'):
+                    setattr(a, key, '')
+                a.evs_image = None
+                a.record_profile = selected
+                self.edit_control()
+            a.record_profile = selected
+            if selected == 'vslam-map':
+                a.auto_fixed_throttle = -1.0
+                a.auto_fixed_throttle_r2_gate = False
                 a.rgb_fps = a.infra_fps = None
                 a.rgb_profile = a.depth_profile = a.imu_profile = ''
                 if a.infra_profile == '0':
@@ -402,6 +446,17 @@ class Editor:
 
     def edit_control(self):
         a = self.args
+        if getattr(a, 'record_profile', '') == 'vehicle-model':
+            settings = self.control_settings()
+            if a.joy_max_throttle is not None:
+                settings['speed_scale'] = a.joy_max_throttle
+            current = a.auto_fixed_throttle if a.auto_fixed_throttle is not None and a.auto_fixed_throttle >= 0 else settings['auto_fixed_throttle']
+            value = float(input(f'車両モデル用 固定スロットル 0..{settings["speed_scale"]}（R2で駆動／惰行）[{current}] > ').strip() or current)
+            if not math.isfinite(value) or not 0 <= value <= settings['speed_scale']:
+                raise ValueError('固定スロットルは0..Joy最大スロットルの有限値を指定してください')
+            a.auto_fixed_throttle = value
+            a.auto_fixed_throttle_r2_gate = True
+            return
         if a.mode == 'e2e':
             from kart_e2e.contract import model_contract, runtime_settings
             _, output = model_contract(a.e2e_model_dir)

@@ -140,7 +140,7 @@ def argument_parser():
     parser.add_argument("--model-root", type=Path, default=ROOT / "models")
     parser.add_argument("--rgb-fps", choices=("0", "30", "60", "90"))
     parser.add_argument("--infra-fps", choices=("0", "30", "60", "90"))
-    parser.add_argument("--record-profile", choices=("standard", "vslam-map"), default="", help="記録profile: standard=通常 / vslam-map=stereo VO地図用最小構成")
+    parser.add_argument("--record-profile", choices=("standard", "vslam-map", "vehicle-model"), default="", help="記録profile: standard=通常 / vslam-map=地図用最小 / vehicle-model=車両モデル用（地図なしVO・固定駆動／惰行）")
     parser.add_argument("--rgb-profile", default="", help="RGB WIDTHxHEIGHTxFPS; 0 disables")
     parser.add_argument("--imu-profile", choices=("low", "high", "off"), default="", help="IMU: low=accel100/gyro200Hz, high=accel200/gyro400Hz, off=なし; 未指定はYAML")
     parser.add_argument("--depth-profile", default="", help="Depth Z16 WIDTHxHEIGHTxFPS; 0 disables; Infra同時使用時は同じ解像度・FPS")
@@ -211,6 +211,11 @@ def build_command(args, config):
     from kart_bringup.configuration import collection_r2_gate
     gate_value = getattr(args, 'auto_fixed_throttle_r2_gate', None)
     r2_gate = collection_r2_gate(args.mode, '' if gate_value is None else str(gate_value).lower())
+    from kart_bringup.recording_profiles import profile_vehicle_overrides
+    profile_controls = profile_vehicle_overrides(config, args.record_profile, args.mode, {
+        'auto_fixed_throttle': '' if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle),
+        'auto_fixed_throttle_r2_gate': r2_gate,
+    })
     if args.mode == "e2e-latency":
         return latency_entry(args, config)
     if args.latency_output:
@@ -285,6 +290,14 @@ def build_command(args, config):
             print(f"相手車認識: {engine} (RealSenseと同一container)")
     from kart_bringup.mission import validate_record_profile
     validate_record_profile(args.record_profile, args.mode, sensors, args.evs)
+    if args.record_profile == 'vehicle-model':
+        if engine:
+            raise ValueError('vehicle-model does not use opponent perception')
+        if not composition(config / 'mission.yaml', args.mode)['create_sensor_container']:
+            raise ValueError('vehicle-model must own its sensor container')
+        from kart_bringup.tuning import mapless_configuration
+        mapless_configuration(config, sensors)
+        print('車両モデル用記録: 地図なしVOを同一sensor containerへ追加。地図・VGL・追従制御なし。')
     if section_routing:
         from kart_bringup.localization import resolve
         from kart_bringup.vehicle_tf import load_transforms
@@ -335,8 +348,8 @@ def build_command(args, config):
         _, modules = load(config / "bringup.yaml", {
             "enable_bridge": str(not args.no_bridge).lower(), "device": args.device,
             "joy_max_throttle": "" if args.joy_max_throttle is None else str(args.joy_max_throttle),
-            "auto_fixed_throttle": '-1' if args.mode == 'e2e' else ('' if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle)),
-            "auto_fixed_throttle_r2_gate": r2_gate,
+            "auto_fixed_throttle": '-1' if args.mode == 'e2e' else profile_controls['auto_fixed_throttle'],
+            "auto_fixed_throttle_r2_gate": profile_controls['auto_fixed_throttle_r2_gate'],
         })
         if not args.no_bridge:
             print(f"車両基板: {modules['bridge']['effective']['device']}")
@@ -387,7 +400,8 @@ def build_command(args, config):
 
         from recording_name import sensor_recording_name
         recording_name = args.run_name or sensor_recording_name(
-            args.mode, sensors, recording_evs_paths if args.evs else None,
+            'vehicle_model' if args.record_profile == 'vehicle-model' else args.mode,
+            sensors, recording_evs_paths if args.evs else None,
             recording_evs_overrides if args.evs else None)
         Settings(recording_name=recording_name).validate()
     else:
@@ -401,8 +415,8 @@ def build_command(args, config):
         "record_profile": args.record_profile,
         "recovery": args.recovery,
         "joy_max_throttle": None if args.joy_max_throttle is None else str(args.joy_max_throttle),
-        "auto_fixed_throttle": None if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle),
-        "auto_fixed_throttle_r2_gate": r2_gate or None,
+        "auto_fixed_throttle": profile_controls['auto_fixed_throttle'] or None,
+        "auto_fixed_throttle_r2_gate": profile_controls['auto_fixed_throttle_r2_gate'] or None,
         "e2e_throttle_mode": args.e2e_throttle_mode,
         "e2e_fixed_throttle": None if args.e2e_fixed_throttle is None else str(args.e2e_fixed_throttle),
         "rgb_profile": args.rgb_profile,

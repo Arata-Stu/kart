@@ -317,6 +317,60 @@ class MissionTests(unittest.TestCase):
 
 
 class MissionCompositionTests(unittest.TestCase):
+    def test_vehicle_model_owns_one_camera_container_and_mapless_odometry(self):
+        import importlib.util
+        from types import ModuleType, SimpleNamespace
+        from unittest.mock import MagicMock, patch
+        import yaml
+
+        lu=ModuleType('isaac_ros_launch_utils');lu.__path__=[]
+        lu.get_path=lambda pkg,suffix:PACKAGE/suffix
+        lu.log_info=lambda text:('log',text)
+        lu.component_container=MagicMock(return_value=('container',))
+        lu.include=MagicMock(side_effect=lambda pkg,path,**kwargs:(path,kwargs))
+        lut=ModuleType('isaac_ros_launch_utils.all_types')
+        index=ModuleType('ament_index_python');index.__path__=[]
+        packages=ModuleType('ament_index_python.packages')
+        packages.get_package_share_directory=lambda name:'/mock/'+name
+        with patch.dict(sys.modules,{'isaac_ros_launch_utils':lu,
+                'isaac_ros_launch_utils.all_types':lut,'ament_index_python':index,
+                'ament_index_python.packages':packages}):
+            spec=importlib.util.spec_from_file_location('vehicle_model_mission',PACKAGE/'launch/mission.launch.py')
+            module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+            values={key:'' for key in (*module.OVERRIDES,'device','record_dir','run_name',
+                'rgb_fps','infra_fps','map_dir','model_dir','map_file','lane_id','line_type',
+                'e2e_model_dir','multicam_mode')}
+            values.update(mode='collect',record_profile='vehicle-model',enable_bridge='false',
+                          infra_profile='424x240x60',imu_profile='low')
+            actions=module.add_mission(SimpleNamespace(**values))
+            paths=[call.args[1] for call in lu.include.call_args_list]
+            self.assertEqual(paths,['launch/modules/sensors/realsense.launch.py',
+                'launch/vehicle.launch.py','launch/modules/localization/vslam.launch.py'])
+            lu.component_container.assert_called_once_with('kart_sensor_container',container_type='multithreaded')
+            camera,vehicle,vslam=[call.kwargs['launch_arguments'] for call in lu.include.call_args_list]
+            self.assertEqual(camera['container_name'],vslam['container_name'])
+            self.assertEqual(vslam['container_name'],'/kart_sensor_container')
+            self.assertEqual(camera['infra_profile'],'424x240x60')
+            self.assertTrue(camera['camera_config'].endswith('realsense_vehicle_model.yaml'))
+            self.assertTrue(vehicle['bag_config'].endswith('bag_manager_vehicle_model.yaml'))
+            self.assertEqual(float(vehicle['auto_fixed_throttle']),.1)
+            self.assertEqual(vehicle['auto_fixed_throttle_r2_gate'],'true')
+            params=json.loads(vslam['parameters_json'])
+            expected=yaml.safe_load((CONFIG/'tuning/cuvslam.yaml').read_text())['/**/visual_slam']['ros__parameters']
+            self.assertEqual(params,expected)
+            self.assertFalse(params['enable_localization_n_mapping'])
+            self.assertFalse(params['publish_map_to_odom_tf'] or params['publish_odom_to_base_tf'])
+            remaps=json.loads(vslam['remappings_json'])
+            self.assertIn(['/diagnostics','/localization/vslam/diagnostics'],remaps)
+            self.assertFalse(any('AUTO request' in str(action) for action in actions))
+            self.assertTrue(any('effective VSLAM=' in str(action) for action in actions))
+            self.assertLess(next(i for i,action in enumerate(actions) if 'effective VSLAM=' in str(action)),
+                            actions.index(('container',)))
+            with self.assertRaisesRegex(ValueError,'own its sensor container'):
+                module.add_mission(SimpleNamespace(**dict(values,create_sensor_container='false')))
+            with self.assertRaisesRegex(ValueError,'saved maps'):
+                module.add_mission(SimpleNamespace(**dict(values,map_dir='/unrelated/map')))
+
     def test_realsense_launch_passes_numeric_off_to_driver(self):
         import importlib.util
         from types import ModuleType, SimpleNamespace

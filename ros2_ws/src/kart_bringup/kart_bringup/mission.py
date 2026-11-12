@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 import yaml
+from .recording_profiles import validate_profile_name
 
 KINDS = ("centerline", "raceline", "customline")
 
@@ -59,16 +60,22 @@ def validate_camera_profile(stream, profile):
 
 def camera_config(root, mode, record_profile=""):
     """Select the full static sensor config, shared by CLI and launch."""
+    validate_profile_name(record_profile, mode)
     if record_profile == "vslam-map":
         return Path(root) / "sensors/realsense_vslam_map.yaml"
+    if record_profile == "vehicle-model":
+        return Path(root) / "sensors/realsense_vehicle_model.yaml"
     return Path(root) / "sensors" / (
         "realsense_environment.yaml" if mode == "environment" else "realsense.yaml"
     )
 
 
 def recording_config(root, mode, evs=False, record_profile=""):
+    validate_profile_name(record_profile, mode)
     if record_profile == "vslam-map":
         return Path(root) / "recording/bag_manager_vslam_map.yaml"
+    if record_profile == "vehicle-model":
+        return Path(root) / "recording/bag_manager_vehicle_model.yaml"
     suffix = "_environment" if mode == "environment" else ""
     suffix += "_openeb" if evs else ""
     return Path(root) / "recording" / f"bag_manager{suffix}.yaml"
@@ -299,12 +306,17 @@ def validate_localization_imu(parameters, sensors):
 
 
 def validate_record_profile(profile, mode, sensors, evs):
-    if profile not in ("", "standard", "vslam-map"):
-        raise ValueError(f"Unknown record profile: {profile}")
+    validate_profile_name(profile, mode)
     if profile in ("", "standard"):
         return
-    if mode != "collect":
-        raise ValueError("vslam-map profileはcollect専用です")
+    if profile == "vehicle-model":
+        if evs or sensors["enable_color"] or sensors["enable_depth"]:
+            raise ValueError("vehicle-model: RGB・Depth・EVSはOFFにしてください")
+        if not (sensors["enable_infra1"] and sensors["enable_infra2"]):
+            raise ValueError("vehicle-model requires both stereo Infra streams")
+        if not (sensors["enable_accel"] and sensors["enable_gyro"] and sensors["unite_imu_method"] == 2):
+            raise ValueError("vehicle-model requires united accel/gyro IMU (choose low or high)")
+        return
     if evs or any(sensors[k] for k in ("enable_color", "enable_depth", "enable_accel", "enable_gyro")):
         raise ValueError("vslam-map: RGB・Depth・IMU・EVSはOFFにしてください（通常記録はstandard）")
     if not (sensors["enable_infra1"] and sensors["enable_infra2"]):

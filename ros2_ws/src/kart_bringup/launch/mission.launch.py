@@ -1,5 +1,6 @@
 """Collect, drive or E2E composition. Never starts recording or requests AUTO."""
 
+import json
 import isaac_ros_launch_utils as lu
 from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
@@ -8,6 +9,7 @@ from kart_bringup.configuration import load, collection_r2_gate
 from kart_bringup.localization import resolve
 from kart_bringup.mission import composition, hdmap_choices, sensor_parameters, camera_config, recording_config, validate_localization_imu, validate_record_profile
 from kart_bringup.vehicle_tf import load_transforms
+from kart_bringup.recording_profiles import profile_vehicle_overrides
 
 OVERRIDES = (
     "sensor_container",
@@ -52,6 +54,7 @@ def add_mission(args):
         "auto_fixed_throttle_r2_gate": collection_r2_gate(
             args.mode, getattr(args, "auto_fixed_throttle_r2_gate", "")),
     }
+    vehicle = profile_vehicle_overrides(root, record_profile, args.mode, vehicle)
     if args.mode == "environment" or cfg["enable_evs"] or record_profile:
         vehicle["bag_config"] = str(recording_config(root, args.mode, cfg["enable_evs"], record_profile))
     if cfg['e2e']:
@@ -82,6 +85,16 @@ def add_mission(args):
     if vehicle_modules['joy_manager']['effective']['auto_fixed_throttle_r2_gate'] and not (
             params['enable_infra1'] and params['enable_infra2']):
         raise ValueError('auto_fixed_throttle_r2_gate requires stereo Infra for offline vehicle speed estimation')
+    mapless = None
+    if record_profile == 'vehicle-model':
+        if not cfg['create_sensor_container']:
+            raise ValueError('vehicle-model must own its sensor container; stop other mission launches first')
+        if engine or cfg['localization'] or cfg['tracking'] or cfg['e2e']:
+            raise ValueError('vehicle-model cannot start perception, saved-map localization, tracking or E2E')
+        if any(getattr(args, key, '') for key in ('map_dir', 'map_file', 'model_dir', 'lane_id', 'line_type', 'e2e_model_dir')):
+            raise ValueError('vehicle-model does not use saved maps, lanes or models')
+        from kart_bringup.tuning import mapless_configuration
+        mapless = mapless_configuration(root, params, multicam_mode=args.multicam_mode)
     if parking_site and vehicle_modules["joy_manager"]["effective"]["auto_fixed_throttle"] >= 0:
         raise ValueError("Parking cannot use fixed AUTO throttle")
     from kart_bringup.recovery import configuration, validate_inputs
@@ -137,6 +150,11 @@ def add_mission(args):
             f"Mission: {args.mode}; config: {cfg}; recording/AUTO require Joy operation"
         )
     ]
+    if mapless is not None:
+        mapless_params, mapless_remaps = mapless
+        actions.append(lu.log_info(
+            f'Vehicle-model mapless odometry: config={root / "tuning/cuvslam.yaml"}; '
+            f'effective VSLAM={mapless_params}; remaps={mapless_remaps}. Recording and AUTO remain explicit.'))
     if cfg["create_sensor_container"] and realsense_enabled:
         actions.append(
             lu.component_container(
@@ -195,6 +213,13 @@ def add_mission(args):
             )
         )
     actions.append(include("vehicle.launch.py", vehicle))
+    if mapless is not None:
+        mapless_params, mapless_remaps = mapless
+        actions.append(include('modules/localization/vslam.launch.py', {
+            'container_name': '/' + cfg['sensor_container'].lstrip('/'),
+            'parameters_json': json.dumps(mapless_params),
+            'remappings_json': json.dumps(mapless_remaps),
+        }))
     if cfg["localization"]:
         actions.append(
             include(

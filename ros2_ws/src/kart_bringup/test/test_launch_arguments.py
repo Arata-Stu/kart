@@ -134,7 +134,10 @@ class LaunchArgumentTests(unittest.TestCase):
                 context = dict(model_dir='/model', container_name='/event_camera/tensor_container' if modality == 'evs' else '/external', create_container='false',
                                evs_tensor_config='/tensor.yaml', use_fixed_throttle='true',
                                fixed_throttle='0', drive_enabled='false', use_sim_time='false', recovery='off')
-                with (patch('kart_e2e.engine_cache.require_engine'),
+                # Other launch tests restore sys.modules after stubbing ROS.
+                # Patch the concrete module used by the callback's local import,
+                # rather than a stale engine_cache attribute on its parent package.
+                with (patch.object(importlib.import_module('kart_e2e.engine_cache'), 'require_engine'),
                       patch.object(pipeline, 'require_engine', create=True),
                       patch.object(pipeline, 'runtime_settings', return_value={}),
                       patch.object(pipeline, 'validate_evs_tensor', create=True),

@@ -354,7 +354,7 @@ HDMapを選んだだけで無関係なbundleを自動対応させない。
 
 | mode | 起動内容 |
 |---|---|
-| collect | RealSense、Joy、mode manager、command mux、車両bridge、bag manager、Jetson jtop |
+| collect | RealSense、Joy、mode manager、command mux、車両bridge、bag manager、Jetson jtop。vehicle-model profileは地図なしVOも追加 |
 | drive | collect一式＋VSLAM/VGL、HDMap/reference line、Pure Pursuit、速度PID |
 | e2e | collect一式＋公式image encoder/TensorRT＋control decoder。VSLAM/VGLなし |
 | eval | bag＋保存map localization、mapなしVSLAM診断、またはE2E latency。実センサ・車両・追従・録画なし |
@@ -793,8 +793,9 @@ mapなしVO/VIO、保存mapのVO/VIO、VGL併用のいずれでも設定でき�
 | 2 Precision | 精度重視・処理負荷は増える |
 
 既定候補は対応する運用YAMLの値を読む。現在はlocalization/simとも1。
-`--multicam-mode 0|1|2`で明示した場合は選択を省略する。collect/E2EはVSLAMを
-起動しないためこの指定を拒否する。選択値はcuVSLAMだけへ渡し、VGLには渡さない。
+`--multicam-mode 0|1|2`で明示した場合は選択を省略する。collect/E2EのCLIではこの指定を拒否する。
+vehicle-model profileのVOは`config/tuning/cuvslam.yaml`の値を使う。
+選択値はcuVSLAMだけへ渡し、VGLには渡さない。
 
 ```bash
 bash scripts/bringup.sh --multicam-mode 2
@@ -1803,9 +1804,10 @@ bash scripts/bringup.sh --mode collect --record-profile vslam-map --dry-run
 ```
 
 独自CLI/launch引数 `--record-profile` / `record_profile` は既定空文字（従来設定）。
-`standard` は通常記録、`vslam-map` はcollect専用のstereo VO地図入力記録。
-ノードやserviceは追加しない。既存`realsense`と`kart_bag_manager`を使用し、
-録画はR1開始／L1停止または既存UIから操作する。自動録画・SLAMの同時起動はしない。
+`standard` は通常記録、`vslam-map` はcollect専用のstereo VO地図入力記録、
+`vehicle-model` はcollect専用の車両モデル推定用記録。
+以下の`vslam-map`最小profileではノードやserviceを追加せず、既存`realsense`と`kart_bag_manager`を使用する。
+録画はR1開始／L1停止または既存UIから操作する。最小profileは自動録画・SLAMの同時起動を行わない。
 
 `config/sensors/realsense_vslam_map.yaml` と
 `config/recording/bag_manager_vslam_map.yaml` が全parameterを保持する静的設定。
@@ -1835,6 +1837,56 @@ VIO（tracking_mode=1）にはIMUが別途必要なため、このbagはstereo V
 RGB/Depthを必要とする密な再構成やE2E学習用の記録にはstandardを使う。
 topic削減は欠落防止の保証ではない。収録後に左右のstamp・フレーム数・欠落区間を確認する。
 portable testとdry-runで設定選択・競合拒否を検証。ROS結合・Jetson実機録画は未確認。
+
+## 車両モデル用記録profile
+
+`bash scripts/bringup.sh`のTUIで「データ記録」→「記録profile」→
+「車両モデル用（地図なしVO・固定駆動／惰行）」を選び、固定スロットル値を入力する。
+「制御 / AUTO」から値を編集できる。通常profileへ戻すと、profile選択前のセンサー・EVS・制御設定を復元する。
+記録名・保存先・Joy上限など、profileの管理対象外の編集は保持する。
+
+```bash
+bash scripts/bringup.sh --mode collect --record-profile vehicle-model
+# 固定値を明示する場合
+bash scripts/bringup.sh --mode collect --record-profile vehicle-model --auto-fixed-throttle 0.125
+```
+
+| 設定ファイル | 用途・既定値 |
+| --- | --- |
+| `config/sensors/realsense_vehicle_model.yaml` | 全RealSense parameter。RGB/Depth OFF、左右Infra Y8 640×480・90fps、統合IMUは加速度200/ジャイロ400Hz |
+| `config/recording/bag_manager_vehicle_model.yaml` | 全bag manager parameter。MCAP、record_all=false、35 topic、EVS RAW連携なし |
+| `config/recording/vehicle_model.yaml` | 独自profile設定（ROS parameterではない）。固定throttle初期値0.10、R2 gate=true |
+| `config/tuning/cuvslam.yaml` | 全VO parameter。既定stereo VO、base_link基準、地図保存/読込み・mapping・動的TF出版なし |
+
+profile自体は独自ROSノード・topic・serviceを持たず、既存の`/realsense`、
+`/kart_joy_manager`、`/kart_bag_manager`、`/visual_slam`等を組み合わせる。
+missionが所有する同じsensor containerへcameraとVOを各1回だけloadする。
+保存地図・HDMap・VGL・追従制御は不要。起動時に採用sensor/bag/VO設定を表示する。
+ノードの入出力・QoSとparameterの意味は既存の各モジュール説明に従う。
+
+録画対象には、左右画像・CameraInfo・統合/生IMU・校正・TF、
+`/visual_slam/tracking/odometry`（`nav_msgs/msg/Odometry`）、
+`/localization/vslam/diagnostics`と`/diagnostics`（`diagnostic_msgs/msg/DiagnosticArray`）、
+`/vehicle/control_cmd`（`kart_interfaces/msg/ControlCommand`）、
+`/operation_mode/state`（`kart_interfaces/msg/OperationModeState`）、
+`/teleop/fixed_config`（`std_msgs/msg/String`）と基板経路・PWM報告・trim・Joyを含む。
+元stereo/IMU/固定TFも残すため、オンラインVOが不良な場合はofflineで再処理できる。
+
+明示的な固定値はprofile初期値より優先する。固定値は補正前の正規化要求で車速ではない。
+負の固定値、R2ゲート無効、RGB/Depth/EVS有効、左右Infraや統合IMU無効、相手車認識、
+外部所有sensor containerや保存地図指定は起動前に拒否する。別の有効なInfra profileやIMU lowは明示指定できる。
+入力値・センサーの不整合を黙って上書きしない。
+記録名未指定では`vehicle_model_...`を使い、明示`--run-name`は保持する。
+
+□保持＋R2押下で固定駆動、R2解放で同じAUTOのまま中立・惰行、□解除・×でSTOP。
+AUTO入口の0.3秒中立待機後にR2を離してから押す。録画はR1開始／L1停止で独立し、自動AUTO・録画開始はない。
+オンラインVOの良否は駆動許可を自動変更せず、解析側で品質不良区間を除外する。
+VOは推定値、中立は物理停止・制動完了の確認ではない。
+
+`analyze --mode auto --bag ...`で収録済みodometryと指令から解析できる。
+詳細手順は[vehicle_tuning](../../../tools/vehicle_tuning/README.md)を参照。
+profile設定・TUI選択/復元・CLI・単一container構成をROS非依存テストで確認する。
+ROS結合・Jetsonでの処理負荷・実車収録は未確認。
 
 相手車両の重み配置・TensorRT build・録画RGBの検出ギャラリー・任意のbase_link接地点推定は[racing設定](config/racing/README.md)参照。
 

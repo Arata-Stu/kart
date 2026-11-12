@@ -127,7 +127,7 @@ rule-based/E2E/他のAUTO指令publisherとの併用は不可。
 
 標準`config/recording/bag_manager.yaml`とOpenEB版は以下を含む。固定指令の状態topicも追加済み。
 列挙されているだけでは実データがある保証にならない。`check`と`analyze`で確認する。
-通常の`bringup.sh collect`だけではVSLAMは起動しないので、本専用入口を使う。
+standardの`bringup.sh collect`だけではVSLAMは起動しない。本専用入口または車両モデル用profileを使う。
 
 | 区分 | topic | 型 | 用途・条件 |
 |---|---|---|---|
@@ -414,12 +414,25 @@ STOPでモードボタンを離して入力を中立にし、D-pad上/下を押�
 INFOログの`AUTO fixed throttle selected`で現在値と上限を確認する。長押しの連続変更なし。
 □保持で固定AUTO＋手動ステア、△保持で通常MANUAL。録画はR1開始/L1停止で独立。
 現在値は既存`/teleop/fixed_config`へ記録する。MANUAL中も上下のトリム調整は無効となる。
-通常collectはオンラインVSLAMを起動しないため、速度解析には記録したstereoからoffline poseを求める。
+standardの通常collectはオンラインVSLAMを起動しないため、速度解析には記録したstereoからoffline poseを求める。
 固定AUTO区間の解析には`--mode auto`を使う。
 このD-pad調整はJoy managerの`auto_fixed_throttle`用で、別ノードの
 `tuning_collect fixed_command:=true` / `vehicle_tuning.sh control`を操作する機能ではない。
 
 ## 車両同定用：R2で固定駆動と惰行を記録
+
+一式をTUIから選ぶ場合は、`bash scripts/bringup.sh`→「データ記録」→「記録profile」→
+「車両モデル用」を選び、固定値を入力する。地図なしVO、左右Infra、IMUとR2切替が揃う。
+
+```bash
+bash scripts/bringup.sh --mode collect --record-profile vehicle-model
+```
+
+このprofileはRGB/Depth/EVS OFF、Infra 640×480・90fps、IMU加速度200/ジャイロ400Hzが既定。
+固定値初期値0.10（正規化要求）とR2 gate=trueを使い、明示`--auto-fixed-throttle`を優先する。
+速度odometryと診断に加えて元stereo/IMU/TFも保存する。録画やAUTOの自動開始はない。
+記録名未指定は`vehicle_model_...`。通常profileへ戻すと、選択前の設定を復元する。
+全設定とtopicは[kart_bringupのprofile説明](../../ros2_ws/src/kart_bringup/README.md#車両モデル用記録profile)を参照。
 
 同じAUTO内で固定スロットルと惰行を繰り返す場合は、通常collectの固定値に
 `--auto-fixed-throttle-r2-gate`を明示する。これはJoy managerの追加操作で、専用のAUTO指令producerは増やさない。
@@ -467,7 +480,7 @@ R2の元正規化軸は0.10以上でON、0.05以下でOFF、中間は直前状�
 設定値と実際に生成した補正前要求を照合できる。車速・基板ackを表すフィールドではない。
 段階の例は`entry_neutral`→`coast`→`drive`→`coast`。録画や走行開始の自動操作はない。
 
-通常collectはオンラインVSLAMを起動しないため、速度解析には同じbagから公式offline poseを生成する。
+standardの通常collectはオンラインVSLAMを起動しないため、速度解析には同じbagから公式offline poseを生成する。
 元の`poses/odom_poses.tum`も保持し、解析には`--mode auto`を指定する。
 惰行中もAUTOと新鮮なゼロ指令が継続するため、□解除でSTOPとなった区間とは別に扱える。
 速度・固定TF・bridge/ESCの品質検査や区間長など、既存解析の採用条件は維持する。

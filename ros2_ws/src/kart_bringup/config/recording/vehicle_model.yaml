@@ -1,0 +1,6 @@
+# Custom vehicle-model recording profile defaults, NOT ROS node parameters.
+# These are initial collection requests, not measured speed or calibrated output.
+# Used only when record_profile=vehicle-model is explicitly selected and a launch
+# override is empty. Existing input/joy_manager.yaml and other profiles stay intact.
+auto_fixed_throttle: 0.10
+auto_fixed_throttle_r2_gate: true

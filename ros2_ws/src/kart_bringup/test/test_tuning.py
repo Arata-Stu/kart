@@ -7,7 +7,8 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 import sys
 import yaml
-from kart_bringup.tuning import collect_configuration, fixed_configuration
+from kart_bringup.tuning import collect_configuration, fixed_configuration, mapless_configuration
+from kart_bringup.mission import sensor_parameters
 
 ROOT=Path(__file__).resolve().parents[1]/'config'
 
@@ -96,6 +97,21 @@ class TuningCollectionTest(unittest.TestCase):
             path.write_text(yaml.safe_dump(data))
             with self.assertRaisesRegex(ValueError,'未設定'):
                 collect_configuration(copy_root)
+
+    def test_mapless_uses_actual_resolved_camera_without_rereading_defaults(self):
+        camera=sensor_parameters(ROOT/'sensors/realsense.yaml',
+                                 infra_profile='424x240x60',imu_profile='high')
+        original=dict(camera)
+        with patch('kart_bringup.tuning.sensor_parameters',side_effect=AssertionError('defaults reread')):
+            params,remaps=mapless_configuration(ROOT,camera,tracking_mode='1',multicam_mode='2')
+        self.assertEqual(camera,original)
+        self.assertEqual(params['tracking_mode'],1)
+        self.assertEqual(params['multicam_mode'],2)
+        self.assertIn(('visual_slam/image_0','/realsense/infra1/image_rect_raw'),remaps)
+        with self.assertRaisesRegex(ValueError,'VIO requires'):
+            mapless_configuration(ROOT,dict(camera,enable_gyro=False),tracking_mode='1')
+        with self.assertRaisesRegex(ValueError,'stereo'):
+            mapless_configuration(ROOT,dict(camera,enable_infra2=False))
 
 
 if __name__=='__main__': unittest.main()

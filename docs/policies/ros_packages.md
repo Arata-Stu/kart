@@ -268,7 +268,8 @@ Tab補完のため直下に同名stemのファイルを並べない。
 対話選択はfzfで検索・上下キー選択を提供し、Esc/Ctrl-Cでは起動せず中止する。
 非対話CLIはfzfに依存しない。fzf依存はDockerに含める。
 `scripts/bringup.sh`のTUIは選択と`mission.launch.py` / `evaluation.launch.py` / `sim_vslam.launch.py`呼出しに限定する。
-collectはセンサ・手動vehicle・録画管理・監視のみ、driveは地図localization・offline参照ライン追従を追加。
+通常collectはセンサ・手動vehicle・録画管理・監視のみとする。
+明示的な車両モデル用record_profile=vehicle-modelだけ地図なしVOを追加し、driveは地図localization・offline参照ライン追従を追加する。
 構成の正本はbringup/config/mission.yaml。ROS nodeの静的値は各module YAMLに置く。
 Hz選択はprofileのrateだけを明示上書きし、未指定ではYAMLを保持する。
 TUIから録画STARTやAUTO要求を自動送信しない。地図とモデルは一覧探索し、
@@ -532,6 +533,21 @@ collectの明示record_profile=vslam-mapでは、左右Infra rectified画像・C
 RGB・Depth・IMU・EVSを無効化する。必要な左右Infraが無効、または不要センサーが有効なら起動前に拒否する。
 通常記録の既定値と既存録画操作は維持する。これはstereo VO用で、VIO・密な再構成・
 E2E学習用データを兼ねるとは扱わない。単体検証と実機の欠落低減確認は区別する。
+
+### 車両モデル用記録profile
+
+collectの明示record_profile=vehicle-modelは、専用の全parameter入りsensor/bag YAMLと
+recording/vehicle_model.yamlの同定用初期値を使う。独自profile設定とROS parameterを区別する。
+既定はRGB/Depth/EVS OFF、左右Infra 640×480・90fps、加速度200/ジャイロ400Hzの統合IMU。
+同じmission所有sensor containerへtuning/cuvslam.yamlの地図なしVOを1回だけloadし、
+保存地図・VGL・追従・E2E・相手車認識を起動しない。実際に採用したsensor設定でVOの前提条件を検査する。
+固定スロットル初期値0.10とR2駆動／惰行をprofile選択時だけ適用し、明示値を最後に検証する。
+負の固定値・R2ゲート無効・左右Infraや統合IMU欠落・不要センサー有効は黙って補わず起動前に拒否する。
+TUIは「データ記録」→「記録profile」→「車両モデル用」で固定値を入力でき、
+通常profileへ戻したときはprofile変更前の設定を復元する。録画・AUTOは操作による明示開始とする。
+VO/診断・車両指令/状態・駆動/惰行JSONと、元stereo/IMU/固定TFを保存する。
+推定速度を真値と扱わず、オンラインVOが不良でも元データから再解析できるようにする。
+単体・構成テストとROS結合・Jetson実機収録を区別する。
 
 Studioからの明示的なモード切替は既存のoperation_mode/requestを1回使用する。
 Studio起点の通常AUTOではJoy切断・モードボタン解放を停止条件にせず、自律指令の鮮度・
