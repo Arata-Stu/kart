@@ -17,6 +17,7 @@ const labels = {
   evs_tensor_config:'EVS Tensor設定', evs_bias_file:'EVSバイアス', bias_root:'バイアス探索先',
   record_dir:'記録の保存先', run_name:'記録名', joy_max_throttle:'Joy最大スロットル',
   auto_fixed_throttle:'AUTO固定スロットル（手動ステア）',
+  auto_fixed_throttle_r2_gate:'車両同定：R2で固定駆動／惰行',
   e2e_throttle_mode:'E2Eスロットル方式', e2e_fixed_throttle:'E2E固定スロットル',
   recovery:'自動復帰', tuning:'Studioからの動的調整', foxglove:'Foxglove', no_bridge:'車両基板を起動しない',
   parking_site:'駐車用地図（任意上書き）', parking_slot:'駐車区画',
@@ -24,12 +25,15 @@ const labels = {
   multicam_mode:'VSLAM速度・精度', base_frame:'基準frame', imu_frame:'IMU frame', latency_output:'遅延評価の保存先',
 };
 const live = ['collect','environment','drive','e2e'];
+const collectionModes = ['collect','environment'];
+const r2GateHelp = 'AUTO固定スロットルに0以上を設定し、左右InfraをONにして使用。□保持でAUTOを維持し、入口の中立待機後にR2を一度離して押すと固定駆動、R2を離すと中立で惰行します。□解除・×はSTOP。録画はR1開始／L1停止で独立です。';
 const modeKeys = {
   device:live, no_bridge:live, record_dir:[...live,'eval','e2e-latency'], run_name:live,
   rgb_fps:live, infra_fps:live, rgb_profile:live, infra_profile:live, depth_profile:live, imu_profile:live,
   evs:live, no_evs:live, evs_backend:live, evs_aggregation:live, evs_image:live,
   evs_serial:live, evs_tensor_config:live, evs_bias_file:live, bias_root:live,
   joy_max_throttle:['collect','environment'], auto_fixed_throttle:['collect','environment','drive'],
+  auto_fixed_throttle_r2_gate:collectionModes,
   e2e_model_dir:['e2e','e2e-latency'], e2e_throttle_mode:['e2e'], e2e_fixed_throttle:['e2e'],
   recovery:['drive','e2e'], tuning:['drive'], parking_site:['drive'], parking_slot:['drive'],
   map_file:['drive','eval','e2e'], map_dir:['drive','eval','e2e'], model_dir:['drive','eval'],
@@ -40,7 +44,7 @@ const modeKeys = {
   foxglove:live,
 };
 const essentials = new Set(['device','rgb_profile','infra_profile','depth_profile','imu_profile','evs','run_name',
-  'joy_max_throttle','auto_fixed_throttle','e2e_throttle_mode','e2e_fixed_throttle','recovery','tuning','eval_localization','tracking_mode','rate']);
+  'joy_max_throttle','auto_fixed_throttle','auto_fixed_throttle_r2_gate','e2e_throttle_mode','e2e_fixed_throttle','recovery','tuning','eval_localization','tracking_mode','rate']);
 const assetKeys = new Set(['map_file','map_dir','model_dir','e2e_model_dir','lane_id','line_type','bag']);
 const panes = ['basic','assets','details','review','log'];
 function showPane(name) {
@@ -63,6 +67,13 @@ function invalidate() {
   $('bringup-review').textContent='設定を検証すると、採用される構成をここに表示します。';
   renderButtons();
 }
+function fixedThrottleEnabled() {
+  const selected=ui.values.auto_fixed_throttle;
+  const configured=ui.catalog?.default_labels?.[ui.values.mode]?.auto_fixed_throttle;
+  const fallback=ui.catalog?.fields?.find(f=>f.key==='auto_fixed_throttle')?.default;
+  const value=selected!=null && selected!==''?selected:configured ?? fallback;
+  return value!=null && value!=='' && Number.isFinite(Number(value)) && Number(value)>=0;
+}
 function renderButtons() {
   for (const el of $('bringup-workspace').querySelectorAll('input,select,.profile-picker button')) el.disabled=ui.busy;
   for(const key of ['evs_backend','evs_aggregation','evs_serial','evs_tensor_config','evs_bias_file','evs_image']){
@@ -70,6 +81,8 @@ function renderButtons() {
     if(control){control.disabled=ui.busy || ui.values.no_evs===true;
       if(ui.values.no_evs===true)control.title='基本設定でEVSを有効にすると変更できます。';}
   }
+  const r2Gate=$('bringup-field-auto_fixed_throttle_r2_gate');
+  if(r2Gate)r2Gate.disabled=ui.busy || !fixedThrottleEnabled();
   $('bringup-connect').disabled=ui.preview;
   $('bringup-container').disabled=ui.preview;
   $('bringup-preview').disabled=ui.busy;
@@ -142,6 +155,11 @@ function defaultLabel(f) {
   return '未指定・設定確認で確定';
 }
 function renderFields() {
+  // A saved recording option must never become a hidden override in a driving plan.
+  const r2GateAvailable=ui.catalog?.fields?.some(f=>f.key==='auto_fixed_throttle_r2_gate');
+  if(!collectionModes.includes(ui.values.mode) || !r2GateAvailable)delete ui.values.auto_fixed_throttle_r2_gate;
+  if(r2GateAvailable && collectionModes.includes(ui.values.mode) && ui.values.auto_fixed_throttle!=null && ui.values.auto_fixed_throttle!=='' && Number(ui.values.auto_fixed_throttle)<0)
+    ui.values.auto_fixed_throttle_r2_gate=false;
   // Adapt legacy presets to the single visible controls.
   if(ui.values.no_evs)ui.values.evs=false;
   if(ui.values.rgb_fps!=null && ui.values.rgb_fps!=='' && !ui.values.rgb_profile){
@@ -170,7 +188,8 @@ function renderFields() {
         (f.key==='rgb_profile' || f.key==='infra_profile' || f.key==='depth_profile') && value==='0'?'なし（OFF）':value,value));
     } else { input=document.createElement('input'); input.type='text'; input.placeholder=defaultLabel(f); }
     input.id='bringup-field-'+f.key; input.value=ui.values[f.key] ?? '';
-    input.title=f.help || caption.textContent;
+    const help=f.key==='auto_fixed_throttle_r2_gate'?r2GateHelp:f.help;
+    input.title=help || caption.textContent;
     input.onchange=()=>{
       $('bringup-choice').hidden=true;
       if(f.key==='rgb_profile')delete ui.values.rgb_fps;
@@ -186,6 +205,10 @@ function renderFields() {
       }
       if(input.value==='') delete ui.values[f.key];
       else ui.values[f.key]=f.kind==='boolean'?input.value==='true':input.value;
+      if(f.key==='auto_fixed_throttle' && r2GateAvailable && collectionModes.includes(ui.values.mode) && !fixedThrottleEnabled()){
+        ui.values.auto_fixed_throttle_r2_gate=false;
+        const r2Gate=$('bringup-field-auto_fixed_throttle_r2_gate');if(r2Gate)r2Gate.value='false';
+      }
       for(const field of ui.catalog.fields){
         const option=$('bringup-field-'+field.key)?.options?.[0];
         if(option?.value==='')option.textContent=defaultLabel(field);
@@ -193,7 +216,7 @@ function renderFields() {
       invalidate();
     };
     if(f.key!=='rgb_profile')label.append(input);
-    if(f.help && f.key!=='rgb_profile') {const help=document.createElement('small');help.textContent=f.help;label.append(help);}
+    if(help && f.key!=='rgb_profile') {const note=document.createElement('small');note.textContent=help;label.append(note);}
     $(assetKeys.has(f.key)?'bringup-assets-fields':essentials.has(f.key)?'bringup-basic':'bringup-details').append(label);
   }
   renderStereo();

@@ -26,3 +26,4 @@
     steering_scale: 1.0
     speed_scale: 0.3
     auto_fixed_throttle: -1.0  # -1: normal triggers; 0..speed_scale: initial fixed value in AUTO; D-pad up/down adjusts by 0.001 in STOP; steering stays manual
+    auto_fixed_throttle_r2_gate: false  # Identification collection: R2 switches fixed drive/coast while AUTO is held; requires a fixed value

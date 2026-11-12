@@ -9,6 +9,7 @@ from kart_bringup.configuration import load
 from kart_bringup.tuning import collect_configuration, fixed_configuration
 
 KEYS=('device','record_dir','run_name','rgb_fps','infra_fps','tracking_mode','multicam_mode')
+JOY_KEYS=('auto_fixed_throttle','auto_fixed_throttle_r2_gate')
 FIXED_KEYS=('fixed_axes','steering','throttle','brake','duration_s')
 
 
@@ -18,11 +19,14 @@ def build(args):
     mission,params,remaps=collect_configuration(root,explicit)
     fixed,fixed_params=fixed_configuration(root,getattr(args,'fixed_command',''),
         {key:getattr(args,key,'') for key in FIXED_KEYS})
-    load(root/'bringup.yaml',{key:explicit[key] for key in ('device','record_dir','run_name')})
+    joy={key:getattr(args,key,'') for key in JOY_KEYS}
+    _,vehicle=load(root/'bringup.yaml',{**{key:explicit[key] for key in ('device','record_dir','run_name')},**joy})
+    if fixed and vehicle['joy_manager']['effective']['auto_fixed_throttle'] >= 0:
+        raise ValueError('fixed_command cannot use Joy auto_fixed_throttle; disable it and auto_fixed_throttle_r2_gate in input/joy_manager.yaml')
     actions = [
         lu.log_info(f'Tuning collection: mapless manual recording; config={root / "tuning/cuvslam.yaml"}; effective VSLAM={params}; remaps={remaps}. Recording START and MANUAL operation are separate.'),
         lu.include('kart_bringup','launch/mission.launch.py',launch_arguments={
-            'mode':'collect',**{key:explicit[key] for key in KEYS if key not in ('tracking_mode','multicam_mode')}},
+            'mode':'collect',**{key:explicit[key] for key in KEYS if key not in ('tracking_mode','multicam_mode')},**joy},
             scoped=True,forwarding=False),
         lu.include('kart_bringup','launch/modules/localization/vslam.launch.py',launch_arguments={
             'container_name':'/'+mission['sensor_container'].lstrip('/'),
@@ -37,7 +41,7 @@ def build(args):
 
 def generate_launch_description():
     args=LaunchArguments()
-    for key in (*KEYS,'fixed_command',*FIXED_KEYS):
+    for key in (*KEYS,*JOY_KEYS,'fixed_command',*FIXED_KEYS):
         args.add_arg(key,'',description='Explicit override; empty preserves module YAML',cli=True)
     args.add_opaque_function(build)
     return lut.LaunchDescription(args.get_launch_actions())

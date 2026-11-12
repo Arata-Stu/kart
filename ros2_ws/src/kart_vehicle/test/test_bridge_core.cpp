@@ -105,6 +105,45 @@ int main() {
     assert(frame.throttle_milli==0 && unacknowledged.phase()==kart_vehicle::HostSession::Phase::disarmed);
   }
   {
+    // Identification R2 transitions keep HOST authority across drive -> coast
+    // -> drive; neutral coasting is not a STOP or a physical-brake assertion.
+    using namespace kart_system;
+    ManualFixedThrottle gate;
+    gate.throttle=0.1;
+    gate.r2_gate=true;
+    gate.observe(STOP,100,100,0,true,true);
+    gate.observe(AUTO,100.1,100.1,0.1,true,true);
+    HostSession host;
+    host.start(0.1);
+    const Command raw{0.25,0.3,0,0};
+    auto tick=[&](double wall,double r2) {
+      gate.observe(AUTO,100+wall,100+wall,wall,true,true);
+      const auto decision=gate.command(raw,false,100+wall,wall,true,r2);
+      assert(!decision.stop && gate.active());
+      return host.output(decision.command,true,wall,-1,0);
+    };
+    auto output=tick(0.11,1.0);
+    assert(output.flags==3 && output.throttle_milli==0);
+    StatusFrame ack;
+    ack.selector=RcSelector::automatic;
+    ack.active_path=ActivePath::automatic;
+    host.status(ack);
+    tick(0.2,1.0);
+    tick(0.3,1.0);
+    output=tick(0.41,1.0);
+    assert(output.throttle_milli==0); // Holding R2 at entry cannot propel.
+    output=tick(0.42,0.0);
+    assert(output.throttle_milli==0);
+    output=tick(0.43,0.2);
+    assert(output.throttle_milli==100 && output.steering_milli==-250);
+    output=tick(0.44,0.0);
+    assert(output.flags==3 && output.throttle_milli==0 && output.brake_milli==0 &&
+           output.reverse_milli==0 && host.phase()==HostSession::Phase::armed);
+    output=tick(0.45,1.0);
+    assert(output.flags==3 && output.throttle_milli==100 &&
+           host.phase()==HostSession::Phase::armed);
+  }
+  {
     // MANUAL demands are immediate: no automatic brake hold, neutral or pulse.
     HostSession direct;
     direct.start(40);

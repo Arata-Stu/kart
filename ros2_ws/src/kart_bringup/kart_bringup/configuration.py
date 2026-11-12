@@ -10,7 +10,19 @@ NODE_NAMES = {
 }
 BOOL_KEYS = ('composed', 'enable_joy', 'enable_control', 'enable_bridge', 'enable_bag_manager', 'enable_jetson_stats')
 RUNTIME_KEYS = (*BOOL_KEYS, 'container_name', 'namespace', 'bag_shutdown_timeout',
-                'profile', 'device', 'record_dir', 'bag_config', 'run_name', 'session_layout', 'auto_fixed_throttle', 'joy_max_throttle')
+                'profile', 'device', 'record_dir', 'bag_config', 'run_name', 'session_layout', 'auto_fixed_throttle',
+                'auto_fixed_throttle_r2_gate', 'joy_max_throttle')
+
+
+def collection_r2_gate(mode, value=''):
+    """Keep collection opt-in out of drive/E2E, including stale YAML values."""
+    if value not in ('', 'true', 'false'):
+        raise ValueError('auto_fixed_throttle_r2_gate must be true or false')
+    if mode not in ('collect', 'environment'):
+        if value == 'true':
+            raise ValueError('auto_fixed_throttle_r2_gate is only supported for collect/environment')
+        return 'false'
+    return value
 
 
 def load(path, overrides=None):
@@ -92,6 +104,12 @@ def load(path, overrides=None):
         value = float(value)
         for key in ('overrides', 'effective'):
             modules['joy_manager'][key]['auto_fixed_throttle'] = value
+    if 'auto_fixed_throttle_r2_gate' in overrides:
+        value = overrides['auto_fixed_throttle_r2_gate']
+        if value not in ('true', 'false'):
+            raise ValueError('auto_fixed_throttle_r2_gate must be true or false')
+        for key in ('overrides', 'effective'):
+            modules['joy_manager'][key]['auto_fixed_throttle_r2_gate'] = value == 'true'
     joy = modules['joy_manager']['effective']
     fixed = joy['auto_fixed_throttle']
     limit = joy['speed_scale']
@@ -101,6 +119,9 @@ def load(path, overrides=None):
         raise ValueError('auto_fixed_throttle must be -1 (normal) or 0..speed_scale')
     if fixed >= 0 and not (settings['enable_joy'] and settings['enable_control']):
         raise ValueError('auto_fixed_throttle requires enable_joy=true and enable_control=true')
+    gate = joy['auto_fixed_throttle_r2_gate']
+    if type(gate) is not bool or (gate and fixed < 0):
+        raise ValueError('auto_fixed_throttle_r2_gate must be boolean and requires auto_fixed_throttle >= 0')
     for key in ('effective', 'overrides'):
         modules['command_mux'][key]['auto_use_teleop'] = fixed >= 0
     if settings['enable_bridge']:

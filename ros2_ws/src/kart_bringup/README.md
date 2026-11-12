@@ -914,6 +914,45 @@ TUIの「設定一覧」→「制御 / AUTO」で必要時だけ通常／固定�
 RGB/EVS教師抽出はbag内の固定AUTO有効設定を自動検出する。固定収集bagでは固定AUTOだけを採用し、MANUALの復帰・調整区間を全て除外する。通常bagは従来どおりMANUALだけを採用する。
 ROS結合・実車動作は未確認。portable testで固定出力、直接切替、異常ラッチ、HOST handshakeを検証する。
 
+### 車両モデル同定用の固定駆動・惰行収集
+
+`auto_fixed_throttle_r2_gate`はJoy managerの起動時固定bool parameter、既定`false`。
+`true`では□保持でAUTOを維持し、R2を押している間だけ設定済みの固定スロットルを出す。
+R2の押し込み量は出力量に使わず、解放中はthrottle/brake/reverseを0にして手動ステアとAUTOを維持する。
+AUTO入口の中立待機後にR2を一度解放してから押す。押下判定は0.10以上、解除判定は0.05以下で、
+□解除、×、○、L2、入力途絶、異常時の停止・再arm規則は既存のものを使う。
+中立出力は物理停止の確認ではない。録画のR1開始/L1停止は独立操作。
+
+```bash
+bash scripts/bringup.sh --mode collect --auto-fixed-throttle 0.10 \
+  --auto-fixed-throttle-r2-gate --run-name identify_t010
+```
+
+CLIは`--auto-fixed-throttle-r2-gate`／`--no-auto-fixed-throttle-r2-gate`、
+mission/vehicle launchは`auto_fixed_throttle_r2_gate:=true|false`。
+CLI未指定と空のlaunch引数はYAMLを保持し、`false`は明示的に無効化する。
+固定値`auto_fixed_throttle >= 0`、Joy・control有効、左右両方のInfra有効、通常記録profileが必要。
+通常collectでは記録したステレオ画像から速度を求めるため、左右どちらかが無効なら起動前に拒否する。
+センサーを自動で有効化することはしない。
+`vslam-map`最小profileには車両指令・modeがないため、この収録とは併用しない。
+collect/environmentのみで使用でき、drive/E2EはYAMLの有効値も`false`へ上書きし、明示`true`を拒否する。
+TUIの「制御 / AUTO」→「車両同定：R2で固定駆動／惰行」で選択できる。
+「通常AUTO」「固定値で収集」へ変更すると、このR2ゲートを明示的に無効化する。
+
+収録中に地図なしcuVSLAMも起動する専用入口では、同じ設定を次のように指定できる。
+
+```bash
+bash scripts/vehicle_tuning.sh collect auto_fixed_throttle:=0.10 \
+  auto_fixed_throttle_r2_gate:=true run_name:=identify_t010
+```
+
+この専用入口の`fixed_command:=true`は別のAUTO producerを使うため、Joy側の固定AUTOと併用できない。
+`/teleop/fixed_config`（`std_msgs/msg/String`、reliable/volatile/depth1）は既存の標準録画対象で、
+R2ゲート有効・押下状態、段階、実効スロットル、段階連番、指令stampを10Hzおよび段階変更時に保存する。
+段階は指令生成の状態であり、実車速度や基板の受信確認ではない。
+車両特性解析では`analyze --mode auto`を使用し、AUTOを維持した惰行区間も解析対象になる。
+ROS非依存テストで設定検証・伝搬・操作コアを検証する。ROS結合・この操作での実車収録は未確認。
+
 ## 収集用固定スロットルとE2E走行の分離
 
 - collect/driveの`--auto-fixed-throttle`（Joy parameter `auto_fixed_throttle`）は手動ステア収集用。

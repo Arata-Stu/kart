@@ -4,7 +4,7 @@ import isaac_ros_launch_utils as lu
 from kart_bringup.launch_arguments import LaunchArguments
 import isaac_ros_launch_utils.all_types as lut
 from ament_index_python.packages import get_package_share_directory
-from kart_bringup.configuration import load
+from kart_bringup.configuration import load, collection_r2_gate
 from kart_bringup.localization import resolve
 from kart_bringup.mission import composition, hdmap_choices, sensor_parameters, camera_config, recording_config, validate_localization_imu, validate_record_profile
 from kart_bringup.vehicle_tf import load_transforms
@@ -49,6 +49,8 @@ def add_mission(args):
         "run_name": args.run_name,
         "joy_max_throttle": getattr(args, "joy_max_throttle", ""),
         "auto_fixed_throttle": getattr(args, "auto_fixed_throttle", ""),
+        "auto_fixed_throttle_r2_gate": collection_r2_gate(
+            args.mode, getattr(args, "auto_fixed_throttle_r2_gate", "")),
     }
     if args.mode == "environment" or cfg["enable_evs"] or record_profile:
         vehicle["bag_config"] = str(recording_config(root, args.mode, cfg["enable_evs"], record_profile))
@@ -75,6 +77,11 @@ def add_mission(args):
     _, vehicle_modules = load(
         root / "bringup.yaml", vehicle
     )  # Validate device/config before any node starts.
+    if vehicle_modules['joy_manager']['effective']['auto_fixed_throttle_r2_gate'] and record_profile == 'vslam-map':
+        raise ValueError('auto_fixed_throttle_r2_gate requires the standard record profile; vslam-map omits vehicle commands and modes')
+    if vehicle_modules['joy_manager']['effective']['auto_fixed_throttle_r2_gate'] and not (
+            params['enable_infra1'] and params['enable_infra2']):
+        raise ValueError('auto_fixed_throttle_r2_gate requires stereo Infra for offline vehicle speed estimation')
     if parking_site and vehicle_modules["joy_manager"]["effective"]["auto_fixed_throttle"] >= 0:
         raise ValueError("Parking cannot use fixed AUTO throttle")
     from kart_bringup.recovery import configuration, validate_inputs
@@ -255,6 +262,7 @@ def generate_launch_description():
         "run_name",
         "record_profile",
         "auto_fixed_throttle",
+        "auto_fixed_throttle_r2_gate",
         "joy_max_throttle",
         "recovery",
         "parking_site",

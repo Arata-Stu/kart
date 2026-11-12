@@ -29,6 +29,21 @@ class TuningCollectionTest(unittest.TestCase):
             actions=module.build(SimpleNamespace(**{key:'' for key in module.KEYS}))
             fixed=module.build(SimpleNamespace(**{key:'' for key in module.KEYS},
                 fixed_command='true',fixed_axes='throttle',throttle='.12',steering='-.05'))
+            identified=module.build(SimpleNamespace(**{key:'' for key in module.KEYS},
+                auto_fixed_throttle='.1',auto_fixed_throttle_r2_gate='true'))
+            for gated in ('false', 'true'):
+                with self.assertRaisesRegex(ValueError, 'fixed_command cannot use Joy'):
+                    module.build(SimpleNamespace(**{key:'' for key in module.KEYS},
+                        fixed_command='true',auto_fixed_throttle='.1',auto_fixed_throttle_r2_gate=gated))
+            with tempfile.TemporaryDirectory() as folder:
+                copied=Path(folder)/'config';shutil.copytree(ROOT,copied)
+                path=copied/'input/joy_manager.yaml'
+                document=yaml.safe_load(path.read_text())
+                document['/**/kart_joy_manager']['ros__parameters'].update(
+                    auto_fixed_throttle=.1,auto_fixed_throttle_r2_gate=True)
+                path.write_text(yaml.safe_dump(document))
+                with patch.object(lu,'get_path',return_value=copied), self.assertRaisesRegex(ValueError,'fixed_command cannot use Joy'):
+                    module.build(SimpleNamespace(**{key:'' for key in module.KEYS},fixed_command='true'))
         includes=[a for a in actions if a[0]=='include']
         self.assertEqual([a[1] for a in includes],['launch/mission.launch.py','launch/modules/localization/vslam.launch.py'])
         self.assertEqual(includes[0][2]['launch_arguments']['mode'],'collect')
@@ -39,6 +54,8 @@ class TuningCollectionTest(unittest.TestCase):
         self.assertEqual(nodes[0]['parameters'][0]['throttle'],.12)
         self.assertEqual(nodes[0]['parameters'][0]['fixed_axes'],'throttle')
         self.assertEqual(nodes[0]['on_exit'],('shutdown',))
+        identify_include=next(a for a in identified if a[0]=='include' and a[1]=='launch/mission.launch.py')
+        self.assertEqual(identify_include[2]['launch_arguments']['auto_fixed_throttle_r2_gate'],'true')
 
     def test_fixed_values_opt_in_and_ranges(self):
         self.assertFalse(fixed_configuration(ROOT)[0])

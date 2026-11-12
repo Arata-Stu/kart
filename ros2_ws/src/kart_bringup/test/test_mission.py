@@ -418,6 +418,27 @@ class MissionCompositionTests(unittest.TestCase):
             vehicle_args = lu.include.call_args_list[-1].kwargs['launch_arguments']
             self.assertEqual(vehicle_args['auto_fixed_throttle'], '0.10')
             self.assertEqual(lu.include.call_args_list[0].kwargs["launch_arguments"]["depth_profile"], "424x240x60")
+            identified = SimpleNamespace(**{**vars(args), 'auto_fixed_throttle_r2_gate': 'true'})
+            module.add_mission(identified)
+            self.assertEqual(lu.include.call_args_list[-1].kwargs['launch_arguments']['auto_fixed_throttle_r2_gate'], 'true')
+            no_stereo = SimpleNamespace(**{**vars(identified), 'infra_profile': '0'})
+            with self.assertRaisesRegex(ValueError, 'stereo Infra'):
+                module.add_mission(no_stereo)
+            no_stereo.auto_fixed_throttle_r2_gate = ''
+            with patch.object(module, 'load', return_value=({}, {
+                    'joy_manager': {'effective': {'auto_fixed_throttle_r2_gate': True}}})), \
+                    self.assertRaisesRegex(ValueError, 'stereo Infra'):
+                module.add_mission(no_stereo)
+            minimal = SimpleNamespace(**{**vars(identified), 'record_profile': 'vslam-map',
+                                        'rgb_profile': '0', 'infra_profile': '640x480x90', 'depth_profile': '0'})
+            with self.assertRaisesRegex(ValueError, 'standard record profile'):
+                module.add_mission(minimal)
+            # The effective YAML setting must be checked even without an explicit gate argument.
+            minimal.auto_fixed_throttle_r2_gate = ''
+            with patch.object(module, 'load', return_value=({}, {
+                    'joy_manager': {'effective': {'auto_fixed_throttle_r2_gate': True}}})), \
+                    self.assertRaisesRegex(ValueError, 'standard record profile'):
+                module.add_mission(minimal)
             saved = vars(args).copy()
             import tempfile
             with tempfile.NamedTemporaryFile() as engine:
@@ -533,6 +554,7 @@ class MissionCompositionTests(unittest.TestCase):
             self.assertEqual(inference['use_fixed_throttle'], 'true')
             vehicle_call = next(call for call in lu.include.call_args_list if call.args[1]=='launch/vehicle.launch.py')
             self.assertEqual(vehicle_call.kwargs['launch_arguments']['auto_fixed_throttle'], '-1')
+            self.assertEqual(vehicle_call.kwargs['launch_arguments']['auto_fixed_throttle_r2_gate'], 'false')
 
             lu.include.reset_mock()
             args.enable_evs = 'true'

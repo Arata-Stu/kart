@@ -176,6 +176,8 @@ def argument_parser():
                         help="データ記録のJoy最大スロットル 0.01..1（未指定はYAML）")
     parser.add_argument("--auto-fixed-throttle", type=float, default=None,
                         help="Collection AUTO throttle, manual steering (collect/drive): -1 normal, 0..speed_scale fixed (not vehicle speed)")
+    parser.add_argument("--auto-fixed-throttle-r2-gate", action=argparse.BooleanOptionalAction, default=None,
+                        help="collect/environment同定用: □保持中、R2で固定駆動／惰行を切替（固定値の指定が必要）")
     parser.add_argument("--e2e-throttle-mode", choices=("fixed", "model"), default="",
                         help="E2E throttle: fixed (default) or model (requires steer_throttle)")
     parser.add_argument("--e2e-fixed-throttle", type=float, default=None,
@@ -206,6 +208,9 @@ def build_command(args, config):
     if args.mode == "eval" and args.eval_localization == "e2e_latency":
         args.mode = "e2e-latency"
     validate_mode_options(args)
+    from kart_bringup.configuration import collection_r2_gate
+    gate_value = getattr(args, 'auto_fixed_throttle_r2_gate', None)
+    r2_gate = collection_r2_gate(args.mode, '' if gate_value is None else str(gate_value).lower())
     if args.mode == "e2e-latency":
         return latency_entry(args, config)
     if args.latency_output:
@@ -331,14 +336,23 @@ def build_command(args, config):
             "enable_bridge": str(not args.no_bridge).lower(), "device": args.device,
             "joy_max_throttle": "" if args.joy_max_throttle is None else str(args.joy_max_throttle),
             "auto_fixed_throttle": '-1' if args.mode == 'e2e' else ('' if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle)),
+            "auto_fixed_throttle_r2_gate": r2_gate,
         })
         if not args.no_bridge:
             print(f"車両基板: {modules['bridge']['effective']['device']}")
         print(f"Joy最大スロットル: {modules['joy_manager']['effective']['speed_scale']}（前進・後退）")
         fixed = modules['joy_manager']['effective']['auto_fixed_throttle']
+        if modules['joy_manager']['effective']['auto_fixed_throttle_r2_gate'] and args.record_profile == 'vslam-map':
+            raise ValueError('auto_fixed_throttle_r2_gate requires the standard record profile; vslam-map omits vehicle commands and modes')
+        if modules['joy_manager']['effective']['auto_fixed_throttle_r2_gate'] and not (
+                sensors['enable_infra1'] and sensors['enable_infra2']):
+            raise ValueError('auto_fixed_throttle_r2_gate requires stereo Infra for offline vehicle speed estimation')
         if args.mode != 'e2e':
-            print('AUTOスロットル: ' + ('通常AUTO（既存制御）、MANUALはR2/L2' if fixed < 0 else
-              f'固定 {fixed:.6f}（□でAUTO、△で通常MANUALへ直接切替、ステア手動、○/L2/×で解除・STOP）'))
+            if modules['joy_manager']['effective']['auto_fixed_throttle_r2_gate']:
+                print(f'AUTOスロットル: 車両同定 固定 {fixed:.6f}（□保持でAUTO、R2で固定駆動／惰行、ステア手動、□解除/×でSTOP）')
+            else:
+                print('AUTOスロットル: ' + ('通常AUTO（既存制御）、MANUALはR2/L2' if fixed < 0 else
+                  f'固定 {fixed:.6f}（□でAUTO、△で通常MANUALへ直接切替、ステア手動、○/L2/×で解除・STOP）'))
     if args.mode in ('drive', 'e2e'):
         recovery_enabled, recovery_params = recovery_configuration(config / 'recovery', args.recovery)
         if recovery_enabled:
@@ -388,6 +402,7 @@ def build_command(args, config):
         "recovery": args.recovery,
         "joy_max_throttle": None if args.joy_max_throttle is None else str(args.joy_max_throttle),
         "auto_fixed_throttle": None if args.auto_fixed_throttle is None else str(args.auto_fixed_throttle),
+        "auto_fixed_throttle_r2_gate": r2_gate or None,
         "e2e_throttle_mode": args.e2e_throttle_mode,
         "e2e_fixed_throttle": None if args.e2e_fixed_throttle is None else str(args.e2e_fixed_throttle),
         "rgb_profile": args.rgb_profile,

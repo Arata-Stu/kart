@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 import yaml
-from kart_bringup.configuration import load
+from kart_bringup.configuration import load, collection_r2_gate
 
 class ConfigurationTest(unittest.TestCase):
     def setUp(self):
@@ -92,5 +92,39 @@ class ConfigurationTest(unittest.TestCase):
         self.edit('input/joy_manager.yaml', lambda d: d['/**/kart_joy_manager']['ros__parameters'].update(auto_fixed_throttle=0.4))
         with self.assertRaises(ValueError):
             load(self.path)
+
+    def test_r2_gate_yaml_retention_explicit_disable_and_requirements(self):
+        self.edit('input/joy_manager.yaml', lambda d: d['/**/kart_joy_manager']['ros__parameters'].update(
+            auto_fixed_throttle=0.1, auto_fixed_throttle_r2_gate=True))
+        _, modules = load(self.path, {'auto_fixed_throttle_r2_gate': ''})
+        self.assertTrue(modules['joy_manager']['effective']['auto_fixed_throttle_r2_gate'])
+        self.assertNotIn('auto_fixed_throttle_r2_gate', modules['joy_manager']['overrides'])
+        _, modules = load(self.path, {'auto_fixed_throttle_r2_gate': 'false'})
+        self.assertIs(modules['joy_manager']['overrides']['auto_fixed_throttle_r2_gate'], False)
+        for value in ('yes', '1', True):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                load(self.path, {'auto_fixed_throttle_r2_gate': value})
+        with self.assertRaisesRegex(ValueError, 'requires auto_fixed_throttle'):
+            load(self.path, {'auto_fixed_throttle': '-1'})
+        for key in ('enable_joy', 'enable_control'):
+            with self.assertRaises(ValueError):
+                load(self.path, {key: 'false'})
+
+    def test_r2_gate_is_collection_only_and_other_modes_disable_yaml(self):
+        self.edit('input/joy_manager.yaml', lambda d: d['/**/kart_joy_manager']['ros__parameters'].update(
+            auto_fixed_throttle=0.1, auto_fixed_throttle_r2_gate=True))
+        for mode in ('collect', 'environment'):
+            self.assertEqual(collection_r2_gate(mode), '')
+            self.assertEqual(collection_r2_gate(mode, 'true'), 'true')
+        for mode in ('drive', 'e2e', 'eval', 'e2e-latency'):
+            self.assertEqual(collection_r2_gate(mode), 'false')
+            _, modules = load(self.path, {'auto_fixed_throttle_r2_gate': collection_r2_gate(mode),
+                                         'auto_fixed_throttle': '-1' if mode == 'e2e' else ''})
+            self.assertFalse(modules['joy_manager']['effective']['auto_fixed_throttle_r2_gate'])
+            with self.assertRaisesRegex(ValueError, 'collect/environment'):
+                collection_r2_gate(mode, 'true')
+        for value in ('yes', True):
+            with self.assertRaises(ValueError):
+                collection_r2_gate('collect', value)
 
 if __name__=='__main__': unittest.main()

@@ -80,6 +80,7 @@ def default_labels(mode):
         joy = params('input/joy_manager.yaml', 'kart_joy_manager')
         labels.update(joy_max_throttle=str(joy['speed_scale']),
                       auto_fixed_throttle='通常AUTO' if joy['auto_fixed_throttle'] < 0 else str(joy['auto_fixed_throttle']),
+                      auto_fixed_throttle_r2_gate=('有効（R2で固定駆動／惰行）' if mode in ('collect', 'environment') and joy['auto_fixed_throttle_r2_gate'] else '無効'),
                       device=params('vehicle/bridge.yaml', 'kart_bridge')['device'])
         enabled, recovery = configuration(CONFIG / 'recovery')
         labels['recovery'] = recovery['sensor_profile'] if enabled else 'off'

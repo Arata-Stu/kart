@@ -418,3 +418,59 @@ INFOログの`AUTO fixed throttle selected`で現在値と上限を確認する�
 固定AUTO区間の解析には`--mode auto`を使う。
 このD-pad調整はJoy managerの`auto_fixed_throttle`用で、別ノードの
 `tuning_collect fixed_command:=true` / `vehicle_tuning.sh control`を操作する機能ではない。
+
+## 車両同定用：R2で固定駆動と惰行を記録
+
+同じAUTO内で固定スロットルと惰行を繰り返す場合は、通常collectの固定値に
+`--auto-fixed-throttle-r2-gate`を明示する。これはJoy managerの追加操作で、専用のAUTO指令producerは増やさない。
+既定は無効。通常の固定AUTO、MANUAL、E2Eの操作を暗黙に変更しない。
+
+```bash
+# Jetson Docker内。数値は指定例。
+cd /workspaces
+bash scripts/build.sh --packages-up-to kart_bringup
+source ros2_ws/install/setup.bash
+bash scripts/bringup.sh --mode collect --auto-fixed-throttle 0.10 \
+  --auto-fixed-throttle-r2-gate --run-name identification_010
+```
+
+地図なしcuVSLAMも同時に起動してodometryを記録する専用入口は次のとおり。
+通常collectとは同時起動しない。左右Infraが有効な構成を使用する。
+
+```bash
+bash scripts/vehicle_tuning.sh collect auto_fixed_throttle:=0.10 \
+  auto_fixed_throttle_r2_gate:=true run_name:=identification_010
+```
+
+このJoy固定値と、別AUTO producerを起動する`fixed_command:=true`は併用しない。
+
+1. 左右Infra・CameraInfo・IMU・車体取付TFと、標準の車両／モード／診断topicを記録対象にする。
+   `vslam-map`最小profileは車両指令を含まないため使わない。
+2. R1で録画開始。STOPと全入力中立を確認して□を保持し、AUTOへ入る。
+3. 入口の0.3秒中立待機後、R2を一度離した状態にする。
+4. □を保持したままR2を押すと設定済み固定値、R2を離すとthrottle/brake/reverse=0となる。
+   R2の押し込み量は出力量に影響しない。ステアは手動で修正できる。
+5. □を保持したまま固定駆動→惰行を繰り返す。□解除や×ではSTOPとなる。
+   ○は従来の独立制動、L2は固定AUTO取消＋STOPであり、惰行操作には使わない。
+6. 固定値を変えるときはSTOPにしてモードボタンを離し、D-pad上下で0.001ずつ調整する。
+   AUTO惰行中には値を変えない。録画は条件を跨いで継続できる。
+7. L1で録画を止め、bagの確定を確認する。
+
+R2の元正規化軸は0.10以上でON、0.05以下でOFF、中間は直前状態を保持する。
+起動・AUTO進入・異常復帰でR2が押されたままでも駆動しない。再接続・異常時は既存のSTOP再armを必要とする。
+中立指令は物理制動や実停止の確認ではない。
+同定AUTOから□を離して△へ切り替える場合も一度STOPにし、モードボタンを離してSTOPを確認後、
+新しく△を押してMANUALへ入る。通常固定AUTOの直接切替とは操作を分ける。
+
+既存`/teleop/fixed_config`（`std_msgs/msg/String`、reliable/volatile/depth1）を10 Hzと段階変更時に保存する。
+`r2_gate_enabled`、`r2_pressed`、`phase`、`effective_throttle`、`phase_sequence`、`command_stamp_ns`で、
+設定値と実際に生成した補正前要求を照合できる。車速・基板ackを表すフィールドではない。
+段階の例は`entry_neutral`→`coast`→`drive`→`coast`。録画や走行開始の自動操作はない。
+
+通常collectはオンラインVSLAMを起動しないため、速度解析には同じbagから公式offline poseを生成する。
+元の`poses/odom_poses.tum`も保持し、解析には`--mode auto`を指定する。
+惰行中もAUTOと新鮮なゼロ指令が継続するため、□解除でSTOPとなった区間とは別に扱える。
+速度・固定TF・bridge/ESCの品質検査や区間長など、既存解析の採用条件は維持する。
+ROSノードの設定は[kart_system](../../ros2_ws/src/kart_system/README.md)、起動設定は
+[kart_bringup](../../ros2_ws/src/kart_bringup/README.md)を参照。
+portable単体テストで指令生成を確認し、ROS結合・実車の駆動／惰行・bag記録は別途確認する。

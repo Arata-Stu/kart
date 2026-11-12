@@ -97,6 +97,26 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual({b['kind'] for b in bins},{'accel','coast','brake'})
         self.assertTrue(all(r['acceleration_mps2'] is None for r in rows if r['reason']))
 
+    def test_auto_coast_is_adopted_only_while_auto_is_maintained(self):
+        # Identification keeps AUTO and fresh zero commands after R2 release.
+        data = copy.deepcopy(self.data)
+        cfg = dict(CONFIG, allowed_modes=[1])
+        for mode in data['mode']:
+            mode['mode'] = 1
+        summary, rows, segments, _ = analyze(data, cfg)
+        self.assertTrue(summary['model']['usable'], summary['model'])
+        self.assertGreaterEqual(sum(s['kind'] == 'coast' for s in segments), 3)
+        self.assertTrue(any(r['segment'] is not None and r['mode'] == 1 and
+                            r['throttle'] == 0 and r['brake'] == 0 for r in rows))
+        # Releasing the mode button instead makes the same zero-input part STOP.
+        for mode, command in zip(data['mode'], data['command']):
+            if command['throttle'] == 0 and command['brake'] == 0:
+                mode['mode'] = 3
+        _, rows, segments, _ = analyze(data, cfg)
+        self.assertFalse(any(s['kind'] == 'coast' for s in segments))
+        self.assertTrue(all('mode' in r['reason'] for r in rows
+                            if r['throttle'] == 0 and r['brake'] == 0))
+
     def test_small_command_header_backstep_preserves_order_and_raw_stamp(self):
         cfg = dict(CONFIG, clock='header')
         for backstep_ns in (2_175_000, 5_000_000):

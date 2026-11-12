@@ -139,6 +139,9 @@ ROS結合ビルド、実USB再接続、CH3切替・ESC動作は未検証。
 
 portableなbridge_core testに、AUTO固定スロットルの0.3秒中立からHOST handshakeへの
 組合せ確認を追加した。HOST未成立の非中立入力は引き続き拒否する。
+同定用R2ゲートの固定駆動→中立惰行→固定駆動でもHOSTを保持し、
+惰行時のthrottle/brake/reverseが全て0になることをportable testで確認する。
+これは指令生成とHOST経路の単体組合せ確認であり、ROS結合・実PWM・実車惰行の確認とは区別する。
 bridge実装・parameter・topicは変更しない。このテストはROS/基板/実車動作の確認ではない。
 
 正常なHOST稼働中のAUTO↔MANUALはAuthorityを保持して直接切替する。

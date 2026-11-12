@@ -211,7 +211,11 @@ class Editor:
             settings = runtime_settings(a.e2e_model_dir)
             value = settings['fixed_throttle'] if a.e2e_fixed_throttle is None else a.e2e_fixed_throttle
             return 'モデル出力' if a.e2e_throttle_mode == 'model' else f'モデル操舵＋固定スロットル {value}'
-        value = self.params('input/joy_manager.yaml', 'kart_joy_manager')['auto_fixed_throttle'] if a.auto_fixed_throttle is None else a.auto_fixed_throttle
+        settings = self.params('input/joy_manager.yaml', 'kart_joy_manager')
+        value = settings['auto_fixed_throttle'] if a.auto_fixed_throttle is None else a.auto_fixed_throttle
+        gate = settings['auto_fixed_throttle_r2_gate'] if getattr(a, 'auto_fixed_throttle_r2_gate', None) is None else a.auto_fixed_throttle_r2_gate
+        if a.mode in ('collect', 'environment') and gate and value >= 0:
+            return f'車両同定：R2で固定 {value}／惰行＋手動操舵'
         return '通常AUTO' if value < 0 else f'固定スロットル {value}＋手動操舵'
 
     def foxglove_enabled(self):
@@ -416,13 +420,19 @@ class Editor:
             if a.joy_max_throttle is not None:
                 settings['speed_scale'] = a.joy_max_throttle
             value = settings['auto_fixed_throttle'] if a.auto_fixed_throttle is None else a.auto_fixed_throttle
-            mode = self.pick('AUTOスロットル', ['normal', 'fixed'], 'fixed' if value >= 0 else 'normal',
-                             lambda v: '通常AUTO' if v == 'normal' else '固定値で収集（ステア手動）')
+            gate = settings['auto_fixed_throttle_r2_gate'] if getattr(a, 'auto_fixed_throttle_r2_gate', None) is None else a.auto_fixed_throttle_r2_gate
+            choices = ['normal', 'fixed'] + (['identification'] if a.mode in ('collect', 'environment') else [])
+            current_mode = 'identification' if 'identification' in choices and gate and value >= 0 else 'fixed' if value >= 0 else 'normal'
+            labels = {'normal': '通常AUTO', 'fixed': '固定値で収集（ステア手動）',
+                      'identification': '車両同定：R2で固定駆動／惰行'}
+            mode = self.pick('AUTOスロットル', choices, current_mode, labels.__getitem__)
             if mode == 'normal':
                 a.auto_fixed_throttle = -1.0
+                a.auto_fixed_throttle_r2_gate = False
             else:
                 current = value if value >= 0 else ''
                 a.auto_fixed_throttle = float(input(f'固定スロットル初期値 0..{settings["speed_scale"]}（起動後はSTOP中のD-pad上下で0.001調整）[{current}] > ').strip() or current)
+                a.auto_fixed_throttle_r2_gate = mode == 'identification'
 
     def edit_evs(self):
         from kart_bringup.evs import BACKENDS, BACKEND_LABELS, AGGREGATIONS, AGGREGATION_LABELS, DEFAULT_BIAS, bias_files

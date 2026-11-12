@@ -18,7 +18,7 @@ const {state,emit}=await import('../frontend/api.js');
 state.config={connection:{user:'kart',host:'jetson',port:22}};
 const id='a'.repeat(64), calls=[];
 let snapshot={phase:'idle',session:false,ownership:{locked:false},legacy:[]};
-let delayedStatus=null,failStatus=false;
+let delayedStatus=null,failStatus=false,savedPreset=null,remoteSupportsGate=true;
 globalThis.fetch=async(url,options)=>{
   if(url==='/api/bringup/preview')return {ok:true,json:async()=>({modes:{collect:'記録'},fields:[{key:'device',kind:'text'}],status:{phase:'preview',session:false}})};
   const body=JSON.parse(options.body);calls.push({url,body});
@@ -27,8 +27,17 @@ globalThis.fetch=async(url,options)=>{
   if(action==='status' && failStatus)throw Error('offline');
   let result;
   if(action==='containers')result={containers:[{id,name:'kart',running:true,root:'/repo'}]};
-  else if(action==='preset_get')result={preset:null};
-  else if(action==='catalog')result={modes:{'esc-trial':'ESC試験',collect:'記録'},stereo_defaults:{collect:{profile:'640x480x90',infra_profile:'640x480x90',depth_profile:'0'}},fields:[{key:'device',kind:'text'},{key:'rgb_profile',choices:['0','640x480x30']},{key:'infra_profile',choices:['0','640x480x90']},{key:'depth_profile',choices:['0','640x480x90']}],status:snapshot};
+  else if(action==='preset_get')result={preset:savedPreset};
+  else if(action==='catalog')result={
+    modes:{'esc-trial':'ESC試験',collect:'記録',drive:'地図走行',e2e:'E2E'},
+    default_labels:{collect:{auto_fixed_throttle:'通常AUTO',auto_fixed_throttle_r2_gate:'無効'}},
+    stereo_defaults:{collect:{profile:'640x480x90',infra_profile:'640x480x90',depth_profile:'0'}},
+    fields:[{key:'device',kind:'text'},{key:'rgb_profile',choices:['0','640x480x30']},
+      {key:'infra_profile',choices:['0','640x480x90']},{key:'depth_profile',choices:['0','640x480x90']},
+      {key:'auto_fixed_throttle',kind:'text'},
+      ...(remoteSupportsGate?[{key:'auto_fixed_throttle_r2_gate',kind:'boolean',default:null}]:[])],
+    status:snapshot,
+  };
   else if(action==='plan')result={revision:'reviewed',review:'ESC plan'};
   else if(action==='start'){assert.equal(body.revision,'reviewed');snapshot={...snapshot,run_id:'r1',phase:'running',session:true,ownership:{locked:true},managed:true};result=snapshot;}
   else if(action==='stop'){assert.equal(body.run_id,'r1');result={...snapshot,stop_requested:true};}
@@ -108,3 +117,41 @@ assert.equal(picker.root.children[1].textContent,'OFF');
 controls.children[0].children[0].onclick();
 assert.equal(picker.root.children[1].textContent,'640 × 480 / 30 Hz（既定）');
 console.log('RGB defaults: resolved value, highlighted resolution/rate, OFF and reset passed');
+
+// The identification toggle creates an explicit bool override and cannot leak
+// from a recording preset into an unrelated driving mode.
+snapshot={phase:'idle',session:false,ownership:{locked:false},legacy:[]};
+savedPreset={container:id,values:{mode:'collect'}};
+emit('connection');await flush();el('bringup-connect').onclick();await flush();
+let fixed=el('bringup-field-auto_fixed_throttle');
+let r2Gate=el('bringup-field-auto_fixed_throttle_r2_gate');
+assert.equal(r2Gate.disabled,true,'a fixed throttle is required before enabling the gate');
+assert.match(r2Gate.title,/□保持/);
+assert.match(r2Gate.title,/左右InfraをON/);
+assert.match(r2Gate.title,/R1開始／L1停止/);
+fixed.value='0.15';fixed.onchange();
+assert.equal(r2Gate.disabled,false);
+r2Gate.value='true';r2Gate.onchange();
+el('bringup-plan').onclick();await flush();
+const lastPlan=()=>calls.filter(c=>c.url.endsWith('/plan')).at(-1).body.values;
+assert.equal(lastPlan().auto_fixed_throttle_r2_gate,true);
+assert.equal(lastPlan().auto_fixed_throttle,'0.15');
+fixed.value='-1';fixed.onchange();
+assert.equal(r2Gate.disabled,true);
+el('bringup-plan').onclick();await flush();
+assert.equal(lastPlan().auto_fixed_throttle_r2_gate,false,'normal AUTO explicitly disables a previously selected gate');
+fixed.value='0.15';fixed.onchange();r2Gate.value='true';r2Gate.onchange();
+el('bringup-mode').value='drive';el('bringup-mode').onchange();
+el('bringup-plan').onclick();await flush();
+assert.equal('auto_fixed_throttle_r2_gate' in lastPlan(),false,'mode switches must discard the recording option');
+savedPreset={container:id,values:{mode:'e2e',auto_fixed_throttle_r2_gate:true}};
+emit('connection');await flush();el('bringup-connect').onclick();await flush();
+el('bringup-plan').onclick();await flush();
+assert.equal(lastPlan().mode,'e2e');
+assert.equal('auto_fixed_throttle_r2_gate' in lastPlan(),false,'legacy hidden preset values must not enter an E2E plan');
+remoteSupportsGate=false;
+savedPreset={container:id,values:{mode:'collect',auto_fixed_throttle:'-1',auto_fixed_throttle_r2_gate:true}};
+emit('connection');await flush();el('bringup-connect').onclick();await flush();
+el('bringup-plan').onclick();await flush();
+assert.equal('auto_fixed_throttle_r2_gate' in lastPlan(),false,'an older remote catalog must not receive a new unsupported option');
+console.log('Identification recording: fixed prerequisite, explicit bool override, normal-mode reset, mode/preset isolation passed');

@@ -25,7 +25,7 @@ QoSはすべてvolatile、keep-last。R=reliable、BE=best effort、数字=depth
 | 入力 | `/vehicle/active_path` | `std_msgs/msg/UInt8` | R/10 | 基板の出力経路。○の開始・保持はHOST=2、受信後150 ms以内を確認 |
 | 入力 | `/joy/ready` | `std_msgs/msg/Bool` | R/1 | 入力・profileが有効かつ設定中でないこと |
 | 入力 | `/operation_mode/state` | `kart_interfaces/msg/OperationModeState` | R/1 | 現在モード |
-| 出力 | `/teleop/fixed_config` | `std_msgs/msg/String` | R/1 | 10 Hz、固定スロットル設定とAUTO gateの状態（JSON） |
+| 出力 | `/teleop/fixed_config` | `std_msgs/msg/String` | R/1 | 10 Hz＋段階変更時、固定スロットル設定・AUTO gate・駆動／惰行の状態（JSON） |
 | 出力 | `/teleop/control_cmd` | `kart_interfaces/msg/ControlCommand` | R/1 | 有効なJoy受信時に手動指令を配信。元stampを保持 |
 | 出力 | `/operation_mode/request` | `kart_interfaces/msg/OperationModeRequest` | R/10 | モード切替・入力喪失時のSTOP要求 |
 | 出力 | `/bag/request` | `kart_interfaces/msg/BagRequest` | R/10 | L1 START / R1 STOP。走行モードと独立 |
@@ -112,6 +112,7 @@ sim時刻での入力鮮度と実時間での通信断を分離する。元stamp
 | `brake_pulse_throttle` | `0.05` | ○による正throttle要求、0.002..1。起動時固定 |
 | `brake_pulse_s` | `0.02` | 正パルス保持時間[秒]、steady時刻、0.01..0.5。起動時固定 |
 | `auto_fixed_throttle` | `-1.0` | AUTO時の固定正規化指令（手動ステア）。-1で通常操作、0..speed_scaleで固定。parameterは起動時の初期値、運用値はSTOP中にD-pad変更可能 |
+| `auto_fixed_throttle_r2_gate` | `false` | 起動時固定のbool。trueなら車両同定用にR2で固定駆動／惰行を切り替える。`auto_fixed_throttle >= 0`が必要 |
 
 スロットルは`(R2 − L2) × speed_scale`。各トリガー0.01以下を0とし、負側は`reverse`へ格納する。
 両方同量なら相殺するが、モード要求時には両トリガーを離す必要がある。
@@ -190,6 +191,42 @@ CLI/launchの旧`manual_fixed_throttle`は`auto_fixed_throttle`へ変更した�
 TUIの「AUTOスロットル」で通常／固定を選ぶ。collect/driveで利用可能。E2Eでは収集用の固定設定を無効化し、モデルのステア＋E2E専用固定スロットルを使用する。
 RGB/EVS教師抽出はbag内の固定AUTO有効設定を自動検出する。固定収集bagでは固定AUTOだけを採用し、MANUALの復帰・調整区間を全て除外する。通常bagは従来どおりMANUALだけを採用する。
 ROS結合・実車動作は未確認。portable testで固定出力、直接切替、異常ラッチ、HOST handshakeを検証する。
+
+### 車両同定用の固定駆動・惰行
+
+`auto_fixed_throttle_r2_gate=true`を明示すると、□保持中のAUTOと手動ステアを維持したまま、
+R2で設定済み固定スロットルと惰行を切り替える。R2の押し込み量で出力量を変えない。
+未指定の既定falseでは従来の□保持による連続固定駆動を使う。
+
+| 操作 | mode | 補正前の要求 |
+| --- | --- | --- |
+| □保持＋R2を押す | AUTO | 設定済み固定throttle、brake/reverse=0、手動ステア |
+| □保持＋R2を離す | AUTO | throttle/brake/reverse=0、手動ステア |
+| □解除・×・入力喪失 | STOP要求 | 中立。物理停止や制動完了を示さない |
+
+R2は正規化した元軸値0.10以上でON、0.05以下でOFFとする（定数、追加parameterなし）。
+中間は直前状態を保持する。STOP→AUTO、MANUAL→AUTOとも初めに0.3秒の中立を配信し、
+その後にR2を一度0.05以下へ戻してから新しく押す必要がある。入口から押し続けていても駆動しない。
+Joy/ready/modeの鮮度、異常ラッチ、追加deadman、□の保持条件、○の独立制動、L2のSTOPは従来どおり。
+異常回復やR2の押し直しだけでは再armせず、STOPとモードボタンの押し直しを必要とする。
+固定値のD-pad変更は新鮮なSTOP中だけで、AUTOの惰行中には変更しない。録画の開始・停止は独立操作。
+同定用AUTOで□を離して△へ切り替えた場合も一度STOPとする。モードボタンを離してSTOPを確認し、
+新しく△を押して通常MANUALへ入る。R2の固定値ゲートから通常アナログ操作への意図しない引継ぎを防ぐ。
+
+```bash
+bash scripts/bringup.sh --mode collect --auto-fixed-throttle 0.10 \
+  --auto-fixed-throttle-r2-gate --run-name identification_010
+```
+
+数値は指定例。ROSノード`/kart_joy_manager`の入出力topic・型・QoSは上表から追加なし。
+既存`/teleop/fixed_config`の`kart.auto_fixed_throttle.v1`へ、`r2_gate_enabled`、`r2_pressed`、
+`phase`（disabled/inactive/entry_neutral/coast/drive/fault）、`effective_throttle`、
+`phase_sequence`、`command_stamp_ns`を追加して10 Hzと段階変更時に配信する。
+`effective_throttle`は固定AUTO経路の補正前要求（inactive/faultでは0）、
+`command_stamp_ns`は現在の段階で生成した指令の元stamp（その段階で未生成なら0）。
+段階と論理的armedは実車速度・基板ack・惰行の成立を保証しない。標準bagの既存topic設定で保存する。
+portable C++テストで固定値、ヒステリシス、AUTOでの惰行、入口での押下保持、異常後の再始動抑制を確認する。
+ROS結合・実車の駆動／惰行・記録は未確認。
 
 
 ### ESCへの手動要求と○による制動試験

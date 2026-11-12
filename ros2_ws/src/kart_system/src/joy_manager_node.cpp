@@ -34,12 +34,14 @@ public:
     brake_hold_.pulse.throttle=number(*this,"brake_pulse_throttle",0.05,0.002,1.0);
     brake_hold_.pulse.duration_s=number(*this,"brake_pulse_s",0.02,0.01,0.5);
     manual_fixed_.throttle=number(*this,"auto_fixed_throttle",-1.0,-1.0,1.0);
+    manual_fixed_.r2_gate=declare_parameter<bool>("auto_fixed_throttle_r2_gate",false,fixed());
     if (!manual_fixed_.valid_settings(teleop_.speed_scale)) {
-      throw std::invalid_argument("auto_fixed_throttle must be -1 (disabled) or 0..speed_scale");
+      throw std::invalid_argument("auto_fixed_throttle must be -1 (disabled) or 0..speed_scale; R2 gate requires a fixed value");
     }
     fixed_config_pub_=create_publisher<std_msgs::msg::String>("teleop/fixed_config",rclcpp::QoS(1).reliable());
-    RCLCPP_INFO(get_logger(),"AUTO fixed throttle (D-pad up/down: step 0.001 in STOP when enabled): %s; value=%.6f; limit(speed_scale)=%.6f",
-      manual_fixed_.enabled() ? "enabled" : "disabled",manual_fixed_.throttle,teleop_.speed_scale);
+    RCLCPP_INFO(get_logger(),"AUTO fixed throttle (D-pad up/down: step 0.001 in STOP when enabled): %s; value=%.6f; limit(speed_scale)=%.6f; R2 drive/coast gate=%s",
+      manual_fixed_.enabled() ? "enabled" : "disabled",manual_fixed_.throttle,teleop_.speed_scale,
+      manual_fixed_.r2_gate ? "enabled" : "disabled");
     pub_=create_publisher<Control>("teleop/control_cmd",rclcpp::QoS(1).reliable());
     request_pub_=create_publisher<Request>("operation_mode/request",10);
     ready_sub_=create_subscription<std_msgs::msg::Bool>("joy/ready",1,[this](std_msgs::msg::Bool::ConstSharedPtr msg) {
@@ -56,6 +58,7 @@ public:
       manual_fixed_.observe(mode_,seconds(msg->header.stamp),now().seconds(),steady_now(),
         input_healthy() && !blocked_,neutral_input_);
       if (mode_==STOP) {blocked_=false;}
+      publish_fixed_transition();
     });
     path_sub_=create_subscription<std_msgs::msg::UInt8>("vehicle/active_path",10,
       [this](std_msgs::msg::UInt8::ConstSharedPtr msg) {board_path_=msg->data; path_at_=steady_now();});
@@ -71,7 +74,8 @@ public:
         stop_fixed({},"joy_manager:fixed_throttle_mode_unavailable");
       }
       if (brake_hold_.active() && !fresh_mode()) {stop_hold("joy_manager:circle_mode_timeout");}
-      if (steady_now()-last_config_>=0.1) {publish_fixed_config(); last_config_=steady_now();}
+      publish_fixed_transition();
+      if (steady_now()-last_config_>=0.1) {publish_fixed_config();}
     });
   }
 private:
@@ -148,12 +152,38 @@ private:
       ",\"entry_neutral_s\":"+std::to_string(ManualFixedThrottle::ENTRY_NEUTRAL_S)+
       ",\"speed_scale\":"+std::to_string(teleop_.speed_scale)+
       ",\"mode\":"+std::to_string(mode_)+
-      ",\"armed\":"+std::string(manual_fixed_.active() && !blocked_ ? "true" : "false")+"}";
+      ",\"armed\":"+std::string(manual_fixed_.active() && !blocked_ ? "true" : "false")+
+      ",\"r2_gate_enabled\":"+std::string(manual_fixed_.r2_gate ? "true" : "false")+
+      ",\"r2_pressed\":"+std::string(manual_fixed_.r2_pressed() ? "true" : "false")+
+      ",\"phase\":\""+manual_fixed_.phase()+"\""+
+      ",\"effective_throttle\":"+std::to_string(manual_fixed_.effective_throttle())+
+      ",\"phase_sequence\":"+std::to_string(manual_fixed_.phase_sequence())+
+      ",\"command_stamp_ns\":"+std::to_string(command_phase_sequence_==manual_fixed_.phase_sequence() ? command_stamp_ns_ : 0)+"}";
     fixed_config_pub_->publish(msg);
+    last_fixed_phase_=manual_fixed_.phase();
+    last_fixed_phase_sequence_=manual_fixed_.phase_sequence();
+    last_config_=steady_now();
+  }
+  void publish_fixed_transition() {
+    if (last_fixed_phase_==manual_fixed_.phase() &&
+        last_fixed_phase_sequence_==manual_fixed_.phase_sequence()) {return;}
+    if (manual_fixed_.r2_gate) {
+      RCLCPP_INFO(get_logger(),"Vehicle identification: phase=%s fixed_throttle=%.6f effective_throttle=%.6f R2_pressed=%s sequence=%llu",
+        manual_fixed_.phase(),manual_fixed_.throttle,manual_fixed_.effective_throttle(),
+        manual_fixed_.r2_pressed() ? "true" : "false",
+        static_cast<unsigned long long>(manual_fixed_.phase_sequence()));
+    }
+    publish_fixed_config();
+  }
+  void publish_control(const Control & msg) {
+    pub_->publish(msg);
+    command_stamp_ns_=static_cast<int64_t>(msg.header.stamp.sec)*1000000000LL+msg.header.stamp.nanosec;
+    command_phase_sequence_=manual_fixed_.phase_sequence();
+    publish_fixed_transition();
   }
   void stop_fixed(const Command & command,const std::string & reason) {
     manual_fixed_.trip(); blocked_=true;
-    Control msg; msg.header.stamp=now(); set_values(msg,command); pub_->publish(msg);
+    Control msg; msg.header.stamp=now(); set_values(msg,command); publish_control(msg);
     if (steady_now()-last_stop_>=0.1) {request(*this,request_pub_,STOP,reason); last_stop_=steady_now();}
   }
   bool studio_mode() const {
@@ -202,7 +232,7 @@ private:
       mode_hold_.reset(); manual_fixed_.trip();
       log_brake_signal(steady_now(),"circle_release_or_control_gate");
       if (brake.stop) {stop_hold("joy_manager:circle_finished_or_unavailable"); return;}
-      Control msg; msg.header=joy.header; set_values(msg,brake.command); pub_->publish(msg);
+      Control msg; msg.header=joy.header; set_values(msg,brake.command); publish_control(msg);
       if (brake.manual) {
         circle_request_at_=steady_now();
         request(*this,request_pub_,MANUAL,"joy_manager:circle_brake");
@@ -211,7 +241,9 @@ private:
       return;
     }
     const auto requested=mode_hold_.update(*actions);
-    if (requested==STOP || (host_mode(mode_) && !studio_mode() && !mode_hold_.active())) {
+    if (requested==STOP ||
+        (manual_fixed_.r2_gate && mode_==AUTO && !actions->auto_held) ||
+        (host_mode(mode_) && (!studio_mode() || manual_fixed_.r2_gate) && !mode_hold_.active())) {
       stop_hold(actions->manual_held && actions->auto_held ?
         "joy_manager:mode_buttons_conflict" : "joy_manager:mode_button_released");
       return;
@@ -238,13 +270,13 @@ private:
     if (requested==MANUAL && mode_==AUTO) {
       reset_brake_pulse("manual_takeover");
       request(*this,request_pub_,MANUAL,"joy_manager:manual_takeover");
-      Control msg; msg.header=joy.header; set_values(msg,teleop_.command(joy.axes,actions->brake)); pub_->publish(msg); return;
+      Control msg; msg.header=joy.header; set_values(msg,teleop_.command(joy.axes,actions->brake)); publish_control(msg); return;
     }
     const auto raw=teleop_.command(joy.axes,actions->brake);
     const auto result=manual_fixed_.command(raw,joy.axes[teleop_.reverse_axis]>0.01,
-      now().seconds(),steady_now(),input_healthy() && !blocked_);
+      now().seconds(),steady_now(),input_healthy() && !blocked_,joy.axes[teleop_.throttle_axis]);
     if (result.stop) {stop_fixed(result.command,"joy_manager:fixed_throttle_cancelled"); return;}
-    Control msg; msg.header=joy.header; set_values(msg,result.command); pub_->publish(msg);
+    Control msg; msg.header=joy.header; set_values(msg,result.command); publish_control(msg);
     if ((mode_==STOP && teleop_.can_arm(joy.axes,actions->brake)) || host_mode(mode_)) {
       if (requested==MANUAL) {request(*this,request_pub_,MANUAL,"joy_manager:manual_button");}
       else if (requested==AUTO) {request(*this,request_pub_,AUTO,"joy_manager:auto_button");}
@@ -268,6 +300,10 @@ private:
   ManualFixedThrottle manual_fixed_;
   bool neutral_input_{false};
   double last_config_{NEVER};
+  std::string last_fixed_phase_;
+  uint64_t last_fixed_phase_sequence_{0};
+  uint64_t command_phase_sequence_{0};
+  int64_t command_stamp_ns_{0};
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr fixed_config_pub_;
   double ready_at_{NEVER},joy_at_{NEVER},last_stop_{NEVER};
   bool ready_{false},blocked_{false}; uint8_t mode_{STOP};
