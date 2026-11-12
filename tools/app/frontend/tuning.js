@@ -1,15 +1,16 @@
 import { paintTrailSpeed } from './trail_speed.js';
 import { renderVehicle } from './vehicle_status.js';
+import { renderPerception } from './perception_status.js';
 import { $, state, api, action, on, emit, toast } from './api.js';
 
 export const tuning = {connected:false, busy:false, epoch:0, received:0, status:null,
-  poseStream:null, poseCursor:0, active:null, preview:null, trail:[], timer:null, id:null, error:''};
+  poseStream:null, poseCursor:0, active:null, preview:null, previewJson:null, trail:[], timer:null, id:null, error:''};
 const fresh = () => tuning.connected && Date.now() - tuning.received < 3000;
-function invalidatePreview() { tuning.preview=null; render(); }
+function invalidatePreview() { tuning.preview=null; tuning.previewJson=null; render(); }
 function stop() {
   tuning.epoch++;
   tuning.connected=false; tuning.received=0;
-  tuning.poseStream=null; tuning.poseCursor=0; tuning.status=null; tuning.active=null; tuning.preview=null; tuning.trail=[];
+  tuning.poseStream=null; tuning.poseCursor=0; tuning.status=null; tuning.active=null; tuning.preview=null; tuning.previewJson=null; tuning.trail=[];
   clearTimeout(tuning.timer); tuning.timer=null;
   render(); emit('tuning');
 }
@@ -59,7 +60,7 @@ function applyIssue() {
 }
 function previewValid() {
   const p=tuning.preview;
-  return p && !state.dirty && p.document.revision===state.doc?.revision &&
+  return p && tuning.previewJson && !state.dirty && p.document.revision===state.doc?.revision &&
     p.lane_id===state.laneId && p.line_type===$('tuning-line').value &&
     p.centerline_speed_mps===Number($('tuning-speed').value);
 }
@@ -69,6 +70,7 @@ function render() {
   $('tuning-connect').textContent=tuning.connected?'切断':'自己位置を接続';
   $('tuning-connect').disabled=tuning.busy || !state.doc;
   renderVehicle(fresh() ? s : null);
+  renderPerception(s?.perception, fresh(), (Date.now()-tuning.received)/1000);
   $('tuning-offset-open').disabled=tuning.busy || !parameterConnectionReady();
   $('tuning-parameters-open').disabled=tuning.busy || !parameterConnectionReady();
   $('tuning-line-switch').disabled=tuning.busy || !!applyIssue();
@@ -107,13 +109,17 @@ action('tuning-preview', async()=> {
   if(state.dirty)throw new Error('編集を保存し、必要なラインを生成してください');
   const epoch=tuning.epoch, id=state.id, revision=state.doc.revision, lane=state.laneId;
   const kind=$('tuning-line').value, speed=Number($('tuning-speed').value);
-  tuning.id=id; tuning.busy=true; tuning.preview=null; render();
+  tuning.id=id; tuning.busy=true; invalidatePreview();
   try {
     const result=await api('tuning/prepare',{id,document_revision:revision,lane_id:lane,
       line_type:kind,centerline_speed_mps:speed});
     if(epoch!==tuning.epoch || state.id!==id || state.doc.revision!==revision || state.dirty || state.laneId!==lane || $('tuning-line').value!==kind || Number($('tuning-speed').value)!==speed)
       throw new Error('編集内容が変わりました。プレビューを作り直してください');
-    tuning.preview=result; emit('tuning');
+    if(typeof result?.snapshot_json!=='string')
+      throw new Error('候補データの形式が古いか不正です。Studioを再起動して画面を再読み込みしてください');
+    const candidate=JSON.parse(result.snapshot_json);
+    // Parse only for display; send the original Python JSON back unchanged.
+    tuning.preview=candidate; tuning.previewJson=result.snapshot_json; emit('tuning');
   } finally {tuning.busy=false;render();}
 });
 for(const [id, actionName] of [['tuning-apply','apply'],['tuning-rollback','rollback']]) {
@@ -123,7 +129,7 @@ for(const [id, actionName] of [['tuning-apply','apply'],['tuning-rollback','roll
     const epoch=tuning.epoch;
     tuning.busy=true; render();
     try {
-      const result=await request(actionName,{snapshot:tuning.preview,expected_revision:tuning.status.revision});
+      const result=await request(actionName,{snapshot:tuning.previewJson,expected_revision:tuning.status.revision});
       if(epoch!==tuning.epoch)return;
       update(result); toast('Jetsonの適用版を確認しました。走行中は次の制御周期から反映されます');
     } catch(error) {
@@ -136,10 +142,14 @@ $('tuning-line').addEventListener('change',invalidatePreview);
 $('tuning-speed').addEventListener('input',invalidatePreview);
 on('loaded',stop);
 on('connection',stop);
-on('document',()=> { if(tuning.preview && !previewValid())tuning.preview=null; render(); });
+on('document',()=> { if(tuning.preview && !previewValid())invalidatePreview(); else render(); });
 on('ready',render);
 on('status',render);
-setInterval(()=> { if(tuning.connected && !fresh()){render();emit('tuning');} },500);
+setInterval(()=> {
+  if(!tuning.connected)return;
+  if(!fresh()){render();emit('tuning');}
+  else renderPerception(tuning.status?.perception, true, (Date.now()-tuning.received)/1000);
+},500);
 
 export function paintTuning(ctx, project, line) {
   if(tuning.id!==state.id)return;

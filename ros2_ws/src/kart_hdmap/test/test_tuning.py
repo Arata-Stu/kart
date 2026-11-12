@@ -151,6 +151,38 @@ class TransactionTests(unittest.TestCase):
         self.assertNotIn('error', result)
         self.assertEqual(b.active(), old)
 
+    def test_perception_status_is_display_only_and_keeps_revision_and_raw_ids(self):
+        from types import SimpleNamespace as NS
+        from unittest.mock import Mock
+        from kart_hdmap.perception_status import PerceptionStatus
+        b = self.bridge
+        stamp_ns = 1_234_567_890_123_456_789
+        sec, nanosec = divmod(stamp_ns, 1_000_000_000)
+        header = NS(stamp=NS(sec=sec, nanosec=nanosec), frame_id='rgb_optical')
+        box = NS(center=NS(position=NS(x=100., y=200.)), size_x=40., size_y=50.)
+        detection = NS(id='7-3', bbox=box, results=[NS(hypothesis=NS(class_id='2', score=.9))])
+        b.node.get_clock = lambda: NS(now=lambda: NS(nanoseconds=stamp_ns + 100_000_000))
+        b.perception = {name: PerceptionStatus() for name in ('detections', 'tracks')}
+        b.fresh = Mock(return_value=True)
+        revision, active = b.revision(), copy.deepcopy(b.active())
+        b.capture_perception('detections', NS(header=header, detections=[detection]))
+        b.capture_perception('tracks', NS(header=header, detections=[]))
+        result = self.call('/status', known_revision=revision)
+        b.fresh.assert_called_with(header.stamp, 2.)
+        self.assertNotIn('active', result)
+        self.assertEqual(result['perception']['detections']['count'], 1)
+        self.assertEqual(result['perception']['detections']['objects'][0]['class_id'], '2')
+        self.assertEqual(result['perception']['detections']['stamp_ns'], str(stamp_ns))
+        self.assertEqual(result['perception']['tracks']['count'], 0)
+        json.dumps(result, allow_nan=False)
+        b.node.count_publishers = lambda topic: int(topic != '/racing/detections')
+        missing = self.call('/status', known_revision=revision)['perception']['detections']
+        self.assertIsNone(missing['count'])
+        self.assertEqual(missing['objects'], [])
+        self.assertEqual(b.active(), active)
+        self.assertEqual(b.revision(), revision)
+        b.replace.assert_not_called()
+
     def test_atomic_apply_and_rollback_keep_complete_old_version(self):
         b=self.bridge
         original=copy.deepcopy(b.active())

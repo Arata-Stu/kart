@@ -184,6 +184,8 @@ ros2 topic pub --once /hdmap/select_line std_msgs/msg/String '{data: centerline}
 | 入力 | /operation_mode/state | kart_interfaces/msg/OperationModeState | reliable/volatile/depth1、走行モードとstamp/受信期限0.3秒 |
 | 入力 | /visual_slam/tracking/odometry | nav_msgs/msg/Odometry | sensor data QoS、速度normとstamp/受信期限0.5秒 |
 | 入力 | /localization/vslam/diagnostics | diagnostic_msgs/msg/DiagnosticArray | reliable/volatile/depth10、表示用の位置確定状態、1.5秒期限 |
+| 入力 | /racing/detections | vision_msgs/msg/Detection2DArray | best effort/volatile/depth1、検出の件数・class ID・score・画像座標bbox |
+| 入力 | /racing/tracks | vision_msgs/msg/Detection2DArray | best effort/volatile/depth1、追跡ID・class ID・score・画像座標bbox |
 | 入力 | /tf、/tf_static | tf2_msgs/msg/TFMessage | tf2_ros標準QoS、map→tuning_tracking_frameの取得、動的TFは0.5秒期限 |
 
 出力topic・既存serviceは上記の表と同じ。追加ROS service/actionなし。
@@ -195,6 +197,17 @@ Infra/VSLAMが90 Hzでも、そのTF chainの更新が遅ければ表示用取�
 正値はROS stamp差で取得を間引く上限。時計巻戻しでは履歴streamを更新する。
 状態監視・HTTP要求処理は従来の10 Hz、HTTP取得は約1 Hz。
 状態変更はHTTPスレッドで行わずexecutorで一括処理する。
+
+検出・追跡の表示は`status.perception`へ約1 Hzの既存取得で同梱する。画像はSSHで転送しない。
+両topicはracing launchの固定namespaceに合わせた絶対名。新しいROS parameter・publisher・serviceはない。
+各channelはpublisherの存在、最後の受信からの秒数、撮影stamp（精度保持用文字列）、frame、受信件数、
+先頭最大10件のID/class ID/score/bboxを持つ。bboxは画像内のcx/cy/幅/高さ[pixel]で距離ではない。
+計測stampと受信のどちらかが2秒を超えた場合、未受信、publisher停止では件数を不明に戻して一覧を消す。
+応答には両期限の短い方の残り秒数`fresh_for_s`も載せ、ブラウザ側でも通信待ちの間に期限切れの一覧を消す。
+新鮮な空配列だけを0件として表示する。受信後の秒数を推論遅延やセンサ遅延として扱わない。
+モデルを決めつけずclass IDをそのまま渡すため、専用モデルのclass 0をCOCOのpersonへ誤変換しない。
+これは表示専用で、参照ライン・モード・車両指令や追い越し判断を変更しない。
+ROS非依存の`test_perception_status.py`で鮮度・容量上限・不正値の除外を検証する。
 
 位置履歴は最大12,000点。HTTP要求のpose_stream/pose_afterに対し、pose_samplesに
 seq、stamp_ns（精度保持用文字列）、x/y/yaw、break_beforeを含む未送信分を返す。

@@ -20,7 +20,7 @@ from .mapping import Mapping, local_records
 from .maps import Maps
 from .storage import atomic_json, name, read_json, within
 from .transfers import Transfers, profile
-from .tuning import Tuning, remote
+from .tuning import MAX_APPLY_BYTES, Tuning, remote
 from .bringup import Bringup, preview_catalog
 from .audit import Audit, FILES as AUDIT_FILES
 
@@ -501,12 +501,14 @@ class Handler(BaseHTTPRequestHandler):
             if self.headers.get("Content-Type", "").split(";")[0] != "application/json":
                 raise ValueError("JSON required")
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 < length <= 4 * 1024 * 1024:
+            path = urlsplit(self.path).path
+            limit = MAX_APPLY_BYTES if path == '/api/tuning/apply' else 4 * 1024 * 1024
+            if not 0 < length <= limit:
                 raise ValueError("Body size limit exceeded")
             body = json.loads(self.rfile.read(length))
             if not isinstance(body, dict):
                 raise ValueError("JSON object required")
-            self.reply(200, self.server.studio.post(urlsplit(self.path).path, body))
+            self.reply(200, self.server.studio.post(path, body))
         except (ValueError, KeyError, TypeError, OSError, TimeoutError) as exc:
             self.reply(400, dict(error=str(exc)))
         except Exception as exc:

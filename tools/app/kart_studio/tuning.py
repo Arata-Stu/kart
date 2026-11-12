@@ -18,6 +18,9 @@ _package = importlib.util.module_from_spec(_spec)
 sys.modules.setdefault(_spec.name, _package)
 _protocol = importlib.import_module('_kart_tuning_protocol.tuning')
 
+# JSON-string escaping can double the snapshot size in the browser envelope.
+MAX_APPLY_BYTES = 2 * _protocol.MAX_BYTES + 4096
+
 
 def remote(connection, action, payload):
     if action not in ('status', 'apply', 'rollback', 'parameters_get', 'parameters_set', 'parking_start', 'parking_reset', 'esc_status', 'esc_start', 'esc_stop'):
@@ -85,14 +88,23 @@ class Tuning:
                          line_type=body['line_type'], centerline_speed_mps=body['centerline_speed_mps'])
         candidate['revision'] = _protocol.digest(candidate)
         _protocol.validate(candidate, candidate['map_id'])
-        return candidate
+        # Keep the hashed JSON opaque in the browser: parsing and reserializing
+        # numbers there changes e.g. 0.0 to 0 (and can round large integers).
+        return dict(snapshot_json=_protocol.encoded(candidate).decode())
 
     def request(self, body, action):
         identity = self.identity(body['id'])
         payload = dict(map_id=identity, known_revision=body.get('known_revision'),
                        pose_stream=body.get('pose_stream'), pose_after=body.get('pose_after', 0))
         if action == 'apply':
-            candidate = body['snapshot']
+            raw = body['snapshot']
+            if not isinstance(raw, str):
+                raise ValueError('候補データの形式が古いか不正です。画面を再読み込みしてプレビューを作り直してください')
+            if len(raw.encode()) > _protocol.MAX_BYTES:
+                raise ValueError('Tuning snapshot exceeds 3 MiB')
+            candidate = json.loads(raw)
+            if not isinstance(candidate, dict):
+                raise ValueError('候補データが不正です。プレビューを作り直してください')
             _protocol.validate(candidate, identity)
             if candidate['document'] != self.maps.load(body['id']):
                 raise ValueError('プレビュー後に地図が変わりました。作り直してください')

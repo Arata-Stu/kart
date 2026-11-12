@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .pose_history import PoseHistory
 from .speed_history import SpeedHistory
 from .timing_history import TimingHistory
+from .perception_status import PerceptionStatus
 
 from .tuning import MAX_BYTES, StopGate, digest, encoded, map_identity, validate
 
@@ -19,10 +20,11 @@ class TuningBridge:
         from kart_interfaces.msg import HeadToHeadPlan, OperationModeState, TrackingReference
         from nav_msgs.msg import Odometry
         from std_msgs.msg import String
+        from vision_msgs.msg import Detection2DArray
         from .vehicle_status import VehicleStatus
         from diagnostic_msgs.msg import DiagnosticArray
         from rclpy.clock import Clock, ClockType
-        from rclpy.qos import qos_profile_sensor_data
+        from rclpy.qos import qos_profile_sensor_data, QoSProfile, ReliabilityPolicy, DurabilityPolicy
         from tf2_ros import Buffer, TransformListener
         from pathlib import Path
         root = Path(node.settings['tuning_map_dir'])
@@ -48,6 +50,7 @@ class TuningBridge:
         self.requests = queue.Queue(maxsize=4)
         self.pose_history = PoseHistory()
         self.speed_history = SpeedHistory()
+        self.perception = {name: PerceptionStatus() for name in ('detections', 'tracks')}
         self.timing_history = {
             'tracking': TimingHistory('lateral_controller', 'kart_control', ('pose_age_ms',)),
             'speed': TimingHistory('speed_controller', 'speed_controller', ('target_age_ms', 'measurement_age_ms')),
@@ -61,7 +64,13 @@ class TuningBridge:
 
         self.buffer = DisplayBuffer()
         self.listener = TransformListener(self.buffer, node)
+        perception_qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT,
+                                    durability=DurabilityPolicy.VOLATILE)
         self.subscriptions = [
+            node.create_subscription(Detection2DArray, '/racing/detections',
+                                     lambda msg: self.capture_perception('detections', msg), perception_qos),
+            node.create_subscription(Detection2DArray, '/racing/tracks',
+                                     lambda msg: self.capture_perception('tracks', msg), perception_qos),
             node.create_subscription(HeadToHeadPlan, 'racing/shadow_plan', self.vehicle.racing, 1),
             node.create_subscription(String, 'recovery/status', lambda m: self.vehicle.recovery(m.data), 1),
             node.create_subscription(DiagnosticArray, 'control/lateral_diagnostics', self.lateral_diagnostics, 10),
@@ -160,6 +169,9 @@ class TuningBridge:
         stamp = msg.header.stamp.sec + msg.header.stamp.nanosec / 1e9
         self.timing_history['tracking'].capture(stamp, msg.status, self.fresh(msg.header.stamp, .5))
 
+    def capture_perception(self, channel, msg):
+        self.perception[channel].capture(msg, self.fresh(msg.header.stamp, PerceptionStatus.MAX_AGE_S))
+
     def vehicle_diagnostics(self, msg):
         stamp = msg.header.stamp.sec + msg.header.stamp.nanosec / 1e9
         self.vehicle.bridge(stamp, msg.status)
@@ -201,6 +213,13 @@ class TuningBridge:
             result['speed_history'] = self.speed_history.view(now)
         if hasattr(self, 'timing_history'):
             result['timing_history'] = {k: h.view(now) for k, h in self.timing_history.items()}
+        if hasattr(self, 'perception'):
+            source_now_ns = self.node.get_clock().now().nanoseconds
+            result['perception'] = {
+                name: channel.view(self.node.count_publishers('/racing/' + name) > 0,
+                                   now, source_now_ns)
+                for name, channel in self.perception.items()
+            }
         if hasattr(self, 'pose_history'):
             result.update(self.pose_history.batch(pose_stream, pose_after))
         if hasattr(self, 'parking'): result['parking']=self.parking.view()

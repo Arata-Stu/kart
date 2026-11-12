@@ -1,6 +1,8 @@
 /**/opponent_tracker:
   ros__parameters:
     use_sim_time: false
+    tracking_enabled: true
+    tracked_class_id: "0"
     low_score: 0.1
     association_score: 0.5
     new_track_score: 0.6

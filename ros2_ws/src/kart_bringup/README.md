@@ -1888,8 +1888,21 @@ VOは推定値、中立は物理停止・制動完了の確認ではない。
 profile設定・TUI選択/復元・CLI・単一container構成をROS非依存テストで確認する。
 ROS結合・Jetsonでの処理負荷・実車収録は未確認。
 
-相手車両の重み配置・TensorRT build・録画RGBの検出ギャラリー・任意のbase_link接地点推定は[racing設定](config/racing/README.md)参照。
+公式YOLOv8s（COCO80クラス）の重み配置・ONNX変換・TensorRT build・録画RGBの検出ギャラリー・
+任意のbase_link接地点推定は[racing設定](config/racing/README.md)参照。
+追加学習なしで全80クラスを`/racing/detections`（vision_msgs/msg/Detection2DArray）へ出版し、
+car（class_id="2"）だけを`/racing/tracks`（同型）へ追跡出力する。
+自身のROSノードは追加せず、既存のIsaac ROS decoderとopponent_tracker componentを組み合わせる。
+decoderの基準値はnum_classes=80・confidence_threshold=0.1・nms_threshold=0.45、trackerはtracked_class_id="2"。
+engineのbuild.jsonに従い、専用opponentモデルではnum_classes=1・tracked_class_id="0"を選ぶ。
 
-`scripts/bringup.sh --mode collect --perception /path/to/opponent.plan`（TUIでも選択可）は
+`scripts/bringup.sh --mode collect --perception /path/to/yolov8s.plan`（地図走行drive・TUIでも選択可）は
 640×480のRGBを使い、RealSenseと同じsensor_containerに認識componentをロードする。
-mission.yamlのperception_engine既定は空（OFF）。[認識設定](config/racing/README.md)参照。
+mission.yamlのperception_engine既定は空（OFF）、perception_mode既定はtrack。
+起動時の`--perception-mode detect`は全80クラスの検出のみ、`track`は検出＋COCO carだけの追跡。
+未指定はYAMLを保持する。TUIの「認識 / 物体検出」でengine／OFFを、
+「認識 / モード」で検出のみ／検出＋車両追跡を切り替える。
+地図走行のライン追従を表すtracking構成とは独立しており、detectでも通常のライン追従は維持する。
+対象GPUコンテナの`/workspaces`で`ENGINE=$(bash scripts/racing_trt.sh --model coco) || exit 1`によりbuildし、
+`bash scripts/bringup.sh --perception "$ENGINE" --perception-mode detect`から用途「地図走行」を選べる。
+ノード・topic・tracking_enabledの既定値と検証範囲は[認識設定](config/racing/README.md)参照。

@@ -152,6 +152,8 @@ def perception_engine(value, sensors):
         raise ValueError(f"認識用TensorRT engineがありません: {plan}")
     if not sensors["enable_color"] or sensors["rgb_camera.color_profile"].split("x")[:2] != ["640", "480"]:
         raise ValueError("認識には640x480のRGBが必要です。--rgb-profile 640x480x30 等を指定してください")
+    from .racing_models import engine_profile
+    engine_profile(plan)
     return str(plan)
 
 
@@ -162,6 +164,7 @@ def composition(path, mode, overrides=None):
         "create_sensor_container",
         "sensor_container_type",
         "perception_engine",
+        "perception_mode",
         "enable_evs",
         "enable_foxglove",
         "enable_bridge",
@@ -186,6 +189,8 @@ def composition(path, mode, overrides=None):
         "e2e_drive_enabled",
     ):
         cfg[key] = boolean(cfg[key])
+    if cfg["perception_mode"] not in ("detect", "track"):
+        raise ValueError("perception_mode must be detect or track")
     if not re.fullmatch(
         r"/?[A-Za-z_][A-Za-z_0-9]*(/[A-Za-z_][A-Za-z_0-9]*)*", cfg["sensor_container"]
     ):

@@ -12,6 +12,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
 #include "vision_msgs/msg/detection2_d_array.hpp"
+#include "tracked_class.hpp"
 
 namespace kart_opponent_tracker
 {
@@ -25,6 +26,9 @@ public:
   {
     rcl_interfaces::msg::ParameterDescriptor fixed;
     fixed.read_only = true;
+    const bool tracking_enabled = declare_parameter("tracking_enabled", true, fixed);
+    tracked_class_ = TrackedClass(
+      declare_parameter("tracked_class_id", std::string("0"), fixed), tracking_enabled);
     low_ = declare_parameter("low_score", 0.1, fixed);
     association_ = declare_parameter("association_score", 0.5, fixed);
     new_track_ = declare_parameter("new_track_score", 0.6, fixed);
@@ -38,6 +42,7 @@ public:
     const auto qos = rclcpp::SensorDataQoS().keep_last(1);
     output_ = create_publisher<Detections>("tracks", qos);
     boxes_ = create_publisher<visualization_msgs::msg::ImageMarker>("detection_boxes", qos);
+    tracking_boxes_ = create_publisher<visualization_msgs::msg::ImageMarker>("tracking_boxes", qos);
     input_ = create_subscription<Detections>("detections", qos,
       [this](Detections::ConstSharedPtr msg) { update(*msg); });
   }
@@ -46,20 +51,38 @@ private:
   void update(const Detections & msg)
   {
     const auto stamp = rclcpp::Time(msg.header.stamp).nanoseconds();
-    if (tracker_ && frame_ == msg.header.frame_id && stamp == last_stamp_) {
+    if (seen_frame_ && frame_ == msg.header.frame_id && stamp == last_stamp_) {
       return;
     }
-    if (!tracker_ || frame_ != msg.header.frame_id || stamp < last_stamp_ ||
-      (stamp - last_stamp_) * 1e-9 > gap_)
+    if (tracked_class_.enabled() && (!tracker_ || frame_ != msg.header.frame_id || stamp < last_stamp_ ||
+      (stamp - last_stamp_) * 1e-9 > gap_))
     {
       tracker_ = std::make_unique<byte_track::BYTETracker>(30, buffer_, association_, new_track_, match_);
       ++generation_;
     }
     last_stamp_ = stamp;
+    seen_frame_ = true;
     if (boxes_->get_subscription_count() + boxes_->get_intra_process_subscription_count() > 0) {
-      publish_boxes(msg);
+      publish_boxes(msg, boxes_, false);
     }
     frame_ = msg.header.frame_id;
+    Detections tracks;
+    tracks.header = msg.header;
+    if (tracked_class_.enabled()) {
+      update_tracks(msg, tracks);
+    }
+    // Detection-only mode still publishes an empty result for every frame so
+    // consumers and overlays discard any previous tracks.
+    output_->publish(tracks);
+    if (tracking_boxes_->get_subscription_count() +
+      tracking_boxes_->get_intra_process_subscription_count() > 0)
+    {
+      publish_boxes(tracks, tracking_boxes_, true);
+    }
+  }
+
+  void update_tracks(const Detections & msg, Detections & tracks)
+  {
     std::vector<byte_track::Object> objects;
     for (const auto & detection : msg.detections) {
       const auto & box = detection.bbox;
@@ -69,14 +92,12 @@ private:
         !std::isfinite(h) || w <= 0 || h <= 0) {continue;}
       for (const auto & result : detection.results) {
         const auto & hyp = result.hypothesis;
-        if (hyp.class_id == "0" && hyp.score >= low_ && hyp.score <= 1.0) {
+        if (tracked_class_.accepts(hyp.class_id, hyp.score, low_)) {
           objects.emplace_back(byte_track::Rect<float>(x, y, w, h), 0, hyp.score);
           break;
         }
       }
     }
-    Detections tracks;
-    tracks.header = msg.header;
     for (const auto & track : tracker_->update(objects)) {
       auto & d = tracks.detections.emplace_back();
       d.header = msg.header;
@@ -87,20 +108,23 @@ private:
       d.bbox.size_x = rect.width();
       d.bbox.size_y = rect.height();
       auto & hypothesis = d.results.emplace_back().hypothesis;
-      hypothesis.class_id = "0";
+      hypothesis.class_id = tracked_class_.id();
       hypothesis.score = track->getScore();
     }
-    output_->publish(tracks);
   }
 
-  void publish_boxes(const Detections & msg)
+  void publish_boxes(
+    const Detections & msg,
+    const rclcpp::Publisher<visualization_msgs::msg::ImageMarker>::SharedPtr & publisher,
+    bool tracking)
   {
     visualization_msgs::msg::ImageMarker marker;
     marker.header = msg.header;
-    marker.ns = "opponent_detections";
+    marker.ns = tracking ? "opponent_tracks" : "opponent_detections";
     marker.type = marker.LINE_LIST;
-    marker.scale = 2.0;
-    marker.outline_color.g = 1.0;
+    marker.scale = tracking ? 3.0 : 2.0;
+    marker.outline_color.g = tracking ? 0.4 : 1.0;
+    marker.outline_color.b = tracking ? 1.0 : 0.0;
     marker.outline_color.a = 1.0;
     for (const auto & detection : msg.detections) {
       const auto & box = detection.bbox;
@@ -117,14 +141,17 @@ private:
         marker.points.push_back(corners[(i + 1) % corners.size()]);
       }
     }
-    boxes_->publish(marker);
+    publisher->publish(marker);
   }
 
   rclcpp::Publisher<visualization_msgs::msg::ImageMarker>::SharedPtr boxes_;
+  rclcpp::Publisher<visualization_msgs::msg::ImageMarker>::SharedPtr tracking_boxes_;
   std::unique_ptr<byte_track::BYTETracker> tracker_;
+  TrackedClass tracked_class_;
   double low_, association_, new_track_, match_, gap_;
   int buffer_;
   int64_t last_stamp_{0};
+  bool seen_frame_{false};
   uint64_t generation_{0};
   std::string frame_;
   rclcpp::Subscription<Detections>::SharedPtr input_;

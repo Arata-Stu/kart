@@ -1,9 +1,11 @@
-# Isaac ROS 5.0; target apt revisions unverified. Verified 2026-11-07.
+# Isaac ROS 5.0; target apt revisions unverified. Source verified 2026-11-13.
 # ros-lyrical-isaac-ros-{image-proc,tensor-proc,tensor-rt,yolov8}
 # https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_image_pipeline/tree/release-5.0/isaac_ros_image_proc
 # https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_dnn_inference/tree/release-5.0
 # https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_object_detection/tree/release-5.0/isaac_ros_yolov8
 # Fixed 640x480 RGB; /255 exactly once. No resize/crop/mean subtraction.
+# COCO80 default. Launch derives num_classes from the selected engine profile
+# (coco=80, custom opponent=1); this is model metadata, not a tuning constant.
 # Internal topics reliable. Only standard ROS runtime parameters omitted.
 format:
   encoding_desired: rgb8
@@ -52,7 +54,7 @@ trt:
   output_qos: DEFAULT
 decoder:
   tensor_name: output0
-  num_classes: 1
+  num_classes: 80
   confidence_threshold: 0.1  # Preserve ByteTrack low-score candidates.
   nms_threshold: 0.45
   input_queue_size: 1

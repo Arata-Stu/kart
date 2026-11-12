@@ -13,6 +13,11 @@ vehicle/localization/e2e launchへ重複includeしない。ROS namespaceはroot�
 |---|---|---|---|
 | ROS→表示 | /tf, /tf_static | tf2_msgs/msg/TFMessage | 地図・車体座標 |
 | ROS→表示 | /clock | rosgraph_msgs/msg/Clock | replay時計 |
+| ROS→表示 | /racing/rgb | sensor_msgs/msg/Image | 検出・追跡枠を重ねるRGB画像 |
+| ROS→表示 | /racing/{detection_boxes,tracking_boxes} | visualization_msgs/msg/ImageMarker | 全クラスの生検出枠（緑）／確認済みの車両追跡枠（青） |
+| ROS→表示 | /racing/{detections,tracks} | vision_msgs/msg/Detection2DArray | 検出のclass_id・score／追跡ID・class_id・score |
+| ROS→表示 | /racing/ground_markers | visualization_msgs/msg/Marker | 投影した路面接地点 |
+| ROS→表示 | /racing/ground_points | kart_interfaces/msg/OpponentGroundPoints | 路面接地点の座標とtrack ID |
 | ROS→表示 | /hdmap/markers | visualization_msgs/msg/MarkerArray | 境界・禁止領域・line |
 | ROS→表示 | /hdmap/{centerline,raceline,customline} | nav_msgs/msg/Path | 生成ライン |
 | ROS→表示 | /hdmap/selected_lane | std_msgs/msg/String | 選択lane ID |
@@ -99,4 +104,10 @@ macOSの`open`、Linuxの`xdg-open`とPython 3標準ライブラリを使用す�
 `openIn=desktop`でアプリを開く。未導入なら公式の案内ページが表示される。
 Bridgeの起動・SSH接続・localization要求はこのスクリプトでは行わない。
 
-相手車両認識は/racing/rgbと撮影stampの一致する/racing/detection_boxesをImageパネルで重ね、/racing/ground_markersを3Dで表示する。/racing/detections、tracks、ground_pointsは値の確認用。
+物体検出・追跡はImageパネルの画像に`/racing/rgb`を選び、Annotationsへ
+`/racing/detection_boxes`（全クラスの生検出・緑）と`/racing/tracking_boxes`
+（確認済みの車両追跡・青）を追加する。Sync timestampsを有効にする。
+COCOモデルではcar（class_id=`"2"`）だけを追跡する。検出のみの起動では青枠と追跡配列は空になる。
+ID・class_id・scoreはRaw Messagesパネルの`/racing/tracks`、検出結果は`/racing/detections`で確認する。
+ImageMarkerの線枠に追跡IDの文字は描かず、IDはメッセージで確認する。
+路面投影を起動した場合は`/racing/ground_markers`を3Dで表示し、`/racing/ground_points`で座標を確認する。

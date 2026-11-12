@@ -1020,16 +1020,32 @@ IPプリセット・SSHユーザー・portを共用する。新しい接続設�
 約1 Hzの通信は前回以降の時刻付き位置のバッチ・状態とrevision。HDMap全体は初回・適用版変更時のみ取得し、
 点群・画像の常時転送やJetson側のライン最適化は行わない。
 適用データは3 MiB・生成点20,000点まで。通信失敗時に適用を自動再送しない。
+候補は元のJSON文字列のままブラウザに保持し、表示用だけ解析する。
+適用時は元の文字列をStudioへ戻してhash・保存済み地図との一致を検証してからJetsonへ送る。
+これにより`0.0`と`0`等のブラウザによる数値表現の変更で`Snapshot revision mismatch`になる問題を防ぐ。
+Studioの適用要求だけはJSON文字列のエスケープ分を含め最大6 MiB＋4 KiB、候補本体の上限は3 MiBのまま。
+この修正の利用時はStudioを再起動し、ブラウザを再読み込みしてプレビューを作り直す。Jetson側の更新・再ビルドは不要。
 未保存編集・地図不一致・古い候補・適用元版の競合・モード/速度情報の期限切れは拒否する。
 画面切断は車両を停止しない。停止・再開は既存の操作系で行う。
 編集の正本はNotebookのmap.json。Jetsonへの適用はメモリ上のみで、再起動時は元の起動地図へ戻る。
+
+「自己位置を接続」中は、同じ実車調整パネルの「検出」「追跡」で認識結果の要約を確認できる。
+`/racing/detections`と`/racing/tracks`の件数、Jetsonでの受信後の秒数、元のframe・stamp、
+最大10件ずつのID・class ID・scoreを約1 Hzで表示する。画像はSSHで転送しない。
+class IDはモデルの出力文字列のまま表示し、クラス名を推測しない。track IDは追跡器内の識別子で、実車IDではない。
+「0件」は新鮮な空メッセージを受けた場合だけ表示する。「配信なし」「受信待ち」「受信停止」は区別し、
+古い検出・追跡の一覧は消す。自己位置接続の通信が止まった場合や切断時にも一覧を消す。
+「Jetson受信後」はROSメッセージをJetson側で受けてからの経過時間で、センサからの処理遅延ではない。
+この表示から認識ノードの起動・設定変更・走行指令の送信は行わない。
 
 検証コマンド:
 
 ```bash
 PYTHONPATH=tools/app:ros2_ws/src/kart_mapping:ros2_ws/src/kart_bringup:ros2_ws/src/kart_hdmap python3 -m unittest discover -s tools/app/tests -p test_tuning.py -v
+PYTHONPATH=tools/app:ros2_ws/src/kart_mapping:ros2_ws/src/kart_bringup:ros2_ws/src/kart_hdmap python3 -m unittest discover -s tools/app/tests -p test_http_disconnect.py -v
 PYTHONPATH=ros2_ws/src/kart_hdmap python3 -m unittest discover -s ros2_ws/src/kart_hdmap/test -v
 node --test tools/app/tests/test_tuning.mjs
+node --test tools/app/tests/test_perception_status.mjs
 ```
 
 ROS結合・Jetsonの負荷・実車動作の確認は別途必要。

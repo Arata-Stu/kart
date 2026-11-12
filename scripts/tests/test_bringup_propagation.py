@@ -39,6 +39,28 @@ class PropagationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "640x480"):
                 self.run_cli("--mode", "collect", "--perception", engine.name, "--rgb-profile", "0")
 
+    def test_perception_modes_are_forwarded_for_map_drive_and_offline_is_rejected(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile() as engine:
+            engine.write(b"fixture")
+            engine.flush()
+            for selection in ('detect', 'track'):
+                with self.subTest(selection=selection), \
+                        patch('kart_bringup.mission.hdmap_choices', return_value=[('main', 'raceline')]), \
+                        patch('kart_bringup.localization.resolve', return_value=(
+                            {'cuvslam': {'tracking_mode': 0}}, {}, {}, {'input_shape': [1, 3, 480, 640]})):
+                    output = self.run_cli('--mode', 'drive', '--no-tuning', '--recovery', 'off',
+                        '--map-file', '/map/hd_map.yaml', '--map-dir', '/map/vslam', '--model-dir', '/model/vgl',
+                        '--lane-id', 'main', '--line-type', 'raceline', '--infra-profile', '640x480x60',
+                        '--perception', engine.name, '--perception-mode', selection)
+                    self.assertIn('mode:=drive', output)
+                    self.assertIn('perception_mode:=' + selection, output)
+                    self.assertIn('line_type:=raceline', output)
+                    self.assertIn(f'perception_engine:={Path(engine.name).resolve()}', output)
+        for mode in ('eval', 'e2e-latency'):
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, 'perception-mode'):
+                self.run_cli('--mode', mode, '--perception-mode', 'detect')
+
     def test_depth_profile_forwarded_and_offline_rejected(self):
         output = self.run_cli('--mode', 'collect', '--depth-profile', '424x240x60', '--infra-profile', '424x240x60')
         self.assertIn('depth_profile:=424x240x60', output)
@@ -147,7 +169,7 @@ class PropagationTests(unittest.TestCase):
             self.run_cli('--mode', 'collect')
         # Search roots and dry_run are local selector behavior, not ROS parameters.
         selector = {'help', 'map_root', 'model_root', 'bias_root', 'dry_run'}
-        forwarded = {'perception', 'record_profile', 'mode', 'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
+        forwarded = {'perception', 'perception_mode', 'record_profile', 'mode', 'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
                      'device', 'map_file', 'map_dir', 'model_dir', 'lane_id', 'line_type',
                      'tuning', 'record_dir', 'evs', 'no_evs', 'evs_backend', 'evs_aggregation',
                      'evs_image', 'evs_serial', 'evs_tensor_config', 'evs_bias_file', 'foxglove',

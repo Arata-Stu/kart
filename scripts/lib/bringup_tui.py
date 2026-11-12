@@ -25,8 +25,9 @@ RECORD_LABELS = {
 PROFILE_FIELDS = (
     'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
     'evs', 'no_evs', 'evs_backend', 'evs_aggregation', 'evs_serial', 'evs_tensor_config',
-    'evs_bias_file', 'evs_image', 'perception', 'auto_fixed_throttle', 'auto_fixed_throttle_r2_gate',
+    'evs_bias_file', 'evs_image', 'perception', 'perception_mode', 'auto_fixed_throttle', 'auto_fixed_throttle_r2_gate',
 )
+PERCEPTION_LABELS = {'detect': '物体検出のみ', 'track': '物体検出＋車両追跡'}
 
 
 def select_purpose(args, choose):
@@ -194,7 +195,9 @@ class Editor:
                 enabled, settings = configuration(self.config / 'recovery', a.recovery)
                 rows['recovery'] = '補助 / 自動復帰: ' + LABELS[settings['sensor_profile'] if enabled else 'off']
             perception = a.perception or mission.composition(self.config / 'mission.yaml', a.mode)['perception_engine']
-            rows['perception'] = '認識 / 相手車: ' + (Path(perception).name if perception and perception != 'off' else '無効')
+            rows['perception'] = '認識 / 物体検出: ' + (Path(perception).name if perception and perception != 'off' else '無効')
+            perception_mode = getattr(a, 'perception_mode', '') or mission.composition(self.config / 'mission.yaml', a.mode)['perception_mode']
+            rows['perception_mode'] = '認識 / モード: ' + PERCEPTION_LABELS[perception_mode]
             rows['foxglove'] = f'補助 / Foxglove: {"有効" if self.foxglove_enabled() else "無効"}'
             if a.mode == 'drive':
                 enabled = self.params('hdmap/hdmap.yaml', 'hdmap_server')['tuning_enabled'] if a.tuning is None else a.tuning
@@ -385,15 +388,20 @@ class Editor:
                     raise ValueError('Joy最大スロットルは0.01..1の有限値を指定してください')
                 a.joy_max_throttle = value
         elif action == 'perception':
-            plans = sorted((self.root / 'weights/racing/yolov8s/engines').glob('*/opponent.plan'))
+            plans = sorted(path for path in (self.root / 'weights/racing/yolov8s/engines').rglob('*.plan')
+                           if path.is_file() and path.stat().st_size > 0
+                           and not any(part.startswith('.') for part in path.relative_to(self.root).parts))
             choices = ['off', *map(str, plans), 'custom']
-            selected = self.pick('相手車認識用engine', choices, a.perception or 'off',
+            selected = self.pick('物体検出用engine', choices, a.perception or 'off',
                                  lambda v: {'off': '無効', 'custom': 'パスを入力'}.get(v, v))
             if selected == 'custom':
                 selected = input('TensorRT engineのパス > ').strip()
                 if not selected:
                     return
             a.perception = selected
+        elif action == 'perception_mode':
+            current = getattr(a, 'perception_mode', '') or mission.composition(self.config / 'mission.yaml', a.mode)['perception_mode']
+            a.perception_mode = self.pick('物体認識モード', PERCEPTION_LABELS, current, PERCEPTION_LABELS.__getitem__)
         elif action == 'control':
             self.edit_control()
         elif action == 'recovery':

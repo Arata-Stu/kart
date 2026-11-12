@@ -192,6 +192,19 @@
             <div id="vehicle-health" class="small"></div>
             <div id="vehicle-calibration" class="small"></div>
           </section>
+          <section class="perception-state" aria-label="検出・追跡の受信状態">
+            <div>
+              <strong id="perception-detections-status">検出: 未接続</strong>
+              <div id="perception-detections-source" class="small"></div>
+              <div id="perception-detections-objects" class="perception-objects small" hidden></div>
+            </div>
+            <div>
+              <strong id="perception-tracks-status">追跡: 未接続</strong>
+              <div id="perception-tracks-source" class="small"></div>
+              <div id="perception-tracks-objects" class="perception-objects small" hidden></div>
+            </div>
+            <p class="small">Jetson受信後の時間です。画像処理の遅延ではありません。class IDはモデルの出力値です。</p>
+          </section>
           <div class="tuning-controls"><span id="tuning-parking-status">駐車planner未接続</span><button id="tuning-parking-start" disabled>駐車を開始</button><button id="tuning-parking-reset" disabled>駐車をリセット（STOP）</button></div>
           <p class="small">駐車構成では地図・パラメータ編集は停止します。AUTO中の「駐車を開始」は実車の経路を切り替えます。STOP中は経路を準備し、AUTOへの切替は従来の操作で行います。</p>
           <div class="small" id="tuning-status" role="status">未接続</div>

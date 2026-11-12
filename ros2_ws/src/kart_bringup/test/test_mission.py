@@ -15,6 +15,16 @@ CONFIG = PACKAGE / "config"
 
 
 class MissionTests(unittest.TestCase):
+    def test_perception_mode_preserves_line_tracking_and_checks_values(self):
+        for selection in ('detect', 'track'):
+            config = composition(CONFIG / 'mission.yaml', 'drive', {'perception_mode': selection})
+            self.assertEqual(config['perception_mode'], selection)
+            self.assertTrue(config['tracking'], 'object tracking must not disable reference-line following')
+        self.assertEqual(composition(CONFIG / 'mission.yaml', 'drive')['perception_mode'], 'track')
+        self.assertEqual(composition(CONFIG / 'mission.yaml', 'drive', {'perception_mode': ''})['perception_mode'], 'track')
+        with self.assertRaisesRegex(ValueError, 'perception_mode'):
+            composition(CONFIG / 'mission.yaml', 'drive', {'perception_mode': 'invalid'})
+
     def test_depth_profiles_and_shared_stereo_selection(self):
         from kart_bringup.mission import DEPTH_PROFILES
         path = camera_config(CONFIG, 'collect')
@@ -508,6 +518,11 @@ class MissionCompositionTests(unittest.TestCase):
                 self.assertEqual(perception.args[1], "launch/racing_perception.launch.py")
                 self.assertEqual(perception.kwargs["launch_arguments"]["target_container"],
                                  camera.kwargs["launch_arguments"]["container_name"])
+                self.assertEqual(perception.kwargs['launch_arguments']['tracking_enabled'], 'true')
+                args.perception_mode = 'detect'
+                lu.include.reset_mock()
+                module.add_mission(args)
+                self.assertEqual(lu.include.call_args_list[1].kwargs['launch_arguments']['tracking_enabled'], 'false')
                 lu.component_container.assert_not_called()
             args = SimpleNamespace(**saved)
             args.record_profile = "vslam-map"

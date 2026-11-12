@@ -16,6 +16,7 @@ OVERRIDES = (
     "create_sensor_container",
     "enable_evs",
     "perception_engine",
+    "perception_mode",
     "enable_foxglove",
     "enable_bridge",
 )
@@ -24,7 +25,7 @@ OVERRIDES = (
 def add_mission(args):
     root = lu.get_path("kart_bringup", "config")
     cfg = composition(
-        root / "mission.yaml", args.mode, {k: getattr(args, k) for k in OVERRIDES}
+        root / "mission.yaml", args.mode, {k: getattr(args, k, "") for k in OVERRIDES}
     )
     record_profile = getattr(args, "record_profile", "")
     params = sensor_parameters(
@@ -191,6 +192,7 @@ def add_mission(args):
     if engine:
         actions.append(include("racing_perception.launch.py", {
             "engine": engine,
+            "tracking_enabled": str(cfg["perception_mode"] == "track").lower(),
             "target_container": "/" + cfg["sensor_container"].lstrip("/"),
         }))
     if getattr(args, "validate_infra", "false") == "true":

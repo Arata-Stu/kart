@@ -20,7 +20,7 @@
       - '^/tf$'
       - '^/tf_static$'
       - '^/clock$'
-      - '^/racing/(rgb|detection_boxes|ground_markers|detections|tracks|ground_points)$'
+      - '^/racing/(rgb|detection_boxes|tracking_boxes|ground_markers|detections|tracks|ground_points)$'
       - '^/hdmap/(markers|centerline|raceline|customline|selected_lane)$'
       - '^/planning/reference_line$'
       - '^/visual_slam/tracking/(odometry|vo_pose|vo_pose_covariance|vo_path|slam_path)$'
