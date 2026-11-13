@@ -36,6 +36,20 @@ def add_tracking(args):
         validate(lu.get_path("kart_bringup", "config"), parking_site,
                  getattr(args, "parking_slot", ""), getattr(args, "recovery", ""),
                  getattr(args, "tuning_enabled", ""))
+    root = lu.get_path('kart_bringup', 'config')
+    overtake = getattr(args, 'overtake_mode', 'off')
+    from kart_bringup.mission import validate_overtake
+    from kart_bringup.recovery import configuration as recovery_configuration
+    recovery_enabled, _ = recovery_configuration(root / 'recovery', getattr(args, 'recovery', ''))
+    fixed = -1.
+    if overtake == 'active':
+        from kart_bringup.configuration import load
+        _, modules = load(root / 'bringup.yaml', {
+            'auto_fixed_throttle': getattr(args, 'auto_fixed_throttle', '')})
+        fixed = modules['joy_manager']['effective']['auto_fixed_throttle']
+    validate_overtake(overtake, 'drive', getattr(args, 'perception_engine', ''),
+                      getattr(args, 'perception_mode', 'track'), parking=bool(parking_site),
+                      fixed_throttle=fixed, recovery_enabled=recovery_enabled)
     actions = [lu.log_info(f"Tracking container config: {config}")]
     if create:
         actions.append(
@@ -50,7 +64,7 @@ def add_tracking(args):
                 "tuning_map_dir": getattr(args, "tuning_map_dir", ""),
                 "tuning_tracking_frame": getattr(args, "tuning_tracking_frame", ""),
                 "tuning_parking_enabled": "true" if parking_site else "false",
-                "reference_topic": "planning/course_reference" if parking_site else "planning/reference_line",
+                "reference_topic": "planning/course_reference" if parking_site or overtake == 'active' else "planning/reference_line",
                 "map_file": args.map_file,
                 "lane_id": args.lane_id,
                 "line_type": args.line_type,
@@ -65,6 +79,7 @@ def add_tracking(args):
             launch_arguments={
                 "container_name": "/" + name,
                 "use_sim_time": args.use_sim_time,
+                "overtake_mode": overtake,
             },
             scoped=True,
             forwarding=False,
@@ -86,6 +101,11 @@ def add_tracking(args):
     if parking_site:
         actions += node_action(lu.get_path("kart_bringup", "config"), parking_site,
                                getattr(args, "parking_slot", ""), args.use_sim_time)
+    if overtake != 'off':
+        actions.append(lu.include('kart_bringup', 'launch/racing_behavior.launch.py',
+            launch_arguments={'mode': overtake, 'map_file': args.map_file,
+                              'perception_engine': getattr(args, 'perception_engine', ''),
+                              'use_sim_time': args.use_sim_time}, scoped=True, forwarding=False))
     return actions
 
 
@@ -115,5 +135,9 @@ def generate_launch_description():
     args.add_arg("parking_site", "", cli=True)
     args.add_arg("parking_slot", "", cli=True)
     args.add_arg("recovery", "", cli=True)
+    args.add_arg('overtake_mode', 'off', choices=['off', 'shadow', 'active'], cli=True)
+    args.add_arg('perception_engine', '', cli=True)
+    args.add_arg('perception_mode', 'track', choices=['detect', 'track'], cli=True)
+    args.add_arg('auto_fixed_throttle', '', cli=True)
     args.add_opaque_function(add_tracking)
     return lut.LaunchDescription(args.get_launch_actions())

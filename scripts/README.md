@@ -16,7 +16,7 @@ CLIの`--mode collect|environment`と各モードのセンサ・録画設定は�
   地図・モデル／追従ライン
   センサ：RGB、Infra、IMU、EVS詳細
   制御：AUTOスロットル
-  補助：自動復帰、Foxglove、Studio調整
+  補助：自動復帰、Foxglove、Studio調整、driveの任意追従・追越し
   記録：保存先、記録名
   車両基板／VSLAM速度・精度
   終了

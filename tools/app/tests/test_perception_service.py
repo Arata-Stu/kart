@@ -50,10 +50,25 @@ class ServiceTests(unittest.TestCase):
     def test_display_name_and_storage_id_are_separate_and_annotation_conflicts_preserve_data(self):
         self.assertEqual(self.project['name'], 'RCカーとオレンジダクト')
         self.assertTrue(self.project['id'].startswith('rc-car-'))
-        self.assertEqual(self.project['class_names'], ['rc_car'])
+        self.assertEqual(self.project['class_names'], ['rc_car', 'obstacle'])
         self.assertEqual(self.service.datasets.load(self.project['id']), self.project)
         with self.assertRaises(ValueError):
             self.service.datasets.load('../outside')
+
+    def test_annotation_requires_two_class_client_and_saves_mixed_labels(self):
+        project = self.selection_project()
+        request = dict(id=project['id'], frame='frame-a', revision=project['revision'], frame_revision=1,
+                       boxes=[[10, 10, 30, 30], [50, 10, 80, 30]], reviewed=True)
+        with self.assertRaisesRegex(ValueError, '再読み込み'):
+            self.service.annotate(request)
+        with self.assertRaisesRegex(ValueError, '再読み込み'):
+            self.service.annotate(dict(request, class_names=['rc_car', 'obstacle'], class_ids=None))
+        self.assertEqual(self.service.datasets.load(project['id']), project)
+        saved = self.service.annotate(dict(request, class_names=['rc_car', 'obstacle'], class_ids=[0, 1]))
+        self.assertEqual(saved['frames'][0]['class_ids'], [0, 1])
+        self.assertEqual(saved['frames'][0]['boxes'], request['boxes'])
+        with self.assertRaisesRegex(ValueError, '更新'):
+            self.service.annotate(dict(request, class_names=['rc_car', 'obstacle'], class_ids=[1, 0]))
 
     def test_train_parameters_are_bounded_and_revisions_are_captured(self):
         plan = self.service.prepare('train', dict(id=self.project['id'], epochs=2, batch=1, imgsz=320))

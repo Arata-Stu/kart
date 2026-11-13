@@ -9,7 +9,7 @@ import time
 import uuid
 
 from . import transfers
-from .remote_agent import perception_manifest
+from .remote_agent import perception_contract, perception_manifest
 from .storage import atomic_json, name, within
 
 
@@ -30,7 +30,7 @@ class PerceptionTransfer:
         artifact = json.loads((source / 'artifact.json').read_text())
         if artifact['id'] != model_id:
             raise ValueError('モデルIDと成果物metadataが一致しません')
-        return source, hashes
+        return source, hashes, perception_contract(artifact['class_names'])
 
     def prepare(self, body):
         model_id = name(body.get('id'))
@@ -38,9 +38,10 @@ class PerceptionTransfer:
         model_root = _root(body.get('model_root', ''))
         container = body.get('container_model_root', '')
         container_root = _root(container) if container else None
-        _source, hashes = self._source(model_id)
+        _source, hashes, contract = self._source(model_id)
         return dict(id=model_id, connection=connection, model_root=model_root,
                     container_model_root=container_root, source_hashes=hashes,
+                    **contract,
                     source_sha256=hashes['opponent.onnx'],
                     destination=name(model_id[:54] + '_' + uuid.uuid4().hex[:8]),
                     stage='.kart-upload-' + uuid.uuid4().hex)
@@ -51,15 +52,18 @@ class PerceptionTransfer:
         destination, stage = name(plan['destination']), plan['stage']
         if not isinstance(stage, str) or not re.fullmatch(r'\.kart-upload-[a-f0-9]{32}', stage):
             raise ValueError('転送の一時領域が不正です')
-        source, source_hashes = self._source(plan['id'])
+        source, source_hashes, contract = self._source(plan['id'])
         if source_hashes != plan['source_hashes'] or source_hashes['opponent.onnx'] != plan['source_sha256']:
             raise ValueError('送信予約後にモデルが変更されました。送信し直してください')
+        for key, value in contract.items():
+            if key in plan and (plan[key] != value or (key == 'num_classes' and type(plan[key]) is not int)):
+                raise ValueError('送信予約とモデルのクラス・profileが一致しません')
         container_root = plan.get('container_model_root')
         if container_root:
             container_root = _root(container_root)
         host_path = root + '/' + destination
         container_path = container_root + '/' + destination if container_root else None
-        command = ('bash scripts/racing_trt.sh --model opponent --model-root ' + shlex.quote(container_path)
+        command = ('bash scripts/racing_trt.sh --model ' + contract['model_profile'] + ' --model-root ' + shlex.quote(container_path)
                    if container_path else None)
         reserved = published = attempted = False
         with tempfile.TemporaryDirectory(prefix='kart-perception-') as temporary:
@@ -70,7 +74,7 @@ class PerceptionTransfer:
                 shutil.copyfile(within(source, filename), bundle / filename)
             atomic_json(bundle / 'transfer.json', dict(schema='kart.perception.transfer.v1',
                 model=plan['id'], created=time.time(), source_sha256=plan['source_sha256'],
-                payload_sha256=source_hashes, engine_included=False))
+                payload_sha256=source_hashes, engine_included=False, **contract))
             hashes = perception_manifest(bundle)
             if {key: value for key, value in hashes.items() if key != 'transfer.json'} != source_hashes:
                 raise ValueError('コピー中にモデルが変更されました。送信し直してください')
@@ -103,5 +107,6 @@ class PerceptionTransfer:
                 raise
         job.log('SHA-256検証後に新規モデルdirectoryへ公開しました。engineビルドは未実行です')
         return dict(model=plan['id'], published=destination, host_path=host_path, remote_path=host_path,
+                    **contract,
                     container_path=container_path, source_sha256=plan['source_sha256'], hashes=hashes,
                     build_command=command, engine_built=False)

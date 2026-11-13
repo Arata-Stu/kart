@@ -1,0 +1,13 @@
+/**/perception_ground:
+  ros__parameters:
+    use_sim_time: false
+    projection_frame: base_link  # Intersect bbox contact rays with the vehicle's flat-road plane.
+    target_frame: map  # Display-only positions; transform at the original image stamp.
+    # Provisional: config/vehicle/transforms.yaml adopts a 33 mm rear-axle height.
+    # Measure the loaded vehicle's axle height and camera mount before use; ground_z_m=-height.
+    ground_z_m: -0.033
+    max_range_m: 10.0
+    confidence_threshold: 0.25
+    rc_car_class_id: "2"  # COCO car; launch derives the selected model's vehicle class.
+    obstacle_class_id: ""  # Disabled for COCO/legacy opponent; racing profile derives "1".
+    max_objects: 100  # Bound detections/projected points per synchronized image.

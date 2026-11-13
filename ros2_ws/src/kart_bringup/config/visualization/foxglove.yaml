@@ -21,7 +21,8 @@
       - '^/tf$'
       - '^/tf_static$'
       - '^/clock$'
-      - '^/racing/(ground_markers|detections|tracks|ground_points|ground_diagnostics)$'
+      - '^/racing/(ground_markers|detections|tracks|ground_points|ground_diagnostics|map_points|map_markers|map_diagnostics)$'
+      - '^/racing/(behavior_path|behavior_markers|behavior_status|candidate_reference)$'
       - '^/racing/debug_image/compressed$'  # No publisher unless debug image is explicitly enabled.
       - '^/hdmap/(markers|centerline|raceline|customline|selected_lane)$'
       - '^/planning/reference_line$'

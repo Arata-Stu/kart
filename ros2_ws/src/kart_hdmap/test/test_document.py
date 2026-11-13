@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from kart_hdmap.document import load, path_samples, select
+from kart_hdmap.passing_zones import geometry_revision
 
 
 def example():
@@ -64,6 +65,23 @@ class DocumentTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.read()
 
+    def test_passing_permissions_are_per_line_and_bound_to_generated_geometry(self):
+        lane = self.doc['lanes'][0]
+        for kind, side in (('centerline', 'left'), ('raceline', 'right')):
+            line = lane['lines'][kind]
+            line['passing_zones'] = [dict(id='straight', start_index=2, end_index=1, side=side,
+                geometry_revision=geometry_revision(line['points'], lane['closed']))]
+        normalized = self.read()['lanes'][0]['lines']
+        self.assertEqual(normalized['centerline']['passing_zones'], lane['lines']['centerline']['passing_zones'])
+        self.assertEqual(normalized['raceline']['passing_zones'], lane['lines']['raceline']['passing_zones'])
+        # A profile-only change keeps geometric permissions.
+        lane['lines']['raceline']['profile'][0][5] = .4
+        self.assertEqual(self.read()['lanes'][0]['lines']['raceline']['passing_zones'], normalized['raceline']['passing_zones'])
+        lane['lines']['centerline']['points'] = copy.deepcopy(lane['lines']['centerline']['points'])
+        lane['lines']['centerline']['points'][1][0] += .1
+        with self.assertRaisesRegex(ValueError, 'revision mismatch'):
+            self.read()
+
     def test_obstacles_preserved_and_invalid_rejected(self):
         self.doc["obstacles"] = [{"id": "block", "polygon": [[1, 2], [3, 2], [3, 4]]}]
         self.assertEqual(self.read()["obstacles"], self.doc["obstacles"])
@@ -117,6 +135,18 @@ class DocumentTests(unittest.TestCase):
         self.assertEqual(
             self.read()["lanes"][0]["lines"]["centerline"]["points"], lane["left"]
         )
+        permission = dict(id='exported', start_index=2, end_index=1, side='both',
+                          geometry_revision=geometry_revision(lane['lines']['centerline']['points'], True))
+        self.doc['lanes'][0]['line_passing_zones'] = {'centerline': [permission]}
+        self.assertEqual(self.read()['lanes'][0]['lines']['centerline']['passing_zones'], [permission])
+        self.doc['lanes'][0]['line_passing_zones']['customline'] = []
+        with self.assertRaisesRegex(ValueError, 'existing generated line'):
+            self.read()
+        del self.doc['lanes'][0]['line_passing_zones']['customline']
+        (self.file.parent / 'centerline.csv').write_text(
+            'x_m,y_m,width_right_m,width_left_m\n1,2,1,1\n3.1,2,1,1\n3,4,1,1\n')
+        with self.assertRaisesRegex(ValueError, 'revision mismatch'):
+            self.read()
         self.doc["lanes"][0]["offline_lines"]["centerline"] = str(
             self.file.parent / "centerline.csv"
         )

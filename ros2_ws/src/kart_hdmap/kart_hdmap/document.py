@@ -123,6 +123,10 @@ def normalize(doc, frame_id="map", root=None):
         )
         if exported and "centerline" not in data:
             data["centerline"] = {"points": raw["centerline"]}
+        permission_map = raw.get('line_passing_zones', {}) if exported else {}
+        if (not isinstance(permission_map, dict) or set(permission_map) - set(KINDS)
+                or set(permission_map) - set(data)):
+            raise ValueError('Passing permissions must belong to an existing generated line')
         for kind in KINDS:
             if kind not in data:
                 continue
@@ -150,6 +154,10 @@ def normalize(doc, frame_id="map", root=None):
             if mode not in ("profile","step") or (mode=="step" and kind!="customline"):
                 raise ValueError("Invalid line speed mode")
             if mode=="step": line["speed_mode"]=mode
+            if kind in permission_map or (not exported and 'passing_zones' in data[kind]):
+                from .passing_zones import validate_passing_zones
+                zones = permission_map[kind] if exported else data[kind]['passing_zones']
+                line['passing_zones'] = validate_passing_zones(zones, line['points'], closed)
             lane["lines"][kind] = line
         if (
             exported

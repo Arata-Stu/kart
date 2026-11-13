@@ -28,6 +28,8 @@ PROFILE_FIELDS = (
     'evs_bias_file', 'evs_image', 'perception', 'perception_mode', 'perception_debug_image', 'auto_fixed_throttle', 'auto_fixed_throttle_r2_gate',
 )
 PERCEPTION_LABELS = {'detect': '物体検出のみ', 'track': '物体検出＋車両追跡'}
+OVERTAKE_LABELS = {'off': '無効', 'shadow': '候補・判断の表示のみ（shadow）',
+                   'active': '追従・追越しを実行（active・2クラス認識必須）'}
 
 
 def select_purpose(args, choose):
@@ -55,6 +57,7 @@ class Editor:
         self.choose = choose
         self.inferred = {}  # Only these values may be reset when changing assets.
         self.profile_restore = None
+        self.adjustments = []
         if getattr(args, 'record_profile', '') == 'vehicle-model':
             self.profile_restore = {k: deepcopy(getattr(args, k)) for k in PROFILE_FIELDS}
 
@@ -204,6 +207,10 @@ class Editor:
             rows['perception_debug_image'] = '認識 / bbox画像: ' + ('有効（JPEG・最大5Hz）' if debug_image else '無効')
             rows['foxglove'] = f'補助 / Foxglove: {"有効" if self.foxglove_enabled() else "無効"}'
             if a.mode == 'drive':
+                overtake = getattr(a, 'overtake', '') or mission.composition(self.config / 'mission.yaml', a.mode)['overtake_mode']
+                rows['overtake'] = '走行 / 追従・追越し: ' + OVERTAKE_LABELS[overtake]
+                for notice in self.adjustments:
+                    print('連動変更:', notice)
                 enabled = self.params('hdmap/hdmap.yaml', 'hdmap_server')['tuning_enabled'] if a.tuning is None else a.tuning
                 rows['tuning'] = f'補助 / Studio調整: {"有効" if enabled else "無効"}'
             rows['record'] = f'記録: {a.record_dir} / {a.run_name or "自動（センサー構成・Hz）"}'
@@ -282,11 +289,13 @@ class Editor:
                 return action == 'start'
             before, inferred = deepcopy(self.args), dict(self.inferred)
             profile_restore = deepcopy(self.profile_restore)
+            adjustments = list(self.adjustments)
             try:
                 self.edit(action)
             except (ValueError, OSError, KeyError, TypeError, yaml.YAMLError) as error:
                 self.args, self.inferred = before, inferred
                 self.profile_restore = profile_restore
+                self.adjustments = adjustments
                 print(f'変更できません: {error}（変更前の設定を保持）')
 
     def edit(self, action):
@@ -406,9 +415,42 @@ class Editor:
             a.perception = selected
             if selected == 'off':
                 a.perception_debug_image = False
+                a.overtake = 'off'
+                self.adjustments.append('認識OFFに合わせて追従・追越しをOFFにしました')
+            elif getattr(a, 'overtake', '') == 'active':
+                from kart_bringup.racing_models import engine_profile
+                if engine_profile(Path(selected))['name'] != 'racing':
+                    a.overtake = 'off'
+                    self.adjustments.append('2クラス以外のengineへ変更したため追従・追越しをOFFにしました')
         elif action == 'perception_mode':
             current = getattr(a, 'perception_mode', '') or mission.composition(self.config / 'mission.yaml', a.mode)['perception_mode']
             a.perception_mode = self.pick('物体認識モード', PERCEPTION_LABELS, current, PERCEPTION_LABELS.__getitem__)
+            if a.perception_mode == 'detect':
+                a.overtake = 'off'
+                self.adjustments.append('検出のみの選択に合わせて追従・追越しをOFFにしました')
+        elif action == 'overtake':
+            current = getattr(a, 'overtake', '') or mission.composition(self.config / 'mission.yaml', a.mode)['overtake_mode']
+            selected = self.pick('追従・追越しモード', OVERTAKE_LABELS, current, OVERTAKE_LABELS.__getitem__)
+            if selected != 'off':
+                engine = a.perception or mission.composition(self.config / 'mission.yaml', a.mode)['perception_engine']
+                if not engine or engine == 'off':
+                    self.edit('perception')
+                    engine = a.perception
+                settings = self.control_settings()
+                fixed = settings['auto_fixed_throttle'] if a.auto_fixed_throttle is None else a.auto_fixed_throttle
+                mission.validate_overtake(selected, a.mode, engine, 'track',
+                    parking=bool(getattr(a, 'parking_site', '') or getattr(a, 'parking_slot', '')),
+                    fixed_throttle=fixed)
+                a.perception_mode = 'track'
+                self.adjustments.append('追従・追越しに必要な認識モードを車両追跡に設定しました')
+                if selected == 'active':
+                    a.recovery = 'off'
+                    self.adjustments.append('active追従・追越しと併用しない自動復帰をOFFにしました')
+                else:
+                    from kart_bringup.racing_models import engine_profile
+                    if engine_profile(Path(engine))['name'] != 'racing':
+                        self.adjustments.append('shadowの認識モデルには障害物クラスがありません（activeには使えません）')
+            a.overtake = selected
         elif action == 'perception_debug_image':
             current = getattr(a, 'perception_debug_image', None)
             if current is None:
@@ -422,6 +464,9 @@ class Editor:
             enabled, settings = configuration(self.config / 'recovery', a.recovery)
             a.recovery = self.pick('壁接触・スタック自動復帰', CHOICES,
                                    settings['sensor_profile'] if enabled else 'off', LABELS.__getitem__)
+            if a.recovery != 'off' and getattr(a, 'overtake', '') == 'active':
+                a.overtake = 'off'
+                self.adjustments.append('自動復帰の有効化に合わせてactive追従・追越しをOFFにしました')
         elif action in ('foxglove', 'tuning', 'bridge'):
             current = (not a.no_bridge if action == 'bridge' else self.foxglove_enabled() if action == 'foxglove' else
                        self.params('hdmap/hdmap.yaml', 'hdmap_server')['tuning_enabled'] if a.tuning is None else a.tuning)

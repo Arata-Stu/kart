@@ -23,7 +23,7 @@ MAX_APPLY_BYTES = 2 * _protocol.MAX_BYTES + 4096
 
 
 def remote(connection, action, payload):
-    if action not in ('status', 'apply', 'rollback', 'parameters_get', 'parameters_set', 'parking_start', 'parking_reset', 'esc_status', 'esc_start', 'esc_stop'):
+    if action not in ('status', 'apply', 'rollback', 'parameters_get', 'parameters_set', 'parking_start', 'parking_reset', 'behavior_reset', 'esc_status', 'esc_start', 'esc_stop'):
         raise ValueError('Unknown tuning action')
     p = profile(connection)
     port = 8783 if action.startswith('esc_') else 8782
@@ -109,7 +109,7 @@ class Tuning:
             if candidate['document'] != self.maps.load(body['id']):
                 raise ValueError('プレビュー後に地図が変わりました。作り直してください')
             payload['snapshot'] = candidate
-        if action in ('apply', 'rollback', 'parameters_set', 'parking_start', 'parking_reset'):
+        if action in ('apply', 'rollback', 'parameters_set', 'parking_start', 'parking_reset', 'behavior_reset'):
             payload['expected_revision'] = body['expected_revision']
         if action in ('parameters_get', 'parameters_set'):
             from _kart_tuning_protocol.parameter_policy import target

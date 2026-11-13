@@ -79,8 +79,8 @@ def build(root, profile, force=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", choices=("coco", "opponent"), default="coco",
-                        help="Official COCO80 YOLOv8s (default), or a custom opponent1class model")
+    parser.add_argument("--model", choices=("coco", "opponent", "racing"), default="coco",
+                        help="Official COCO80 (default), racing2class, or legacy opponent1class")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--model-root", type=Path,
                         default=Path(__file__).resolve().parents[1] / "weights/racing/yolov8s",

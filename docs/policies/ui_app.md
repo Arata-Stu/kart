@@ -3,16 +3,19 @@
 ## 対象と画面
 
 Notebook側で記録から地図を作成・編集してJetsonへ渡すローカルWebアプリ。
-画面は「地図」「転送」「学習」「RCカー検出」「解析」「分布解析」「ESC試験」「Jetson起動」。
+画面は「地図」「転送」「学習」「RCカー・障害物」「解析」「分布解析」「ESC試験」「Jetson起動」。
 E2Eとbringup管理は独立したbackend/frontend moduleで実装する。
 Jetsonのbringup起動・終了をUIから扱う。通常走行のモード操作は既存Joy契約を維持する。録画開始停止はJoyとUIから同じkart_bag_managerを操作する。
 学習画面はデータセット作成・学習・ONNX export・オフライン評価・特徴量確認・モデル転送を扱う。
-物体検出は独立したfrontend/backendで、RGB bag抽出・1クラスRCカーのbbox annotation・YOLOv8s追加学習を扱う。
+物体検出は独立したfrontend/backendで、RGB bag抽出・RCカーと障害物の2クラスbbox annotation・YOLOv8s追加学習を扱う。
+class 0はrc_car、class 1はobstacle。障害物は走路上の静止ダンボールや落とし物等とし、
+背景ダクト・常設コース境界を一律に障害物へ分類しない。
 未確認画像と明示確認したnegativeを区別し、前者を学習へ含めない。
 候補bboxは手動確認前の提案とし、自動で正解へ昇格しない。
-実際に写る全RCカーを正しいbboxで付け、RCカーがいない画像だけを人がnegativeと確認する。
+実際に写る全RCカーと対象の障害物を正しいクラス・bboxで付け、両方ない画像だけを人がnegativeと確認する。
+旧1クラスの枠はclass 0として保持し、旧確認済み画像も2クラスで再確認する。read-only読み込みでは元JSONを変更しない。
 train/valはbag単位で分離し、コピーbagも検査して連続フレームの評価漏れを防ぐ。
-学習前にannotation revisionとsource由来を固定snapshotに保存する。
+両splitに両クラスの確認済みbboxを要求し、学習前にannotation revisionとsource由来を固定snapshotに保存する。
 canvasは元画像のpixel座標を正本とし、CSS拡縮やdevicePixelRatioをbboxへ二重適用しない。
 未保存draftをフレーム・project切替や非同期更新で黙って破棄しない。
 学習ジョブは既存の永続supervisorと中止処理を共用し、モデル適用や車両モード操作へ自動接続しない。
@@ -20,11 +23,14 @@ canvasは元画像のpixel座標を正本とし、CSS拡縮やdevicePixelRatio�
 YOLOのscore下限・想定検出数・画像内にclipしたbbox面積比はUIで調整し、多検出・巨大枠を
 誤検出確定ではなく要確認候補とする。10枚ごとの1・3番目に要確認、5番目に背景、10番目に探索を割り当て、
 通常枠は要確認以外を優先する。該当候補不足時は補完し、同bagの時刻・外観の重複も抑える。
-DINOv3を使う場合の参照例は確認済みtrainのRCカーcrop／negativeだけ。valラベルを参照例へ混ぜない。
+DINOv3を使う場合の参照例は確認済みtrainの対象crop／negativeだけ。両クラスのcropを交互に選び、
+RCカー多数で少数の障害物例を押し出さない。valラベルを参照例へ混ぜない。
 類似度・優先度を確率や正解と表示せず、順位外の画像や未保存編集を維持する。
 画像集合の変更では順位を失効し、annotationの追加だけなら以前の順位を継続し再計算を案内する。
 ONNX転送は共通の接続設定・永続SCPキューを使い、検証したpayloadだけを新規directoryへ公開する。
 SSHホストとDockerのパスを明示的に分け、buildコマンドの表示と実行を区別する。buildは自動実行しない。
+2クラスexportはracing profile、固定raw Detect出力[1,6,6300]とし、従来のopponent.onnxという名前を維持する。
+旧opponent 1クラスとCOCO80は別profile/cacheで保持する。追跡はRCカーだけとし、障害物は別の任意behaviorで扱う。
 
 - 高さ付きVSLAM点群を背景に左右境界を編集し、centerline、raceline、customlineを生成する。
 - 画面全体を縦に伸ばさず、キャンバスを主役にする。工程ごとに右パネルを切り替える。
@@ -314,6 +320,22 @@ DataLoader worker数は既定8を表示し、要求値と実効cache設定を実
 - 検出・追跡の監視は同じ接続の軽量な状態要約へ含め、各最大10件のID・class ID・scoreを表示する。
   class IDからクラス名を推測しない。新鮮な空配信だけ0件とし、配信なし・未受信・古い受信を区別する。
   古い一覧は接続の通信停止・切断時にも消す。受信後の経過時間をセンサ処理遅延と扱わず、画像を転送しない。
+- 路面投影済みの認識点は、同じ接続の`ground_perception`から最大100点を地図へ重ねる。
+  `map`座標をcanvasの投影へ直接渡し、現在の車両姿勢で再変換しない。
+  明示されたkindでRCカーを緑の丸、障害物を桃色のひし形に分け、数値class IDからクラス名を推測しない。
+  点はbbox下端から路面への接地点の概算で、物体中心・bbox・物理寸法と扱わない。
+  点は最大1秒とし、HTTP応答間も残り有効時間で失効させ、地図を再描画して消す。
+  両クラスの件数・配信なし・未受信・失効・投影診断を表示し、新鮮なvalid=trueの空配信だけ両クラス0件とする。
+  map_pointsのvalid=falseと同梱reasonで失敗・消去を即時表示し、1Hz診断の到着前でも0件と誤表示しない。
+  TF等の投影失敗を示す新鮮な診断があれば点を隠し、非有限座標・`map`以外のframeも描画しない。
+  古いbridgeで状態キーがなければ未対応と表示し、接続の通信停止・切断時にも点を消す。表示から車両指令を送信しない。
+  元class IDと明示class_nameを保持する。
+  元画像とCameraInfoの完全同期、校正・路面高さ・撮影時刻TFを投影側で検証する。bboxをUI側で距離へ換算しない。
+  点は検出単位の表示とし、追跡ID・障害物地図の永続編集・自動制御入力へ昇格しない。
+- Jetson起動の追従・追越しは共通catalogのovertake（off/shadow/active）で選択し、既定OFF・drive専用とする。
+  ONは認識trackへ連動し、認識OFF・detectへ変更するとovertakeをOFFへ戻す。
+  active選択は自動復帰OFFを表示し、2クラスengine・通常AUTO・parking等との競合をbackendで起動前に検証する。
+  起動設定だけでAUTO・録画を開始せず、live表示・パラメータ調整から新しい参照publisherを作らない。
 - Jetsonの既存hdmap_serverに明示的に有効化するloopback HTTP窓口を置く。
   参照ラインpublisherを二重化せず、ROS状態変更は単一executor内で処理する。
 - 地図資産の内容hash、snapshot hash、適用元revisionを確認し、最新AUTO/MANUALと
@@ -335,19 +357,48 @@ DataLoader worker数は既定8を表示し、要求値と実効cache設定を実
 - Pure Pursuitの参照点は`/control/tracking_reference`から受け、同じ計算に使った車両位置と
   結んで表示する。設定lookahead（最近傍経路投影点からの経路長）と直線距離を区別し、
   ブラウザ側で参照点を再計算しない。無効・古い情報は表示対象から除外する。
+- 追従・追越しの判断は`/racing/behavior_status`の軽量な状態要約を表示し、off・shadow・activeを区別する。
+  状態、対象kind/ID/推定速度、目標速度、選択側、両候補の成立/不成立理由と余裕を示す。
+  選択経路・左右候補は各最大300点のmap座標を描画し、復帰区間と寸法に基づく占有仮定を明記する。
+  自車矩形は経路先頭の後車軸を基準に後端距離で非対称に置き、対象は中心を仮定する。
+  後端距離が未取得なら自車矩形を描かず、仮定未取得と表示する。
+  自車姿勢による再変換・ブラウザでの再計画を行わない。shadowの選択経路は破線で区別する。
+  配信の受信後0.5秒とROS stampの鮮度を検証し、shadow/activeの配信中だけ250 ms間隔で状態を取得する。
+  応答間の失効も250 msごとに確認し、古い候補・選択経路を地図から消す。旧bridgeのキー欠落は未対応とする。
+  raw文字列はtextContentで扱い、非有限座標・不正な型・map以外のframeは描画しない。
+  FAULT時は最新の異常理由を残して古い候補経路を隠し、主要な理由は日本語説明と元コードを併記する。
+- 行動計画のリセットは明示ボタンから既存executorのqueueを経由してTriggerを1回呼ぶ。
+  STOP・1秒停車、地図・適用版一致、新鮮な状態を確認し、ノード側でも新鮮な基準ラインの近傍を検査する。
+  AUTOを変更せず、パラメータ変更後も自動リセットしない。応答不明時は自動再送せず状態を確認させる。
 
+
+## 追越し許可区間の地図編集
+
+- 許可は生成済みCenter / Race / Customの点列ごとに複数区間を保存し、未設定・旧地図は無許可とする。
+  開始・終了WPは番号と地図クリックの両方で選び、左右/左/右の許可、一覧の編集・削除、Undo/Redoを提供する。
+  画面は1始まり、保存は0始まりの両端index。開路は昇順、閉路は始点跨ぎを許し、開始と終了が同じ区間は作らない。
+- 色帯と番号は保存対象の許可、破線・黄色い端点は未追加の下書きとして区別する。
+  明示追加後も既存の地図保存を必要とし、保存・再読込・export・転送・動的プレビューで同じ値を使用する。
+- 各ラインの`passing_zones`は最大64件、厳密なid/index/side/geometry_revisionを持つ。
+  サーバー所有の点列・開閉路のdigestを照合し、クライアントに生成geometryを変更させない。
+  同形の再生成だけ許可を維持し、形状変更・再サンプリング・座標が変わる位置合わせでは許可を失効させ案内を残す。
+  古いindexを別位置へ追従させず、不整合の許可は描画・書き出し・実行に使わない。
+- exportはlaneの`line_passing_zones`へ載せ、既存CSV列は保持する。地図バンドルにmap.json/HDMap YAML/metadataをまとめて転送する。
+  この設定は許可範囲であり、走行開始・AUTO切替・追越し成立を意味しない。実行側の経路全体・占有・観測検査は維持する。
 
 ## 実行中の制御パラメータ調整
 
 - 地図画面の実車調整へ統合し、接続先は既存SSH設定を共用する。
 - パラメータの現在値・型・read_only属性はJetsonの実ノードから取得する。
-  対象はPure Pursuit・HDMap・速度PID・復帰の明示allowlist。任意service／ノード操作UIを作らない。
+  対象はPure Pursuit・HDMap・速度PID・復帰・追従／追越しの明示allowlist。任意service／ノード操作UIを作らない。
 - UIは対象別の適用条件を確認し、ノードごとにset_parameters_atomicallyで変更して現在値を読み返す。
-  追従・速度PID・参照ラインは走行中変更に対応し、車両補正・復帰はSTOP・1秒停車に限定する。
+  横制御・速度PID・参照ラインは走行中変更に対応し、車両補正・復帰・追従／追越しはSTOP・1秒停車に限定する。
   ROS executorをHTTP待機やspinで塞がない。通信失敗時に変更を自動再送しない。
 - lookahead等の追従項目はノード側で最新AUTO/MANUAL/STOPを要求する。
   復帰core Settingsは引き続き最新STOPを要求する。
   センサtopic・画像処理構成等の起動時固定項目は編集不可とし、未起動ノードを勝手に起動しない。
+- 追従・追越しの`racing_behavior`は33項目の明示allowlistに限り、読取りは走行中も許可する。
+  変更のSTOP・停車条件は受付時・送信直前・ノード側で検査し、`mode`・`map_file`は常に表示のみとする。
 - パラメータ変更はメモリ上に保持する。地図snapshotの「直前の版へ」とパラメータ変更は別操作。
   起動YAMLへの自動保存や、複数ノードを跨ぐatomic commitは提供しない。
 

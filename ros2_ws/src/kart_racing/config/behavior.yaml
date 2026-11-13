@@ -1,0 +1,38 @@
+/**/racing_behavior:
+  ros__parameters:
+    use_sim_time: false
+    mode: shadow  # Startup only: shadow observes; active owns planning/reference_line.
+    map_file: ""  # Absolute saved HDMap path, required at startup.
+    speed_cap: 0.8
+    vehicle_length: 0.35
+    vehicle_width: 0.19
+    rear_axle_to_rear: 0.1065  # Provisional vehicle_geometry.md split, not measured.
+    uncertainty_margin: 0.12
+    rc_length: 0.35
+    rc_width: 0.19
+    obstacle_length: 0.5
+    obstacle_width: 0.4
+    slow_speed: 0.35
+    stationary_anchor_speed: 0.10
+    headway: 0.7
+    follow_min_gap: 0.4
+    moving_merge_margin: 0.6
+    static_merge_margin: 0.2
+    moving_speed_advantage: 0.2
+    moving_observation_s: 0.5
+    object_timeout: 0.4
+    static_memory_s: 5.0
+    min_transition: 0.8
+    max_curvature: 1.2
+    sample_spacing: 0.05
+    lookahead_m: 20.0  # Bounded to 3..50 m by Settings.
+    preferred_side: left
+    deceleration: 1.0
+    prediction_horizon_s: 15.0
+    simple_pass_speed: 2.0
+    prediction_hold_s: 6.0
+    prediction_speed_uncertainty: 0.10
+    prediction_acceleration: 0.05
+    prediction_lateral_speed: 0.03
+    prediction_uncertainty_limit: 1.5
+    max_pass_heading_change: 0.25

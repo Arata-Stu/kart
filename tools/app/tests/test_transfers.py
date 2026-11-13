@@ -161,6 +161,10 @@ class TransferTests(unittest.TestCase):
             )
             doc = self.maps.load("course")
         folder = self.maps.folder("course") / "cuvslam_map"
+        for lane in doc['lanes']:
+            line=lane['lines']['centerline']
+            line['passing_zones']=[dict(id='pass_001',start_index=0,end_index=2,side='left',geometry_revision=line['geometry_revision'])]
+        doc=self.maps.save('course',doc)
         folder.mkdir()
         (folder / "map.db").write_bytes(b"map")
         result = self.transfer.push(LocalScpJob(), self.profile, "course")
@@ -174,6 +178,9 @@ class TransferTests(unittest.TestCase):
             self.assertTrue(
                 (target / "export/lanes" / lane_id / "centerline.csv").is_file()
             )
+        transferred=read_json(target/'export/hd_map.yaml')
+        self.assertEqual(transferred['lanes'][0]['line_passing_zones']['centerline'],doc['lanes'][0]['lines']['centerline']['passing_zones'])
+        self.assertEqual(read_json(target/'map.json')['lanes'][0]['lines']['centerline']['passing_zones'],doc['lanes'][0]['lines']['centerline']['passing_zones'])
         self.assertEqual((target / "cuvslam_map/map.db").read_bytes(), b"map")
         self.assertFalse(
             any(

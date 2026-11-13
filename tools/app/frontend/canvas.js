@@ -1,5 +1,6 @@
 import { vehicleShape, handles, hitHandle } from './parking_visual.js';
 import { paintTuning } from "./tuning.js";
+import { paintPassingZones } from './passing_zones.js';
 import { lineVisible } from "./line_visibility.js";
 import { lineSpeedScale, paintSpeedLine, speedAtCursor } from "./line_speed.js";
 import { viewBounds } from "./view_bounds.js";
@@ -357,6 +358,7 @@ export function draw() {
         else line(data.points, colors[kind], d.closed, false, 2.5);
         directionArrows(data.points, colors[kind], d.closed);
       }
+      paintPassingZones(ctx,project,line);
       const failure = state.diagnostic;
       if (failure?.lane_id === d.id && failure.map_id === state.id) {
         if (failure.boundary) line(failure.boundary, "#f3b52e", false, false, 5);
@@ -490,6 +492,10 @@ canvas.addEventListener("pointerdown", (e) => {
   if (e.button !== 0 && e.button !== 1 && e.button !== 2) return;
   const [x, y] = local(e);
   canvas.focus();
+  if(state.passingPick && !$('parking-editor').open && state.doc && e.button===0 && !e.altKey) {
+    emit('passing-click',{point:world(x,y),tolerance:22/scale});
+    return;
+  }
   if ($('parking-editor').open && state.doc && state.doc.snapshot_status!=='pending' && e.button === 0 && !e.altKey) {
     canvas.setPointerCapture(e.pointerId);
     const lane=state.lane;
@@ -592,8 +598,10 @@ export function neutral() {
   state.target = null;
   state.selected = -1;
   state.parkingPick = null;
+  state.passingPick = null;
   $('parking-editor').open = false;
   emit('parking-end');
+  emit('passing-end');
   emit('status');
   draw();
 }

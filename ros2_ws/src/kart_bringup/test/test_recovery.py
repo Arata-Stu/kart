@@ -89,7 +89,7 @@ def test_bringup_cli_and_tui_forward_selection_without_editing_yaml(monkeypatch,
         monkeypatch.setattr(sys, 'argv', common + ['--mode', 'e2e', '--recovery', 'rgb_imu'])
         cli.main()
         assert 'recovery:=rgb_imu' in capsys.readouterr().out
-        choices = iter(['e2e', 'infra_imu'])
+        choices = iter(['e2e', 'recovery', 'infra_imu', 'start'])
         monkeypatch.setattr(sys.stdin, 'isatty', lambda: True)
         monkeypatch.setattr(cli, 'choose', lambda *a, **k: next(choices))
         monkeypatch.setattr(sys, 'argv', common)

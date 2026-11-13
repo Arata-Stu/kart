@@ -86,6 +86,38 @@ class PropagationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.run_cli('--mode', 'eval', '--depth-profile', '0')
 
+    def test_live_overtake_is_forwarded_and_incompatible_active_configs_fail(self):
+        import hashlib
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            engine = Path(folder) / 'racing.plan'
+            engine.write_bytes(b'preflight fixture, not a TensorRT engine')
+            manifest = Path(folder) / 'build.json'
+            manifest.write_text(json.dumps(dict(model_profile='racing', num_classes=2,
+                engine_sha256=hashlib.sha256(engine.read_bytes()).hexdigest())))
+            base = ['--mode', 'drive', '--no-tuning', '--recovery', 'off',
+                    '--map-file', '/map/hd_map.yaml', '--map-dir', '/map/vslam', '--model-dir', '/model/vgl',
+                    '--lane-id', 'main', '--line-type', 'raceline', '--infra-profile', '640x480x60',
+                    '--perception', str(engine), '--perception-mode', 'track']
+            with patch('kart_bringup.mission.hdmap_choices', return_value=[('main', 'raceline')]), \
+                    patch('kart_bringup.localization.resolve', return_value=(
+                        {'cuvslam': {'tracking_mode': 0}}, {}, {}, {'input_shape': [1, 3, 480, 640]})):
+                for mode in ('shadow', 'active'):
+                    self.assertIn('overtake_mode:=' + mode, self.run_cli(*base, '--overtake', mode))
+                for extra in (['--perception-mode', 'detect'], ['--perception', 'off'],
+                              ['--auto-fixed-throttle', '0'], ['--recovery', 'infra_imu'],
+                              ['--parking-slot', 'P1']):
+                    with self.subTest(extra=extra), self.assertRaises(ValueError):
+                        self.run_cli(*base, '--overtake', 'active', *extra)
+                manifest.unlink()  # No metadata defaults to COCO; shadow remains inspection-only.
+                self.assertIn('obstacleクラスがありません', self.run_cli(*base, '--overtake', 'shadow'))
+                with self.assertRaisesRegex(ValueError, 'two-class'):
+                    self.run_cli(*base, '--overtake', 'active')
+        for mode in ('collect', 'e2e', 'eval'):
+            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, 'overtake'):
+                self.run_cli('--mode', mode, '--overtake', 'shadow')
+
     def run_cli(self, *options):
         output = io.StringIO()
         with patch.object(sys, 'argv', ['bringup.py', '--dry-run', '--no-bridge', *options]), contextlib.redirect_stdout(output):
@@ -185,7 +217,7 @@ class PropagationTests(unittest.TestCase):
             self.run_cli('--mode', 'collect')
         # Search roots and dry_run are local selector behavior, not ROS parameters.
         selector = {'help', 'map_root', 'model_root', 'bias_root', 'dry_run'}
-        forwarded = {'perception', 'perception_mode', 'perception_debug_image', 'record_profile', 'mode', 'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
+        forwarded = {'perception', 'perception_mode', 'perception_debug_image', 'overtake', 'record_profile', 'mode', 'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
                      'device', 'map_file', 'map_dir', 'model_dir', 'lane_id', 'line_type',
                      'tuning', 'record_dir', 'evs', 'no_evs', 'evs_backend', 'evs_aggregation',
                      'evs_image', 'evs_serial', 'evs_tensor_config', 'evs_bias_file', 'foxglove',

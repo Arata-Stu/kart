@@ -10,7 +10,7 @@ function parameterIssue() {
   const method=inputs.get('lateral_controller');
   if(method && method.input.value!==String(method.field.value) && tuning.status?.stop_issue)
     return tuning.status.stop_issue;
-  const stopped = ['vehicle','recovery'].includes($('tuning-parameters-target').value);
+  const stopped = ['vehicle','recovery','behavior'].includes($('tuning-parameters-target').value);
   return (stopped ? tuning.status?.stop_issue : tuning.status?.apply_issue) || tuning.status?.apply_issue || '';
 }
 function canApply() {
@@ -61,6 +61,7 @@ function render(result) {
       if(field.type===4) {
         const choices=field.name==='lateral_controller' ? [['pure_pursuit','Pure Pursuit'],['mpc','MPC']] : field.name==='lookahead_mode'
           ? [['fixed','固定距離'],['speed_interpolated','速度に合わせる']]
+          : field.name==='preferred_side' ? [['left','左'],['right','右']]
           : [['centerline','Center'],['raceline','Race'],['customline','Custom']];
         for(const [value,text] of choices) {
           const option=document.createElement('option');option.value=value;option.textContent=text;
@@ -84,6 +85,7 @@ function render(result) {
   const controller=result.fields?.find(f=>f.name==='lateral_controller')?.value;
   const targetLabel=result.target==='tracking'
     ? `横制御 · 適用済み: ${{pure_pursuit:'Pure Pursuit',mpc:'MPC'}[controller] || '方式未取得（Jetson側の更新を確認）'}`
+    : result.target==='behavior' ? '追従・追越し（変更はSTOP・1秒停車中のみ）'
     : result.node;
   $('tuning-parameters-status').title=`ROSノード: ${result.node || '—'}`;
   $('tuning-parameters-status').textContent=result.available

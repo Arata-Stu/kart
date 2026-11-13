@@ -83,6 +83,15 @@ class TransferTests(unittest.TestCase):
     def assert_no_staging(self):
         self.assertFalse(list(self.remote_root.glob('.kart-upload-*')))
 
+    def two_classes(self):
+        report = read_json(self.model / 'report.json')
+        report.update(model_profile='racing', num_classes=2, class_names=['rc_car', 'obstacle'])
+        report['output']['shape'] = [1, 6, 6300]
+        atomic_json(self.model / 'report.json', report)
+        artifact = read_json(self.model / 'artifact.json')
+        artifact.update(model_profile='racing', num_classes=2, class_names=['rc_car', 'obstacle'])
+        atomic_json(self.model / 'artifact.json', artifact)
+
     def test_success_publishes_all_verified_payloads_and_only_returns_a_build_command(self):
         plan = self.transfer.prepare(self.body)
         job = LocalScpJob()
@@ -108,6 +117,63 @@ class TransferTests(unittest.TestCase):
         result = self.transfer.push(LocalScpJob(), self.transfer.prepare(body))
         self.assertIsNone(result['container_path'])
         self.assertIsNone(result['build_command'])
+
+    def test_two_class_contract_uses_racing_build_and_ignores_client_profile_claim(self):
+        self.two_classes()
+        plan = self.transfer.prepare(dict(self.body, model_profile='opponent', num_classes=1))
+        self.assertEqual(plan['model_profile'], 'racing')
+        self.assertEqual(plan['num_classes'], 2)
+        result = self.transfer.push(LocalScpJob(), plan)
+        self.assertEqual(result['class_names'], ['rc_car', 'obstacle'])
+        self.assertEqual(result['model_profile'], 'racing')
+        self.assertEqual(result['build_command'],
+                         'bash scripts/racing_trt.sh --model racing --model-root ' + result['container_path'])
+        manifest = read_json(Path(result['host_path']) / 'transfer.json')
+        self.assertEqual(manifest['model_profile'], 'racing')
+        self.assertEqual(manifest['num_classes'], 2)
+        self.assertEqual(manifest['class_names'], ['rc_car', 'obstacle'])
+        self.assertEqual(result['hashes'], perception_manifest(Path(result['host_path'])))
+
+    def test_legacy_transfer_manifest_without_profile_fields_still_validates(self):
+        result = self.transfer.push(LocalScpJob(), self.transfer.prepare(self.body))
+        target = Path(result['host_path'])
+        manifest = read_json(target / 'transfer.json')
+        for field in ('model_profile', 'num_classes', 'class_names'):
+            del manifest[field]
+        atomic_json(target / 'transfer.json', manifest)
+        self.assertEqual(set(perception_manifest(target)), {'opponent.onnx', 'report.json', 'artifact.json', 'transfer.json'})
+
+    def test_class_name_profile_shape_and_artifact_mismatches_are_rejected(self):
+        self.two_classes()
+        original = read_json(self.model / 'report.json')
+        for change in (dict(class_names=['obstacle', 'rc_car']), dict(class_names=['rc_car', 'cone']),
+                       dict(model_profile='opponent'), dict(num_classes=1), dict(num_classes=True),
+                       dict(output=dict(name='output0', shape=[1, 5, 6300], dtype='float32'))):
+            atomic_json(self.model / 'report.json', dict(original, **change))
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                self.transfer.prepare(self.body)
+        atomic_json(self.model / 'report.json', original)
+        artifact = read_json(self.model / 'artifact.json')
+        artifact.update(class_names=['rc_car'], model_profile='opponent', num_classes=1)
+        atomic_json(self.model / 'artifact.json', artifact)
+        with self.assertRaisesRegex(ValueError, 'incomplete'):
+            self.transfer.prepare(self.body)
+        self.assertEqual(self.actions, [])
+
+    def test_tampered_profile_in_plan_or_remote_manifest_never_publishes(self):
+        self.two_classes()
+        plan = self.transfer.prepare(self.body)
+        with self.assertRaisesRegex(ValueError, 'profile'):
+            self.transfer.push(LocalScpJob(), dict(plan, model_profile='opponent'))
+        self.assertEqual(self.actions, [])
+        def tamper(bundle):
+            manifest = read_json(bundle / 'transfer.json')
+            manifest['model_profile'] = 'opponent'
+            atomic_json(bundle / 'transfer.json', manifest)
+        with self.assertRaisesRegex(ValueError, 'class/profile'):
+            self.transfer.push(LocalScpJob(mutate=tamper), plan)
+        self.assertFalse((self.remote_root / plan['destination']).exists())
+        self.assert_no_staging()
 
     def test_known_local_runtime_caches_are_not_transferred(self):
         for directory in ('.ultralytics', '.matplotlib'):

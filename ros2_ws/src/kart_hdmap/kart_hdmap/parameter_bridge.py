@@ -27,7 +27,7 @@ class ParameterBridge:
             return issue
         # Drive tuning may run in AUTO/MANUAL; actuator calibration and recovery
         # retain their existing STOP/stationary contract.
-        if key in ('vehicle', 'recovery'):
+        if key in ('vehicle', 'recovery', 'behavior'):
             return self.bridge.gate.issue()
         return ''
 
@@ -78,8 +78,9 @@ class ParameterBridge:
             actual = {1: value.bool_value, 2: value.integer_value, 3: value.double_value,
                       4: value.string_value}.get(value.type)
             fields.append(dict(name=name, value=actual, type=value.type,
-                               read_only=descriptor.read_only or value.type not in (2, 3, 4),
-                               label=LABELS.get(name, name), description=descriptor.description,
+                               read_only=descriptor.read_only or value.type not in (2, 3, 4)
+                               or (key == 'behavior' and name in ('mode', 'map_file')),
+                               label=LABELS.get(f'{key}.{name}', LABELS.get(name, name)), description=descriptor.description,
                                constraints=descriptor.additional_constraints))
         result = catalog(key, fields)
         if key == 'map':

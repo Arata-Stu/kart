@@ -9,6 +9,7 @@ import { poll } from "./jobs.js";
 import "./dialogs.js";
 import "./line_tools.js";
 import "./custom_editor.js";
+import "./passing_zones.js";
 import "./simulation.js";
 import "./tuning.js";
 import "./esc_trial.js";

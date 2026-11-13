@@ -31,10 +31,11 @@ class RuntimeTests(unittest.TestCase):
             folder.mkdir(parents=True)
             (folder / f'{split}.jpg').write_bytes(b'image data inspected by the real trainer, not this boundary test')
         yaml = root / 'data.yaml'
-        yaml.write_text(f'path: {json.dumps(str(root))}\ntrain: images/train\nval: images/val\nnc: 1\nnames:\n  0: rc_car\n')
-        meta = dict(schema='kart.perception.dataset.v1', class_names=['rc_car'], annotation_revision=7,
+        yaml.write_text(f'path: {json.dumps(str(root))}\ntrain: images/train\nval: images/val\nnc: 2\nnames:\n  0: rc_car\n  1: obstacle\n')
+        meta = dict(schema='kart.perception.dataset.v2', class_names=['rc_car', 'obstacle'], annotation_revision=7,
                     annotation_sha256='labels-sha', split_bag_ids=dict(train=['bag-train'], val=['bag-val']),
-                    frames=[dict(reviewed=True, split=split) for split in ('train', 'val')])
+                    frames=[dict(reviewed=True, split=split, boxes=[[1, 2, 20, 30], [30, 2, 40, 30]],
+                                 class_ids=[0, 1]) for split in ('train', 'val')])
         (root / 'snapshot.json').write_text(json.dumps(meta))
         return yaml
 
@@ -58,6 +59,7 @@ class RuntimeTests(unittest.TestCase):
         callbacks = {}
         model.add_callback = lambda name, callback: callbacks.update({name: callback})
         def train(**kwargs):
+            model.names = {0: 'rc_car', 1: 'obstacle'}
             (output / 'weights').mkdir()
             for name in ('best.pt', 'last.pt'):
                 (output / 'weights' / name).write_bytes(b'original-format training checkpoint')
@@ -75,6 +77,10 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(kwargs['pretrained'], str(self.weights.resolve()))
         self.assertEqual(report['annotation_revision'], 7)
         self.assertEqual(report['source_weights_sha256'], self.source_hash)
+        self.assertEqual(report['class_names'], ['rc_car', 'obstacle'])
+        self.assertEqual(report['model_profile'], 'racing')
+        self.assertEqual(report['num_classes'], 2)
+        self.assertEqual(report['class_boxes'], {'train': [1, 1], 'val': [1, 1]})
         rows = [json.loads(v) for v in (output / 'metrics.jsonl').read_text().splitlines()]
         self.assertEqual((rows[0]['epoch'], rows[0]['loss'], rows[0]['map50'], rows[0]['map50_95']), (1, 3., .8, .4))
         self.assertEqual(self.weights.read_bytes(), b'test checkpoint; model boundary is injected')
@@ -110,6 +116,32 @@ class RuntimeTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 runtime.run(dict(action='train', weights=str(self.weights), dataset_yaml=str(dataset),
                     output=str(self.root / 'invalid'), **{key: value}))
+
+    def test_new_training_requires_v2_two_class_snapshot_with_class_coverage(self):
+        dataset = self.dataset()
+        snapshot = dataset.parent / 'snapshot.json'
+        original = json.loads(snapshot.read_text())
+        for case in ('legacy_schema', 'wrong_names', 'mismatched_ids', 'missing_obstacle', 'bool_class'):
+            metadata = json.loads(json.dumps(original))
+            if case == 'legacy_schema':
+                metadata['schema'] = 'kart.perception.dataset.v1'
+            elif case == 'wrong_names':
+                metadata['class_names'] = ['obstacle', 'rc_car']
+            elif case == 'mismatched_ids':
+                metadata['frames'][0]['class_ids'] = [0]
+            elif case == 'missing_obstacle':
+                metadata['frames'][1]['class_ids'] = [0, 0]
+            else:
+                metadata['frames'][0]['class_ids'] = [False, 1]
+            snapshot.write_text(json.dumps(metadata))
+            with self.subTest(case=case), patch.object(runtime, '_load_yolo') as load:
+                with self.assertRaises(ValueError):
+                    runtime.run(dict(action='train', weights=str(self.weights), dataset_yaml=str(dataset),
+                                     output=str(self.root / case)))
+                load.assert_not_called()
+        dataset.write_text(dataset.read_text().replace('nc: 2', 'nc: 1'))
+        with self.assertRaisesRegex(ValueError, '2クラス'):
+            runtime._dataset(dataset)
 
     def test_metrics_ignore_nonfinite_values_and_duplicate_epoch_callbacks(self):
         path = self.root / 'metrics.jsonl'
@@ -147,6 +179,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertIs(model.predict.call_args.kwargs['classes'], None)
         self.assertIs(report['reviewed'], False)
         self.assertIs(report['automatic_ground_truth'], False)
+        self.assertIn('rc_car / obstacle', report['note'])
 
     def test_empty_proposal_job_needs_no_torch_and_excess_images_are_rejected(self):
         with patch.object(runtime, '_load_yolo') as load:
@@ -186,8 +219,57 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(runtime._sha(self.weights), self.source_hash)
         onnx.checker.check_model(onnx.load(output / 'opponent.onnx'))
         with patch.object(runtime, '_load_yolo', return_value=SimpleNamespace(names={i: str(i) for i in range(80)})), \
-                self.assertRaisesRegex(ValueError, '1クラス'):
+                self.assertRaisesRegex(ValueError, 'class names/order'):
             runtime.run(dict(action='export', weights=str(self.weights), output=str(self.root / 'wrong-nc')))
+
+    def test_export_two_class_racing_shape_and_strict_class_name_order(self):
+        import onnx
+        from onnx import TensorProto, helper
+        def load(weights, output):
+            def export(**kwargs):
+                path = weights.with_suffix('.onnx')
+                graph = helper.make_graph([helper.make_node('Constant', [], ['output0'], value=helper.make_tensor(
+                    'values', TensorProto.FLOAT, [1, 6, 6300], [0.] * (6 * 6300)))], 'raw-detect',
+                    [helper.make_tensor_value_info('images', TensorProto.FLOAT, [1, 3, 480, 640])],
+                    [helper.make_tensor_value_info('output0', TensorProto.FLOAT, [1, 6, 6300])])
+                onnx.save(helper.make_model(graph, opset_imports=[helper.make_opsetid('', 17)]), path)
+                return str(path)
+            # Dict insertion order differs, but numeric IDs are authoritative.
+            return SimpleNamespace(names={1: 'obstacle', 0: 'rc_car'}, task='detect', export=export)
+        output = self.root / 'racing-export'
+        with patch.object(runtime, '_load_yolo', side_effect=load):
+            report = runtime.run(dict(action='export', weights=str(self.weights), output=str(output)))
+        self.assertEqual(report['model_profile'], 'racing')
+        self.assertEqual(report['class_names'], ['rc_car', 'obstacle'])
+        self.assertEqual(report['num_classes'], 2)
+        self.assertEqual(report['output']['shape'], [1, 6, 6300])
+        onnx.checker.check_model(onnx.load(output / 'opponent.onnx'))
+        invalid = ({0: 'obstacle', 1: 'rc_car'}, {0: 'rc_car', 1: 'cone'}, {0: 'opponent'},
+                   {1: 'rc_car'}, {0: 'rc_car', 1: 'obstacle', 2: 'other'})
+        for index, names in enumerate(invalid):
+            model = SimpleNamespace(names=names, task='detect', export=Mock())
+            with self.subTest(names=names), patch.object(runtime, '_load_yolo', return_value=model):
+                with self.assertRaises(ValueError):
+                    runtime.run(dict(action='export', weights=str(self.weights), output=str(self.root / f'invalid-{index}')))
+                model.export.assert_not_called()
+
+    def test_export_rejects_raw_output_shape_disagreeing_with_two_class_names(self):
+        import onnx
+        from onnx import TensorProto, helper
+        def load(weights, output):
+            def export(**kwargs):
+                source = weights.with_suffix('.onnx')
+                graph = helper.make_graph([], 'wrong-class-count',
+                    [helper.make_tensor_value_info('images', TensorProto.FLOAT, [1, 3, 480, 640])],
+                    [helper.make_tensor_value_info('output0', TensorProto.FLOAT, [1, 5, 6300])])
+                onnx.save(helper.make_model(graph, opset_imports=[helper.make_opsetid('', 17)]), source)
+                return str(source)
+            return SimpleNamespace(names={0: 'rc_car', 1: 'obstacle'}, task='detect', export=export)
+        output = self.root / 'wrong-class-shape'
+        with patch.object(runtime, '_load_yolo', side_effect=load), self.assertRaises(ValueError):
+            runtime.run(dict(action='export', weights=str(self.weights), output=str(output)))
+        self.assertFalse((output / 'opponent.onnx').exists())
+        self.assertFalse((output / 'report.json').exists())
 
     def test_setup_script_rejects_extra_arguments_before_environment_changes(self):
         result = subprocess.run(['bash', str(runtime.REPO / 'scripts/perception_setup.sh'), '--inject'],

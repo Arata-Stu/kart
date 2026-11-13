@@ -149,3 +149,28 @@ class TuningBackendTests(unittest.TestCase):
                 remote(CONNECTION,'apply',{})
             self.assertEqual(run.call_count,1)
         with self.assertRaises(ValueError):remote({**CONNECTION,'host':'$(bad)'},'status',{})
+
+    def test_behavior_reset_forwards_map_revision_without_a_snapshot_or_automatic_retry(self):
+        identity = self.tuning.identity('course')
+        with patch('kart_studio.tuning.remote', return_value=dict(map_id=identity, success=True, message='reset')) as send:
+            self.tuning.request({**self.body, 'expected_revision': 'r1'}, 'behavior_reset')
+            self.assertEqual(send.call_count, 1)
+            self.assertEqual(send.call_args.args[1], 'behavior_reset')
+            self.assertEqual(send.call_args.args[2]['expected_revision'], 'r1')
+            self.assertEqual(send.call_args.args[2]['map_id'], identity)
+            self.assertNotIn('snapshot', send.call_args.args[2])
+        result = subprocess.CompletedProcess([], 0, b'{"map_id":"x","success":true}', b'')
+        with patch('kart_studio.tuning.subprocess.run', return_value=result) as run:
+            self.assertTrue(remote(CONNECTION, 'behavior_reset', dict(map_id='x', expected_revision='r1'))['success'])
+            self.assertIn('http://127.0.0.1:8782/behavior_reset', run.call_args.args[0][-1])
+            self.assertEqual(run.call_count, 1)
+
+    def test_behavior_reset_http_route_uses_the_existing_tuning_adapter(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from kart_studio.server import Studio
+        studio = Studio.__new__(Studio)
+        studio.tuning = SimpleNamespace(request=Mock(return_value=dict(success=True)))
+        body = dict(id='course', connection=CONNECTION, expected_revision='r1')
+        self.assertEqual(studio.post('/api/tuning/behavior_reset', body), dict(success=True))
+        studio.tuning.request.assert_called_once_with(body, 'behavior_reset')

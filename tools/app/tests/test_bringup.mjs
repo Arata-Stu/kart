@@ -37,6 +37,7 @@ globalThis.fetch=async(url,options)=>{
       {key:'auto_fixed_throttle',kind:'text'},
       {key:'perception',kind:'text'}, {key:'perception_mode',choices:['detect','track']},
       {key:'perception_debug_image',kind:'boolean',default:null},
+      {key:'overtake',choices:['off','shadow','active']},{key:'recovery',choices:['off','infra_imu']},
       ...(remoteSupportsGate?[{key:'auto_fixed_throttle_r2_gate',kind:'boolean',default:null}]:[])],
     status:snapshot,
   };
@@ -167,3 +168,23 @@ emit('connection');await flush();el('bringup-connect').onclick();await flush();
 el('bringup-plan').onclick();await flush();
 assert.equal('auto_fixed_throttle_r2_gate' in lastPlan(),false,'an older remote catalog must not receive a new unsupported option');
 console.log('Identification recording: fixed prerequisite, explicit bool override, normal-mode reset, mode/preset isolation passed');
+
+savedPreset={container:id,values:{mode:'drive',perception:'/models/racing.plan',perception_mode:'detect',recovery:'infra_imu'}};
+emit('connection');await flush();el('bringup-connect').onclick();await flush();
+const overtake=el('bringup-field-overtake');
+overtake.value='active';overtake.onchange();
+assert.equal(el('bringup-field-perception_mode').value,'track');
+assert.equal(el('bringup-field-recovery').value,'off');
+el('bringup-plan').onclick();await flush();
+assert.equal(lastPlan().overtake,'active');
+assert.equal(lastPlan().perception_mode,'track');
+assert.equal(lastPlan().recovery,'off');
+el('bringup-field-perception_mode').value='detect';el('bringup-field-perception_mode').onchange();
+assert.equal(overtake.value,'off');
+overtake.value='shadow';overtake.onchange();
+el('bringup-field-perception').value='off';el('bringup-field-perception').onchange();
+assert.equal(overtake.value,'off');
+el('bringup-mode').value='collect';el('bringup-mode').onchange();
+el('bringup-plan').onclick();await flush();
+assert.equal('overtake' in lastPlan(),false);
+console.log('Live behavior startup: tracking/recovery coupling, perception prerequisite resets and drive-only isolation passed');

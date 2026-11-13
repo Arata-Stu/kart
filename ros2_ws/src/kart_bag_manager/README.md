@@ -36,7 +36,7 @@ managerのQoSはすべてreliable / volatile / keep-last depth 10。
 
 既定topic一覧は[config/bag_manager.yaml](config/bag_manager.yaml)。走行指令・モード・Joy・基板状態・
 トリム・bag要求/状態・diagnostics・TFを記録する。D455のRGB/IR/IMUとVSLAMは候補名を含む。
-**D455/localizationのlaunchは未実装なので、センサーtopic名は実構成に合わせる必要がある。**
+実運用のセンサー・localizationの起動はkart_bringupが担う。単体構成ではtopic名を実構成に合わせる。
 相対topicはmanagerのnamespaceで解決し、`/tf`と`/tf_static`は既定でglobal名を維持する。
 no_discovery=falseなら録画開始後に現れた対象topicも発見対象となる。
 
@@ -262,6 +262,26 @@ manager自身の入出力・parameterは追加せず、topics既定値への追�
 
 標準の通常／OpenEBプロファイルは`e2e/status`（std_msgs/msg/String）も記録する。
 operation_mode/request・stateと組み合わせ、E2Eの最初の停止理由を診断する。
+
+### 任意の追従・追越しの診断記録
+
+通常/OpenEBのpackage基準configと、bringupの通常・旧environment（各OpenEB版を含む）の
+明示topicsへ次の5件を含める。録画は認識・behaviorノードを起動せず、配信されている場合だけ記録する。
+既存のRGB・記録開始/停止・RAW連携・exclude設定は変更しない。軽量なvslam-map・vehicle-model profileには追加しない。
+
+| topic | 型 | 配信元QoS・更新条件 |
+| --- | --- | --- |
+| /racing/behavior_status | std_msgs/msg/String | reliable / volatile / depth 1、20Hz・有界JSON。状態・理由・候補経路 |
+| /racing/map_points | kart_interfaces/msg/GroundDetections | best effort / volatile / depth 1、同期画像ごと／無効消去通知 |
+| /racing/map_diagnostics | diagnostic_msgs/msg/DiagnosticArray | reliable / volatile / depth 1、1Hz。全検出の投影診断 |
+| /racing/ground_points | kart_interfaces/msg/OpponentGroundPoints | best effort / volatile / depth 5、confirmed RC追跡と校正の完全同期ごと |
+| /racing/ground_diagnostics | diagnostic_msgs/msg/DiagnosticArray | reliable / volatile / depth 1、1Hz。RC追跡の投影診断 |
+
+marker・可視化Path・candidate_referenceはbehavior_status内の経路と重複するため追加しない。
+bringupの通常profileは既存のplanning/reference_lineとplanning/course_referenceも記録するので、
+基線・実際の参照・判断状態と投影入力を対応させられる。子プロセスのQoSは既存の自動適応／overrideに従う。
+型・stamp・valid/reasonを保持し、投影失敗を正常0件や自由空間と扱わない。
+録画候補への追加であり、起動や録画開始からAUTOやactive behaviorを有効化しない。
 
 ### 録画進捗の表示
 

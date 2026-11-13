@@ -15,7 +15,7 @@
         <button class="nav active" id="nav-map">地図</button
         ><button class="nav" id="nav-transfer">転送</button
         ><button class="nav" id="nav-learning">学習</button
-        ><button class="nav" id="nav-perception">RCカー検出</button
+        ><button class="nav" id="nav-perception">RCカー・障害物</button
         ><button class="nav" id="nav-audit">解析</button>
         <button class="nav" id="nav-coverage">分布解析</button>
         <button class="nav" id="nav-esc">ESC試験</button>
@@ -25,9 +25,10 @@
       ><button class="quiet" id="connection-open">接続設定</button>
     </header>
     <main id="perception-page" hidden>
-      <div class="perception-heading actions"><div><h1>RCカーを見つけるモデルを作る</h1><p>録画 → 枠を確認 → 1クラス学習 → ONNX。画像の確認・編集はJetson未接続でもできます。</p></div><button id="perception-refresh">一覧を更新</button><button id="perception-jobs">ログ・履歴を開く</button></div>
+      <div class="perception-heading actions"><div><h1>RCカーと障害物を見つけるモデルを作る</h1><p>録画 → 枠とクラスを確認 → 2クラス学習 → ONNX。画像の確認・編集はJetson未接続でもできます。</p></div><button id="perception-refresh">一覧を更新</button><button id="perception-jobs">ログ・履歴を開く</button></div>
       <nav class="perception-stages" aria-label="RCカー学習の工程"><button id="perception-tab-data" aria-pressed="true">1 データ準備</button><button id="perception-tab-annotate" aria-pressed="false">2 枠を確認</button><button id="perception-tab-train" aria-pressed="false">3 学習・ONNX</button></nav>
       <p id="perception-message" role="status">プロジェクトを作成するか、保存済みのプロジェクトを選んでください。</p>
+      <p id="perception-schema-warning" class="perception-schema-warning" role="status" hidden></p>
       <div class="perception-preparation" id="perception-pane-data">
         <section class="perception-card">
           <h2><span class="perception-step">1</span> 録画とプロジェクト</h2>
@@ -41,37 +42,37 @@
           <h2>bagから画像を取り出す</h2>
           <div class="perception-fields"><label>Notebookのbag<select id="perception-bag"></select></label><label>用途<select id="perception-extract-split"><option value="train">学習用（train）</option><option value="val">検証用（val）</option></select></label><label>画像topic<input id="perception-topic" value="/realsense/color/image_raw" /></label><label>抽出頻度（Hz）<input id="perception-sample-hz" type="number" min="0.1" max="30" step="0.1" value="2" /></label><label>最大画像数<input id="perception-max-frames" type="number" min="1" max="500" value="500" /></label></div>
           <button id="perception-extract" class="primary">選択bagの画像を抽出</button>
-          <p class="small">学習用と検証用には別のbagを使います。同じ走行の似た画像を両方へ混ぜず、RCカーがいない場面やダクトだけの画像も含めてください。</p>
+          <p class="small">学習用と検証用には別のbagを使います。RCカーとコース上のダンボール・落とし物などの障害物、両方ともない背景を含めます。同じ走行の似た画像をtrain/valへ混ぜないでください。</p>
         </section>
         <section class="perception-card perception-selection-card"><details id="perception-selection-details"><summary>確認画像を選ぶ · 学習用の未確認画像から優先順位を付ける</summary>
           <p>trainの未確認画像を、見た目の違いや検出の不確かさから選びます。選定だけでは枠や確認済み状態を変更しません。valの画像・正解は選定用のseedに使いません。</p>
           <div class="perception-fields"><label>方式<select id="perception-selection-method"><option value="yolo">YOLO · 検出結果＋未検出も探索</option><option value="dinov3">DINOv3 · 画像特徴による選定</option></select></label><label>優先画像数<input id="perception-selection-limit" type="number" min="1" max="500" value="100" /></label><label>調べる画像数の上限<input id="perception-selection-max-images" type="number" min="1" max="500" value="500" /></label><label id="perception-selection-yolo-fields">YOLOの重み<select id="perception-selection-weights-source"><option value="official">公式YOLOv8sの重み</option></select></label></div>
           <details id="perception-selection-yolo-details"><summary>YOLO選定詳細</summary><p><strong>誤検出を重点確認する目安（誤りの断定ではありません）</strong></p><p>scoreが下限以上の枠を対象に、想定数を超える画像や大きすぎる枠のある画像を優先します。正解枠・確認済み状態を変更するのは、人が画像を確認して保存した場合だけです。</p><div class="perception-fields"><label>重点確認で数える枠のscore下限<input id="perception-selection-review-confidence" type="number" min="0.05" max="1" step="0.05" value="0.10" /></label><label>1画像の想定検出数（整数・0〜100）<input id="perception-selection-expected-max-detections" type="number" min="0" max="100" step="1" value="3" /></label><label>大きすぎる枠の目安（枠面積 ÷ 画像面積）<input id="perception-selection-large-bbox-area-ratio" type="number" min="0.01" max="1" step="0.01" value="0.40" /></label></div><p class="small">枠面積は画像内に収めてから計算します。面積比0.40は画像面積の40%です。scoreはモデルの出力値で、正解の確率としては扱いません。</p></details>
-          <div id="perception-selection-dino-fields" hidden><p>DINOv3は、確認済みtrainのRCカー枠と、ダクトだけなどの対象なし画像がそれぞれ1件以上必要です。まず数枚ずつ確認してください。リポジトリ・重みは手元のものを指定し、自動ダウンロードはしません。</p><div class="perception-fields"><label>DINOv3リポジトリ<input id="perception-encoder-repo" placeholder="ローカルDINOv3リポジトリの絶対パス" /></label><label>DINOv3重み<input id="perception-encoder-weights" placeholder="ローカル重みの絶対パス" /></label></div></div>
+          <div id="perception-selection-dino-fields" hidden><p>DINOv3は、確認済みtrainの対象crop（RCカー・障害物）と、両方ともない背景画像をseedとして特徴の類似度を比較します。対象あり・対象なしをまず数枚ずつ確認してください。正解の確率ではありません。リポジトリ・重みは手元のものを指定し、自動ダウンロードはしません。</p><div class="perception-fields"><label>DINOv3リポジトリ<input id="perception-encoder-repo" placeholder="ローカルDINOv3リポジトリの絶対パス" /></label><label>DINOv3重み<input id="perception-encoder-weights" placeholder="ローカル重みの絶対パス" /></label></div></div>
           <div class="actions"><button id="perception-select" class="primary">確認画像の優先順位を計算</button><button id="perception-selection-refresh">選定結果を再取得</button><button id="perception-selection-save-settings">選定・転送先の設定を保存</button></div><p id="perception-selection-summary" role="status">選定結果はまだありません。通常の全画像からも確認できます。</p>
         </details></section>
       </div>
       <section class="perception-card perception-annotation" id="perception-pane-annotate" hidden>
         <div class="actions"><h2><span class="perception-step">2</span> 画像の枠を確認</h2><strong id="perception-progress">画像なし</strong></div>
-        <p class="perception-annotation-help">正解は <code>rc_car</code> だけです。見えているRCカーを全て囲みます。ダクト・人・台車には枠を付けず、RCカーがいない画像は「対象なしとして保存」で確認済みにします。</p>
-        <div class="actions perception-frame-controls"><label>表示<select id="perception-filter"><option value="all">全画像</option><option value="unreviewed">未確認</option><option value="reviewed">確認済み</option><option value="positive">確認済み・RCカーあり</option><option value="negative">確認済み・対象なし</option></select></label><label>用途<select id="perception-filter-split"><option value="all">train / val</option><option value="train">train</option><option value="val">val</option></select></label><label class="perception-selection-toggle"><input id="perception-selection-order" type="checkbox" />選定順で確認</label><button id="perception-prev">← 前</button><select id="perception-frame" aria-label="確認する画像"></select><button id="perception-next">次 →</button></div>
+        <p class="perception-annotation-help"><code>rc_car</code> はRCカー、<code>obstacle</code> は走行を妨げるダンボール・落とし物などの静止物体です。見える対象を全て囲んでクラスを選びます。「対象なし」は両クラスともない画像です。</p>
+        <div class="actions perception-frame-controls"><label>表示<select id="perception-filter"><option value="all">全画像</option><option value="unreviewed">未確認</option><option value="reviewed">確認済み</option><option value="positive">確認済み・対象あり</option><option value="negative">確認済み・両方ともなし</option></select></label><label>用途<select id="perception-filter-split"><option value="all">train / val</option><option value="train">train</option><option value="val">val</option></select></label><label class="perception-selection-toggle"><input id="perception-selection-order" type="checkbox" />選定順で確認</label><button id="perception-prev">← 前</button><select id="perception-frame" aria-label="確認する画像"></select><button id="perception-next">次 →</button></div>
         <p id="perception-selection-frame" class="small" role="status"></p>
         <p id="perception-frame-info" class="small">抽出した画像を選択してください。</p>
         <div id="perception-draft-warning" class="perception-draft-warning" hidden><strong>未保存の編集があります。</strong> ページを切り替えても編集は保持されます。別画像・プロジェクトへ進む前に保存してください。<button id="perception-discard">この画像の編集を破棄</button></div>
         <div class="perception-editor">
           <div>
             <div class="actions perception-tools"><button id="perception-tool-edit" aria-pressed="true">選択・移動</button><button id="perception-tool-box" aria-pressed="false">矩形を追加</button><button id="perception-undo">元に戻す</button><button id="perception-redo">やり直す</button><button id="perception-delete">選択枠を削除</button><button id="perception-fit">全体表示</button></div>
-            <div class="perception-canvas-wrap"><canvas id="perception-canvas" tabindex="0" aria-label="RCカーの矩形編集。ドラッグで追加・移動、ハンドルでサイズ変更。"></canvas><div id="perception-image-empty">画像を抽出し、確認する画像を選んでください。</div></div>
+            <div class="perception-canvas-wrap"><canvas id="perception-canvas" tabindex="0" aria-label="RCカー・障害物の矩形編集。ドラッグで追加・移動、ハンドルでサイズ変更。"></canvas><div id="perception-image-empty">画像を抽出し、確認する画像を選んでください。</div></div>
             <p class="small perception-shortcuts">ホイールで拡大・縮小、Space＋ドラッグで表示を移動。Deleteで枠削除、Ctrl/Cmd＋Zで元に戻す、[ / ]で前後の画像。座標は元画像のpixelです。</p>
           </div>
-          <aside class="perception-box-sidebar"><strong id="perception-box-count">正解枠 0個</strong><div id="perception-boxes"></div><p id="perception-suggestions-note" class="small">候補なし</p><button id="perception-accept">候補で正解枠を置き換える</button><p class="small">橙の点線は自動候補です。採用・修正して保存するまで正解には使いません。</p><label>候補score下限<input id="perception-confidence" type="number" min="0.01" max="0.95" step="0.01" value="0.1" /></label><button id="perception-prelabel">未確認画像の候補を生成</button><details><summary>枠付け・キー操作</summary><p class="small">RCカーを全て囲み、ダクト・人・台車は囲みません。RCカーがいない画像は「対象なしとして保存」。ホイールで拡大、Space＋ドラッグで表示移動。Deleteで削除、Ctrl/Cmd＋Zで元に戻す、[ / ]で前後へ進みます。座標は元画像のpixelです。</p></details></aside>
+          <aside class="perception-box-sidebar"><div class="perception-class-legend"><span data-class-id="0">RCカー</span><span data-class-id="1">障害物</span></div><label class="perception-class-picker">追加・候補採用のクラス<select id="perception-new-class"><option value="0">RCカー (rc_car)</option><option value="1">障害物 (obstacle)</option></select></label><label class="perception-class-picker">選択枠のクラス<select id="perception-selected-class"><option value="" disabled>枠を選択してください</option><option value="0">RCカー (rc_car)</option><option value="1">障害物 (obstacle)</option></select></label><strong id="perception-box-count">正解枠 0個</strong><div id="perception-boxes"></div><p id="perception-suggestions-note" class="small">候補なし</p><button id="perception-accept">候補で置換（選択クラス）</button><p class="small">橙の点線は未分類の自動候補です。採用すると選択クラスの下書きになります。各枠のクラスと全ての対象を確認・修正して保存してください。</p><label>候補score下限<input id="perception-confidence" type="number" min="0.01" max="0.95" step="0.01" value="0.1" /></label><button id="perception-prelabel">未確認画像の候補を生成</button><details><summary>枠付け・キー操作</summary><p class="small">rc_carはRCカー、obstacleはコース上のダンボール・落とし物など走行を妨げる静止物体です。通常のコース境界ダクトは含めません。両方ない画像は「対象なしとして保存」。ホイールで拡大、Space＋ドラッグで表示移動。Deleteで削除、Ctrl/Cmd＋Zで元に戻す、[ / ]で前後へ進みます。</p></details></aside>
         </div>
         <div class="actions perception-save-actions"><button id="perception-save" class="primary">枠を確認して保存</button><button id="perception-save-next" class="primary">枠を保存して次へ →</button><button id="perception-negative">対象なしとして保存</button><span id="perception-save-state" role="status"></span></div>
       </section>
       <div class="perception-training" id="perception-pane-train" hidden>
         <section class="perception-card">
-          <h2><span class="perception-step">3</span> RCカー1クラスで学習</h2>
-          <p>YOLOv8sを <code>rc_car</code> の1クラスへ学習し直します。COCOの80クラスを維持する学習ではありません。</p>
+          <h2><span class="perception-step">3</span> RCカー・障害物の2クラスで学習</h2>
+          <p>YOLOv8sを <code>rc_car</code> / <code>obstacle</code> の2クラスへ学習し直します。COCOの80クラスを維持する学習ではありません。</p>
           <details><summary>Notebookの学習環境</summary><div class="perception-fields"><label>Python<input id="perception-python" placeholder="学習用Pythonの絶対パス" /></label><label>初期重み<input id="perception-weights" placeholder="yolov8s.ptの絶対パス" /></label><label>device<input id="perception-device" value="auto" placeholder="auto / cpu / cuda:0 / mps" /></label></div><div class="actions"><button id="perception-settings-save">設定を保存</button><button id="perception-setup">学習環境をセットアップ</button></div></details>
           <p id="perception-environment" role="status">学習環境を確認中…</p>
           <div class="perception-fields"><label>学習名<input id="perception-train-name" maxlength="80" placeholder="例：rc-car-indoor-v1" /></label><label>epoch<input id="perception-epochs" type="number" min="1" max="1000" value="50" /></label><label>batch<input id="perception-batch" type="number" min="1" max="128" value="8" /></label><label>画像サイズ<input id="perception-imgsz" type="number" min="320" max="1280" step="32" value="640" /></label><label>初期学習率<input id="perception-lr0" type="number" min="0.000001" max="0.1" step="0.0001" value="0.001" /></label></div>
@@ -272,12 +273,31 @@
             </div>
             <p class="small">Jetson受信後の時間です。画像処理の遅延ではありません。class IDはモデルの出力値です。</p>
           </section>
+          <section class="perception-state ground-perception-state" aria-label="地図上のRCカー・障害物の接地点">
+            <strong id="ground-perception-status" role="status">地図上の接地点: 未接続</strong>
+            <div class="ground-perception-legend"><span class="ground-rc">RCカー（丸）</span><span class="ground-obstacle">障害物（ひし形）</span></div>
+            <div id="ground-perception-source" class="small"></div>
+            <div id="ground-perception-diagnostic" class="small"></div>
+            <p class="small">点はbbox下端から路面へ投影した接地点の概算です。物体の中心・bbox・物理寸法を示すものではありません。古い点は消えます。</p>
+          </section>
+          <section class="perception-state behavior-state" aria-label="追従・追越しの判断と候補経路">
+            <strong id="behavior-status" role="status">追従・追越し: 未接続</strong>
+            <div id="behavior-reason" class="small"></div>
+            <div id="behavior-target" class="small"></div>
+            <div id="behavior-context" class="small behavior-candidates"></div>
+            <div id="behavior-candidates" class="small behavior-candidates"></div>
+            <div id="behavior-geometry" class="small"></div>
+            <div id="behavior-source" class="small"></div>
+            <div class="tuning-controls"><button id="behavior-reset" type="button" disabled>行動計画をリセット</button><span class="small">STOP・1秒停車かつ基準ライン近傍で実行。AUTOは変更しません。</span></div>
+            <p class="behavior-legend small"><span>青: 選択経路（shadowは破線）</span><span>緑: 左候補</span><span>橙: 右候補</span></p>
+            <p class="small">候補の破線は不成立、端点を結ぶ線は復帰区間です。矩形は経路方向に沿う占有仮定で、自車は後車軸基準、対象は中心を仮定します。実測寸法ではありません。activeは実車の参照経路に反映され、shadowは観察のみです。動作モードは起動時設定、調整値の変更はSTOP・停車中のみです。</p>
+          </section>
           <div class="tuning-controls"><span id="tuning-parking-status">駐車planner未接続</span><button id="tuning-parking-start" disabled>駐車を開始</button><button id="tuning-parking-reset" disabled>駐車をリセット（STOP）</button></div>
           <p class="small">駐車構成では地図・パラメータ編集は停止します。AUTO中の「駐車を開始」は実車の経路を切り替えます。STOP中は経路を準備し、AUTOへの切替は従来の操作で行います。</p>
           <div class="small" id="tuning-status" role="status">未接続</div>
           <div class="small" id="tuning-revision"></div>
           <div class="small" id="tuning-lookahead" role="status">横制御の参照点: 未受信</div>
-          <p class="small">既存の編集・区間速度・ライン生成後に保存してプレビュー。白＝実車、青＝候補、橙＝自己位置、黄＝横制御の参照点。ライン・速度・追従調整はAUTO/MANUAL走行中も適用可能。画面切断は走行を停止しません。</p>
+          <p class="small">既存の編集・区間速度・ライン生成後に保存してプレビュー。白＝実車、青＝地図の候補ライン、橙＝自己位置、黄＝横制御の参照点。ライン・速度・横制御調整はAUTO/MANUAL走行中も適用可能。画面切断は走行を停止しません。</p>
         </details>
         <div class="canvas-wrap">
           <canvas
@@ -532,6 +552,23 @@
               <div class="actions"><button id="custom-downsample">現在の点を間引く</button><button id="custom-delete">Customを削除</button></div>
               <p class="help">間引きで形状が変わるため再生成前に確認してください。既存点の間引き・削除では区間速度もクリアします。保存前はUndo可能です。</p>
             </div>
+            <details id="passing-editor" class="line-card passing-editor">
+              <summary>追越し許可区間を設定</summary>
+              <p class="help">未設定は許可なし。開始・終了WPは進行方向順、閉路は始点を跨ぐ区間も設定できます。追越し開始から合流完了まで許可区間内に収めるための設定です。</p>
+              <label>対象ライン<select id="passing-line"><option value="centerline">Center</option><option value="raceline">Race</option><option value="customline">Custom</option></select></label>
+              <p id="passing-summary" class="help">対象ラインを生成してください。</p>
+              <p id="passing-notice" class="passing-notice" role="status"></p>
+              <div class="passing-endpoints">
+                <label>開始WP<input id="passing-start" type="number" min="1" step="1" value="1" /></label><button id="passing-pick-start" type="button">地図で開始を選ぶ</button>
+                <label>終了WP<input id="passing-end" type="number" min="1" step="1" value="2" /></label><button id="passing-pick-end" type="button">地図で終了を選ぶ</button>
+              </div>
+              <label>許可する側<select id="passing-side"><option value="both">左右</option><option value="left">左のみ</option><option value="right">右のみ</option></select></label>
+              <p id="passing-pick-status" class="help"></p>
+              <div class="actions"><button id="passing-add" type="button">区間を追加</button><button id="passing-cancel" type="button">選択を終了</button></div>
+              <div id="passing-list" class="passing-list"></div>
+              <div class="actions"><label class="passing-toggle"><input id="passing-show" type="checkbox" checked />許可帯を表示</label><button id="passing-clear" type="button">全区間を削除</button></div>
+              <p class="help">紫＝左右、緑＝左、橙＝右。破線は未追加の下書きです。「区間を追加」の後に地図を保存します。ライン形状が変わると許可は失効し、設定し直す必要があります。</p>
+            </details>
             <button id="line-settings-open" class="full">
               車幅・速度などの生成設定</button
             ><p id="parking-warning" class="help"></p><button id="export" class="primary full">
@@ -1602,10 +1639,11 @@
 </dialog>
 <dialog id="tuning-parameters-dialog" class="tuning-parameters-dialog">
   <div class="actions"><h2>Jetsonのパラメータ調整</h2><button id="tuning-parameters-close" type="button">閉じる</button></div>
-  <p class="help">Jetsonの現在値を取得します。ライン・速度・追従の変更は走行中もノード単位で一括適用。車両補正・復帰設定はSTOP・停車中のみ。起動時固定の項目は表示のみです。</p>
+  <p class="help">Jetsonの現在値を取得します。ライン・速度・横制御の変更は走行中もノード単位で一括適用。車両補正・復帰・追従／追越し設定はSTOP・1秒停車中のみ。起動時固定の項目は表示のみです。</p>
   <div class="actions"><label>対象<select id="tuning-parameters-target" aria-label="パラメータの対象ノード"><option value="vehicle">車両・ステア補正</option>
     <option value="tracking">横制御（Pure Pursuit / MPC）</option><option value="map">参照ライン・Center速度</option>
     <option value="speed">速度PID</option><option value="recovery">復帰モジュール</option>
+    <option value="behavior">追従・追越し（STOP・停車中のみ変更）</option>
   </select></label><button id="tuning-parameters-refresh" type="button">現在値を再取得</button></div>
   <p id="tuning-parameters-status" role="status"></p>
   <section id="tuning-speed-panel" hidden>

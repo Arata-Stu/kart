@@ -32,6 +32,14 @@
 .perception-box-sidebar>button{width:100%;white-space:normal;margin:4px 0}
 #perception-boxes{max-height:230px;overflow:auto;margin:8px 0}
 #perception-boxes button{display:block;width:100%;white-space:normal;text-align:left;font-size:12px;margin:4px 0;padding:7px}
+#perception-boxes button[data-class-id="0"]{border-left:4px solid #16866b}
+#perception-boxes button[data-class-id="1"]{border-left:4px solid #b43b79}
+.perception-class-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin-bottom:7px;grid-column:1/-1}
+.perception-class-legend span:before{content:'';display:inline-block;width:9px;height:9px;margin-right:5px;border-radius:2px}
+.perception-class-legend [data-class-id="0"]:before{background:#16866b}
+.perception-class-legend [data-class-id="1"]:before{background:#b43b79}
+.perception-box-sidebar .perception-class-picker{font-size:12px;margin:6px 0}
+.perception-schema-warning{flex:none;background:#fff4dc;border:1px solid #edd6a8;border-radius:7px;padding:7px 10px;margin:4px 0 8px;font-size:12px}
 .perception-draft-warning{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;background:#fff4dc;border:1px solid #edd6a8;border-radius:7px;margin:10px 0}
 .perception-save-actions{padding-top:10px;border-top:1px solid var(--line)}
 #perception-save-state{color:var(--muted)}

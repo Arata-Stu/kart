@@ -22,6 +22,7 @@ const labels = {
   recovery:'自動復帰', tuning:'Studioからの動的調整', foxglove:'Foxglove', no_bridge:'車両基板を起動しない',
   perception:'物体検出engine（空欄は設定値、offは無効）', perception_mode:'物体検出／車両追跡モード',
   perception_debug_image:'bbox付きデバッグ画像（JPEG・最大5Hz）',
+  overtake:'追従・追越し（off / shadow候補 / active実行）',
   parking_site:'駐車用地図（任意上書き）', parking_slot:'駐車区画',
   eval_localization:'評価方式', bag:'再生bag', rate:'再生速度', tracking_mode:'追跡方式',
   multicam_mode:'VSLAM速度・精度', base_frame:'基準frame', imu_frame:'IMU frame', latency_output:'遅延評価の保存先',
@@ -45,10 +46,11 @@ const modeKeys = {
   tracking_mode:['eval'], base_frame:['eval'], imu_frame:['eval'], latency_output:['e2e-latency'],
   foxglove:live,
   perception:live, perception_mode:live, perception_debug_image:live,
+  overtake:['drive'],
 };
 const essentials = new Set(['device','rgb_profile','infra_profile','depth_profile','imu_profile','evs','run_name',
   'joy_max_throttle','auto_fixed_throttle','auto_fixed_throttle_r2_gate','e2e_throttle_mode','e2e_fixed_throttle','recovery','tuning','eval_localization','tracking_mode','rate',
-  'perception','perception_mode','perception_debug_image']);
+  'perception','perception_mode','perception_debug_image','overtake']);
 const assetKeys = new Set(['map_file','map_dir','model_dir','e2e_model_dir','lane_id','line_type','bag']);
 const panes = ['basic','assets','details','review','log'];
 function showPane(name) {
@@ -159,6 +161,7 @@ function defaultLabel(f) {
   return '未指定・設定確認で確定';
 }
 function renderFields() {
+  if(ui.values.mode!=='drive' || !ui.catalog?.fields?.some(f=>f.key==='overtake'))delete ui.values.overtake;
   // A saved recording option must never become a hidden override in a driving plan.
   const r2GateAvailable=ui.catalog?.fields?.some(f=>f.key==='auto_fixed_throttle_r2_gate');
   if(!collectionModes.includes(ui.values.mode) || !r2GateAvailable)delete ui.values.auto_fixed_throttle_r2_gate;
@@ -209,6 +212,19 @@ function renderFields() {
       }
       if(input.value==='') delete ui.values[f.key];
       else ui.values[f.key]=f.kind==='boolean'?input.value==='true':input.value;
+      if(ui.values.mode==='drive') {
+        const linked=(key,value)=>{ui.values[key]=value;const control=$('bringup-field-'+key);if(control)control.value=value;};
+        if(f.key==='overtake' && ['shadow','active'].includes(input.value)) {
+          linked('perception_mode','track');
+          if(input.value==='active')linked('recovery','off');
+          toast(input.value==='active'?'車両追跡を有効にし、自動復帰をOFFにしました。設定確認で2クラスengine等を検証します。':'車両追跡を有効にしました。shadowは候補表示のみです。');
+        } else if((f.key==='perception' && input.value==='off') || (f.key==='perception_mode' && input.value==='detect')) {
+          linked('overtake','off');
+        } else if(f.key==='recovery' && input.value && input.value!=='off' && ui.values.overtake==='active') {
+          linked('overtake','off');
+          toast('自動復帰の有効化に合わせてactive追従・追越しをOFFにしました。');
+        }
+      }
       if(f.key==='auto_fixed_throttle' && r2GateAvailable && collectionModes.includes(ui.values.mode) && !fixedThrottleEnabled()){
         ui.values.auto_fixed_throttle_r2_gate=false;
         const r2Gate=$('bringup-field-auto_fixed_throttle_r2_gate');if(r2Gate)r2Gate.value='false';

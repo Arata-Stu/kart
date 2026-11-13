@@ -11,6 +11,40 @@ Jetsonへ転送したbundleは`export/hd_map.yaml`を指定できる。古いv1�
 点群未取得のpending地図、frame不一致、重複lane ID、不正数値、CSVとラインの不整合を拒否する。
 ファイルは起動時とreload要求時だけ読み込む。編集中の自動追従はしない。
 
+### ラインごとの追越し許可
+
+編集正本は`lanes[].lines[kind].passing_zones`を持てる。未記載・空配列は許可ゼロで、
+既存地図を全周許可へ読み替えない。Center/Race/Customそれぞれに独立して設定する。
+
+| field | 型・意味 |
+| --- | --- |
+| id | 1..64文字の英数字・`_`・`-`、先頭は英数字。同一line内で大文字小文字を無視して一意 |
+| start_index / end_index | 現在の生成point列への0始まり整数。両端inclusive、同じindexは不可 |
+| side | both / left / right。ラインの進行方向に対して許可する側 |
+| geometry_revision | そのpoint列とclosedを正規化したSHA-256、小文字64桁 |
+
+1line最大64区間。開路はstart_index < end_index、閉路はstart_index > end_indexで
+末尾→先頭を跨ぐ区間を表す。たとえば4点の閉路の3→1は3→0→1を含む。
+頂点を並べ替えたり始点を付加したりせず、保存されたpoint列のindexを使う。
+
+共通のROS非依存APIは`kart_hdmap.passing_zones.geometry_revision(points, closed)`と
+`validate_passing_zones(zones, points, closed)`。XYをfloatへ、±0を0.0へ揃え、
+pointsの順序とclosed boolをcanonical JSONにしてhashする。int/float表記差には依存しない。
+速度profileだけの変更ではhashを変えず、点列・順序・開閉路の変更では許可を失効させる。
+lineに付いたクライアント側のhashを信用せず、必ず実際のpoint列から照合する。
+
+exportの`offline_lines`は従来どおりCSV path。許可はlaneの
+`line_passing_zones: {centerline: [...], raceline: [...], customline: [...]}`へ付帯し、
+CSV読込後に各`line.passing_zones`へ戻す。存在しないlineへの許可、不正index・side・ID・
+stale revisionはnormalize／reload／調整snapshot適用で拒否する。新しい形状へ黙って移し替えない。
+正常な許可は`/hdmap/document`と調整のactive/revision・rollbackにも保持し、ReferenceLineの型は変更しない。
+Studioは再生成・編集・位置合わせで旧許可を明示失効させ、変更後に設定し直す。
+
+許可は追越し候補を検討できる範囲であり、通路の空き・実車安全性の証明ではない。
+live behavior側の入力鮮度・車体掃引・境界・対象予測・合流の検証も必要。
+型・範囲・周期跨ぎ・数値表現・CSV整合は`test_passing_zones.py`と`test_document.py`、
+revision・原子的適用・rollback・stale拒否は`test_tuning.py`で検証する。ROS結合・実車は未確認。
+
 ## 起動
 
 ```bash
@@ -45,11 +79,11 @@ ros2 launch kart_bringup hdmap.launch.py \
 
 | 方向 | 既定topic | 型 | 内容 |
 |---|---|---|---|
-| 出力 | `/hdmap/markers` | `visualization_msgs/msg/MarkerArray` | 全laneの境界・生成ライン・IDラベル。青=左、橙=右、緑=Center、紫=Race、黄=Custom。選択laneは太線 |
+| 出力 | `/hdmap/markers` | `visualization_msgs/msg/MarkerArray` | 全laneの境界・生成ライン・IDラベルと追越し許可区間の色帯・ラベル。青=左、橙=右、緑=Center、紫=Race、黄=Custom。選択laneは太線 |
 | 出力 | `/hdmap/centerline` | `nav_msgs/msg/Path` | 選択laneのCenterline |
 | 出力 | `/hdmap/raceline` | `nav_msgs/msg/Path` | 選択laneのRaceline |
 | 出力 | `/hdmap/customline` | `nav_msgs/msg/Path` | 選択laneのCustomline |
-| 出力 | `/hdmap/document` | `std_msgs/msg/String` | 検証済み正規化JSON。全lane・frame・revision・offline_reference・速度profile。観測用でplanner向けの型付きAPIではない |
+| 出力 | `/hdmap/document` | `std_msgs/msg/String` | 検証済み正規化JSON。全lane・frame・revision・offline_reference・速度profile・line別passing_zones。live behaviorも明示購読する |
 | 出力 | `/hdmap/selected_lane` | `std_msgs/msg/String` | 現在選択中のID。空なら選択なし |
 | 入力 | `/hdmap/select_lane` | `std_msgs/msg/String` | lane ID選択要求。reliable / volatile / depth 1。空で解除、不明IDは拒否し現在の選択を維持 |
 
@@ -57,6 +91,9 @@ ros2 launch kart_bringup hdmap.launch.py \
 profile列は`[s_m,x_m,y_m,psi_rad,kappa_radpm,vx_mps,ax_mps2]`。
 閉路Pathは表示用に始点を末尾へ付加する。documentの点列・profileには付加しない。
 未選択／未生成のPathは空配信して以前のラインを消す。markersは専用topicで毎回DELETEALL＋全データを送る。
+許可区間の帯はboth=水色、left=黄緑、right=橙。ラベルはlane/line・区間ID・許可側を示す。
+閉路の周回跨ぎは開始WP→終点列→0番WP→終了WPの順に表示し、許可外の弧は結ばない。
+topic名・型は従来どおりで、Foxgloveの3Dから`/hdmap/markers`を表示する。
 
 | service | 型 | 用途 |
 |---|---|---|
@@ -256,16 +293,16 @@ Pure Pursuitの速度連動時、ここで表示するlookahead_mは実効先読
 ## Jetsonパラメータ調整窓口
 
 `tuning_enabled=true`時の同じloopback HTTP窓口へ`POST /parameters_get`・`/parameters_set`を追加。
-map_id、target（tracking / speed / map / recovery / vehicle）、変更時はexpected_revisionとchangesを受ける。
-許可した5ノードと項目だけに限定し、クライアントから任意ノード名・service名は受け付けない。
-対象はHDMapノードと同じnamespace内のpure_pursuit、speed_controller、hdmap_server、recovery、kart_bridge。
+map_id、target（tracking / speed / map / recovery / vehicle / behavior）、変更時はexpected_revisionとchangesを受ける。
+許可した6ノードと項目だけに限定し、クライアントから任意ノード名・service名は受け付けない。
+対象はHDMapノードと同じnamespace内のpure_pursuit、speed_controller、hdmap_server、recovery、kart_bridge、racing_behavior。
 現在値とdescriptorのread_only・型・説明を取得して返す。取得は閲覧用でSTOP不要、変更は
-追従・速度・参照ラインは走行中も変更可能。車両補正・復帰は最新STOP・1秒停車を要求する。
+追従・速度・参照ラインは走行中も変更可能。車両補正・復帰・behaviorは最新STOP・1秒停車を要求する。
 全変更で地図一致・参照ライン非競合・モード受信0.3秒・速度受信0.5秒の鮮度条件を維持する。
 
 既存ROS標準serviceのクライアント:
 
-| 方向 | 既定service名（nodeを上記5ノードで展開） | 型 | 用途 |
+| 方向 | 既定service名（nodeを上記6ノードで展開） | 型 | 用途 |
 | --- | --- | --- | --- |
 | 要求 | /node/get_parameters | rcl_interfaces/srv/GetParameters | 許可項目の現在値取得 |
 | 要求 | /node/describe_parameters | rcl_interfaces/srv/DescribeParameters | 実ノードの型・read_only属性取得 |
@@ -408,3 +445,70 @@ Studio調整bridge有効時、hdmap_serverは/racing/shadow_plan
 （kart_interfaces/msg/HeadToHeadPlan、reliable / volatile / depth 1、相対名racing/shadow_plan）
 を購読し、レース判断を車両状態に表示する。追加parameterなし。publisher数・元stamp・受信時刻・
 valid_for_secで状態を確認する。計画無効通知は直近の受信として表示する。
+
+### RCカー・障害物のmap接地点表示
+
+`tuning_enabled=true`の`hdmap_server`は追加で次を購読する。ノード名、既存の出力topic・
+parameter・地図適用条件は変更しない。取得結果は既存のlocalhost HTTP statusへ
+`ground_perception`として渡し、参照ラインのrevisionや制御判断には含めない。
+
+|方向|既定topic|型|QoS|内容|
+|---|---|---|---|---|
+|入|`/racing/map_points`|`kart_interfaces/msg/GroundDetections`|best effort / volatile / depth 1|撮影時刻にmapへ変換済みの可視接地点|
+|入|`/racing/map_diagnostics`|`diagnostic_msgs/msg/DiagnosticArray`|reliable / volatile / depth 1|`perception_ground/projection`の投影状態、既定1Hz|
+
+map frame以外、無効なclass_name・score・座標を除外し、HTTPの配列は100点まで。
+元stampとJetson受信のmonotonic時刻で点は1秒、診断は2.5秒以内のみを有効とする。
+失効・未配信を0件と混同せず、新しい投影エラー診断でも以前の点を消す。
+points自体の`valid=false`・`reason`でも即時に無効化し、1Hz診断が以前の成功状態でも
+消去イベントを0件と表示しない。HTTPの投影診断はこのイベント状態を優先して返す。
+`class_name`でRCカー／障害物を区別し、COCO class 0などの元IDから意味を推定しない。
+座標へ現在の車両poseを重ねて再変換しない。単位mの接地点の概算であり、物体中心・3D寸法・
+障害物の占有領域を表さない。画像やCameraInfoをHTTP配信しない。
+
+新規型生成のため`kart_interfaces`・`kart_opponent_tracker`・`kart_hdmap`・`kart_bringup`を
+同じworkspaceでビルド・source・再起動する。ground transportとtuningの表示専用契約は
+`test/test_ground_perception.py`・`test/test_tuning.py`で単体確認する。ROS結合・Jetson・
+カメラ外部姿勢／路面高の実測と実機表示は別途確認が必要。
+
+### Live追従・追越しの状態と設定
+
+Studio bridge有効時、hdmap_serverは`/racing/behavior_status`（`std_msgs/msg/String`、
+JSON、reliable / volatile / depth 1、behavior側20Hz・最大128KiB）も購読し、
+既存status HTTPの`behavior`へ渡す。追加のHDMap parameter・ROS出力topicはない。
+publisherが1つで、ROS配信stampとmonotonic受信時刻の両方が0.5秒以内の場合だけ状態を有効とする。
+`map`座標、有限値、選択経路300点・左右候補各300点/最大2本を検証し、未起動・失効時は古い経路を消す。
+配信の新鮮さと認識入力の新鮮さは別で、`valid`・`state`・`reason`も表示する。
+この表示取得はHDMapのrevision・適用条件や走行指令を変更しない。
+
+parameter target `behavior`はroot namespace運用の`/racing_behavior`を対象にする。
+`mode`・`map_file`は取得するが起動時固定で、次の33設定だけを動的編集の対象とする。
+運用初期値は`kart_bringup/config/racing/behavior.yaml`、意味・範囲は
+[kart_racing README](../kart_racing/README.md)と実ノードのdescriptorを参照。
+
+| 分類 | 取得・調整対象 |
+| --- | --- |
+| 自車の速度・寸法 | `speed_cap`, `vehicle_length`, `vehicle_width`, `rear_axle_to_rear`, `uncertainty_margin` |
+| 対象の寸法仮定 | `rc_length`, `rc_width`, `obstacle_length`, `obstacle_width` |
+| 観察・追従 | `slow_speed`, `stationary_anchor_speed`, `headway`, `follow_min_gap`, `moving_speed_advantage`, `moving_observation_s`, `simple_pass_speed` |
+| 入力・予測の期限 | `object_timeout`, `static_memory_s`, `prediction_hold_s` |
+| 予測の不確かさ | `prediction_speed_uncertainty`, `prediction_acceleration`, `prediction_lateral_speed`, `prediction_uncertainty_limit` |
+| 経路・合流 | `moving_merge_margin`, `static_merge_margin`, `min_transition`, `max_curvature`, `sample_spacing`, `lookahead_m`, `preferred_side`, `deceleration`, `prediction_horizon_s`, `max_pass_heading_change` |
+
+取得は閲覧用でSTOP不要。書込みは地図一致・参照配信元の非競合に加え、受信0.3秒以内のSTOPと、
+受信0.5秒以内の有限速度で絶対値0.05m/s未満が1秒以上続くことを要求する。
+revision照合→一括適用→読戻しを既存parameter bridgeで行い、YAMLへ自動保存しない。
+表示・設定取得からbehaviorの起動やAUTO切替は行わない。
+
+HTTP action `behavior_reset`は、利用者の明示操作で`/racing/behavior/reset`
+（std_srvs/srv/Trigger）を一度だけ呼び出す。地図/revision一致・新鮮なSTOPと1秒以上停車・
+配信元非競合・新鮮なshadow/active診断を受付時に検査し、node側でも基線近傍と入力鮮度を再検査する。
+AUTOへ変更せず、timeoutは結果不明として自動再送しない。既存serviceへのbridgeクライアントである。
+
+関連topicは`/racing/behavior_path`（nav_msgs/msg/Path）、`/racing/behavior_markers`
+（visualization_msgs/msg/MarkerArray、どちらもreliable / volatile / depth 1）と
+`/racing/candidate_reference`（kart_interfaces/msg/ReferenceLine、reliable / transient local / depth 1）。
+これらはbehavior/Foxgloveの観測用経路で、hdmap_serverの新規購読はbehavior_statusだけ。
+active時の`/planning/reference_line`はbehaviorが唯一のpublisherとなり、HDMap基線は
+`/planning/course_reference`へ分離する。off/shadowでは通常のHDMap参照配信を維持する。
+ROS parameter service・実Jetson・実車の動作は未確認で、状態境界・許可項目・STOP gateはportable testsで検証する。

@@ -1,4 +1,4 @@
-"""640x480 RGB to image-space opponent tracks."""
+"""640x480 RGB detections, optional RC tracks and display-only map projection."""
 from pathlib import Path
 
 import yaml
@@ -46,8 +46,14 @@ def pipeline(context):
     tracking = LaunchConfiguration("tracking_enabled").perform(context)
     if tracking != "":
         settings["opponent_tracker"]["tracking_enabled"] = ParameterValue(boolean(tracking), value_type=bool)
-    # The selected engine determines class semantics: COCO car=2, custom=0.
+    # The selected engine determines class semantics: COCO car=2, RC car=0.
     settings["opponent_tracker"]["tracked_class_id"] = ParameterValue(model["track_class_id"], value_type=str)
+    map_config = root / "map_projection.yaml"
+    map_settings = None
+    if boolean(LaunchConfiguration("map_projection").perform(context)):
+        map_settings = yaml.safe_load(map_config.read_text())["/**/perception_ground"]["ros__parameters"]
+        map_settings["rc_car_class_id"] = model["track_class_id"]
+        map_settings["obstacle_class_id"] = model["obstacle_class_id"]
     nodes = [
         ComposableNode(package=pkg, plugin=plugin, namespace="/racing", name=name,
                        parameters=[settings[name]], remappings=topics,
@@ -62,12 +68,20 @@ def pipeline(context):
                                          package="rclcpp_components", executable="component_container_mt",
                                          composable_node_descriptions=nodes)
     actions = [LogInfo(msg=f"Racing perception: {root}, container={target or '/racing_perception'}, "
-                          f"image={image}, model={model['name']}, tracked_class_id={model['track_class_id']}, {settings}"), action]
+                          f"image={image}, model={model['name']}, tracked_class_id={model['track_class_id']}, "
+                          f"map_projection={map_settings}, {settings}"), action]
     if boolean(LaunchConfiguration("debug_image").perform(context)):
         actions.append(Node(package="kart_opponent_tracker", executable="opponent_debug_image",
             namespace="/racing", name="opponent_debug_image", output="screen",
             parameters=[str(root / "debug_image.yaml"), {"class_names": model["class_names"]}],
             remappings=[("rgb", image)]))
+    if map_settings is not None:
+        typed_map_settings = dict(map_settings)
+        for name in ("rc_car_class_id", "obstacle_class_id"):
+            typed_map_settings[name] = ParameterValue(map_settings[name], value_type=str)
+        actions.append(Node(package="kart_opponent_tracker", executable="perception_ground",
+            namespace="/racing", name="perception_ground", output="screen",
+            parameters=[typed_map_settings]))
     return actions
 
 
@@ -75,9 +89,10 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("target_container", default_value="", description="Existing component container"),
         DeclareLaunchArgument("engine", description="Prebuilt YOLOv8 Detect engine with FP32 bindings"),
-        DeclareLaunchArgument("model_profile", default_value="", description="coco/opponent; empty reads engine build.json or defaults to coco"),
+        DeclareLaunchArgument("model_profile", default_value="", description="coco/racing/opponent; empty reads engine build.json or defaults to coco"),
         DeclareLaunchArgument("tracking_enabled", default_value="", description="true/false; empty preserves tracker.yaml (detect-only uses false)"),
         DeclareLaunchArgument("debug_image", default_value="false", description="Publish bounded-rate bbox JPEG for debugging"),
+        DeclareLaunchArgument("map_projection", default_value="true", description="Display detections on map using CameraInfo and calibrated TF; false disables this display-only node"),
         DeclareLaunchArgument("image_topic", default_value="/realsense/color/image_raw"),
         OpaqueFunction(function=pipeline),
     ])

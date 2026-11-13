@@ -1,4 +1,4 @@
-"""Both model cache layouts are selectable in the normal bringup menu."""
+"""Official, two-class and legacy model caches are selectable in bringup."""
 from pathlib import Path
 import sys
 import tempfile
@@ -56,7 +56,7 @@ class RacingMenuTests(unittest.TestCase):
                 path = cache / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b'' if name.endswith('empty.plan') else b'fixture')
-            tuned = root / 'weights/racing/yolov8s/finetuned/model-a/engines/opponent/gpu-11/opponent.plan'
+            tuned = root / 'weights/racing/yolov8s/finetuned/model-a/engines/racing/gpu-11/racing.plan'
             tuned.parent.mkdir(parents=True)
             tuned.write_bytes(b'fine-tuned engine fixture')
             target = str(cache / relative[0])

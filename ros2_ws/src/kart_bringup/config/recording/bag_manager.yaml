@@ -34,6 +34,12 @@
     - vehicle/active_path
     - diagnostics
     - /system/jetson/diagnostics
+    # Optional racing state and its projection inputs; recording starts no perception/behavior nodes.
+    - /racing/behavior_status
+    - /racing/map_points
+    - /racing/map_diagnostics
+    - /racing/ground_points
+    - /racing/ground_diagnostics
     - /tf
     - /tf_static
     - robot_description

@@ -56,19 +56,25 @@ class EvsTests(unittest.TestCase):
         from unittest.mock import patch
         spec=importlib.util.spec_from_file_location('bringup_tui_grouped',ROOT/'scripts/lib/bringup.py')
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        edits = iter(('evs', 'start'))
+        details = iter(('enabled', 'backend', 'aggregation', 'image', 'bias', 'back'))
         def choose(title,values,label=str,default=0):
+            if title == '用途': return 'record'
+            if title.startswith('設定一覧'):
+                selected = next(edits)
+                self.assertIn(selected, values)
+                return selected
+            if title == 'EVS 詳細設定':
+                selected = next(details)
+                self.assertIn(selected, values)
+                return selected
+            if title == 'EVS': return True
             if title=='EVS Tensor処理方式':return 'cuda_async'
             if title=='EVS 集計方式':
                 self.assertIn('evt3_runs_grouped_gpu',values);return 'evt3_runs_grouped_gpu'
             if title=='EVS event image可視化':return False
             if title=='EVS bias file':return '@default'
-            if title.startswith('EVS（'):return True
-            if title=='AUTOスロットル':return 'normal'
-            if title.startswith('IMU'):return 'low'
-            if title.startswith('RGB'):return '424x240x30'
-            if title.upper().startswith('INFRA'):return '424x240x60'
-            if title.startswith('Foxglove'):return False
-            return 'collect'
+            self.fail('Unexpected startup prompt: ' + title)
         output=io.StringIO()
         with patch.object(sys,'argv',['bringup.py','--no-bridge','--dry-run','--run-name','trial']),patch.object(sys.stdin,'isatty',return_value=True),patch.object(module,'choose',side_effect=choose),contextlib.redirect_stdout(output):module.main()
         self.assertIn('evs_aggregation:=evt3_runs_grouped_gpu',output.getvalue())
@@ -139,10 +145,22 @@ class EvsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             bias = Path(folder).resolve() / "indoor.bias"
             bias.write_text("178 % bias_diff_off\n")
-            answers = iter(("collect", "424x240x30", "424x240x60", "low", True, "cpu", False, bias, False, "normal"))
+            edits = iter(('evs', 'start'))
+            details = iter(('enabled', 'backend', 'image', 'bias', 'back'))
             def choose(title, values, label=str, default=0):
                 print(title)
-                return next(answers)
+                if title == '用途': return 'record'
+                if title.startswith('設定一覧'):
+                    selected = next(edits)
+                elif title == 'EVS 詳細設定':
+                    selected = next(details)
+                elif title == 'EVS': selected = True
+                elif title == 'EVS Tensor処理方式': selected = 'cpu'
+                elif title == 'EVS event image可視化': selected = False
+                elif title == 'EVS bias file': selected = bias
+                else: self.fail('Unexpected startup prompt: ' + title)
+                self.assertIn(selected, values)
+                return selected
             output = io.StringIO()
             with patch.object(sys, "argv", ["bringup.py", "--no-bridge", "--dry-run",
                                             "--run-name", "trial", "--bias-root", folder]), \

@@ -9,6 +9,7 @@ from . import footprint, parking
 from .lines import settings
 from .obstacles import validate
 from .storage import atomic_json, fingerprint, within
+from .passing_zones import validate_passing_zones
 
 
 def write_csv(path, kind, line):
@@ -32,6 +33,7 @@ def export_map(folder, doc):
     regions = validate(doc.get("obstacles", []))
     for lane in doc["lanes"]:
         for line in lane["lines"].values():
+            validate_passing_zones(line.get('passing_zones', []), line['points'], lane['closed'])
             options = settings(line.get("settings", {}))
             if line.get("settings", {}).get("collision_model") != footprint.MODEL:
                 raise ValueError(
@@ -78,6 +80,8 @@ def export_map(folder, doc):
                     centerline_speed_mps=lane.get("centerline_speed_mps", 1.5),
                     offline_lines=files,
                     line_speed_modes={k: v.get("speed_mode", "profile") for k,v in lane["lines"].items()},
+                    line_passing_zones={kind: validate_passing_zones(line.get('passing_zones', []), line['points'], lane['closed'])
+                                        for kind, line in lane['lines'].items()},
                 )
             )
             metadata[lane["id"]] = dict(

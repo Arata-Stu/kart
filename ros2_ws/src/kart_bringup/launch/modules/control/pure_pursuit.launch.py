@@ -12,15 +12,21 @@ def add_node(args):
             raise ValueError("use_sim_time must be true or false")
         overrides["use_sim_time"] = str(args.use_sim_time).lower() == "true"
     config = lu.get_path("kart_bringup", "config/control/pure_pursuit.yaml")
+    overtake = getattr(args, 'overtake_mode', 'off')
+    if overtake not in ('off', 'shadow', 'active'):
+        raise ValueError('overtake_mode must be off, shadow or active')
+    parameters = [str(config)]
+    if overtake == 'active':
+        parameters.append(str(lu.get_path('kart_bringup', 'config/racing/control_overrides.yaml')))
     node = lut.ComposableNode(
         name="pure_pursuit",
         package="kart_control",
         plugin="kart_control::PurePursuitNode",
-        parameters=[str(config), overrides],
+        parameters=[*parameters, overrides],
         extra_arguments=[{"use_intra_process_comms": True}],
     )
     return [
-        lu.log_info(f"Pure Pursuit config: {config}; overrides: {overrides}"),
+        lu.log_info(f"Pure Pursuit configs: {parameters}; overrides: {overrides}"),
         lu.load_composable_nodes(args.container_name, [node]),
     ]
 
@@ -29,5 +35,6 @@ def generate_launch_description():
     args = LaunchArguments()
     args.add_arg("container_name", description="Existing component container", cli=True)
     args.add_arg("use_sim_time", "", cli=True)
+    args.add_arg('overtake_mode', 'off', choices=['off', 'shadow', 'active'], cli=True)
     args.add_opaque_function(add_node)
     return lut.LaunchDescription(args.get_launch_actions())

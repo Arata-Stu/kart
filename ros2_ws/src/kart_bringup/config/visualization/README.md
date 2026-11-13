@@ -110,8 +110,9 @@ Bridgeの起動・SSH接続・localization要求はこのスクリプトでは�
 
 ## 画像を送らずに認識結果を見る
 
-Raw Messagesパネルで`/racing/detections`（全80クラスの検出）、`/racing/tracks`（carの追跡）を選ぶ。
+Raw Messagesパネルで`/racing/detections`（モデルの全クラスの検出）、`/racing/tracks`（車両の追跡）を選ぶ。
 COCOモデルではcar（class_id=`"2"`）だけを追跡する。検出のみの起動では追跡配列は空になる。
+racingモデルはRCカー=0・障害物=1を検出し、追跡はRCカーだけ。
 `detections`配列を展開すると、各物体の次の値を確認できる。
 
 - `id`: 追跡ID（検出メッセージでは空の場合あり）
@@ -123,10 +124,24 @@ Tableパネルでは`/racing/detections.detections`または`/racing/tracks.dete
 物体ごとに1行で表示され、`results`と`bbox`の入れ子を展開して確認できる。
 Raw Messages／Tableには画像・CameraInfoは不要。以前のImageパネルは閉じるか削除する。
 Bridgeを更新・再起動した後、`/racing/rgb`はFoxgloveのtopic一覧に出ない。
-路面投影を別途起動した場合は`/racing/ground_markers`を3Dで表示し、`/racing/ground_points`で座標を確認する。
+通常認識の表示専用路面投影は`/racing/map_markers`（visualization_msgs/msg/MarkerArray）を出す。
+3DパネルでFixed frame／Display frameをmap、topicを/racing/map_markersにし、HDMapも表示する。
+RCカーは緑#39dcb0、障害物は桃#d16ba5。Raw Messages／Tableの`/racing/map_points.objects`
+（kart_interfaces/msg/GroundDetections）でclass_name・元class ID・score・map位置[m]を確認できる。
+Raw Messagesでは同じメッセージのvalid/reasonも確認する。新鮮なvalid=trueの空配列だけ正常な0件で、
+valid=falseは投影失敗・入力途絶等による表示消去を示す。1Hzの診断到着を待たずに区別できる。
+これらの表示に画像やCameraInfoのネットワーク配信は不要だが、投影処理側では完全同期したCameraInfo・校正・
+取付TF・撮影時刻のmap TF・実測路面高さが必要。`/racing/map_diagnostics`で投影不能理由を確認する。
+COCOと旧opponentは障害物のclass割当がないため、車両位置だけを表示する。
+既存のRC追跡用投影を別途起動した場合は`/racing/ground_markers`も表示でき、`/racing/ground_points`で車体座標を確認する。
 2D bboxだけを地面までの距離として扱わない。
 出典: [Raw Messages](https://docs.foxglove.dev/docs/visualization/panels/raw-messages)、
 [Table](https://docs.foxglove.dev/docs/visualization/panels/table)。
+
+任意のlive behaviorを起動した場合は3Dの`/racing/behavior_path`・`/racing/behavior_markers`と、
+Raw Messagesの`/racing/behavior_status`・`/racing/candidate_reference`も確認できる。
+shadowのcandidateは車両追従へ接続しない。通常はovertake_mode=offでpublisher自体を起動せず、
+Foxgloveからの制御write許可や画像配信は増やさない。設定は[racing](../racing/README.md)参照。
 
 ## bbox付き画像で推論を確認する
 

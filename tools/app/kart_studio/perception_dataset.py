@@ -1,4 +1,4 @@
-"""Confined RC-car image annotation projects and immutable YOLO datasets.
+"""Confined RC-car / static-obstacle projects and immutable YOLO datasets.
 
 ROS, Pillow and rosbags are not imported until image extraction is requested.
 Sampling uses bag record time; source header and record stamps remain separate.
@@ -19,7 +19,8 @@ import uuid
 from .storage import atomic_json, name, read_json, within
 
 
-CLASS_NAMES = ['rc_car']
+CLASS_NAMES = ['rc_car', 'obstacle']
+LEGACY_CLASS_NAMES = ['rc_car']
 MAX_FRAMES = 500
 MAX_PROJECT_FRAMES = 5000
 MAX_BOXES = 100
@@ -58,6 +59,15 @@ def _boxes(rows, width, height):
             raise ValueError('bboxは画像内で幅・高さが正になるよう指定してください')
         result.append([x1, y1, x2, y2])
     return result
+
+
+def _classes(value, boxes):
+    # Four-coordinate legacy annotations always belonged to rc_car (ID 0).
+    result = [0] * len(boxes) if value is None else value
+    if (not isinstance(result, list) or len(result) != len(boxes)
+            or any(type(v) is not int or not 0 <= v < len(CLASS_NAMES) for v in result)):
+        raise ValueError('class_idsはbboxと同じ件数の0（rc_car）/ 1（obstacle）の整数配列です')
+    return list(result)
 
 
 def _dimensions(width, height):
@@ -140,10 +150,21 @@ class DatasetStore:
 
     def _document(self, project_id):
         document = read_json(within(self.folder(project_id), 'project.json'))
-        if (document.get('id') != project_id or document.get('class_names') != CLASS_NAMES or
+        legacy = document.get('class_names') == LEGACY_CLASS_NAMES
+        if (document.get('id') != project_id or document.get('class_names') not in (CLASS_NAMES, LEGACY_CLASS_NAMES) or
                 not isinstance(document.get('frames'), list) or not isinstance(document.get('sources'), list)):
             raise ValueError('annotation projectの形式が不正です')
         _revision(document['revision'])
+        if legacy:
+            # A former RC-free negative may contain a box/fallen object. Keep all
+            # geometry, but never silently use the old review as two-class truth.
+            # Read-only loads do not rewrite the user's original JSON; the next
+            # explicit edit/extraction atomically persists this normalisation.
+            document.update(class_names=list(CLASS_NAMES), class_schema_upgraded=True)
+        for frame in document['frames']:
+            frame['class_ids'] = _classes(None if legacy else frame.get('class_ids'), frame['boxes'])
+            if legacy:
+                frame.update(reviewed=False, class_review_required=True)
         return document
 
     @staticmethod
@@ -195,7 +216,7 @@ class DatasetStore:
     def load(self, project_id):
         return self._public(self._document(project_id))
 
-    def save_frame(self, project_id, frame_id, project_revision, frame_revision, boxes, reviewed=True):
+    def save_frame(self, project_id, frame_id, project_revision, frame_revision, boxes, reviewed=True, class_ids=None):
         name(frame_id)
         if type(reviewed) is not bool:
             raise ValueError('reviewedはtrue/falseで指定してください')
@@ -206,8 +227,9 @@ class DatasetStore:
             frame = self._frame(document, frame_id)
             if _revision(frame_revision) != frame['revision']:
                 raise ValueError('画像のannotationが更新されています。再読み込みしてください')
-            frame.update(boxes=_boxes(boxes, frame['width'], frame['height']), reviewed=reviewed,
-                         revision=frame['revision'] + 1)
+            boxes = _boxes(boxes, frame['width'], frame['height'])
+            frame.update(boxes=boxes, class_ids=_classes(class_ids, boxes), reviewed=reviewed,
+                         class_review_required=False, revision=frame['revision'] + 1)
             document['revision'] += 1
             atomic_json(self.folder(project_id) / 'project.json', document)
         return self._public(document)
@@ -345,7 +367,7 @@ class DatasetStore:
                 frames.append(dict(id=frame_id, revision=1, width=image.width, height=image.height,
                                    bag=str(bag), source_id=source_id, stamp_ns=str(header_stamp),
                                    record_stamp_ns=str(record_stamp), frame_id=str(message.header.frame_id)[:256],
-                                   split=split, reviewed=False, boxes=[], suggestions=[],
+                                   split=split, reviewed=False, boxes=[], class_ids=[], suggestions=[],
                                    image=f'images/{source_id}/{filename}'))
                 if len(frames) % 10 == 0:
                     _log(job, f'RGB抽出: {len(frames)}枚')
@@ -391,10 +413,12 @@ class DatasetStore:
                 raise ValueError('annotationが更新されています。再読み込みしてください')
         selected = [frame for frame in document['frames'] if frame['reviewed']]
         sources = {source['id']: source for source in document['sources']}
-        assignments, counts = {}, {split: dict(frames=0, positive=0, negative=0) for split in ('train', 'val')}
+        assignments, counts = {}, {split: dict(frames=0, positive=0, negative=0,
+                                               class_boxes=dict.fromkeys(CLASS_NAMES, 0)) for split in ('train', 'val')}
         for frame in selected:
             _dimensions(frame['width'], frame['height'])
             frame['boxes'] = _boxes(frame['boxes'], frame['width'], frame['height'])
+            frame['class_ids'] = _classes(frame.get('class_ids'), frame['boxes'])
             split = frame['split']
             source = sources[frame['source_id']]
             if split not in counts or source['split'] != split:
@@ -405,15 +429,19 @@ class DatasetStore:
                 assignments[identity] = split
             counts[split]['frames'] += 1
             counts[split]['positive' if frame['boxes'] else 'negative'] += 1
-        if any(counts[split]['positive'] < 1 for split in counts):
-            raise ValueError('独立したbagのtrain・valに確認済みpositive画像がそれぞれ1枚以上必要です')
+            for class_id in frame['class_ids']:
+                counts[split]['class_boxes'][CLASS_NAMES[class_id]] += 1
+        missing = [f'{split}/{class_name}' for split in counts for class_name in CLASS_NAMES
+                   if counts[split]['class_boxes'][class_name] < 1]
+        if missing:
+            raise ValueError('独立したbagのtrain・valに両クラスの確認済みpositive枠が必要です。不足: ' + ', '.join(missing))
         destination = Path(destination).expanduser()
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination = within(destination.parent, destination.name, exists=False)
         if destination.exists():
             raise ValueError('学習snapshotの出力先が既に存在します')
         used_sources = {frame['source_id'] for frame in selected}
-        metadata = dict(schema='kart.perception.dataset.v1', project_id=project_id,
+        metadata = dict(schema='kart.perception.dataset.v2', project_id=project_id,
                         annotation_revision=document['revision'], class_names=list(CLASS_NAMES),
                         created=time.time(), counts=counts, frames=copy.deepcopy(selected),
                         sources=[source for source in document['sources'] if source['id'] in used_sources])
@@ -438,12 +466,12 @@ class DatasetStore:
                 shutil.copyfile(source_image, staging / 'images' / split / (frame_id + '.jpg'))
                 width, height = frame['width'], frame['height']
                 labels = []
-                for x1, y1, x2, y2 in frame['boxes']:
+                for class_id, (x1, y1, x2, y2) in zip(frame['class_ids'], frame['boxes']):
                     values = ((x1+x2)/(2*width), (y1+y2)/(2*height), (x2-x1)/width, (y2-y1)/height)
-                    labels.append('0 ' + ' '.join(f'{value:.10g}' for value in values))
+                    labels.append(str(class_id) + ' ' + ' '.join(f'{value:.10g}' for value in values))
                 (staging / 'labels' / split / (frame_id + '.txt')).write_text('\n'.join(labels) + ('\n' if labels else ''))
-            yaml = ('path: ' + json.dumps(str(destination)) + '\ntrain: images/train\nval: images/val\nnc: 1\n'
-                    'names:\n  0: rc_car\n')
+            yaml = ('path: ' + json.dumps(str(destination)) + '\ntrain: images/train\nval: images/val\nnc: 2\n'
+                    'names:\n  0: rc_car\n  1: obstacle\n')
             (staging / 'data.yaml').write_text(yaml)
             atomic_json(staging / 'snapshot.json', metadata)
             with self._lock(project_id):

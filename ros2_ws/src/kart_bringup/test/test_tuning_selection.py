@@ -46,11 +46,16 @@ class TuningSelectionTests(unittest.TestCase):
                 '--model-dir', str(self.root/'models')]
         for enabled, interactive in ((True, True), (False, True), (True, False), (False, False)):
             prompts = []
+            edits = iter(('tuning', 'start'))
             def choose(title, values, *args, **kwargs):
                 prompts.append(title)
                 if title == '用途': return 'drive'
                 if title == 'lane / 追従ライン': return ('main', 'customline')
                 if title == 'Map Studio 動的調整': return enabled
+                if title.startswith('設定一覧'):
+                    selected = next(edits)
+                    self.assertIn(selected, values)
+                    return selected
                 self.fail('Unexpected prompt: '+title)
             argv = base if interactive else base + ['--mode', 'drive', '--lane-id', 'main', '--line-type', 'customline', '--tuning' if enabled else '--no-tuning']
             output = io.StringIO()

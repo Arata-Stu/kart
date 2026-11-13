@@ -14,6 +14,27 @@ else:
 
 @unittest.skipUnless(ROS, "ROS message packages unavailable")
 class MessageTests(unittest.TestCase):
+    def test_passing_zone_bands_labels_wrap_and_old_zones_clear(self):
+        from kart_hdmap.passing_zones import geometry_revision
+        points = [[0., 0.], [2., 0.], [2., 2.], [0., 2.]]
+        line = dict(points=points, passing_zones=[dict(id='wrap', start_index=3, end_index=1,
+                    side='right', geometry_revision=geometry_revision(points, True))])
+        lane = dict(id='main', closed=True, left=[], right=[], lines=dict(raceline=line))
+        document = dict(frame_id='map', lanes=[lane])
+        rendered = markers(document, 'main', Time(sec=12), .04, .25)
+        band = next(marker for marker in rendered.markers if marker.ns.endswith('/passing/wrap/band'))
+        label = next(marker for marker in rendered.markers if marker.ns.endswith('/passing/wrap/label'))
+        self.assertEqual([(point.x, point.y) for point in band.points], [tuple(points[index]) for index in (3, 0, 1)])
+        self.assertTrue(all(point.z > 0 for point in band.points))
+        self.assertGreater(band.scale.x, .04)
+        self.assertIn('main/raceline: wrap [right]', label.text)
+        self.assertEqual(band.header.frame_id, 'map')
+        self.assertEqual(band.header.stamp.sec, 12)
+        line['passing_zones'] = []
+        cleared = markers(document, 'main', Time(sec=13), .04, .25)
+        self.assertEqual(cleared.markers[0].action, 3)
+        self.assertFalse(any('/passing/' in marker.ns for marker in cleared.markers))
+
     def test_frames_closure_and_stale_marker_clear(self):
         line = {"points": [[1.0, 2.0], [3.0, 2.0], [3.0, 4.0]]}
         lane = {

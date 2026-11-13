@@ -14,6 +14,7 @@ import re
 import sys
 
 from . import perception_runtime as runtime
+from .perception_dataset import CLASS_NAMES, _classes
 from .storage import atomic_json
 
 
@@ -65,7 +66,8 @@ def _frames(value):
         path = row.get('path')
         if not isinstance(path, str) or not Path(path).is_absolute():
             raise ValueError('画像ファイルは絶対パスで指定してください')
-        result.append(dict(row, stamp_ns=int(stamp), record_stamp_ns=int(record_stamp)))
+        result.append(dict(row, class_ids=_classes(row.get('class_ids'), boxes),
+                           stamp_ns=int(stamp), record_stamp_ns=int(record_stamp)))
     return result
 
 
@@ -180,8 +182,9 @@ def _yolo_rows(frames, weights, output, device, options=None):
     options = review_options(options or {})
     model = runtime._load_yolo(weights, output)
     names = runtime._names(model)
-    if len(names) not in (1, 80) or getattr(model, 'task', 'detect') != 'detect':
-        raise ValueError('選定には公式COCO80または学習済みRCカー1クラスの検出重みが必要です')
+    if (not (len(names) == 80 or names in (['rc_car'], CLASS_NAMES))
+            or getattr(model, 'task', 'detect') != 'detect'):
+        raise ValueError('選定には公式COCO80または学習済みRCカー / obstacleの検出重みが必要です')
     rows = []
     for index, frame in enumerate(frames):
         with _image(frame) as image:
@@ -232,7 +235,7 @@ def _yolo_rows(frames, weights, output, device, options=None):
                       hard_review_candidates=sum(row['hard_review'] for row in rows),
                       review_definition='count > expected_max_detections OR max_clipped_bbox_area/image_area >= large_bbox_area_ratio; score >= review_confidence',
                       score_definition='.5*max_conf + .5*max(4*p*(1-p)); box count has no additive bonus',
-                      note='検出クラスを問わない優先度。RCカーの確率・正解ではありません。')
+                      note='検出クラスを問わない優先度。RCカー / obstacleの確率・正解ではありません。')
 
 
 def _regions(image):
@@ -295,22 +298,33 @@ def _encode(encoder, images):
 
 
 def _dinov3_rows(frames, all_frames, weights, repo, device):
-    positive_frames = balanced_frames([row for row in all_frames if row['split'] == 'train'
-                                       and row['reviewed'] and row['boxes']], MAX_SEED_POSITIVES)
+    reviewed = [row for row in all_frames if row['split'] == 'train' and row['reviewed'] and row['boxes']]
+    positive_pools = []
+    for class_id in range(len(CLASS_NAMES)):
+        class_frames = balanced_frames([row for row in reviewed if class_id in row['class_ids']], MAX_SEED_POSITIVES)
+        pool = []
+        for index in range(runtime.MAX_BOXES):
+            for frame in class_frames:
+                boxes = [box for box, value in zip(frame['boxes'], frame['class_ids']) if value == class_id]
+                if index < len(boxes) and len(pool) < MAX_SEED_POSITIVES:
+                    pool.append((frame, boxes[index], class_id))
+            if len(pool) >= MAX_SEED_POSITIVES:
+                break
+        positive_pools.append(pool)
+    positive_boxes = []
+    for index in range(MAX_SEED_POSITIVES):
+        for pool in positive_pools:
+            if index < len(pool) and len(positive_boxes) < MAX_SEED_POSITIVES:
+                positive_boxes.append(pool[index])
+    positive_frames = list({frame['id']: frame for frame, _, _ in positive_boxes}.values())
     negative_frames = balanced_frames([row for row in all_frames if row['split'] == 'train'
                                        and row['reviewed'] and not row['boxes']], MAX_SEED_NEGATIVES)
     if not positive_frames or not negative_frames:
         raise ValueError('DINOv3選定にはtrainの確認済み正例・負例がそれぞれ1画像以上必要です')
     encoder, metadata = _load_encoder(repo, weights, device)
-    positive, negative, positive_boxes = [], [], []
-    # Spread the crop quota over images before taking second/third boxes.
-    for index in range(runtime.MAX_BOXES):
-        for frame in positive_frames:
-            if index < len(frame['boxes']) and len(positive_boxes) < MAX_SEED_POSITIVES:
-                positive_boxes.append((frame, frame['boxes'][index]))
-        if len(positive_boxes) >= MAX_SEED_POSITIVES:
-            break
-    for frame, box in positive_boxes:
+    positive, negative = [], []
+    # Alternate target classes and spread crops over bags/time before more boxes.
+    for frame, box, _ in positive_boxes:
         with _image(frame) as image:
             x1, y1, x2, y2 = box
             pad_x, pad_y = .1 * (x2 - x1), .1 * (y2 - y1)
@@ -357,10 +371,12 @@ def _dinov3_rows(frames, all_frames, weights, repo, device):
         print(f'DINOv3画像選定 {index + 1}/{len(frames)}: {frame["id"]}', flush=True)
     return rows, dict(metadata, positive_seed_frames=[row['id'] for row in positive_frames],
                       negative_seed_frames=[row['id'] for row in negative_frames],
+                      positive_seed_classes={name: sum(class_id == index for _, _, class_id in positive_boxes)
+                                             for index, name in enumerate(CLASS_NAMES)},
                       positive_seed_crops=len(positive), negative_seed_crops=len(negative), seed_split='train',
                       views='full + 2x2 + 3x3 fixed local crops (14 views)',
                       score_definition='max_local_view(max_positive_cosine - .5*max(0,max_negative_cosine))',
-                      note='凍結特徴の類似度による確認優先度。RCカーの確率・正解ではありません。')
+                      note='凍結特徴の類似度による確認優先度。RCカー / obstacleの確率・正解ではありません。')
 
 
 def diverse_order(rows, limit):

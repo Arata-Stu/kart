@@ -7,7 +7,7 @@ import isaac_ros_launch_utils.all_types as lut
 from ament_index_python.packages import get_package_share_directory
 from kart_bringup.configuration import load, collection_r2_gate
 from kart_bringup.localization import resolve
-from kart_bringup.mission import composition, hdmap_choices, sensor_parameters, camera_config, recording_config, validate_localization_imu, validate_record_profile
+from kart_bringup.mission import composition, hdmap_choices, sensor_parameters, camera_config, recording_config, validate_localization_imu, validate_record_profile, validate_overtake
 from kart_bringup.vehicle_tf import load_transforms
 from kart_bringup.recording_profiles import profile_vehicle_overrides
 
@@ -18,6 +18,7 @@ OVERRIDES = (
     "perception_engine",
     "perception_mode",
     "perception_debug_image",
+    "overtake_mode",
     "enable_foxglove",
     "enable_bridge",
 )
@@ -103,6 +104,7 @@ def add_mission(args):
         raise ValueError("Parking cannot use fixed AUTO throttle")
     from kart_bringup.recovery import configuration, validate_inputs
     recovery = getattr(args, 'recovery', '')
+    recovery_enabled = False
     if recovery and args.mode not in ('drive', 'e2e'):
         raise ValueError('recovery is only supported for drive/e2e')
     if cfg['tracking'] or (cfg['e2e'] and cfg['e2e_drive_enabled']):
@@ -110,6 +112,10 @@ def add_mission(args):
         if recovery_enabled:
             validate_inputs(recovery_params, params, cfg['enable_evs'],
                             vehicle_modules['joy_manager']['effective']['auto_fixed_throttle'])
+    validate_overtake(cfg['overtake_mode'], args.mode, engine, cfg['perception_mode'],
+                      parking=bool(parking_site),
+                      fixed_throttle=vehicle_modules['joy_manager']['effective'].get('auto_fixed_throttle', -1.),
+                      recovery_enabled=recovery_enabled)
     if cfg["localization"]:
         load_transforms(root / "vehicle/transforms.yaml", require_camera=True)
         if not params["enable_infra1"] or not params["enable_infra2"]:
@@ -257,6 +263,10 @@ def add_mission(args):
                     "lane_id": args.lane_id,
                     "line_type": args.line_type,
                     "recovery": recovery,
+                    "overtake_mode": cfg['overtake_mode'],
+                    "perception_engine": engine,
+                    "perception_mode": cfg['perception_mode'],
+                    "auto_fixed_throttle": str(vehicle_modules['joy_manager']['effective'].get('auto_fixed_throttle', -1.)),
                 },
             )
         )

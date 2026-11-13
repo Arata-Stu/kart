@@ -59,9 +59,13 @@ class SelectionStoreTests(unittest.TestCase):
         current = self.selections.get('course')
         self.assertFalse(current['stale'])
         self.assertTrue(current['annotations_changed'])
-        project['frames'].append(dict(project['frames'][0], id='frame-new', reviewed=False, boxes=[]))
+        project['frames'].append(dict(project['frames'][0], id='frame-new', reviewed=False, boxes=[], class_ids=[]))
         atomic_json(self.datasets.folder('course') / 'project.json', project)
         self.assertTrue(self.selections.get('course')['stale'])
+
+    def test_class_contract_change_expires_old_selection_even_when_images_are_unchanged(self):
+        legacy = dict(self.project, class_names=['rc_car'])
+        self.assertNotEqual(image_signature(legacy), image_signature(self.project))
 
     def test_val_reviewed_duplicates_nan_and_conflicts_cannot_publish(self):
         for change in ('val', 'duplicate', 'nan', 'conflict'):

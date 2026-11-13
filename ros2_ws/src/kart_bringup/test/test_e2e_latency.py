@@ -108,6 +108,9 @@ def test_tui_and_cli_select_same_entry(inputs):
         selected.append((title,values))
         if title=='用途':return 'eval'
         if title=='オフライン解析':return 'e2e_latency'
+        if title.startswith('設定一覧'):
+            assert 'start' in values
+            return 'start'
         raise AssertionError(title)
     with patch.object(module,'choose',side_effect=choose),patch.object(sys.stdin,'isatty',return_value=True),patch.object(sys,'argv',[str(script),'--bag',str(bag),'--e2e-model-dir',str(model),'--latency-output',str(output),'--dry-run']):
         module.main()

@@ -13,6 +13,7 @@ import tempfile
 import time
 
 from .storage import atomic_json
+from .remote_agent import perception_contract
 
 
 REPO = Path(__file__).resolve().parents[3]
@@ -98,9 +99,21 @@ def _load_yolo(weights, output):
     return YOLO(str(weights), task='detect')
 
 
+def _ordered_names(names):
+    if isinstance(names, dict):
+        if set(names) == set(range(len(names))) and all(type(key) is int for key in names):
+            names = [names[index] for index in range(len(names))]
+        elif set(names) == {str(index) for index in range(len(names))}:
+            names = [names[str(index)] for index in range(len(names))]
+        else:
+            raise ValueError('検出クラス名とIDの対応が不正です')
+    if not isinstance(names, (list, tuple)) or not names or not all(isinstance(value, str) and value for value in names):
+        raise ValueError('検出クラス名が不正です')
+    return list(names)
+
+
 def _names(model):
-    names = model.names
-    return list(names.values()) if isinstance(names, dict) else list(names)
+    return _ordered_names(model.names)
 
 
 def _versions():
@@ -116,9 +129,9 @@ def _versions():
 def _dataset(path):
     import yaml
     spec = yaml.safe_load(path.read_text())
-    if not isinstance(spec, dict) or spec.get('nc') != 1 or spec.get('names') not in (
-            ['rc_car'], {0: 'rc_car'}, {'0': 'rc_car'}):
-        raise ValueError('rc_car 1クラスのreview済みdataset snapshotが必要です')
+    if (not isinstance(spec, dict) or type(spec.get('nc')) is not int or spec.get('nc') != 2
+            or _ordered_names(spec.get('names')) != ['rc_car', 'obstacle']):
+        raise ValueError('rc_car=0 / obstacle=1の2クラスreview済みdataset snapshotが必要です')
     if any(key in spec for key in ('download', 'validation', 'test', 'minival')):
         raise ValueError('学習snapshotにダウンロード指定・追加splitは使用できません')
     root = Path(spec.get('path', path.parent)).resolve()
@@ -139,7 +152,7 @@ def _dataset(path):
         raise ValueError('trainとvalに同じ画像を使用できません')
     metadata_path = root / 'snapshot.json'
     metadata = json.loads(metadata_path.read_text())
-    if metadata.get('schema') != 'kart.perception.dataset.v1' or metadata.get('class_names') != ['rc_car']:
+    if metadata.get('schema') != 'kart.perception.dataset.v2' or metadata.get('class_names') != ['rc_car', 'obstacle']:
         raise ValueError('dataset snapshotのmetadataが不正です')
     bags = metadata.get('split_bag_ids', {})
     train, val = bags.get('train'), bags.get('val')
@@ -149,8 +162,18 @@ def _dataset(path):
     frames = metadata.get('frames')
     if not isinstance(frames, list) or not frames or any(not isinstance(f, dict) or f.get('reviewed') is not True for f in frames):
         raise ValueError('未確認の画像・自動候補は学習に使用できません')
+    class_boxes = {split: [0, 0] for split in ('train', 'val')}
+    for frame in frames:
+        boxes, classes, split = frame.get('boxes'), frame.get('class_ids'), frame.get('split')
+        if (split not in class_boxes or not isinstance(boxes, list) or not isinstance(classes, list)
+                or len(boxes) != len(classes) or any(type(value) is not int or value not in (0, 1) for value in classes)):
+            raise ValueError('snapshotのbboxとclass_idsの対応が不正です')
+        for value in classes:
+            class_boxes[split][value] += 1
+    if any(not all(counts) for counts in class_boxes.values()):
+        raise ValueError('train / valの両方にrc_carとobstacleの確認済みbboxが必要です')
     return dict(snapshot=metadata, dataset_yaml_sha256=_sha(path), snapshot_sha256=_sha(metadata_path),
-                images={k: len(v) for k, v in image_sets.items()})
+                images={k: len(v) for k, v in image_sets.items()}, class_boxes=class_boxes)
 
 
 def _finite(value):
@@ -225,14 +248,16 @@ def train(plan):
                 resume=False, pretrained=str(weights), **parameters)
     for name in ('best.pt', 'last.pt'):
         _file(str(output / 'weights' / name), '.pt')
+    if _names(model) != ['rc_car', 'obstacle']:
+        raise ValueError('学習済みモデルのクラス名・順序がdatasetと一致しません')
     if _sha(weights) != source_sha:
         raise ValueError('学習中に初期重みが変更されました')
-    report = dict(schema='kart.perception.train.v1', action='train', class_names=['rc_car'],
+    report = dict(schema='kart.perception.train.v1', action='train', **perception_contract(_names(model)),
         source_weights=str(weights), source_weights_sha256=source_sha, dataset_yaml=str(dataset_yaml),
         dataset_yaml_sha256=dataset['dataset_yaml_sha256'], snapshot_sha256=dataset['snapshot_sha256'],
         annotation_revision=dataset['snapshot'].get('annotation_revision'),
         annotation_sha256=dataset['snapshot'].get('annotation_sha256'), split_bag_ids=dataset['snapshot']['split_bag_ids'],
-        images=dataset['images'], parameters=dict(parameters, device=device, amp=False),
+        images=dataset['images'], class_boxes=dataset['class_boxes'], parameters=dict(parameters, device=device, amp=False),
         completed_epochs=len(log.seen), versions=_versions(), finished=time.time())
     atomic_json(output / 'report.json', report)
     return report
@@ -291,7 +316,7 @@ def prelabel(plan):
     report = dict(schema='kart.perception.prelabel.v1', action='prelabel', reviewed=False,
         automatic_ground_truth=False, source_weights=str(weights), source_weights_sha256=source_sha,
         confidence=confidence, images=len(inputs), proposals=sum(map(len, suggestions.values())),
-        class_filter=None, note='元のCOCOクラスを問わないbbox候補です。rc_carかを手動確認してください。')
+        class_filter=None, note='元のCOCOクラスを問わない未分類bbox候補です。rc_car / obstacleの分類と位置を手動確認してください。')
     atomic_json(output / 'report.json', report)
     return report
 
@@ -305,8 +330,9 @@ def export(plan):
         copied = temporary / 'opponent.pt'
         shutil.copyfile(weights, copied)
         model = _load_yolo(copied, output)
-        if len(_names(model)) != 1 or getattr(model, 'task', 'detect') != 'detect':
-            raise ValueError('exportには学習済み1クラスDetectモデルが必要です')
+        contract = perception_contract(_names(model))
+        if getattr(model, 'task', 'detect') != 'detect':
+            raise ValueError('exportには学習済みDetectモデルが必要です')
         source = Path(model.export(format='onnx', imgsz=(480, 640), half=False, dynamic=False,
             nms=False, batch=1, opset=17, simplify=False, device='cpu')).resolve()
         if source.parent != temporary.resolve():
@@ -315,13 +341,13 @@ def export(plan):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         checked = temporary / 'checked.onnx'
-        module.prepare(source, checked, num_classes=1)
+        module.prepare(source, checked, num_classes=contract['num_classes'])
         if _sha(weights) != source_sha:
             raise ValueError('export中に元checkpointが変更されました')
-        report = dict(schema='kart.perception.export.v1', action='export', model_profile='opponent',
-            num_classes=1, class_names=_names(model), source_weights=str(weights), source_weights_sha256=source_sha,
+        report = dict(schema='kart.perception.export.v1', action='export', **contract,
+            source_weights=str(weights), source_weights_sha256=source_sha,
             onnx_sha256=_sha(checked), input=dict(name='images', shape=[1, 3, 480, 640], dtype='float32'),
-            output=dict(name='output0', shape=[1, 5, 6300], dtype='float32'),
+            output=dict(name='output0', shape=[1, 4 + contract['num_classes'], 6300], dtype='float32'),
             versions=_versions(), finished=time.time())
         checked.replace(output / 'opponent.onnx')
     atomic_json(output / 'report.json', report)

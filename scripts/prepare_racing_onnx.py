@@ -48,7 +48,7 @@ if __name__ == "__main__":
     parser.add_argument("source", type=Path)
     parser.add_argument("destination", type=Path)
     parser.add_argument("--num-classes", type=int, default=80,
-                        help="Detect class count (80 for official COCO; 1 for a custom opponent model)")
+                        help="Detect class count (80 for COCO; 2 for racing; 1 for legacy opponent)")
     args = parser.parse_args()
     if args.source.resolve() == args.destination.resolve():
         parser.error("Choose a separate output path")

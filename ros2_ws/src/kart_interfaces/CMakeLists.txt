@@ -6,6 +6,7 @@ ament_auto_find_build_dependencies()
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PassingCorridor.msg"
   "msg/OpponentGroundPoint.msg" "msg/OpponentGroundPoints.msg"
+  "msg/GroundDetection.msg" "msg/GroundDetections.msg"
   "msg/E2EHeadSelection.msg"
   "msg/HeadToHeadObservation.msg" "msg/HeadToHeadPlan.msg"
   "msg/ReferenceLine.msg" "msg/TrackingReference.msg"

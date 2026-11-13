@@ -43,7 +43,8 @@ class SelectionTests(unittest.TestCase):
                     device='cpu', frames=frames, **kwargs)
 
     def model(self, confidence_by_name, classes=80, boxes_by_name=None, shapes_by_name=None):
-        model = SimpleNamespace(names={i: str(i) for i in range(classes)}, task='detect')
+        names = ['rc_car', 'obstacle'][:classes] if classes in (1, 2) else [str(i) for i in range(classes)]
+        model = SimpleNamespace(names=dict(enumerate(names)), task='detect')
         def predict(**kwargs):
             identity = Path(kwargs['source']).stem
             scores = confidence_by_name.get(identity, [])
@@ -115,6 +116,31 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(len(result['ranked']), 3)
         self.assertEqual(result['provenance']['candidates'], 20)
         self.assertEqual(result['provenance']['evaluated'], 3)
+
+    def test_two_class_model_selection_accepts_obstacle_annotations_without_changing_them(self):
+        frame = self.frame('obstacle', boxes=[[10, 10, 30, 30]])
+        frame['class_ids'] = [1]
+        original = copy.deepcopy(frame)
+        model = self.model({'obstacle': [.7]}, classes=2)
+        with patch.object(selection.runtime, '_load_yolo', return_value=model):
+            result = selection.run(self.plan([frame]))
+        self.assertEqual(result['provenance']['class_names'], ['rc_car', 'obstacle'])
+        self.assertEqual(frame, original)
+
+    def test_dino_crop_budget_keeps_rare_obstacle_seeds_and_excludes_val(self):
+        frames = [self.frame(f'rc{i}', reviewed=True, boxes=[[1, 1, 20, 20]],
+                             stamp=i * 2_000_000_000) for i in range(40)]
+        obstacle = self.frame('obstacle_seed', reviewed=True, boxes=[[10, 10, 40, 40]])
+        obstacle['class_ids'] = [1]
+        val = self.frame('val_obstacle', reviewed=True, split='val', boxes=[[1, 1, 20, 20]])
+        val['class_ids'] = [1]
+        frames += [obstacle, val, self.frame('negative', reviewed=True), self.frame('candidate')]
+        with patch.object(selection, '_load_encoder', return_value=(lambda images: [[1, 1] for _ in images], {})):
+            result = selection.run(self.plan(frames, method='dinov3'))
+        metadata = result['provenance']
+        self.assertEqual(metadata['positive_seed_classes'], dict(rc_car=31, obstacle=1))
+        self.assertIn('obstacle_seed', metadata['positive_seed_frames'])
+        self.assertNotIn('val_obstacle', metadata['positive_seed_frames'])
 
     def test_many_and_large_boxes_are_advisory_and_low_scores_do_not_trigger_flags(self):
         frames = [self.frame(name) for name in ('normal', 'many', 'large', 'below', 'weak', 'miss')]

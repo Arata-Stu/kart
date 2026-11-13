@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { AnnotationDraft, MAX_BOXES, normalizeBox, fitView, imagePoint, screenPoint,
+import { AnnotationDraft, MAX_BOXES, CLASS_NAMES, classIds, normalizeBox, fitView, imagePoint, screenPoint,
   zoomView, boxHandles, hitBox, moveBox, resizeBox, filteredFrames, orderedFrames, projectProgress } from '../frontend/perception_model.js';
 
 const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-9,`${a} != ${b}`);
@@ -40,6 +40,24 @@ assert.deepEqual(draft.snapshot(),before,'a rejected oversized annotation keeps 
 const reviewed=new AnnotationDraft({...frame,boxes:[box],reviewed:true});
 reviewed.change([[21,30,121,130]]);assert.equal(reviewed.reviewed,false,'editing an approved frame needs a new explicit review');
 reviewed.undo();assert.equal(reviewed.reviewed,true);assert.equal(reviewed.dirty,false);
+assert.deepEqual(CLASS_NAMES,['rc_car','obstacle']);
+assert.deepEqual(reviewed.class_ids,[0],'legacy boxes without class IDs keep the RC-car class');
+assert.deepEqual(classIds(undefined,2),[0,0]);
+for(const ids of [[0],[0,2],[0,true]])assert.throws(()=>classIds(ids,2),/クラス/);
+const mixed=new AnnotationDraft({...frame,boxes:[box,[200,100,250,160]],class_ids:[0,1],reviewed:true});
+mixed.change([moveBox(box,5,5,640,480),mixed.boxes[1]]);
+assert.deepEqual(mixed.class_ids,[0,1],'moving a box preserves both class IDs');
+mixed.change([resizeBox(mixed.boxes[0],'se',[150,180],640,480),mixed.boxes[1]]);
+assert.deepEqual(mixed.class_ids,[0,1],'resizing never changes class alignment');
+mixed.change([mixed.boxes[1]],false,[mixed.class_ids[1]]);
+assert.deepEqual(mixed.class_ids,[1],'deleting an earlier box keeps the remaining obstacle class');
+mixed.undo();assert.deepEqual(mixed.class_ids,[0,1]);
+mixed.undo(true);assert.deepEqual(mixed.class_ids,[1]);
+mixed.discard();assert.deepEqual(mixed.class_ids,[0,1]);assert.equal(mixed.dirty,false);
+mixed.change(mixed.boxes,false,[1,1]);assert.equal(mixed.dirty,true,'a class-only edit is an unsaved change requiring review');
+mixed.undo();assert.deepEqual(mixed.class_ids,[0,1]);assert.equal(mixed.dirty,false);
+const mixedBefore=mixed.snapshot();assert.throws(()=>mixed.change(mixed.boxes,false,[1]),/クラス/);
+assert.deepEqual(mixed.snapshot(),mixedBefore,'invalid class alignment cannot partially mutate a draft');
 
 const frames=[{id:'a',split:'train',reviewed:false,boxes:[]},
   {id:'b',split:'train',reviewed:true,boxes:[box]},{id:'c',split:'val',reviewed:true,boxes:[]}];

@@ -9,11 +9,12 @@ globalThis.document = {getElementById:element};
 globalThis.CustomEvent = class extends Event {constructor(name,{detail}){super(name);this.detail=detail;}};
 const intervalCallbacks=[];
 globalThis.setInterval = callback => {intervalCallbacks.push(callback);return 1;};
-globalThis.setTimeout = () => 1;
+const timers=[];
+globalThis.setTimeout = (callback,delay) => {timers.push({callback,delay});return timers.length;};
 globalThis.clearTimeout = () => {};
 let now=10000;
 Date.now=()=>now;
-const {state, emit} = await import('../frontend/api.js');
+const {state, emit, on} = await import('../frontend/api.js');
 const {tuning, paintTuning} = await import('../frontend/tuning.js');
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
 state.id='course'; state.laneId='main'; state.dirty=false;
@@ -24,9 +25,11 @@ const active={document:state.doc,lane_id:'main',line_type:'customline'};
 const calls=[];
 const prepared=[];
 let prepareOverride;
+let responseBehavior;
 globalThis.fetch=async(url, options)=> {
   const body=JSON.parse(options.body);
   calls.push([url,body]);
+  if(url.endsWith('/behavior_reset'))return {ok:true,json:async()=>({map_id:'map-a',success:true,message:'行動計画をリセットしました。AUTOは変更しません'})};
   let candidate;
   if(url.endsWith('/prepare')) {
     // Python's JSON spelling must survive the browser without numeric coercion.
@@ -34,7 +37,7 @@ globalThis.fetch=async(url, options)=> {
     if(prepareOverride===undefined)prepared.push(candidate);
   }
   const result=url.endsWith('/prepare') ? prepareOverride ?? {snapshot_json:candidate}
-    : {map_id:'map-a',revision:url.endsWith('/apply')?'r2':'r1',mode:1,speed_mps:2,stop_issue:'STOP required',localized:true,pose:{x:1,y:2,yaw:0},active,pose_stream:'test-stream',pose_cursor:90,pose_reset:false,
+    : {map_id:'map-a',revision:url.endsWith('/apply')?'r2':'r1',mode:1,speed_mps:2,stop_issue:'STOP required',localized:true,pose:{x:1,y:2,yaw:0},active,pose_stream:'test-stream',pose_cursor:90,pose_reset:false,behavior:responseBehavior,
        perception:{detections:{available:true,fresh:true,age_s:.1,frame_id:'camera',stamp_ns:'1000000000',count:0,objects:[],truncated:false},
          tracks:{available:true,fresh:true,age_s:.1,fresh_for_s:.4,frame_id:'camera',stamp_ns:'1000000000',count:1,objects:[{id:'17',class_id:'2',score:.9,bbox:[100,100,30,30]}],truncated:false}},
        pose_samples:Array.from({length:90},(_,i)=>({seq:i+1,stamp_ns:String(1000000000+i*11111112),x:i/90,y:(i/90)**2,yaw:0,break_before:i===0||i===45})),apply_issue:'',can_rollback:true};
@@ -56,6 +59,47 @@ assert.equal(element('perception-tracks-status').textContent,'追跡: 受信停�
 assert.equal(element('perception-tracks-objects').textContent,'');
 assert.match(element('perception-tracks-source').textContent,/Jetson受信後 0.60 秒/);
 now-=500;
+// Ground points already use map coordinates; their lifetime is independent of
+// the current car pose/localization and the longer HTTP-connection lifetime.
+tuning.status.ground_perception={available:true,fresh:true,age_s:.1,fresh_for_s:.4,
+  frame_id:'map',stamp_ns:'1000000000',count:2,truncated:false,objects:[
+    {kind:'rc_car',class_id:'2',score:.9,x:8,y:9,z:0},
+    {kind:'obstacle',class_id:'1',score:.8,x:-2,y:3,z:0}]};
+tuning.status.localized=false;
+let groundFills=0, groundRepaints=0;
+const mapPoints=[];
+const groundCtx=new Proxy({}, {get:(_,name)=>()=>{if(name==='fill')groundFills++;},set:()=>true});
+paintTuning(groundCtx,p=>{mapPoints.push(p);return [p[0]*2,p[1]*-2];},()=>{});
+assert.equal(groundFills,2,'fresh map points remain visible without a current localized car pose');
+assert.deepEqual(mapPoints,[[8,9],[-2,3]],'map points are projected directly, without the car pose transform');
+on('tuning',()=>groundRepaints++);
+now+=500;
+for(const callback of intervalCallbacks)callback();
+await flush();
+assert.equal(groundRepaints,1,'expiring ground points request a canvas redraw while the connection is still fresh');
+assert.match(element('ground-perception-status').textContent,/表示失効/);
+paintTuning(groundCtx,p=>p,()=>{});
+assert.equal(groundFills,2,'expired map points are removed on redraw');
+assert.equal(tuning.connected,true);
+now-=500;
+delete tuning.status.ground_perception;
+tuning.status.localized=true;
+emit('status');await flush();
+assert.match(element('ground-perception-status').textContent,/未対応・状態未取得/,'older bridge responses are not treated as fresh empty projections');
+assert.match(element('behavior-status').textContent,/未対応・状態未取得/);
+tuning.status.behavior={available:true,fresh:true,age_s:.05,fresh_for_s:.2,status:{mode:'shadow',state:'FOLLOW',
+  frame_id:'map',stamp_ns:'1000000000',reason:'following_target',valid:true,target_speed:.5,
+  target:{id:'8',kind:'rc_car',x:5,y:6,speed:.4},side:'left',path:[[1,2],[3,4]],candidates:[]}};
+tuning.status.localized=false;
+const behaviorLines=[];
+paintTuning(groundCtx,p=>p,(...args)=>behaviorLines.push(args));
+assert.ok(behaviorLines.some(args=>args[1]==='#168ddd' && args[3]===true),'shadow map route is drawn without a current localized car pose');
+now+=250;for(const callback of intervalCallbacks)callback();await flush();
+assert.equal(groundRepaints,2,'behavior expiry requests a redraw before the overall connection expires');
+assert.match(element('behavior-status').textContent,/表示失効/);
+const expiredLines=[];paintTuning(groundCtx,p=>p,(...args)=>expiredLines.push(args));
+assert.ok(!expiredLines.some(args=>args[1]==='#168ddd'));
+delete tuning.status.behavior;tuning.status.localized=true;now-=250;
 for(const invalid of [{},{snapshot_json:42},{snapshot_json:{revision:'invalid'}}]) {
   prepareOverride=invalid;
   await element('tuning-preview').click(); await flush();
@@ -117,11 +161,42 @@ assert.equal(calls.at(-1)[1].expected_revision,'r1');
 assert.equal(calls.at(-1)[1].snapshot,prepared[1],'apply sends the latest original Python JSON string exactly');
 assert.match(calls.at(-1)[1].snapshot,/\[0\.0,-0\.0,1e-07,1e\+21,9007199254740993\]/,'integer, signed-zero and exponent spelling is preserved');
 assert.equal(calls.at(-1)[0],'/api/tuning/apply');
+responseBehavior={available:true,fresh:true,age_s:.05,fresh_for_s:.45,status:{mode:'shadow',state:'CLEAR',
+  valid:true,target_speed:.5,frame_id:'map',stamp_ns:'1000000000',path:[[1,2],[3,4]],candidates:[]}};
+await timers[tuning.timer-1].callback();await flush();
+assert.equal(timers[tuning.timer-1].delay,250,'live behavior is polled faster than its half-second source lifetime');
+responseBehavior.status.mode='active';
+await timers[tuning.timer-1].callback();await flush();
+assert.equal(timers[tuning.timer-1].delay,250);
+responseBehavior.status.mode='off';
+await timers[tuning.timer-1].callback();await flush();
+assert.equal(timers[tuning.timer-1].delay,1000,'off keeps the normal lightweight poll interval');
+responseBehavior.status.mode='active';
+tuning.status.mode=1;tuning.status.stop_issue='STOP required';emit('status');await flush();
+assert.equal(element('behavior-reset').disabled,true);
+const beforeReset=calls.length;
+await element('behavior-reset').click();await flush();
+assert.equal(calls.length,beforeReset,'running reset attempts never reach the transport');
+tuning.status.mode=3;tuning.status.stop_issue='';emit('status');await flush();
+assert.equal(element('behavior-reset').disabled,false);
+const resetRevision=tuning.status.revision;
+await element('behavior-reset').click();await flush();
+assert.equal(calls.at(-1)[0],'/api/tuning/behavior_reset');
+assert.equal(calls.at(-1)[1].expected_revision,resetRevision);
+assert.equal(tuning.status.mode,3,'reset does not change the vehicle mode');
+assert.match(element('toast').textContent,/AUTOは変更しません/);
+now+=600;for(const callback of intervalCallbacks)callback();await flush();
+assert.equal(element('behavior-reset').disabled,true,'expired behavior cannot be reset from an old status');
+const afterReset=calls.length;
+await element('behavior-reset').click();await flush();
+assert.equal(calls.length,afterReset);
+now-=600;
 emit('connection'); await flush();
 assert.equal(tuning.connected,false);
 assert.equal(tuning.active,null);
 assert.equal(element('perception-tracks-objects').textContent,'','disconnect clears the track summary');
 assert.equal(tuning.previewJson,null,'disconnect clears the original preview payload');
+assert.match(element('ground-perception-status').textContent,/未接続・受信停止/);
 assert.equal(element('tuning-apply').disabled,true);
 assert.ok(calls.every(([url])=>url.startsWith('/api/tuning/')));
 console.log('Tuning connection reuse, opaque snapshot transport, preview guards, stale pose hiding and revisioned apply passed');

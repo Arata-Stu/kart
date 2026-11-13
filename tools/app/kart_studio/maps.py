@@ -5,7 +5,7 @@ import shutil
 import time
 import uuid
 
-from . import footprint, lanes, obstacles, parking
+from . import footprint, lanes, obstacles, parking, passing_zones
 from .exports import export_map
 from .lines import generate
 from .snapshots import normalize
@@ -102,7 +102,7 @@ class Maps:
         return dict(id=entry["id"])
 
     def load(self, key):
-        return lanes.upgrade(read_json(within(self.folder(key), "map.json")))
+        return passing_zones.decorate(lanes.upgrade(read_json(within(self.folder(key), "map.json"))))
 
     def initialize(self, folder, title):
         cloud = normalize(read_json(folder / "snapshot.json"))
@@ -176,6 +176,8 @@ class Maps:
         )
         if regions != current.get("obstacles", []):
             for lane in current["lanes"]:
+                count=sum(len(line.get('passing_zones', [])) for line in lane['lines'].values())
+                if count: lane['passing_zones_notice']=f'禁止領域の変更により追越し許可{count}区間が失効しました。再生成後に設定してください。'
                 lane["lines"] = {}
         parking_fields = parking.validate(dict(current, **dict(body, obstacles=regions)))
         current.update(
@@ -216,7 +218,7 @@ class Maps:
                 for k in ("left", "right", "closed", "custom", "custom_speeds", "custom_speed_mode")
             }
         )
-        lane["lines"][kind] = result
+        lane["lines"][kind] = passing_zones.regenerated(result, lane['lines'].get(kind), lane['closed'])
         document.update(revision=document["revision"] + 1, updated=time.time())
         atomic_json(self.folder(key) / "map.json", document)
         return dict(map=key, lane_id=lane["id"], revision=document["revision"])

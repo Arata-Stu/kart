@@ -1,4 +1,4 @@
-"""Official COCO and custom opponent ONNX contracts and target-engine caching."""
+"""COCO, two-class racing and legacy opponent ONNX/engine contracts."""
 import contextlib
 import importlib.util
 import io
@@ -54,8 +54,8 @@ class PrepareTests(unittest.TestCase):
         self.assertEqual(result, original)
         self.assertEqual(result.graph.output[0].type.tensor_type.shape.dim[1].dim_value, 84)
 
-    def test_fp16_exports_gain_fp32_boundary_bindings_for_both_profiles(self):
-        for classes in (1, 80):
+    def test_fp16_exports_gain_fp32_boundary_bindings_for_all_profiles(self):
+        for classes in (1, 2, 80):
             with self.subTest(classes=classes):
                 detect_model(self.source, classes, TensorProto.FLOAT16)
                 before = self.source.read_bytes()
@@ -67,6 +67,14 @@ class PrepareTests(unittest.TestCase):
                 self.assertEqual(model.graph.output[0].type.tensor_type.elem_type, TensorProto.FLOAT)
                 self.assertEqual(model.graph.node[0].op_type, 'Cast')
                 self.assertEqual(model.graph.node[-1].op_type, 'Cast')
+
+    def test_two_class_export_requires_six_raw_detect_channels(self):
+        detect_model(self.source, classes=2)
+        prepare(self.source, self.output, num_classes=2)
+        self.assertEqual(onnx.load(self.output), onnx.load(self.source))
+        for classes in (1, 80):
+            with self.subTest(classes=classes), self.assertRaisesRegex(ValueError, 'output0'):
+                prepare(self.source, self.output, num_classes=classes)
 
     def test_class_count_shape_nms_and_type_mismatches_are_rejected(self):
         for change in ('classes', 'nms', 'dynamic', 'dtype'):
@@ -140,6 +148,30 @@ class BuilderTests(unittest.TestCase):
                 builder.build(self.root, get_profile('coco'), force=True)
         self.assertEqual((path.read_bytes(), (path.parent / 'build.json').read_bytes()), before)
 
+    def test_two_class_model_never_reuses_legacy_opponent_engine(self):
+        with patch.object(builder, 'fingerprint', return_value=self.hardware), \
+                patch.object(builder.subprocess, 'run', side_effect=self.run_trtexec), \
+                patch.object(builder, 'check_bindings') as check:
+            old = builder.build(self.root, get_profile('opponent'))
+            old_report = (old.parent / 'build.json').read_bytes()
+            detect_model(self.root / 'opponent.onnx', classes=2)
+            racing = builder.build(self.root, get_profile('racing'))
+            self.assertEqual(racing.name, 'racing.plan')
+            self.assertNotEqual(old.parent, racing.parent)
+            self.assertEqual((old.parent / 'build.json').read_bytes(), old_report)
+            self.assertEqual(builder.build(self.root, get_profile('racing')), racing)
+            self.assertEqual(check.call_args.args, (racing, 2))
+            self.assertEqual(len(self.commands), 2)
+            report = json.loads((racing.parent / 'build.json').read_text())
+            self.assertEqual(report['model_profile'], 'racing')
+            self.assertEqual(report['num_classes'], 2)
+            self.assertEqual(report['source_sha256'], builder.digest(self.root / 'opponent.onnx'))
+            # A two-class source cannot silently rebuild the legacy one-class profile.
+            with self.assertRaisesRegex(ValueError, 'output0'):
+                builder.build(self.root, get_profile('opponent'))
+            self.assertEqual(len(self.commands), 2)
+            self.assertEqual((old.parent / 'build.json').read_bytes(), old_report)
+
     def test_trt10_uses_typed_build_and_rejects_older_versions(self):
         hardware = dict(self.hardware, tensorrt='10.7')
         with patch.object(builder, 'fingerprint', return_value=hardware), \
@@ -152,7 +184,8 @@ class BuilderTests(unittest.TestCase):
                 builder.build(self.root, get_profile('coco'))
 
     def test_cli_defaults_to_official_model_and_allows_custom_model(self):
-        for argv, name in (([], 'coco'), (['--model', 'opponent', '--force'], 'opponent')):
+        for argv, name in (([], 'coco'), (['--model', 'opponent', '--force'], 'opponent'),
+                           (['--model', 'racing'], 'racing')):
             with self.subTest(profile=name), patch.object(sys, 'argv', ['build_racing_engine.py', *argv]), \
                     patch.object(builder, 'build', return_value=Path('model.plan')) as build, \
                     contextlib.redirect_stdout(io.StringIO()):
@@ -162,12 +195,12 @@ class BuilderTests(unittest.TestCase):
 
     def test_cli_accepts_a_transferred_model_directory_without_copying_over_existing_weights(self):
         target = self.root / 'finetuned' / 'version-a'
-        with patch.object(sys, 'argv', ['build_racing_engine.py', '--model', 'opponent', '--model-root', str(target)]), \
+        with patch.object(sys, 'argv', ['build_racing_engine.py', '--model', 'racing', '--model-root', str(target)]), \
                 patch.object(builder, 'build', return_value=Path('model.plan')) as build, \
                 contextlib.redirect_stdout(io.StringIO()):
             builder.main()
         self.assertEqual(build.call_args.args[0], target.resolve())
-        self.assertEqual(build.call_args.args[1]['name'], 'opponent')
+        self.assertEqual(build.call_args.args[1]['name'], 'racing')
 
 
 class BindingTests(unittest.TestCase):
@@ -183,6 +216,10 @@ class BindingTests(unittest.TestCase):
         trt.Logger = type('Logger', (), {'WARNING': 0, '__init__': lambda self, _level: None})
         with patch.dict(sys.modules, tensorrt=trt):
             builder.check_bindings(path, 80)
+            with self.assertRaisesRegex(ValueError, 'output0'):
+                builder.check_bindings(path, 1)
+            shapes['output0'] = (1, 6, 6300)
+            builder.check_bindings(path, 2)
             with self.assertRaisesRegex(ValueError, 'output0'):
                 builder.check_bindings(path, 1)
             engine.get_tensor_dtype = lambda _n: 'fp16'

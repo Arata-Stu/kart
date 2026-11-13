@@ -17,6 +17,7 @@ export const state = {
   step: "cloud",
   target: null,
   selected: -1,
+  passingPick: null,
   zmin: -Infinity,
   zmax: Infinity,
   showPath: true,

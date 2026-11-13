@@ -272,6 +272,10 @@ odomがTFより先に届く一時的な到着順の差を吸収し、待機後�
 use_sim_time空（YAML維持）。config/control/launch.jsonはcontainer_name=kart_control_container、
 create_container=true、container_type=multithreaded。
 module `modules/control/pure_pursuit.launch.py`は既存containerへloadするだけ。
+`overtake_mode`はoff（既定）/shadow/active。activeだけconfig/racing/control_overrides.yamlを重ね、
+line_timeout_sとwall_timeout_sを0.4秒にする。off/shadowでは通常のtimeoutを保持する。
+tracking.launch.pyは同じ引数とperception_engine（既定空）、perception_mode（track）、
+auto_fixed_throttle（空＝YAML維持）でactiveの前提を確認する。
 全topic・parameter・TF・速度と正規化スロットルの境界は[kart_control README](../kart_control/README.md)。
 
 tracking.launch.pyは同じcontainerへ`kart_control::SpeedControllerNode`もloadする。
@@ -1514,7 +1518,8 @@ Race/Customは保存した速度profileを使い、新規生成の速度上限�
 `parking_slot`（既定空＝parking.yamlのP1を使用）を追加した。siteまたはslotを指定した場合のみ
 `kart_parking/parking_planner`を起動し、HDMapの`planning/reference_line`を
 `planning/course_reference`へremapする。Pure Pursuitの入力は変わらずplannerが唯一の参照publisherになる。
-`hdmap.launch.py reference_topic`は既定`planning/reference_line`、parking時のみ明示変更する。
+`hdmap.launch.py reference_topic`は既定`planning/reference_line`、parkingまたはactive追従・追越し時に明示変更する。
+parkingとactive追従・追越しの併用は拒否する。
 
 実運用設定は`config/parking/parking.yaml`の全項目。
 [全パラメータ、topic・service、区画JSON、操作手順](../kart_parking/README.md)を参照。
@@ -1697,7 +1702,28 @@ ROS parameterとYAMLは初期設定のまま。再起動では初期値へ戻る
 設定は[config/racing](config/racing/README.md)。標準driveのPP/PID/localizationは変更しない。
 `/racing/observation`（kart_interfaces/msg/HeadToHeadObservation）を受け、
 `/racing/shadow_plan`（kart_interfaces/msg/HeadToHeadPlan）へ結果を出す。
-画像から2D追跡までは独立起動の[racing_perception.launch.pyと設定手順](config/racing/README.md)を参照。走行時の観測・停止車両の回避計画はracing_ground_shadow.launch.pyで別起動する。実車制御への接続は未実装。全parameterはkart_racing README参照。
+画像から2D追跡までは独立起動の[racing_perception.launch.pyと設定手順](config/racing/README.md)を参照。
+この既存Spliner shadowと、任意のlive追従・追越しモードは別経路。liveは下記の明示設定で起動する。
+全parameterはkart_racing README参照。
+
+### 任意のlive追従・追越し
+
+driveの`--overtake off|shadow|active`（missionのovertake_mode、既定off）で選択する。
+認識engineとperception_mode=trackが必須。activeはracing2クラスengineだけを許可し、
+E2E・parking・固定AUTOスロットル・自動復帰との併用を起動前に拒否する。
+TUI／Studio起動設定はON選択で車両追跡へ連動し、認識OFF・検出のみの選択ではovertakeをOFFへ戻す。
+active選択では自動復帰をOFFにし、変更内容をレビューする。
+shadowはCOCO・旧1クラスも使えるが障害物クラスがなく、判断候補の表示に限定する。
+
+`racing_behavior.launch.py`がroot namespaceのkart_racing/racing_behaviorと
+/racing/opponent_groundを起動する。behavior.yamlが運用値、mode/map_fileだけを明示上書きする。
+activeではHDMapをplanning/course_referenceへ移し、behaviorだけがplanning/reference_lineを出版する。
+shadowでは通常のplanning/reference_lineを保持し、behavior出力はracing/candidate_reference等の観測に限定する。
+通常の認識が出すmap_pointsと、確認済みRC追跡のground_pointsを分けて入力する。
+路面高さはground.yamlとmap_projection.yamlで暫定-0.033 mへ統一し、実測調整が必要。
+入力無効時は空参照等の既存停止経路、node停止時はactive専用0.4秒timeoutを使う。
+起動だけでAUTO・録画を開始しない。ソフトの停止要求を物理停止確認と扱わない。
+設定・topic・検証範囲は[認識・live behavior設定](config/racing/README.md)参照。ROS結合・実車動作は未確認。
 
 ## Offline localization結果の記録と定量解析
 
@@ -1892,7 +1918,8 @@ ROS結合・Jetsonでの処理負荷・実車収録は未確認。
 任意のbase_link接地点推定は[racing設定](config/racing/README.md)参照。
 追加学習なしで全80クラスを`/racing/detections`（vision_msgs/msg/Detection2DArray）へ出版し、
 car（class_id="2"）だけを`/racing/tracks`（同型）へ追跡出力する。
-自身のROSノードは追加せず、既存のIsaac ROS decoderとopponent_tracker componentを組み合わせる。
+bringup自身のROSノードは追加せず、Isaac ROS decoder・opponent_tracker componentと
+kart_opponent_trackerの表示専用perception_groundを組み合わせる。
 decoderの基準値はnum_classes=80・confidence_threshold=0.1・nms_threshold=0.45、trackerはtracked_class_id="2"。
 通常は`/racing/detections`・`/racing/tracks`の結果をRaw Messages／Tableで確認する。
 元RGB・CameraInfo・ImageMarkerは公開しない。カメラからYOLOへのPC内入力は維持する。
@@ -1900,16 +1927,31 @@ decoderの基準値はnum_classes=80・confidence_threshold=0.1・nms_threshold=
 （sensor_msgs/msg/CompressedImage）のbbox付きJPEGを最大5Hzで公開できる。既定OFF、quality 70。
 画像と結果の撮影stamp/frame完全一致を確認し、0件と未着を画像上で区別する。
 FoxgloveのImageパネルで表示し、CameraInfo・別annotationは不要。
-engineのbuild.jsonに従い、専用opponentモデルではnum_classes=1・tracked_class_id="0"を選ぶ。
+engineのbuild.jsonに従い、追加学習のracingモデルではnum_classes=2（rc_car=0／obstacle=1）、
+tracked_class_id="0"を選ぶ。検出には両クラスを残し、追跡・既存の路面投影はRCカーだけを扱う。
+通常の認識起動では表示専用perception_groundも起動し、RCカーと障害物の両方をmap座標へ投影する。
+入力は/racing/detectionsと同時刻の/realsense/color/camera_info、撮影時刻のカメラ〜base_link〜map TFが必要。
+config/racing/map_projection.yamlは全parameterを保持し、projection_frame=base_link、target_frame=map、
+ground_z_m=-0.033 m（取付設定の後車軸高さ33 mmに基づく暫定値、実測調整必須）、max_range_m=10、
+confidence_threshold=0.25、max_objects=100。class IDはprofileから明示上書きする。
+/racing/map_points（kart_interfaces/msg/GroundDetections）・map_markers（visualization_msgs/msg/MarkerArray）・
+map_diagnostics（diagnostic_msgs/msg/DiagnosticArray）を出し、FoxgloveとStudioの地図へ緑RCカー／桃障害物を表示する。
+map_pointsのvalid/reasonで正常な空結果と投影失敗・入力途絶の消去を区別し、後者を0件と表示しない。
+COCO/旧opponentでは障害物classを無効化する。単独認識launchのmap_projection:=falseで表示用投影だけ無効化できる。
+障害物はコース上の静止ダンボール・落とし物等で、背景ダクトや常設境界を一律に含めない。
+認識の選択だけでは障害物の停止・回避制御を有効化せず、live behaviorは別途明示する。旧opponent 1クラスprofileも維持する。
 
 `scripts/bringup.sh --mode collect --perception /path/to/yolov8s.plan`（地図走行drive・TUIでも選択可）は
 640×480のRGBを使い、RealSenseと同じsensor_containerに認識componentをロードする。
 mission.yamlのperception_engine既定は空（OFF）、perception_mode既定はtrack、perception_debug_image既定はfalse。
-起動時の`--perception-mode detect`は全80クラスの検出のみ、`track`は検出＋COCO carだけの追跡。
+起動時の`--perception-mode detect`はモデルの全クラスの検出のみ、`track`は検出＋選択車両クラスだけの追跡。
+追跡クラスはCOCOでcar=2、racingでrc_car=0、旧opponentで0。
 未指定はYAMLを保持する。TUIの「認識 / 物体検出」でengine／OFFを、
 「認識 / モード」で検出のみ／検出＋車両追跡を切り替える。
 「認識 / bbox画像」で画像デバッグを選ぶ。`--no-perception-debug-image`は明示OFF。
-追加学習ONNXをStudioから転送した場合は、Jetsonで`racing_trt.sh --model opponent --model-root <転送先>`を実行する。
+2クラスの追加学習ONNXをStudioから転送した場合は、Jetsonで`racing_trt.sh --model racing --model-root <転送先>`を実行する。
+入力名opponent.onnxは維持し、出力[1,6,6300]を検査してengines/racing配下にracing.planを生成する。
+旧1クラスは`--model opponent`で別cacheに保持する。
 標準weights/racing/yolov8s/finetuned配下のplanもTUIのengine一覧へ含める。画像選定・転送は
 [追加学習手順](../../../docs/perception_training.md)を参照。StudioはTensorRT buildを自動実行しない。
 未指定はYAMLを保持する。既に起動中なら`ros2 launch kart_bringup racing_debug.launch.py`で

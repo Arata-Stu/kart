@@ -5,6 +5,7 @@ sensor_container_type: multithreaded
 perception_engine: ""  # Empty disables racing perception; otherwise local YOLOv8s TensorRT plan.
 perception_mode: track  # detect: all detections only; track: also track the model's vehicle class.
 perception_debug_image: false  # Optional bounded-rate JPEG with detection/tracking boxes.
+overtake_mode: "off"  # drive only: off / shadow (candidate only) / active (owns reference_line).
 enable_evs: false
 enable_foxglove: false
 enable_bridge: true

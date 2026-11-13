@@ -162,7 +162,7 @@ def main():
     parser.add_argument("output", type=Path)
     parser.add_argument("--topic", default="/realsense/color/image_raw")
     parser.add_argument("--engine", required=True, type=Path)
-    parser.add_argument("--model", choices=("coco", "opponent"), default="",
+    parser.add_argument("--model", choices=("coco", "opponent", "racing"), default="",
                         help="Model profile; default reads the engine's build.json, otherwise coco")
     parser.add_argument("--stride", type=int, default=1)
     parser.add_argument("--frames", type=int, default=120)
@@ -186,7 +186,7 @@ def main():
     rclpy.init()
     node = rclpy.create_node("racing_bag_evaluator")
     command = ["ros2", "launch", "kart_bringup", "racing_perception.launch.py",
-               f"engine:={args.engine.resolve()}", "image_topic:=/racing/eval/image"]
+               f"engine:={args.engine.resolve()}", "image_topic:=/racing/eval/image", "map_projection:=false"]
     if args.model:
         command.append(f"model_profile:={profile['name']}")
     launch = subprocess.Popen(command, start_new_session=True)

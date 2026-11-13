@@ -1,5 +1,7 @@
 /**/opponent_ground:
   ros__parameters:
     target_frame: base_link
-    ground_z_m: .nan  # Required measured value at startup.
+    # Provisional rear-axle height 33 mm from config/vehicle/transforms.yaml;
+    # measure the loaded vehicle and camera mount before use. Match map_projection.yaml.
+    ground_z_m: -0.033
     max_range_m: 10.0

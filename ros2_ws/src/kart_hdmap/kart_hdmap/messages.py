@@ -5,6 +5,7 @@ from nav_msgs.msg import Path
 from visualization_msgs.msg import Marker, MarkerArray
 
 from .document import KINDS, path_samples
+from .passing_zones import zone_vertices
 
 COLORS = {
     "left": (0.2, 0.6, 1.0),
@@ -13,6 +14,7 @@ COLORS = {
     "raceline": (0.8, 0.3, 1.0),
     "customline": (1.0, 0.8, 0.1),
 }
+PASSING_COLORS = {'both': (0.0, 0.85, 0.85), 'left': (0.3, 1.0, 0.3), 'right': (1.0, 0.55, 0.1)}
 
 
 def path_message(line, closed, frame, stamp):
@@ -53,6 +55,33 @@ def markers(document, selected, stamp, width, label_height):
             vertices = pts + [pts[0]] if lane["closed"] and pts[-1] != pts[0] else pts
             m.points = [Point(x=float(p[0]), y=float(p[1]), z=0.0) for p in vertices]
             result.markers.append(m)
+        for kind, line in lane['lines'].items():
+            for zone in line.get('passing_zones', []):
+                vertices = zone_vertices(line['points'], zone)
+                namespace = lane['id'] + '/' + kind + '/passing/' + zone['id']
+                color = PASSING_COLORS[zone['side']]
+                band = Marker()
+                band.header = clear.header
+                band.ns, band.id = namespace + '/band', 0
+                band.type, band.action = Marker.LINE_STRIP, Marker.ADD
+                band.pose.orientation.w = 1.0
+                band.scale.x = max(width * 4, 0.08)
+                band.color.r, band.color.g, band.color.b = color
+                band.color.a = 0.7
+                band.points = [Point(x=float(x), y=float(y), z=0.025) for x, y in vertices]
+                result.markers.append(band)
+                label = Marker()
+                label.header = clear.header
+                label.ns, label.id = namespace + '/label', 0
+                label.type, label.action = Marker.TEXT_VIEW_FACING, Marker.ADD
+                label.pose.orientation.w = 1.0
+                label.pose.position.x, label.pose.position.y = vertices[len(vertices) // 2]
+                label.pose.position.z = label_height
+                label.scale.z = label_height
+                label.color.r, label.color.g, label.color.b = color
+                label.color.a = 1.0
+                label.text = lane['id'] + '/' + kind + ': ' + zone['id'] + ' [' + zone['side'] + ']'
+                result.markers.append(label)
         anchor = next((p for p in geometry.values() if p), None)
         if anchor:
             m = Marker()

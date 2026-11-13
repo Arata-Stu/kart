@@ -114,6 +114,7 @@ def validate_mode_options(args):
         (("tuning",), args.mode == "drive"),
         (("foxglove",), not offline),
         (("perception", "perception_mode", "perception_debug_image"), not offline),
+        (("overtake",), args.mode == 'drive'),
     ]
     for keys, allowed in groups:
         if allowed:
@@ -171,6 +172,8 @@ def argument_parser():
                         help="detect=物体検出のみ / track=検出＋車両追跡。未指定はmission YAML（既定track）")
     parser.add_argument("--perception-debug-image", action=argparse.BooleanOptionalAction, default=None,
                         help="bbox付きJPEGをデバッグ配信（既定OFF、5Hz）。未指定はmission YAML")
+    parser.add_argument('--overtake', choices=('off', 'shadow', 'active'), default='',
+                        help='drive追従・追越し: off（既定）/ shadow候補表示 / active実行。認識track必須、activeはracing2クラス・復帰OFF・通常AUTOのみ')
     parser.add_argument("--foxglove", action=argparse.BooleanOptionalAction, default=None, help="Foxglove。未指定は用途のYAML既定（地図走行はON）")
     parser.add_argument("--no-bridge", action="store_true", help="車両基板なしの確認用")
     parser.add_argument(
@@ -289,6 +292,7 @@ def build_command(args, config):
         from kart_bringup.mission import composition, perception_engine
         perception = composition(config / "mission.yaml", args.mode,
                                  {"perception_engine": args.perception, "perception_mode": args.perception_mode,
+                                  "overtake_mode": args.overtake,
                                   "perception_debug_image": "" if args.perception_debug_image is None else args.perception_debug_image})
         engine = perception_engine(perception["perception_engine"], sensors)
         if perception["perception_debug_image"] and not engine:
@@ -379,6 +383,16 @@ def build_command(args, config):
         if recovery_enabled:
             validate_inputs(recovery_params, sensors, args.evs, fixed)
         print('自動復帰: ' + (f"{recovery_params['sensor_profile']} ({recovery_params['image_topic']})" if recovery_enabled else '無効'))
+    if args.mode != 'eval':
+        from kart_bringup.mission import validate_overtake
+        validate_overtake(perception['overtake_mode'], args.mode, engine, perception['perception_mode'],
+                          parking=bool(parking_site or parking_slot), fixed_throttle=fixed,
+                          recovery_enabled=recovery_enabled if args.mode in ('drive', 'e2e') else False)
+        print('追従・追越し: ' + perception['overtake_mode'])
+        if perception['overtake_mode'] == 'shadow':
+            from kart_bringup.racing_models import engine_profile
+            if engine_profile(Path(engine))['name'] != 'racing':
+                print('shadow: このモデルにはobstacleクラスがありません。障害物認識を含むactive判断には使用しません。')
     if args.mode == "e2e":
         from kart_e2e.contract import model_contract, runtime_settings, input_contract
 
@@ -445,6 +459,7 @@ def build_command(args, config):
         "perception_engine": (engine or args.perception) if args.mode != "eval" else "",
         "perception_mode": args.perception_mode if args.mode != "eval" else "",
         "perception_debug_image": "" if args.perception_debug_image is None else str(args.perception_debug_image).lower(),
+        "overtake_mode": args.overtake if args.mode == 'drive' else '',
         "enable_foxglove": "" if args.foxglove is None else str(args.foxglove).lower(),
         "record_dir": args.record_dir,
         "run_name": recording_name if args.mode != "eval" else "",

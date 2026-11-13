@@ -23,7 +23,7 @@ def debug_node(context):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("model_profile", default_value="coco", choices=["coco", "opponent"]),
+        DeclareLaunchArgument("model_profile", default_value="coco", choices=["coco", "opponent", "racing"]),
         DeclareLaunchArgument("image_topic", default_value="/realsense/color/image_raw"),
         OpaqueFunction(function=debug_node),
     ])

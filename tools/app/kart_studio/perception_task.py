@@ -8,6 +8,7 @@ import time
 from .perception_dataset import DatasetStore
 from .storage import atomic_json, name, read_json, within
 from .perception_selection_store import SelectionStore, image_signature
+from .remote_agent import perception_contract, perception_manifest
 
 
 class Progress:
@@ -66,7 +67,7 @@ def execute(plan):
             raise ValueError('同じ学習出力が既にあります')
         output.mkdir()
         artifact = dict(schema=1, id=key, name=plan['title'], project=plan['project'],
-                        created=plan['created'], status='running', class_names=['rc_car'],
+                        created=plan['created'], status='running', **perception_contract(['rc_car', 'obstacle']),
                         project_revision=plan['revision'])
         atomic_json(output / 'artifact.json', artifact)
         try:
@@ -100,10 +101,14 @@ def execute(plan):
             run(dict(action='export', output=str(stage), weights=str(weights)))
             within(stage, 'opponent.onnx')
             within(stage, 'report.json')
+            report = read_json(stage / 'report.json')
+            contract = perception_contract(report.get('class_names'))
             atomic_json(stage / 'artifact.json', dict(schema=1, id=key, name=plan['title'],
                 run=source.name, project=plan['project'], created=plan['created'], status='succeeded',
-                class_names=['rc_car'], model_profile='opponent', num_classes=1,
+                **contract,
                 source_revision=artifact['project_revision']))
+            # Validate the report, bindings, SHA and artifact before publication.
+            perception_manifest(stage, transfer_required=False)
             os.rename(stage, target)
         return
     raise ValueError('未対応の学習タスクです')

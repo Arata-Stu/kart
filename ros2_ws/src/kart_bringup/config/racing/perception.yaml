@@ -5,7 +5,7 @@
 # https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_object_detection/tree/release-5.0/isaac_ros_yolov8
 # Fixed 640x480 RGB; /255 exactly once. No resize/crop/mean subtraction.
 # COCO80 default. Launch derives num_classes from the selected engine profile
-# (coco=80, custom opponent=1); this is model metadata, not a tuning constant.
+# (coco=80, racing=2, legacy opponent=1); this is model metadata, not a tuning constant.
 # Internal topics reliable. Only standard ROS runtime parameters omitted.
 format:
   encoding_desired: rgb8

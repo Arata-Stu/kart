@@ -12,6 +12,14 @@ TARGETS = {
     'speed': ('speed_controller', ('control_rate_hz', 'kp', 'ki', 'kd', 'kff', 'integral_limit', 'derivative_tau_s',
                                  'throttle_limit', 'brake_limit', 'throttle_rise_rate', 'throttle_fall_rate', 'max_target_speed_mps')),
     'map': ('hdmap_server', ('line_type', 'centerline_speed_mps')),
+    'behavior': ('racing_behavior', (
+        'mode', 'map_file', 'speed_cap', 'vehicle_length', 'vehicle_width', 'uncertainty_margin',
+        'rc_length', 'rc_width', 'obstacle_length', 'obstacle_width', 'slow_speed', 'stationary_anchor_speed',
+        'headway', 'follow_min_gap', 'moving_merge_margin', 'static_merge_margin', 'moving_speed_advantage',
+        'moving_observation_s', 'object_timeout', 'static_memory_s', 'min_transition', 'max_curvature',
+        'sample_spacing', 'lookahead_m', 'preferred_side', 'deceleration', 'prediction_horizon_s', 'rear_axle_to_rear',
+        'simple_pass_speed', 'prediction_hold_s', 'prediction_speed_uncertainty', 'prediction_acceleration',
+        'prediction_lateral_speed', 'prediction_uncertainty_limit', 'max_pass_heading_change')),
     'recovery': ('recovery', (
         'history_span_s', 'history_offset_s', 'history_min_samples', 'history_max_gap_s',
         'min_forward_throttle', 'startup_grace_s', 'stuck_duration_s', 'stationary_flow_px_s',
@@ -25,6 +33,28 @@ TARGETS = {
 }
 
 LABELS = {
+    'mode': '追従・追越しの動作（起動時固定）', 'map_file': '参照地図（起動時固定）',
+    'speed_cap': '追従・追越し速度上限 (m/s)', 'vehicle_length': '自車の全長仮定 (m)',
+    'vehicle_width': '自車の全幅仮定 (m)', 'uncertainty_margin': '占有範囲の不確かさ余裕 (m)',
+    'rc_length': 'RCカー対象の全長仮定 (m)', 'rc_width': 'RCカー対象の全幅仮定 (m)',
+    'obstacle_length': '障害物の長さ仮定 (m)', 'obstacle_width': '障害物の幅仮定 (m)',
+    'slow_speed': '低速RCカーとみなす推定速度 (m/s)', 'stationary_anchor_speed': '静止とみなす推定速度上限 (m/s)',
+    'headway': '追従の時間間隔 (s)', 'follow_min_gap': '追従の最低車間 (m)',
+    'moving_merge_margin': '移動中RCカーの復帰余裕 (m)', 'static_merge_margin': '低速・障害物の復帰余裕 (m)',
+    'moving_speed_advantage': '追越しに必要な速度差 (m/s)', 'moving_observation_s': '移動対象の観察時間 (s)',
+    'object_timeout': '動的な対象情報の期限 (s)', 'static_memory_s': '静止対象を保持する時間 (s)',
+    'min_transition': '横移動に使う最低距離 (m)', 'max_curvature': '候補経路の最大曲率 (1/m)',
+    'sample_spacing': '経路の検査間隔 (m)', 'preferred_side': '左右とも成立した時の優先側',
+    'deceleration': '追従・追越しの減速度仮定 (m/s²)', 'prediction_horizon_s': '対象移動の予測時間 (s)',
+    'behavior.lookahead_m': '候補経路の前方範囲 (m)',
+    'rear_axle_to_rear': '後車軸から自車後端までの仮定 (m)',
+    'simple_pass_speed': '周回学習を待たないRCカー速度上限 (m/s)',
+    'prediction_hold_s': '追越し中の対象予測を保持する期限 (s)',
+    'prediction_speed_uncertainty': '対象速度の予測不確かさ (m/s)',
+    'prediction_acceleration': '未観測中の対象加速度の不確かさ (m/s²)',
+    'prediction_lateral_speed': '未観測中の横方向速度の不確かさ (m/s)',
+    'prediction_uncertainty_limit': '対象の前後方向予測不確かさ上限 (m)',
+    'max_pass_heading_change': '追越し区間の最大方位変化 (rad)',
     'control_rate_hz': '制御周期 (10〜100 Hz、STOP・停車中のみ)',
     'lateral_controller': '横制御方式（切替はSTOP・停車中）',
     'mpc_horizon_s': 'MPC 予測時間 (0.3..2 s)',
@@ -102,7 +132,7 @@ def changes_for(snapshot, changes, revision):
             pass
         elif kind == 4 and type(value) is str:
             choices = {'lateral_controller': ('pure_pursuit', 'mpc'), 'line_type': ('centerline', 'raceline', 'customline'),
-                       'lookahead_mode': ('fixed', 'speed_interpolated')}
+                       'lookahead_mode': ('fixed', 'speed_interpolated'), 'preferred_side': ('left', 'right')}
             if value not in choices.get(name, ()):
                 raise ValueError(name + ': 選択値が不正です')
         else:

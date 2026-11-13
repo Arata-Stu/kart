@@ -1,0 +1,5 @@
+# Applied only to explicit overtake_mode=active. Ordinary tracking defaults remain unchanged.
+/**/pure_pursuit:
+  ros__parameters:
+    line_timeout_s: 0.4  # Behavior router loss must not hold the last route for 2.5 seconds.
+    wall_timeout_s: 0.4

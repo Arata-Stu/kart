@@ -19,6 +19,7 @@ const calls=[];
 let available=true, lookahead=.8, offset=0;
 const rates={control_rate_hz:100,throttle_rise_rate:.1,throttle_fall_rate:.2};
 const adaptive={lookahead_mode:'fixed',lookahead_low_speed_m:.8,lookahead_high_speed_m:2};
+const behavior={speed_cap:.8,preferred_side:'left'};
 globalThis.fetch=async(url,options)=> {
   const body=JSON.parse(options.body);calls.push({url,body});
   if(url.endsWith('parameters_set') && body.changes.lookahead_m!=null)lookahead=body.changes.lookahead_m;
@@ -33,6 +34,13 @@ globalThis.fetch=async(url,options)=> {
   if(body.target==='speed'){
     if(url.endsWith('parameters_set'))Object.assign(rates,body.changes);
     result.fields=Object.entries(rates).map(([name,value])=>({name,label:name,type:3,value,read_only:false}));
+  }
+  if(body.target==='behavior'){
+    if(url.endsWith('parameters_set'))Object.assign(behavior,body.changes);
+    result.node='racing_behavior';
+    result.fields=[{name:'mode',label:'mode',type:4,value:'shadow',read_only:true},
+      {name:'map_file',label:'map_file',type:4,value:'/map/map.json',read_only:true},
+      ...Object.entries(behavior).map(([name,value])=>({name,label:name,type:typeof value==='string'?4:3,value,read_only:false}))];
   }
   return {ok:true,json:async()=>result};
 };
@@ -145,3 +153,24 @@ tuning.status.stop_issue='';emit('tuning');
 await element('tuning-parameters-form').submit({preventDefault(){}});await flush();
 assert.deepEqual(calls.at(-1).body.changes,{control_rate_hz:50});
 assert.equal(fieldInput('control_rate_hz').value,'50');
+
+// Reading live behavior remains allowed; changes require the existing STOP gate.
+element('tuning-parameters-target').value='behavior';
+tuning.status.mode=1;tuning.status.stop_issue='STOP required';
+await element('tuning-parameters-refresh').click();await flush();
+assert.equal(calls.at(-1).body.target,'behavior');
+assert.equal(element('tuning-parameters-apply').disabled,true);
+assert.equal(element('tuning-parameters-refresh').disabled,false);
+assert.match(element('tuning-parameters-status').textContent,/STOP・1秒停車中のみ/);
+assert.equal(rows()[0].children[2].textContent,'起動時固定・変更不可');
+assert.equal(rows()[1].children[2].textContent,'起動時固定・変更不可');
+assert.deepEqual(fieldInput('preferred_side').children.map(option=>option.value),['left','right']);
+fieldInput('speed_cap').value='0.6';fieldInput('preferred_side').value='right';
+const runningCalls=calls.length;
+await element('tuning-parameters-form').submit({preventDefault(){}});await flush();
+assert.equal(calls.length,runningCalls,'running behavior changes are blocked before transport');
+tuning.status.mode=3;tuning.status.stop_issue='';emit('tuning');await flush();
+await element('tuning-parameters-form').submit({preventDefault(){}});await flush();
+assert.equal(calls.at(-1).body.target,'behavior');
+assert.deepEqual(calls.at(-1).body.changes,{speed_cap:.6,preferred_side:'right'});
+assert.match(element('tuning-parameters-status').textContent,/適用後の値/);

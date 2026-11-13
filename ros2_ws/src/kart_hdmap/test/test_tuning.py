@@ -198,6 +198,67 @@ class TransactionTests(unittest.TestCase):
         self.assertNotIn('error',second)
         self.assertEqual(b.active(),original)
 
+    def test_passing_permission_apply_revision_rollback_and_stale_geometry_rejection(self):
+        from kart_hdmap.passing_zones import geometry_revision
+        b = self.bridge
+        original, previous_revision = copy.deepcopy(b.active()), b.revision()
+        candidate = snapshot()
+        lane = candidate['document']['lanes'][0]
+        line = lane['lines']['customline']
+        permission = dict(id='straight', start_index=0, end_index=1, side='left',
+                          geometry_revision=geometry_revision(line['points'], lane['closed']))
+        line['passing_zones'] = [permission]
+        resign(candidate)
+        applied = self.call('/apply', snapshot=candidate, expected_revision=previous_revision)
+        self.assertNotIn('error', applied)
+        self.assertNotEqual(applied['revision'], previous_revision)
+        self.assertEqual(b.node.document['lanes'][0]['lines']['customline']['passing_zones'], [permission])
+        self.assertIn('error', self.call('/apply', snapshot=candidate, expected_revision=previous_revision))
+        restored = self.call('/rollback', expected_revision=b.revision())
+        self.assertNotIn('error', restored)
+        self.assertEqual(b.active(), original)
+        # A correctly signed snapshot still cannot transplant permissions to edited geometry.
+        line['points'][1][0] += .1
+        line['profile'][1][1] += .1
+        resign(candidate)
+        before = b.revision()
+        b.replace.reset_mock()
+        rejected = self.call('/apply', snapshot=candidate, expected_revision=before)
+        self.assertIn('revision mismatch', rejected['error'])
+        self.assertEqual(b.revision(), before)
+        b.replace.assert_not_called()
+
+    def test_map_detection_status_is_display_only_and_failures_clear_coordinates(self):
+        from types import SimpleNamespace as NS
+        from unittest.mock import Mock
+        from kart_hdmap.ground_perception import GroundPerception
+        b = self.bridge
+        stamp = 1_234_567_890_123_456_789
+        sec, ns = divmod(stamp, 1_000_000_000)
+        header = NS(stamp=NS(sec=sec, nanosec=ns), frame_id='map')
+        b.node.get_clock = lambda: NS(now=lambda: NS(nanoseconds=stamp + 100_000_000))
+        b.ground_perception = GroundPerception()
+        b.fresh = Mock(return_value=True)
+        revision, active = b.revision(), copy.deepcopy(b.active())
+        objects = [NS(detection_id='0', class_id='0', class_name='rc_car', score=.8, point=NS(x=3.,y=2.,z=0.)),
+                   NS(detection_id='1', class_id='1', class_name='obstacle', score=.9, point=NS(x=4.,y=2.,z=0.))]
+        b.capture_ground(NS(header=header, objects=objects, valid=True, reason='projected'))
+        result = self.call('/status', known_revision=revision)
+        self.assertEqual([row['kind'] for row in result['ground_perception']['objects']], ['rc_car', 'obstacle'])
+        self.assertEqual(result['ground_perception']['frame_id'], 'map')
+        self.assertEqual(result['ground_perception']['stamp_ns'], str(stamp))
+        b.fresh.assert_called_with(header.stamp, 1.)
+        b.capture_ground_diagnostic(NS(header=header, status=[NS(name='perception_ground/projection',
+            level=1, message='TFなし', values=[NS(key='reason', value='map_tf_unavailable')])]))
+        failed = self.call('/status', known_revision=revision)['ground_perception']
+        self.assertFalse(failed['fresh'])
+        self.assertEqual(failed['objects'], [])
+        self.assertEqual(failed['diagnostic']['reason'], 'map_tf_unavailable')
+        self.assertEqual(b.revision(), revision)
+        self.assertEqual(b.active(), active)
+        b.replace.assert_not_called()
+        json.dumps(failed, allow_nan=False)
+
     def test_stale_conflicting_or_expired_requests_never_mutate(self):
         import time
         b=self.bridge

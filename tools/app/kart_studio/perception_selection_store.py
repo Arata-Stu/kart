@@ -8,7 +8,7 @@ from .storage import atomic_json, name, read_json, within
 
 
 def image_signature(project):
-    values = dict(frames=[{key: frame.get(key) for key in
+    values = dict(class_names=project.get('class_names'), frames=[{key: frame.get(key) for key in
                          ('id', 'source_id', 'width', 'height', 'stamp_ns', 'record_stamp_ns', 'split')}
                           for frame in project['frames']],
                   sources=[{key: source.get(key) for key in ('id', 'content_fingerprint', 'topic', 'split')}

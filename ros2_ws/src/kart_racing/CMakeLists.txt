@@ -2,6 +2,14 @@ cmake_minimum_required(VERSION 3.16)
 project(kart_racing)
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
+add_library(kart_racing_opponent_model SHARED src/opponent_model_c.cpp)
+target_compile_features(kart_racing_opponent_model PUBLIC cxx_std_17)
+target_compile_options(kart_racing_opponent_model PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(kart_racing_opponent_model PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>)
+install(TARGETS kart_racing_opponent_model
+  ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 ament_auto_add_library(kart_racing_components SHARED src/predictive_spliner_node.cpp)
 target_compile_features(kart_racing_components PUBLIC cxx_std_17)
 target_compile_options(kart_racing_components PRIVATE -Wall -Wextra -Wpedantic)
@@ -10,6 +18,15 @@ include(CTest)
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(observation_projection test/test_observation.py)
+  ament_add_pytest_test(behavior test/test_behavior.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
+  ament_add_pytest_test(behavior_inputs test/test_behavior_inputs.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
+  ament_add_pytest_test(behavior_node test/test_behavior_node.py APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR})
+  ament_add_pytest_test(opponent_model test/test_opponent_model.py APPEND_ENV
+    PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+    KART_RACING_OPPONENT_MODEL_LIBRARY=$<TARGET_FILE:kart_racing_opponent_model>)
+  ament_add_pytest_test(behavior_permissions test/test_behavior_permissions.py APPEND_ENV
+    PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}
+    KART_RACING_OPPONENT_MODEL_LIBRARY=$<TARGET_FILE:kart_racing_opponent_model>)
   add_executable(test_predictive_spliner test/test_predictive_spliner.cpp)
   target_compile_features(test_predictive_spliner PRIVATE cxx_std_17)
   target_include_directories(test_predictive_spliner PRIVATE include)
@@ -18,6 +35,6 @@ if(BUILD_TESTING)
 endif()
 find_package(ament_cmake_python REQUIRED)
 ament_python_install_package(${PROJECT_NAME})
-install(PROGRAMS scripts/racing_observer DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/racing_observer scripts/racing_behavior DESTINATION lib/${PROJECT_NAME})
 install(FILES README.md DESTINATION share/${PROJECT_NAME})
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR INSTALL_TO_SHARE config)

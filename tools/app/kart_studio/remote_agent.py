@@ -70,6 +70,17 @@ def model_manifest(path):
     return result
 
 
+def perception_contract(class_names):
+    """Supported exported classes, in numeric class-ID order; stdlib only."""
+    if class_names == ['rc_car']:
+        profile = 'opponent'
+    elif class_names == ['rc_car', 'obstacle']:
+        profile = 'racing'
+    else:
+        raise ValueError('perception class names/order must be rc_car or rc_car, obstacle')
+    return dict(model_profile=profile, num_classes=len(class_names), class_names=list(class_names))
+
+
 def perception_manifest(path, transfer_required=True):
     """Verify the RC-car export contract using only the remote Python stdlib."""
     expected = {'opponent.onnx', 'report.json', 'artifact.json'}
@@ -104,19 +115,20 @@ def perception_manifest(path, transfer_required=True):
     artifact = json.loads((path / 'artifact.json').read_text())
     if not isinstance(report, dict) or not isinstance(artifact, dict):
         raise ValueError('invalid perception metadata')
-    if (report.get('schema') != 'kart.perception.export.v1' or report.get('model_profile') != 'opponent' or
+    contract = perception_contract(report.get('class_names'))
+    if (report.get('schema') != 'kart.perception.export.v1' or report.get('model_profile') != contract['model_profile'] or
             type(report.get('num_classes')) is not int or
-            report.get('num_classes') != 1 or report.get('class_names') != ['rc_car'] or
+            report.get('num_classes') != contract['num_classes'] or
             report.get('onnx_sha256') != hashes['opponent.onnx']):
         raise ValueError('perception ONNX checksum or class contract mismatch')
     if (report.get('input') != dict(name='images', shape=[1, 3, 480, 640], dtype='float32') or
-            report.get('output') != dict(name='output0', shape=[1, 5, 6300], dtype='float32')):
+            report.get('output') != dict(name='output0', shape=[1, 4 + contract['num_classes'], 6300], dtype='float32')):
         raise ValueError('perception ONNX binding/shape contract mismatch')
     if any(type(value) is not int for binding in ('input', 'output') for value in report[binding]['shape']):
         raise ValueError('perception ONNX shape must contain integers')
-    if (artifact.get('status') != 'succeeded' or artifact.get('model_profile') != 'opponent' or
+    if (artifact.get('status') != 'succeeded' or artifact.get('model_profile') != contract['model_profile'] or
             type(artifact.get('num_classes')) is not int or
-            artifact.get('num_classes') != 1 or artifact.get('class_names') != ['rc_car'] or
+            artifact.get('num_classes') != contract['num_classes'] or artifact.get('class_names') != contract['class_names'] or
             not isinstance(artifact.get('id'), str) or
             not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', artifact['id'])):
         raise ValueError('perception export is incomplete or has invalid class metadata')
@@ -127,6 +139,12 @@ def perception_manifest(path, transfer_required=True):
                 transfer.get('model') != artifact['id'] or transfer.get('payload_sha256') != payload or
                 transfer.get('source_sha256') != hashes['opponent.onnx']):
             raise ValueError('perception transfer manifest mismatch')
+        # Existing one-class bundles predate these fields. They remain valid;
+        # every new/two-class bundle must agree on the explicit class contract.
+        for key, expected_value in contract.items():
+            actual = transfer.get(key, expected_value if contract['model_profile'] == 'opponent' else None)
+            if actual != expected_value or (key == 'num_classes' and type(actual) is not int):
+                raise ValueError('perception transfer class/profile mismatch')
     return hashes
 
 

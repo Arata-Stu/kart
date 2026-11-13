@@ -81,6 +81,8 @@ def default_labels(mode):
         labels['perception'] = perception['perception_engine'] or 'OFF（engine未選択）'
         labels['perception_mode'] = {'detect': '物体検出のみ', 'track': '物体検出＋車両追跡'}[perception['perception_mode']]
         labels['perception_debug_image'] = '有効' if perception['perception_debug_image'] else '無効'
+        labels['overtake'] = {'off': '無効', 'shadow': '候補・判断の表示のみ',
+                              'active': '追従・追越しを実行'}[perception['overtake_mode']]
         joy = params('input/joy_manager.yaml', 'kart_joy_manager')
         labels.update(joy_max_throttle=str(joy['speed_scale']),
                       auto_fixed_throttle='通常AUTO' if joy['auto_fixed_throttle'] < 0 else str(joy['auto_fixed_throttle']),

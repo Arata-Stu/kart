@@ -157,6 +157,31 @@ def perception_engine(value, sensors):
     return str(plan)
 
 
+def validate_overtake(selection, mode, engine, perception_mode, *, parking=False,
+                      fixed_throttle=-1., recovery_enabled=False):
+    """Validate live behavior ownership before creating any ROS actions."""
+    if selection not in ('off', 'shadow', 'active'):
+        raise ValueError('overtake_mode must be off, shadow or active')
+    if selection == 'off':
+        return
+    if mode != 'drive':
+        raise ValueError('overtake is drive-only')
+    if not engine or engine == 'off':
+        raise ValueError('overtake requires a perception engine')
+    if perception_mode != 'track':
+        raise ValueError('overtake requires perception_mode=track')
+    plan = Path(engine).expanduser().resolve()
+    if not plan.is_file() or not plan.stat().st_size:
+        raise ValueError(f'overtake perception engine is missing: {plan}')
+    from .racing_models import engine_profile
+    profile = engine_profile(plan)
+    if selection == 'active':
+        if profile['name'] != 'racing':
+            raise ValueError('active overtake requires the racing two-class engine (RC car and obstacle)')
+        if parking or fixed_throttle >= 0 or recovery_enabled:
+            raise ValueError('active overtake cannot use parking, fixed AUTO throttle or recovery')
+
+
 def composition(path, mode, overrides=None):
     cfg = yaml.safe_load(Path(path).read_text())
     allowed = {
@@ -166,6 +191,7 @@ def composition(path, mode, overrides=None):
         "perception_engine",
         "perception_mode",
         "perception_debug_image",
+        "overtake_mode",
         "enable_evs",
         "enable_foxglove",
         "enable_bridge",
@@ -193,6 +219,10 @@ def composition(path, mode, overrides=None):
         cfg[key] = boolean(cfg[key])
     if cfg["perception_mode"] not in ("detect", "track"):
         raise ValueError("perception_mode must be detect or track")
+    if cfg['overtake_mode'] not in ('off', 'shadow', 'active'):
+        raise ValueError('overtake_mode must be off, shadow or active')
+    if cfg['overtake_mode'] != 'off' and mode != 'drive':
+        raise ValueError('overtake is drive-only')
     if not re.fullmatch(
         r"/?[A-Za-z_][A-Za-z_0-9]*(/[A-Za-z_][A-Za-z_0-9]*)*", cfg["sensor_container"]
     ):

@@ -182,6 +182,9 @@ def test_catalog_explains_defaults_without_changing_arguments():
     assert labels['drive']['foxglove'] == '有効'
     assert labels['collect']['foxglove'] == '無効'
     assert labels['drive']['tuning'] == '有効'
+    assert labels['drive']['overtake'] == '無効'
+    assert next(field for field in catalog['fields'] if field['key'] == 'overtake')['choices'] == ['off', 'shadow', 'active']
+    assert remote.arguments({'mode': 'drive', 'overtake': 'shadow'}) == ['--mode', 'drive', '--overtake=shadow']
     assert labels['collect']['evs_backend'] == 'cuda_async'
     assert labels['collect']['evs_aggregation'] == 'evt3_runs_gpu_direct'
     assert '200 Hz' in labels['collect']['imu_profile']

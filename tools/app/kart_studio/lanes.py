@@ -5,6 +5,7 @@ import copy
 from .geometry import points, number
 from .speed_sections import sections
 from .storage import name
+from .passing_zones import save_annotations
 
 FIELDS = ("closed", "left", "right", "custom", "custom_speeds", "custom_speed_mode", "centerline_speed_mps", "lines")
 
@@ -81,5 +82,5 @@ def validate(raw, existing):
             lane["lines"] = {}
         elif lane["custom_speed_mode"] != old.get("custom_speed_mode", "profile") or any(lane[k] != old.get(k, []) for k in ("custom", "custom_speeds")):
             lane["lines"].pop("customline", None)
-        result.append(lane)
+        result.append(save_annotations(lane, row, old))
     return result

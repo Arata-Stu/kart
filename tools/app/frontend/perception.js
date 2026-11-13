@@ -1,5 +1,5 @@
 import { $, state, api, on, emit, toast } from './api.js';
-import { AnnotationDraft, MAX_BOXES, copyBoxes, normalizeBox, fitView, imagePoint,
+import { AnnotationDraft, MAX_BOXES, CLASS_NAMES, CLASS_LABELS, copyBoxes, normalizeBox, fitView, imagePoint,
   screenPoint, zoomView, boxHandles, hitBox, moveBox, resizeBox, filteredFrames, orderedFrames, projectProgress } from './perception_model.js';
 
 let catalog=null, project=null, frameId=null, draft=null, image=null, imageEpoch=0;
@@ -7,6 +7,7 @@ let busy=false, selected=-1, tool='edit', view=null, gesture=null, space=false;
 let settingsDirty=false, settingsLoaded=false, catalogEpoch=0, projectEpoch=0, currentJob=null, metricAt=0, metricsBusy=false;
 let step='data';
 const pendingRuns=new Map();
+const classColors=['#39dcb0','#fa83bf'];
 let selection=null, selectionOrder=false, selectionEpoch=0, lastPushJob=null;
 const pushButtons=new Set(), toolEdits=new Set();
 const toolFields={model_root:'model-root',container_model_root:'container-model-root',encoder_repo:'encoder-repo',encoder_weights:'encoder-weights'};
@@ -32,6 +33,9 @@ function controls() {
   $('perception-undo').disabled=busy || !draft?.undoStack.length;
   $('perception-redo').disabled=busy || !draft?.redoStack.length;
   $('perception-accept').disabled=busy || !frame()?.suggestions?.length;
+  $('perception-new-class').disabled=busy || !available;
+  $('perception-selected-class').disabled=busy || !draft?.boxes[selected];
+  $('perception-selected-class').value=draft?.boxes[selected]?String(draft.class_ids[selected]):'';
   for(const name of ['edit','box'])$('perception-tool-'+name).setAttribute('aria-pressed',String(tool===name));
   for(const button of $('perception-boxes').children)button.disabled=busy;
   for(const id of ['project-name','bag','extract-split','topic','sample-hz','max-frames','confidence',
@@ -142,15 +146,17 @@ function useProject(detail,preferred=null) {
   frameId=null;draft=null;selected=-1;image=null;gesture=null;
   $('perception-project').value=detail.id;
   setFrame(chosen?.id || null);
-  message(`${detail.name} · rc_car 1クラス`);
+  message(`${detail.name} · rc_car / obstacle の2クラス`);
 }
 function renderFrames() {
   const progress=projectProgress(project?.frames || []);
-  $('perception-progress').textContent=`${progress.reviewed}/${progress.total}確認済み · RCカーあり ${progress.positive} · 対象なし ${progress.negative}`;
+  $('perception-progress').textContent=`${progress.reviewed}/${progress.total}確認済み · 対象あり ${progress.positive} · 対象なし ${progress.negative}`;
+  $('perception-schema-warning').hidden=!project?.class_schema_upgraded || progress.reviewed===progress.total;
+  $('perception-schema-warning').textContent='旧1クラスの枠はRCカー（class 0）として保持されています。RCカー・障害物の2クラスで再確認し、保存してください。';
   $('perception-project-summary').textContent=project?`${project.name} · train ${progress.train}画像 / val ${progress.val}画像 · 版 ${project.revision}`:'';
   const rows=visibleFrames(),outside=frame() && !rows.some(value=>value.id===frameId);
   if(outside)rows.unshift(frame());
-  options('perception-frame',rows.map((value,i)=>[value.id,`${outside && value.id===frameId?'現在の画像（表示条件外）':`${i+1}/${rows.length}`} · ${value.split} · ${value.reviewed?(value.boxes.length?'RCカーあり':'対象なし'):'未確認'} · ${value.id}`]),frameId,'該当する画像なし');
+  options('perception-frame',rows.map((value,i)=>[value.id,`${outside && value.id===frameId?'現在の画像（表示条件外）':`${i+1}/${rows.length}`} · ${value.split} · ${value.reviewed?(value.boxes.length?'対象あり':'対象なし'):'未確認'} · ${value.id}`]),frameId,'該当する画像なし');
   const source=frame();
   $('perception-frame-info').textContent=source
     ? `${source.split==='val'?'検証用 val':'学習用 train'} · bag: ${source.bag} · stamp: ${source.stamp_ns} ns · ${source.width}×${source.height}px · ${source.reviewed?'確認済み':'未確認'}`
@@ -195,7 +201,9 @@ function renderPushResult(job) {
 function renderBoxes() {
   const list=$('perception-boxes');list.replaceChildren();
   for(const [index,box] of (draft?.boxes || []).entries()) {
-    const button=document.createElement('button');button.textContent=`${index+1}. rc_car [${box.map(value=>value.toFixed(1)).join(', ')}]`;
+    const kind=draft.class_ids[index];
+    const button=document.createElement('button');button.textContent=`${index+1}. ${CLASS_LABELS[kind]} (${CLASS_NAMES[kind]}) [${box.map(value=>value.toFixed(1)).join(', ')}]`;
+    button.dataset.classId=String(kind);
     button.className=index===selected?'active':'';button.disabled=busy;
     button.addEventListener('click',()=>{selected=index;tool='edit';renderBoxes();controls();draw();});list.append(button);
   }
@@ -249,8 +257,12 @@ function draw() {
   ctx.drawImage(image,view.x,view.y,frame().width*view.scale,frame().height*view.scale);
   for(const box of frame().suggestions || [])drawBox(box,'#ffb950',true);
   const boxes=gesture?.boxes || draft.boxes;
-  boxes.forEach((box,index)=>drawBox(box,index===selected?'#75f7d0':'#39dcb0',false,index===selected));
-  if(gesture?.kind==='create' && gesture.preview)drawBox(gesture.preview,'#75f7d0');
+  boxes.forEach((box,index)=>{
+    const kind=draft.class_ids[index];drawBox(box,classColors[kind],false,index===selected);
+    const point=screenPoint(view,box[0],box[1]);ctx.font='12px sans-serif';ctx.fillStyle=classColors[kind];
+    ctx.fillText(`${index+1} ${CLASS_NAMES[kind]}`,point[0]+4,Math.max(13,point[1]-5));
+  });
+  if(gesture?.kind==='create' && gesture.preview)drawBox(gesture.preview,classColors[gesture.classId]);
   ctx.setLineDash([]);
 }
 const pointer=event=>{const rect=canvas.getBoundingClientRect();return [event.clientX-rect.left,event.clientY-rect.top];};
@@ -261,7 +273,7 @@ canvas.addEventListener('pointerdown',event=>{
   if(space || event.button===1)gesture={kind:'pan',start:point,view:{...view}};
   else if(tool==='box') {
     if(draft.boxes.length>=MAX_BOXES)return toast(`矩形は${MAX_BOXES}個までです`,true);
-    gesture={kind:'create',start:position,preview:null};selected=-1;
+    gesture={kind:'create',start:position,preview:null,classId:Number($('perception-new-class').value)};selected=-1;
   } else {
     const hit=hitBox(draft.boxes,position,selected,7/view.scale);
     selected=hit?.index ?? -1;
@@ -285,7 +297,7 @@ function finishGesture(cancel=false) {
   if(!gesture)return;
   const value=gesture;gesture=null;
   if(!cancel) {
-    if(value.kind==='create' && value.preview) {draft.change([...draft.boxes,value.preview]);selected=draft.boxes.length-1;tool='edit';}
+    if(value.kind==='create' && value.preview) {draft.change([...draft.boxes,value.preview],false,[...draft.class_ids,value.classId]);selected=draft.boxes.length-1;tool='edit';}
     else if(value.boxes)draft.change(value.boxes);
   }
   renderBoxes();controls();draw();
@@ -299,7 +311,7 @@ canvas.addEventListener('wheel',event=>{
 },{passive:false});
 function deleteSelected() {
   if(!draft?.boxes[selected])return;
-  draft.change(draft.boxes.filter((_,index)=>index!==selected));selected=-1;renderBoxes();controls();draw();
+  draft.change(draft.boxes.filter((_,index)=>index!==selected),false,draft.class_ids.filter((_,index)=>index!==selected));selected=-1;renderBoxes();controls();draw();
 }
 function undo(redo=false) {draft?.undo(redo);selected=-1;renderBoxes();controls();draw();}
 globalThis.addEventListener?.('keydown',event=>{
@@ -322,16 +334,16 @@ async function saveReviewed(negative=false,next=false) {
   if(!negative && !draft.boxes.length)throw Error('枠がない画像は「対象なしとして保存」で確認してください');
   finishGesture();
   const rows=visibleFrames(),position=rows.findIndex(value=>value.id===frameId),nextId=rows[position+1]?.id;
-  draft.change(negative?[]:draft.boxes,true);controls();
+  draft.change(negative?[]:draft.boxes,true,negative?[]:draft.class_ids);controls();
   let result;
   try {
     result=await api('perception/annotate',{id:project.id,frame:frameId,revision:project.revision,
-      frame_revision:frame().revision,boxes:copyBoxes(draft.boxes),reviewed:true});
+      frame_revision:frame().revision,boxes:copyBoxes(draft.boxes),class_ids:draft.class_ids.slice(),class_names:CLASS_NAMES.slice(),reviewed:true});
   } catch(error) {
     throw Error(error.message+' 編集は保持しています。版の競合時は枠の座標を控え、編集を破棄して「一覧を更新」から保存済みの内容を再取得してください。');
   }
   useProject(result,next?(nextId || frameId):frameId);
-  message(negative?'対象なしの確認結果を保存しました。':'rc_carの枠を確認済みとして保存しました。');
+  message(negative?'RCカー・障害物とも対象なしの確認結果を保存しました。':'RCカー・障害物の枠を確認済みとして保存しました。');
 }
 async function saveSettings() {
   const values=Object.fromEntries(['python','weights','device'].map(key=>[key,$('perception-'+key).value.trim()]));
@@ -407,7 +419,11 @@ bind('setup',async()=>{await saveSettings();await startJob('setup',{});});
 bind('prev',()=>navigateFrame(-1));bind('next',()=>navigateFrame(1));
 bind('save',()=>saveReviewed());bind('save-next',()=>saveReviewed(false,true));bind('negative',()=>saveReviewed(true));
 bind('discard',()=>{draft?.discard();selected=-1;renderBoxes();controls();draw();message('この画像の編集を保存済みの状態へ戻しました。');});
-bind('accept',()=>{draft.change(copyBoxes(frame().suggestions));selected=-1;renderBoxes();draw();message('候補を正解枠へ取り込みました。枠を確認・修正してから保存してください。');});
+bind('accept',()=>{
+  const boxes=copyBoxes(frame().suggestions),kind=Number($('perception-new-class').value);
+  draft.change(boxes,false,Array(boxes.length).fill(kind));selected=-1;renderBoxes();draw();
+  message(`未分類候補を${CLASS_LABELS[kind]}の下書きへ取り込みました。各枠のクラスと全ての対象を確認・修正してから保存してください。`);
+});
 bind('undo',()=>undo());bind('redo',()=>undo(true));bind('delete',deleteSelected);bind('fit',fit);
 for(const name of ['edit','box'])bind('tool-'+name,()=>{tool=name;});
 bind('open-bringup',()=>$('nav-bringup').click());bind('open-transfer',()=>$('nav-transfer').click());
@@ -422,6 +438,11 @@ bind('push-copy',async()=>{
 });
 for(const [key,id] of Object.entries(toolFields))$('perception-'+id).addEventListener('input',()=>toolEdits.add(key));
 $('perception-selection-method').addEventListener('change',controls);
+$('perception-selected-class').addEventListener('change',()=>{
+  if(busy || !draft?.boxes[selected])return;
+  const ids=draft.class_ids.slice();ids[selected]=Number($('perception-selected-class').value);
+  draft.change(draft.boxes,false,ids);renderBoxes();controls();draw();
+});
 $('perception-selection-order').addEventListener('change',()=>{
   const previous=selectionOrder;
   selectionOrder=$('perception-selection-order').checked && !selection?.stale;

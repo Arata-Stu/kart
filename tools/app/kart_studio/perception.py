@@ -115,8 +115,12 @@ class Perception:
         return self.datasets.create(key, title.strip())
 
     def annotate(self, body):
+        from .perception_dataset import CLASS_NAMES
+        if body.get('class_names') != CLASS_NAMES or not isinstance(body.get('class_ids'), list):
+            raise ValueError('2クラスの確認画面を再読み込みしてから保存してください（rc_car / obstacle）')
         return self.datasets.save_frame(body.get('id'), body.get('frame'), body.get('revision'),
-                                        body.get('frame_revision'), body.get('boxes'), body.get('reviewed', True))
+                                        body.get('frame_revision'), body.get('boxes'), body.get('reviewed', True),
+                                        class_ids=body['class_ids'])
 
     @staticmethod
     def number(value, low, high, label, integer=False):
@@ -219,7 +223,7 @@ class Perception:
                 positives = [f for f in project['frames'] if f['split'] == 'train' and f['reviewed'] and f['boxes']]
                 negatives = [f for f in project['frames'] if f['split'] == 'train' and f['reviewed'] and not f['boxes']]
                 if not positives or not negatives:
-                    raise ValueError('先にtrain画像のRCカーあり・対象なしを、それぞれ1枚以上確認して保存してください')
+                    raise ValueError('先にtrain画像の対象あり（RCカー / obstacle）・両方なしを、それぞれ1枚以上確認して保存してください')
                 for field in ('encoder_repo', 'encoder_weights'):
                     value = body.get(field, self.tools_settings()[field])
                     if not isinstance(value, str) or not Path(value).expanduser().is_absolute():

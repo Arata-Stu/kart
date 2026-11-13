@@ -33,6 +33,15 @@ class RacingBagReportTests(unittest.TestCase):
                 self.assertEqual(evaluation.class_name(class_id, names), "unknown")
         self.assertEqual(evaluation.class_name("0", get_profile("opponent")["class_names"]), "opponent")
 
+    def test_racing_labels_distinguish_rc_car_from_obstacle(self):
+        names = get_profile('racing')['class_names']
+        for class_id, expected in (('0', 'rc_car'), ('1', 'obstacle')):
+            with self.subTest(class_id=class_id):
+                name = evaluation.class_name(class_id, names)
+                self.assertEqual(name, expected)
+                label = evaluation.detection_label(dict(class_id=class_id, class_name=name, score=.9))
+                self.assertIn(f'{expected} [id={class_id}]', label)
+
     def test_report_retains_sample_timestamps_and_records_model_labels(self):
         profile = get_profile("coco")
         with tempfile.TemporaryDirectory() as folder:

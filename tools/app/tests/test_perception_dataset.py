@@ -66,13 +66,14 @@ class DatasetStoreTests(unittest.TestCase):
         with patch('kart_studio.perception_dataset._bag_messages', return_value=iter(rows)):
             return self.store.extract('course', bag, '/camera/rgb', split=split, **kwargs)
 
-    def save(self, project, frame, boxes, reviewed=True):
-        return self.store.save_frame('course', frame['id'], project['revision'], frame['revision'], boxes, reviewed)
+    def save(self, project, frame, boxes, reviewed=True, class_ids=None):
+        return self.store.save_frame('course', frame['id'], project['revision'], frame['revision'], boxes, reviewed,
+                                     class_ids=class_ids)
 
     def test_extract_records_exact_clocks_samples_by_record_time_and_starts_unreviewed(self):
         job = Job()
         project = self.extract(self.bag('train'), job=job)
-        self.assertEqual(project['class_names'], ['rc_car'])
+        self.assertEqual(project['class_names'], ['rc_car', 'obstacle'])
         self.assertEqual(project['revision'], 2)
         self.assertEqual(len(project['frames']), 3)
         self.assertEqual([f['record_stamp_ns'] for f in project['frames']],
@@ -108,7 +109,36 @@ class DatasetStoreTests(unittest.TestCase):
                 self.save(project, frame, boxes)
         with self.assertRaises(ValueError):
             self.save(project, frame, [], reviewed='true')
+        for ids in ([], [2], [-1], [True], [1.], [0, 1], '1'):
+            with self.subTest(ids=ids), self.assertRaises(ValueError):
+                self.save(project, frame, [[1, 1, 20, 20]], class_ids=ids)
         self.assertEqual(self.store.load('course'), project)
+
+    def test_legacy_rc_geometry_survives_but_both_old_positive_and_negative_need_review(self):
+        project = self.extract(self.bag('train'))
+        project = self.save(project, project['frames'][0], [[10, 20, 30, 60]])
+        project = self.save(project, project['frames'][1], [])
+        path = self.store.folder('course') / 'project.json'
+        legacy = json.loads(path.read_text())
+        legacy['class_names'] = ['rc_car']
+        for frame in legacy['frames']:
+            frame.pop('class_ids', None)
+        atomic_json(path, legacy)
+        before = path.read_bytes()
+        upgraded = self.store.load('course')
+        self.assertEqual(path.read_bytes(), before, 'read-only migration must not overwrite old data')
+        self.assertTrue(upgraded['class_schema_upgraded'])
+        self.assertEqual(upgraded['class_names'], ['rc_car', 'obstacle'])
+        self.assertEqual(upgraded['frames'][0]['boxes'], [[10, 20, 30, 60]])
+        self.assertEqual(upgraded['frames'][0]['class_ids'], [0])
+        self.assertTrue(all(not f['reviewed'] and f['class_review_required'] for f in upgraded['frames']))
+        updated = self.save(upgraded, upgraded['frames'][0], [[10, 20, 30, 60], [50, 20, 70, 60]],
+                            class_ids=[0, 1])
+        self.assertEqual(updated, self.store.load('course'))
+        self.assertEqual(updated['frames'][0]['class_ids'], [0, 1])
+        self.assertTrue(updated['frames'][0]['reviewed'])
+        self.assertFalse(updated['frames'][1]['reviewed'])
+        self.assertFalse(updated['frames'][0]['class_review_required'])
 
     def test_suggestions_never_mark_images_reviewed_or_replace_confirmed_boxes(self):
         project = self.extract(self.bag('train'))
@@ -144,9 +174,9 @@ class DatasetStoreTests(unittest.TestCase):
         self.extract(self.bag('train'))
         project = self.extract(self.bag('validation'), 'val')
         train = next(frame for frame in project['frames'] if frame['split'] == 'train')
-        project = self.save(project, train, [[10, 20, 30, 60]])
+        project = self.save(project, train, [[10, 20, 30, 60], [50, 20, 70, 60]], class_ids=[0, 1])
         val = next(frame for frame in project['frames'] if frame['split'] == 'val')
-        project = self.save(project, val, [[0, 0, 100, 80]])
+        project = self.save(project, val, [[0, 0, 40, 80], [50, 0, 100, 80]], class_ids=[0, 1])
         negative = next(frame for frame in project['frames'] if not frame['reviewed'] and frame['split'] == 'train')
         project = self.save(project, negative, [])
         draft = next(frame for frame in project['frames'] if not frame['reviewed'])
@@ -155,10 +185,16 @@ class DatasetStoreTests(unittest.TestCase):
         metadata = result['metadata']
         self.assertEqual(result['frames_count'], 3)
         self.assertEqual(metadata['annotation_revision'], project['revision'])
-        self.assertEqual(metadata['counts']['train'], dict(frames=2, positive=1, negative=1))
-        self.assertEqual(metadata['counts']['val'], dict(frames=1, positive=1, negative=0))
+        self.assertEqual(metadata['schema'], 'kart.perception.dataset.v2')
+        self.assertEqual(metadata['class_names'], ['rc_car', 'obstacle'])
+        self.assertEqual(metadata['counts']['train'], dict(frames=2, positive=1, negative=1,
+                                                         class_boxes=dict(rc_car=1, obstacle=1)))
+        self.assertEqual(metadata['counts']['val'], dict(frames=1, positive=1, negative=0,
+                                                       class_boxes=dict(rc_car=1, obstacle=1)))
         self.assertTrue(set(metadata['split_bag_ids']['train']).isdisjoint(metadata['split_bag_ids']['val']))
-        self.assertEqual((self.base / f"snapshot/labels/train/{train['id']}.txt").read_text(), '0 0.2 0.5 0.2 0.5\n')
+        self.assertEqual((self.base / f"snapshot/labels/train/{train['id']}.txt").read_text(),
+                         '0 0.2 0.5 0.2 0.5\n1 0.6 0.5 0.2 0.5\n')
+        self.assertIn('nc: 2\nnames:\n  0: rc_car\n  1: obstacle\n', result['dataset_yaml'].read_text())
         self.assertEqual((self.base / f"snapshot/labels/train/{negative['id']}.txt").read_text(), '')
         self.assertEqual(len(list((self.base / 'snapshot/images').rglob('*.jpg'))), 3)
         self.assertTrue(all((self.base / 'snapshot' / frame['image']).is_file() for frame in metadata['frames']))
@@ -234,7 +270,7 @@ class DatasetStoreTests(unittest.TestCase):
         project = self.extract(self.bag('validation'), 'val')
         for split in ('train', 'val'):
             frame = next(frame for frame in project['frames'] if frame['split'] == split)
-            project = self.save(project, frame, [[1, 1, 20, 20]])
+            project = self.save(project, frame, [[1, 1, 20, 20], [30, 30, 60, 60]], class_ids=[0, 1])
         copy_image = shutil.copyfile
         changed = False
 

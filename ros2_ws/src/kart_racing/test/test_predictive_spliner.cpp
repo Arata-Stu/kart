@@ -10,6 +10,15 @@ int main(){
   gp.observe(2,22,44,.2,2,0,0);assert(!gp.ready()); // identity switch
   assert(!gp.observe(2,21,44,.2,2,0,0)); // reversal
   assert(!gp.ready());
+  OpponentModel retained(40), legacy(40);
+  for(int i=0;i<=420;++i){
+    assert(retained.observe_retained(1,i*.05,i*.1,.2,2,.001,.01));
+    assert(legacy.observe(1,i*.05,i*.1,.2,2,.001,.01));
+  }
+  assert(retained.ready()&&legacy.ready());
+  assert(retained.observe_retained(1,23,46,.2,2,.001,.01));
+  assert(legacy.observe(1,23,46,.2,2,.001,.01));
+  assert(retained.ready()&&!legacy.ready()); // live-gap memory API does not change shadow policy
   OpponentModel sparse(40);
   for(int i=0;i<200;++i)sparse.observe(1,i*.1,0,0,0,0,0);
   assert(!sparse.ready());assert(!sparse.predict(20).valid);

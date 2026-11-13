@@ -11,13 +11,15 @@ from .pose_history import PoseHistory
 from .speed_history import SpeedHistory
 from .timing_history import TimingHistory
 from .perception_status import PerceptionStatus
+from .ground_perception import GroundPerception
+from .behavior_status import BehaviorStatus
 
 from .tuning import MAX_BYTES, StopGate, digest, encoded, map_identity, validate
 
 
 class TuningBridge:
     def __init__(self, node):
-        from kart_interfaces.msg import HeadToHeadPlan, OperationModeState, TrackingReference
+        from kart_interfaces.msg import GroundDetections, HeadToHeadPlan, OperationModeState, TrackingReference
         from nav_msgs.msg import Odometry
         from std_msgs.msg import String
         from vision_msgs.msg import Detection2DArray
@@ -51,6 +53,8 @@ class TuningBridge:
         self.pose_history = PoseHistory()
         self.speed_history = SpeedHistory()
         self.perception = {name: PerceptionStatus() for name in ('detections', 'tracks')}
+        self.ground_perception = GroundPerception()
+        self.behavior = BehaviorStatus()
         self.timing_history = {
             'tracking': TimingHistory('lateral_controller', 'kart_control', ('pose_age_ms',)),
             'speed': TimingHistory('speed_controller', 'speed_controller', ('target_age_ms', 'measurement_age_ms')),
@@ -71,6 +75,9 @@ class TuningBridge:
                                      lambda msg: self.capture_perception('detections', msg), perception_qos),
             node.create_subscription(Detection2DArray, '/racing/tracks',
                                      lambda msg: self.capture_perception('tracks', msg), perception_qos),
+            node.create_subscription(GroundDetections, '/racing/map_points', self.capture_ground, perception_qos),
+            node.create_subscription(DiagnosticArray, '/racing/map_diagnostics', self.capture_ground_diagnostic, 1),
+            node.create_subscription(String, '/racing/behavior_status', lambda msg: self.behavior.capture(msg.data), 1),
             node.create_subscription(HeadToHeadPlan, 'racing/shadow_plan', self.vehicle.racing, 1),
             node.create_subscription(String, 'recovery/status', lambda m: self.vehicle.recovery(m.data), 1),
             node.create_subscription(DiagnosticArray, 'control/lateral_diagnostics', self.lateral_diagnostics, 10),
@@ -85,6 +92,8 @@ class TuningBridge:
         self.parameters = ParameterBridge(self)
         from .parking_bridge import ParkingBridge
         self.parking = ParkingBridge(self)
+        from .behavior_bridge import BehaviorBridge
+        self.behavior_reset = BehaviorBridge(self)
         bridge = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -172,6 +181,13 @@ class TuningBridge:
     def capture_perception(self, channel, msg):
         self.perception[channel].capture(msg, self.fresh(msg.header.stamp, PerceptionStatus.MAX_AGE_S))
 
+    def capture_ground(self, msg):
+        self.ground_perception.capture(msg, self.fresh(msg.header.stamp, GroundPerception.MAX_AGE_S))
+
+    def capture_ground_diagnostic(self, msg):
+        self.ground_perception.capture_diagnostic(
+            msg, self.fresh(msg.header.stamp, GroundPerception.MAX_DIAGNOSTIC_AGE_S))
+
     def vehicle_diagnostics(self, msg):
         stamp = msg.header.stamp.sec + msg.header.stamp.nanosec / 1e9
         self.vehicle.bridge(stamp, msg.status)
@@ -194,6 +210,8 @@ class TuningBridge:
         return digest(self.active())
 
     def issue(self):
+        if getattr(getattr(self, 'behavior_reset', None), 'pending', None) is not None:
+            return '行動計画リセットの応答待ちです'
         if self.node.settings.get("tuning_parking_enabled",False):
             return "駐車構成では地図・パラメータ編集を停止しています。駐車開始／リセットは利用できます"
         if self.node.count_publishers('planning/reference_line') != 1:
@@ -220,6 +238,14 @@ class TuningBridge:
                                    now, source_now_ns)
                 for name, channel in self.perception.items()
             }
+        if hasattr(self, 'ground_perception'):
+            result['ground_perception'] = self.ground_perception.view(
+                self.node.count_publishers('/racing/map_points') > 0,
+                self.node.count_publishers('/racing/map_diagnostics') > 0,
+                now, self.node.get_clock().now().nanoseconds)
+        if hasattr(self, 'behavior'):
+            result['behavior'] = self.behavior.view(self.node.count_publishers('/racing/behavior_status') == 1,
+                                                   self.node.get_clock().now().nanoseconds,now)
         if hasattr(self, 'pose_history'):
             result.update(self.pose_history.batch(pose_stream, pose_after))
         if hasattr(self, 'parking'): result['parking']=self.parking.view()
@@ -277,13 +303,16 @@ class TuningBridge:
     def tick(self):
         self.parameters.tick()
         self.parking.tick()
+        self.behavior_reset.tick()
         # Also expire the displayed pose when TF stops arriving.
         self.capture_pose()
         try:
             action, body, reply, deadline = self.requests.get_nowait()
         except queue.Empty:
             return
-        if action in ('/parking_start','/parking_reset'):
+        if action == '/behavior_reset':
+            self.behavior_reset.begin(body,reply,deadline)
+        elif action in ('/parking_start','/parking_reset'):
             self.parking.begin(action,body,reply,deadline)
         elif action in ('/parameters_get', '/parameters_set'):
             self.parameters.begin(action, body, reply, deadline)

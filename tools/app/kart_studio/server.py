@@ -204,7 +204,7 @@ class Studio:
             return remote(b["connection"], "esc_" + path.rsplit("/", 1)[1], payload)
         if path == "/api/tuning/prepare":
             return self.tuning.prepare(b)
-        if path in ("/api/tuning/status", "/api/tuning/apply", "/api/tuning/rollback", "/api/tuning/parameters_get", "/api/tuning/parameters_set", "/api/tuning/parking_start", "/api/tuning/parking_reset"):
+        if path in ("/api/tuning/status", "/api/tuning/apply", "/api/tuning/rollback", "/api/tuning/parameters_get", "/api/tuning/parameters_set", "/api/tuning/parking_start", "/api/tuning/parking_reset", "/api/tuning/behavior_reset"):
             return self.tuning.request(b, path.rsplit("/", 1)[1])
         key = b.get("id", "")
         if path in ("/api/e2e/trash", "/api/e2e/restore"):

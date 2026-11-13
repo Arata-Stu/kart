@@ -24,13 +24,13 @@ globalThis.ResizeObserver=class{observe(){}};
 globalThis.setTimeout=()=>1;globalThis.clearTimeout=()=>{};globalThis.devicePixelRatio=2;
 let now=10000;Date.now=()=>now;
 const defaults={filter:'all','filter-split':'all','extract-split':'train',topic:'/realsense/color/image_raw',
-  'sample-hz':'2','max-frames':'500',confidence:'.1',epochs:'50',batch:'8',imgsz:'640',lr0:'.001',
+  'sample-hz':'2','max-frames':'500',confidence:'.1',epochs:'50',batch:'8',imgsz:'640',lr0:'.001','new-class':'0',
   'selection-method':'yolo','selection-limit':'100','selection-max-images':'500',
   'selection-review-confidence':'0.10','selection-expected-max-detections':'3','selection-large-bbox-area-ratio':'0.40',
   'model-root':'/home/kart/workspaces/kart/weights/racing/yolov8s/finetuned','container-model-root':'/workspaces/weights/racing/yolov8s/finetuned'};
 for(const [key,value] of Object.entries(defaults))el('perception-'+key).value=value;
 el('perception-page').hidden=false;el('jobs-drawer').hidden=true;
-let detail={id:'project-a',name:'室内 <test>',class_names:['rc_car'],revision:1,frames:[
+let detail={id:'project-a',name:'室内 <test>',class_names:['rc_car','obstacle'],class_schema_upgraded:true,revision:1,frames:[
   {id:'f1',width:640,height:480,bag:'record-a',stamp_ns:'111',split:'train',revision:1,reviewed:false,boxes:[],suggestions:[]},
   {id:'f2',width:640,height:480,bag:'record-b',stamp_ns:'222',split:'val',revision:1,reviewed:false,boxes:[],suggestions:[[50,60,100,120]]},
 ]};
@@ -50,7 +50,8 @@ globalThis.fetch=async(url,options)=>{
   else if(url==='/api/perception/annotate'){
     if(failSave){detail.revision++;return {ok:false,json:async()=>({error:'プロジェクトの版が変わりました'})};}
     assert.equal(body.revision,detail.revision);const frame=detail.frames.find(f=>f.id===body.frame);assert.equal(body.frame_revision,frame.revision);
-    Object.assign(frame,{boxes:body.boxes,reviewed:body.reviewed,revision:frame.revision+1});detail.revision++;result=detail;
+    assert.deepEqual(body.class_names,['rc_car','obstacle']);assert.equal(body.class_ids.length,body.boxes.length);
+    Object.assign(frame,{boxes:body.boxes,class_ids:body.class_ids,reviewed:body.reviewed,revision:frame.revision+1});detail.revision++;result=detail;
   } else if(url==='/api/perception/settings')result=body;
   else if(url==='/api/perception/train')result={id:'job-live',title:'RCカー検出を学習',status:'running',artifact_id:'run-live'};
   else if(url==='/api/perception/push')result={id:'push-job',title:'RCカーONNX転送',status:'queued'};
@@ -66,11 +67,22 @@ assert.equal(calls.length,1,'opening the local detector catalog never connects t
 assert.equal(el('perception-project').children[1].textContent,'室内 <test> · 0/2確認済み','project names are literal text');
 el('perception-project').value='project-a';await el('perception-project').trigger('change');await flush();
 assert.match(el('perception-frame-info').textContent,/record-a.*111/);
+assert.equal(el('perception-schema-warning').hidden,false);assert.match(el('perception-schema-warning').textContent,/旧1クラス.*RCカー.*再確認/);
 assert.equal(el('perception-save').disabled,true,'unreviewed empty is not implicitly a negative label');
 const canvas=el('perception-canvas');
 const point=(x,y)=>({button:0,pointerId:1,clientX:150+x*1.25,clientY:100+y*1.25});
 async function createBox(){await el('perception-tool-box').click();await canvas.trigger('pointerdown',point(20,30));await canvas.trigger('pointermove',point(120,130));await canvas.trigger('pointerup',point(120,130));}
 await createBox();
+assert.match(el('perception-boxes').children[0].textContent,/RCカー \(rc_car\)/);
+el('perception-selected-class').value='1';await el('perception-selected-class').trigger('change');
+assert.match(el('perception-boxes').children[0].textContent,/障害物 \(obstacle\)/);
+await canvas.trigger('pointerdown',point(70,80));await canvas.trigger('pointermove',point(80,100));await canvas.trigger('pointerup',point(80,100));
+assert.match(el('perception-boxes').children[0].textContent,/obstacle.*30.0, 50.0, 130.0, 150.0/);
+await canvas.trigger('pointerdown',point(130,150));await canvas.trigger('pointermove',point(140,160));await canvas.trigger('pointerup',point(140,160));
+assert.match(el('perception-boxes').children[0].textContent,/obstacle.*140.0, 160.0/);
+await el('perception-undo').click();await el('perception-undo').click();await el('perception-undo').click();
+assert.match(el('perception-boxes').children[0].textContent,/rc_car/,'undo restores a class-only edit together with geometry');
+await el('perception-redo').click();assert.match(el('perception-boxes').children[0].textContent,/obstacle/);
 assert.match(el('perception-box-count').textContent,/1\/100/);assert.equal(el('perception-draft-warning').hidden,false);
 assert.equal(canvas.width,2000,'DPR only scales the backing store, not annotation pixels');
 await el('perception-next').click();assert.match(el('perception-frame-info').textContent,/record-a/);
@@ -85,20 +97,27 @@ let unloadPrevented=false;windowEvents.get('beforeunload')({preventDefault(){unl
 failSave=true;await el('perception-save').click();
 let annotation=calls.filter(call=>call.url==='/api/perception/annotate').at(-1).body;
 assert.deepEqual(annotation.boxes,[[20,30,120,130]],'CSS letterbox and DPR still send original image pixel coordinates');
+assert.deepEqual(annotation.class_ids,[1]);assert.deepEqual(annotation.class_names,['rc_car','obstacle']);
 assert.equal(annotation.frame_revision,1);assert.equal(annotation.revision,1);assert.equal(annotation.reviewed,true);
 assert.equal(el('perception-draft-warning').hidden,false,'a rejected revision retains the editable draft');
+assert.match(el('perception-boxes').children[0].textContent,/obstacle/,'a save conflict preserves class IDs as well as coordinates');
 assert.match(el('perception-message').textContent,/編集は保持.*一覧を更新/);
 await el('perception-discard').click();failSave=false;await el('perception-refresh').click();await flush();
 await createBox();await el('perception-save-next').click();await flush();
+assert.deepEqual(calls.filter(call=>call.url==='/api/perception/annotate').at(-1).body.class_ids,[0]);
 assert.match(el('perception-frame-info').textContent,/record-b.*222/);
 assert.match(el('perception-box-count').textContent,/0\/100/,'prelabels remain suggestions instead of silently becoming ground truth');
 assert.equal(el('perception-save').disabled,true);
 await el('perception-negative').click();
 annotation=calls.filter(call=>call.url==='/api/perception/annotate').at(-1).body;
-assert.equal(annotation.frame,'f2');assert.deepEqual(annotation.boxes,[]);assert.equal(annotation.reviewed,true);
+assert.equal(annotation.frame,'f2');assert.deepEqual(annotation.boxes,[]);assert.deepEqual(annotation.class_ids,[]);assert.equal(annotation.reviewed,true);
+el('perception-new-class').value='1';
 await el('perception-accept').click();assert.match(el('perception-box-count').textContent,/1\/100/);
+assert.match(el('perception-boxes').children[0].textContent,/obstacle/,'unclassified suggestions use the explicitly selected class in the draft');
 assert.equal(el('perception-boxes').children[0].disabled,false,'sidebar selectors are enabled after an async action releases the busy state');
 assert.equal(el('perception-draft-warning').hidden,false,'explicitly accepted candidates still need manual review and save');
+await el('perception-boxes').children[0].click();await el('perception-delete').click();assert.match(el('perception-box-count').textContent,/0\/100/);
+await el('perception-undo').click();assert.match(el('perception-boxes').children[0].textContent,/obstacle/,'delete undo restores the matching class');
 await el('perception-undo').click();assert.match(el('perception-box-count').textContent,/0\/100/);assert.equal(el('perception-draft-warning').hidden,true);
 const beforeInput=calls.length;windowEvents.get('keydown')({key:'Delete',target:{closest(){return true;}},preventDefault(){throw Error('input key must be ignored');}});assert.equal(calls.length,beforeInput);
 await el('perception-train').click();assert.equal(calls.at(-1).url,'/api/perception/train');

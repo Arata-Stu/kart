@@ -22,20 +22,23 @@ COCO_CLASSES = (
 
 def get_profile(name):
     if name == 'coco':
-        classes, tracked, stem = COCO_CLASSES, '2', 'yolov8s'
+        classes, tracked, source, engine = COCO_CLASSES, '2', 'yolov8s', 'yolov8s'
     elif name == 'opponent':
-        classes, tracked, stem = ('opponent',), '0', 'opponent'
+        classes, tracked, source, engine = ('opponent',), '0', 'opponent', 'opponent'
+    elif name == 'racing':
+        classes, tracked, source, engine = ('rc_car', 'obstacle'), '0', 'opponent', 'racing'
     else:
-        raise ValueError(f'Unknown racing model profile: {name!r}; choose coco or opponent')
+        raise ValueError(f'Unknown racing model profile: {name!r}; choose coco, opponent or racing')
     return dict(name=name, num_classes=len(classes), class_names=list(classes),
-                track_class_id=tracked, source_name=stem + '.onnx', engine_name=stem + '.plan')
+                obstacle_class_id='1' if name == 'racing' else '',
+                track_class_id=tracked, source_name=source + '.onnx', engine_name=engine + '.plan')
 
 
 def engine_profile(engine, requested=''):
     """Resolve the engine's classes and reject a conflicting/stale build manifest.
 
-    External engines without a manifest default to COCO; legacy one-class
-    engines can be selected explicitly with model_profile:=opponent.
+    External engines without a manifest default to COCO; custom engines must
+    explicitly select racing (two classes) or opponent (legacy one class).
     """
     path = Path(engine)
     manifest = path.parent / 'build.json'

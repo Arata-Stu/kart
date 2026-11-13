@@ -1,11 +1,15 @@
 import { paintTrailSpeed } from './trail_speed.js';
 import { renderVehicle } from './vehicle_status.js';
 import { renderPerception } from './perception_status.js';
+import { renderGroundPerception, paintGroundPerception } from './ground_perception.js';
+import { behaviorView, renderBehavior, paintBehavior } from './racing_behavior.js';
 import { $, state, api, action, on, emit, toast } from './api.js';
 
 export const tuning = {connected:false, busy:false, epoch:0, received:0, status:null,
   poseStream:null, poseCursor:0, active:null, preview:null, previewJson:null, trail:[], timer:null, id:null, error:''};
 const fresh = () => tuning.connected && Date.now() - tuning.received < 3000;
+let groundDrawn=false, behaviorDrawn=false;
+const pollDelay=()=>tuning.status?.behavior?.available && ['shadow','active'].includes(tuning.status.behavior.status?.mode) ? 250 : 1000;
 function invalidatePreview() { tuning.preview=null; tuning.previewJson=null; render(); }
 function stop() {
   tuning.epoch++;
@@ -52,11 +56,15 @@ async function poll(epoch) {
     if(epoch!==tuning.epoch)return;
     tuning.error=error.message; stop(); return;
   }
-  if(epoch===tuning.epoch)tuning.timer=setTimeout(()=>poll(epoch),1000);
+  if(epoch===tuning.epoch)tuning.timer=setTimeout(()=>poll(epoch),pollDelay());
 }
 function applyIssue() {
   if(!fresh())return '自己位置接続を確認してください';
   return tuning.status?.apply_issue || '';
+}
+function canResetBehavior(view) {
+  return parameterConnectionReady() && !tuning.busy && ['shadow','active'].includes(view.mode)
+    && !tuning.status?.stop_issue && !applyIssue();
 }
 function previewValid() {
   const p=tuning.preview;
@@ -71,6 +79,9 @@ function render() {
   $('tuning-connect').disabled=tuning.busy || !state.doc;
   renderVehicle(fresh() ? s : null);
   renderPerception(s?.perception, fresh(), (Date.now()-tuning.received)/1000);
+  renderGroundPerception(s?.ground_perception, fresh(), (Date.now()-tuning.received)/1000);
+  const behavior=renderBehavior(s?.behavior, fresh(), (Date.now()-tuning.received)/1000);
+  $('behavior-reset').disabled=!canResetBehavior(behavior);
   $('tuning-offset-open').disabled=tuning.busy || !parameterConnectionReady();
   $('tuning-parameters-open').disabled=tuning.busy || !parameterConnectionReady();
   $('tuning-line-switch').disabled=tuning.busy || !!applyIssue();
@@ -101,7 +112,7 @@ action('tuning-connect', async()=> {
     const result=await request('status');
     if(epoch!==tuning.epoch)return;
     tuning.connected=true; update(result);
-    tuning.timer=setTimeout(()=>poll(epoch),1000);
+    tuning.timer=setTimeout(()=>poll(epoch),pollDelay());
   } catch(error) { if(epoch===tuning.epoch)tuning.error=error.message; throw error; }
   finally {tuning.busy=false;render();}
 });
@@ -148,10 +159,24 @@ on('status',render);
 setInterval(()=> {
   if(!tuning.connected)return;
   if(!fresh()){render();emit('tuning');}
-  else renderPerception(tuning.status?.perception, true, (Date.now()-tuning.received)/1000);
-},500);
+  else {
+    const elapsed=(Date.now()-tuning.received)/1000;
+    renderPerception(tuning.status?.perception, true, elapsed);
+    const ground=renderGroundPerception(tuning.status?.ground_perception,true,elapsed);
+    const behavior=renderBehavior(tuning.status?.behavior,true,elapsed);
+    $('behavior-reset').disabled=!canResetBehavior(behavior);
+    const expiredGround=groundDrawn && !ground.objects.length;
+    const expiredBehavior=behaviorDrawn && !behavior.path.length && !behavior.candidates.some(candidate=>candidate.path.length>=2);
+    if(expiredGround || expiredBehavior) {
+      if(expiredGround)groundDrawn=false;
+      if(expiredBehavior)behaviorDrawn=false;
+      emit('tuning');
+    }
+  }
+},250);
 
 export function paintTuning(ctx, project, line) {
+  groundDrawn=false;behaviorDrawn=false;
   if(tuning.id!==state.id)return;
   const active=tuning.active;
   if(active) {
@@ -164,6 +189,8 @@ export function paintTuning(ctx, project, line) {
   }
   const s=tuning.status;
   if(!fresh())return;
+  behaviorDrawn=paintBehavior(ctx,project,line,s?.behavior,true,(Date.now()-tuning.received)/1000);
+  groundDrawn=paintGroundPerception(ctx,project,s?.ground_perception,true,(Date.now()-tuning.received)/1000)>0;
   const reference=s?.tracking_reference;
   if(reference) {
     line([reference.origin,reference.target],'#efb62d',false,false,2);
@@ -199,3 +226,16 @@ for(const [id,kind] of [['tuning-parking-start','parking_start'],['tuning-parkin
 });
 
 $('tuning-trail-max').addEventListener('input',()=>emit('tuning'));
+
+action('behavior-reset',async()=> {
+  const view=behaviorView(tuning.status?.behavior,fresh(),(Date.now()-tuning.received)/1000);
+  if(!canResetBehavior(view))throw Error(tuning.status?.stop_issue || applyIssue() || 'STOP・停車状態と行動計画の接続を確認してください');
+  const epoch=tuning.epoch;
+  tuning.busy=true;render();
+  try {
+    const result=await request('behavior_reset',{expected_revision:tuning.status.revision});
+    if(epoch!==tuning.epoch)return;
+    if(!result.success)throw Error(result.message);
+    toast(result.message || '行動計画をリセットしました。AUTOは変更しません');
+  } finally {tuning.busy=false;render();}
+});

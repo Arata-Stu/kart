@@ -1,7 +1,15 @@
 export const MAX_BOXES=100;
 export const MIN_BOX_SIZE=2;
+export const CLASS_NAMES=['rc_car','obstacle'];
+export const CLASS_LABELS=['RCカー','障害物'];
 export const copyBoxes=boxes=>(boxes || []).map(box=>box.slice());
 const clamp=(value,low,high)=>Math.max(low,Math.min(high,value));
+export function classIds(ids,count) {
+  if(ids==null)return Array(count).fill(0);
+  if(!Array.isArray(ids) || ids.length!==count || ids.some(id=>!Number.isInteger(id) || id<0 || id>=CLASS_NAMES.length))
+    throw Error('各矩形にRCカーまたは障害物のクラスを指定してください');
+  return ids.slice();
+}
 
 export function normalizeBox(box,width,height) {
   if(!Array.isArray(box) || box.length!==4 || !box.every(Number.isFinite))throw Error('矩形の座標が不正です');
@@ -75,22 +83,24 @@ export class AnnotationDraft {
   constructor(frame) {
     this.width=frame.width;this.height=frame.height;
     this.boxes=copyBoxes(frame.boxes);this.reviewed=!!frame.reviewed;
+    this.class_ids=classIds(frame.class_ids,this.boxes.length);
     this.saved=this.snapshot();this.undoStack=[];this.redoStack=[];
   }
-  snapshot(){return {boxes:copyBoxes(this.boxes),reviewed:this.reviewed};}
+  snapshot(){return {boxes:copyBoxes(this.boxes),class_ids:this.class_ids.slice(),reviewed:this.reviewed};}
   get dirty(){return JSON.stringify(this.snapshot())!==JSON.stringify(this.saved);}
-  change(boxes,reviewed=false) {
+  change(boxes,reviewed=false,ids=null) {
     if(boxes.length>MAX_BOXES)throw Error(`矩形は1画像${MAX_BOXES}個までです`);
     const next=boxes.map(box=>normalizeBox(box,this.width,this.height));
     if(next.some(box=>!box))throw Error('矩形は縦横2px以上で指定してください');
-    if(JSON.stringify({boxes:next,reviewed})===JSON.stringify(this.snapshot()))return;
+    const classes=classIds(ids ?? (next.length===this.boxes.length?this.class_ids:null),next.length);
+    if(JSON.stringify({boxes:next,class_ids:classes,reviewed})===JSON.stringify(this.snapshot()))return;
     this.undoStack.push(this.snapshot());if(this.undoStack.length>60)this.undoStack.shift();
-    this.redoStack=[];this.boxes=next;this.reviewed=reviewed;
+    this.redoStack=[];this.boxes=next;this.class_ids=classes;this.reviewed=reviewed;
   }
   undo(redo=false) {
     const from=redo?this.redoStack:this.undoStack,to=redo?this.undoStack:this.redoStack;
     if(!from.length)return;
     to.push(this.snapshot());Object.assign(this,from.pop());
   }
-  discard(){this.boxes=copyBoxes(this.saved.boxes);this.reviewed=this.saved.reviewed;this.undoStack=[];this.redoStack=[];}
+  discard(){this.boxes=copyBoxes(this.saved.boxes);this.class_ids=this.saved.class_ids.slice();this.reviewed=this.saved.reviewed;this.undoStack=[];this.redoStack=[];}
 }

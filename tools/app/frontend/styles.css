@@ -1413,6 +1413,22 @@ summary {
 .perception-state [data-tone=unknown]{color:var(--muted)}
 .perception-state [data-tone=ok]{color:var(--accent)}
 .perception-objects{white-space:pre-wrap;margin-top:4px;max-height:9em;overflow:auto;font-variant-numeric:tabular-nums}
+.ground-perception-state{grid-template-columns:minmax(0,1fr)}
+.ground-perception-legend{display:flex;flex-wrap:wrap;gap:8px 18px;color:#263a42}
+.ground-perception-legend>span{display:inline-flex;align-items:center;gap:5px}
+.ground-rc::before,.ground-obstacle::before{content:'';display:inline-block;width:12px;height:12px;background:#39dcb0;border:1px solid #58756b;border-radius:50%}
+.ground-obstacle::before{background:#d16ba5;border-color:#976081;border-radius:0;transform:rotate(45deg);width:10px;height:10px}
+.behavior-state{grid-template-columns:minmax(0,1fr)}
+.behavior-candidates{white-space:pre-wrap;font-variant-numeric:tabular-nums}
+.behavior-legend{display:flex;flex-wrap:wrap;gap:6px 16px}
+.behavior-legend span:nth-child(1){color:#116eaa}.behavior-legend span:nth-child(2){color:#28764f}.behavior-legend span:nth-child(3){color:#93601f}
+.passing-editor summary{font-weight:600;cursor:pointer;padding:3px 0}
+.passing-endpoints{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:end}
+.passing-endpoints label{margin:0}.passing-endpoints input{width:100%}.passing-endpoints button{font-size:11px;padding:8px}
+.passing-list{display:grid;gap:6px;margin:10px 0}.passing-zone-row{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.passing-zone-row>span{border-left:5px solid;padding-left:6px;font-size:12px;flex:1;min-width:140px;overflow-wrap:anywhere}
+.passing-zone-row button{font-size:11px;padding:5px 7px}.passing-editor .passing-notice{font-size:12px;white-space:pre-wrap;color:#8e571a}
+.passing-notice:empty{display:none}.passing-toggle{display:inline-flex;align-items:center;gap:5px;font-size:12px}.passing-toggle input{width:auto}
 @media(max-width:650px){.perception-state{grid-template-columns:minmax(0,1fr)}}
 
 .section-workflow-step { border: 1px solid var(--border, #d8dee7); border-radius: 10px; padding: 14px; margin: 12px 0; }

@@ -49,6 +49,24 @@ class PolicyTests(unittest.TestCase):
             with self.subTest(changes=changes), self.assertRaises(ValueError): changes_for(current,changes,revision)
         with self.assertRaises(ValueError):catalog('/operation_mode_manager',[])
 
+    def test_behavior_is_an_explicit_target_and_side_choices_are_bounded(self):
+        self.assertEqual(TARGETS['behavior'][0], 'racing_behavior')
+        rows=fields('behavior')
+        for row in rows:
+            if row['name']=='preferred_side':row.update(type=4,value='left')
+            if row['name'] in ('mode','map_file'):row.update(type=4,value='shadow',read_only=True)
+        current=catalog('behavior',rows)
+        prediction = dict(simple_pass_speed=2., prediction_hold_s=6., prediction_speed_uncertainty=.1,
+                          prediction_acceleration=.05, prediction_lateral_speed=.03,
+                          prediction_uncertainty_limit=1.5, max_pass_heading_change=.25)
+        self.assertEqual(len(rows), 35)  # 33 writable Settings plus mode/map_file.
+        self.assertEqual(changes_for(current,prediction,current['revision']), prediction)
+        self.assertEqual(changes_for(current,{'preferred_side':'right','speed_cap':.6},current['revision']),
+                         {'preferred_side':'right','speed_cap':.6})
+        for changes in ({'preferred_side':'auto'},{'mode':'active'},{'map_file':'other.json'}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                changes_for(current,changes,current['revision'])
+
 
 class BridgeTests(unittest.TestCase):
     def test_vehicle_and_recovery_keep_stationary_gate(self):
@@ -56,7 +74,7 @@ class BridgeTests(unittest.TestCase):
         manager.bridge = NS(issue=lambda:'', gate=NS(issue=lambda:'STOP required'))
         for key in ('tracking', 'speed', 'map'):
             self.assertEqual(manager.issue(key), '')
-        for key in ('vehicle', 'recovery'):
+        for key in ('vehicle', 'recovery', 'behavior'):
             self.assertEqual(manager.issue(key), 'STOP required')
 
     def setUp(self):
@@ -113,6 +131,33 @@ class BridgeTests(unittest.TestCase):
             result=reply.get_nowait()
             self.assertTrue(result['applied'] and result['readback_matches'])
             self.assertEqual(next(f['value'] for f in result['fields'] if f['name']=='lookahead_m'),.8)
+            self.assertEqual(len(self.writes),1)
+
+    def test_behavior_reads_while_running_but_requires_stop_at_begin_and_dispatch(self):
+        self.values={name:1. for name in TARGETS['behavior'][1]}
+        self.values.update(mode='shadow',map_file='/map/map.json',preferred_side='left')
+        self.bridge.gate=NS(issue=lambda:'STOP and standstill required')
+        with patch('kart_hdmap.parameter_bridge.time.monotonic',return_value=10.):
+            reply=self.begin('/parameters_get',target='behavior');self.manager.tick();current=reply.get_nowait()
+            self.assertTrue(current['available'],'reading behavior settings remains possible while driving')
+            static={row['name']:row for row in current['fields']}
+            self.assertTrue(static['mode']['read_only'] and static['map_file']['read_only'],
+                            'startup fields remain readonly even with an old/misconfigured ROS descriptor')
+            reply=self.begin('/parameters_set',target='behavior',expected_revision=current['revision'],changes={'speed_cap':.6})
+            self.assertIn('standstill',reply.get_nowait()['error']);self.assertEqual(self.writes,[])
+            self.bridge.gate.issue=lambda:''
+            reply=self.begin('/parameters_set',target='behavior',expected_revision=current['revision'],changes={'speed_cap':.6})
+            self.bridge.gate.issue=lambda:'STOP changed before dispatch'
+            self.manager.tick()
+            self.assertIn('STOP changed',reply.get_nowait()['error']);self.assertEqual(self.writes,[])
+            self.bridge.gate.issue=lambda:''
+            reply=self.begin('/parameters_set',target='behavior',expected_revision=current['revision'],changes={'mode':'active'})
+            self.manager.tick();self.assertIn('固定',reply.get_nowait()['error']);self.assertEqual(self.writes,[])
+            reply=self.begin('/parameters_set',target='behavior',expected_revision=current['revision'],
+                             changes={'speed_cap':.6,'preferred_side':'right'})
+            self.manager.tick();self.manager.tick();self.manager.tick()
+            self.assertTrue(reply.get_nowait()['readback_matches'])
+            self.assertEqual(self.values['speed_cap'],.6);self.assertEqual(self.values['preferred_side'],'right')
             self.assertEqual(len(self.writes),1)
 
     def test_rate_change_requires_stationary_gate_at_dispatch(self):

@@ -89,6 +89,92 @@ reliable / volatile / depth 1、steady clockで固定1Hz。追加の設定parame
 - opponent_ground出力 /ground_markers（visualization_msgs/msg/Marker、sensor data QoS）。
   base_linkで推定した接地点を直径6 cmのSPHERE_LISTで表示する。空配列時DELETE、lifetime 0.3秒。
 
+### RCカー・障害物の地図表示
+
+Pythonノード・実行ファイル名`perception_ground`。検出bbox下端中央から光線を出し、
+**projection_frame（既定base_link）の路面ground_z_mと交差させた点を、同じ撮影stampの
+target_frame（既定map）へ変換する**。mapの固定z平面へ直接交差させない。
+既定は表示用の独立経路で、既存`opponent_ground`・追跡の出力は変更しない。
+明示的なlive behaviorでは`/racing/map_points`を観測入力に使い、`overtake_mode=active`の場合だけ
+behaviorが走行参照を配信する。認識を起動するだけでは有効化しない。
+RGB画像の購読・送信はない。bboxの下端が物体の接地位置を示すという近似であり、
+遮蔽・傾斜・非接地物体・カメラ取付誤差による位置誤差は残る。
+点は3D寸法・占有領域・自由空間の証明ではない。behavior側の鮮度・frame・占有仮定・停止条件も維持する。
+
+|方向|単体既定topic|型|QoS|内容|
+|---|---|---|---|---|
+|入|/detections|vision_msgs/msg/Detection2DArray|best effort / volatile / depth 5|全クラス検出。配列headerを撮影時刻・光学frameの正本とする|
+|入|/realsense/color/camera_info|sensor_msgs/msg/CameraInfo|同上|同じ撮影stamp・光学frameの640×480 raw RGB校正|
+|出|/map_points|kart_interfaces/msg/GroundDetections|best effort / volatile / depth 1|撮影時刻のmap接地点とvalid/reason。各点はdetection_id・元class_id・canonical class_name・scoreを保持|
+|出|/map_markers|visualization_msgs/msg/MarkerArray|同上|rc_car・obstacleの2つのSPHERE_LIST|
+|出|/map_diagnostics|diagnostic_msgs/msg/DiagnosticArray|reliable / volatile / depth 1|受信・同期・校正・TF・投影の診断。steady clock 1Hz|
+
+CameraInfoだけが絶対topic名で、その他は相対名。bringupのnamespace`/racing`では
+`/racing/detections`→`/racing/map_points`・`/racing/map_markers`・`/racing/map_diagnostics`になる。
+必要なTFは撮影stampの`projection_frame←camera frame`と`target_frame←projection_frame`。
+TF標準topic`/tf`・`/tf_static`とROS標準topicは上表から省略。独自service/actionなし。
+完全stamp同期（queue 60）を使い、異なるframe・0/不正stamp・校正不正・ROI/ビニング・
+非対応画像サイズを拒否する。画像側のresize/cropを前提にしない。
+ROS撮影stampが現在より0.5秒超古いか0.05秒超未来なら拒否する。
+bag再生では`use_sim_time:=true`と撮影stampに対応する`/clock`・TFが必要。
+
+|起動時固定parameter|既定|意味・範囲|
+|---|---:|---|
+|projection_frame|base_link|路面交差を計算する車体TF frame|
+|target_frame|map|表示点の出力TF frame|
+|ground_z_m|NaN|projection_frameでの実測路面高さ、m。有限値の明示必須|
+|max_range_m|10.0|projection_frame原点からの水平距離上限、m。0より大きく1000以下|
+|confidence_threshold|0.25|対象検出score下限、0..1|
+|rc_car_class_id|"0"|RCカーとして表示する元class_id。空文字で無効|
+|obstacle_class_id|"1"|障害物として表示する元class_id。空文字で無効。両方空・同一IDは不可|
+|max_objects|100|先頭から処理する検出数・出力点数の上限、整数1..1000。各検出のhypothesis走査は先頭16件まで|
+
+全parameterの基準値は`config/perception_ground.yaml`、ROS共通`use_sim_time=false`も記載する。
+実運用は`kart_bringup/config/racing/map_projection.yaml`を読む。
+2クラス専用モデルはrc_car=0・obstacle=1。COCOはrc_car_class_id="2"・
+obstacle_class_id=""、旧専用1クラスはrc_car_class_id="0"・obstacle_class_id=""で使用する。
+同じ検出に対象hypothesisが複数ある場合はscoreが最大のものを1つ使用する。
+無IDの検出は`frame:<配列index>`とし、フレーム間の永続track IDを表さない。
+全点は接地点の近似であり、距離センサによる実測点ではない。
+
+0件・対象class/scoreなし・全除外・同期/TF/校正失敗時は空pointsを送り、
+marker namespace`rc_car`（緑`#39dcb0`）と`obstacle`（桃`#d16ba5`）の両方を毎回ADD/DELETEする。
+marker直径は固定0.08m、lifetimeは固定0.5秒。画像下端まで達したbbox、画像外bbox、
+非有限・非正サイズ・回転bbox、路面に交差しない光線、距離外の点を除外する。
+入力未受信・未同期・0.5秒の途絶はsteady clockの0.1秒watchdogで空pointsと両DELETEを送り、
+古い有効点を再送しない。同じheaderの再受信は鮮度を延長しない。
+有効pointsは元の撮影stamp、watchdogの空pointsは現在ROS stamp、どちらもtarget_frameを使う。
+各pointsメッセージの`valid` / `reason`はその配列自身の状態を示す。
+`projected`・`zero_detections`・`zero_selected`は`valid=true`、同期・投影・TF失敗とwatchdog消去は
+`valid=false`と失敗理由を同じメッセージへ入れる。したがって診断の次の1Hz更新を待たず、
+実際の0件と投影不能・入力途絶を区別できる。空配列だけで実際の0件と判定しない。
+
+診断nameは`perception_ground/projection`、array.header stampは現在ROS時刻。
+`status[].values.reason`は`waiting_detections` / `detections_stale` /
+`waiting_camera_info` / `camera_info_stale` / `not_synchronized` / `invalid_stamp` /
+`invalid_frame` / `clock_unavailable` / `capture_stale` / `invalid_image_shape` /
+`invalid_calibration` / `camera_tf_unavailable` / `target_tf_unavailable` / `invalid_tf` /
+`zero_detections` / `zero_selected` / `all_rejected` / `projected`。
+受信・同期・投影累計、最新クラス別件数、正確なstamp/frame、受信経過秒、除外理由別件数を残す。
+一部成功は`projected`・level 0として有効点を表示し、除外数も記録する。
+
+source後の単体起動（路面高さは車体で実測して指定）:
+
+```bash
+ros2 run kart_opponent_tracker perception_ground --ros-args \
+  --params-file ros2_ws/src/kart_opponent_tracker/config/perception_ground.yaml \
+  -p ground_z_m:=-0.033 -r __ns:=/racing
+```
+
+数学・校正・鮮度とROS adapterをmockした境界テスト:
+
+```bash
+PYTHONPATH=ros2_ws/src/kart_opponent_tracker python3 -m pytest \
+  ros2_ws/src/kart_opponent_tracker/test/test_perception_ground.py
+```
+
+ROS結合・撮影時刻の実TF・Jetsonでの配信・物体位置の実測精度は未確認。
+
 ### bbox付きJPEGデバッグ（任意）
 
 Pythonノード・実行ファイル名`opponent_debug_image`。既定では起動せず、

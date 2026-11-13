@@ -1,0 +1,11 @@
+/**/perception_ground:
+  ros__parameters:
+    use_sim_time: false
+    projection_frame: base_link
+    target_frame: map
+    ground_z_m: .nan  # Measured road-plane height in projection_frame is required.
+    max_range_m: 10.0
+    confidence_threshold: 0.25
+    rc_car_class_id: '0'
+    obstacle_class_id: '1'  # Empty string disables this class (e.g. COCO/opponent).
+    max_objects: 100

@@ -71,10 +71,28 @@ public:
     return {d.first,std::max(0.,v.first),d.second,v.second,d.second<.35&&v.second<.35};
   }
   bool observe(std::uint64_t id,double time,double s,double d,double v,double dv,double vv){
+    return observe_impl(id,time,s,d,v,dv,vv,false);
+  }
+  // Historical profile memory is separate from a live target's visibility.
+  // Only real, identity-confirmed observations may enter this API. The caller
+  // owns missing-time state propagation, uncertainty growth and motion gates.
+  bool observe_retained(std::uint64_t id,double time,double s,double d,double v,double dv,double vv){
+    return observe_impl(id,time,s,d,v,dv,vv,true);
+  }
+private:
+  bool observe_impl(std::uint64_t id,double time,double s,double d,double v,double dv,double vv,bool retain_gap){
     if(!finite(time)||!finite(s)||!finite(d)||!finite(v)||!finite(dv)||!finite(vv)||v<0||v>20||dv<0||vv<0||dv>.25||vv>4)return false;
     if(id!=id_){clear();id_=id;}
     if(stamp_>=0 && time<=stamp_) {if(time<stamp_)clear();return false;}
-    if(stamp_>=0 && (time-stamp_>.5 || s<last_-.2 || s-last_>20*(time-stamp_)+.5))clear();
+    if(stamp_>=0){
+      const bool gap=time-stamp_>.5;
+      if(s<last_-.2 || s-last_>20*(time-stamp_)+.5 || (gap&&!retain_gap))clear();
+      else if(gap && !ready()){
+        // Preserve measured bins, but an unobserved jump cannot establish the
+        // continuous .95-lap progress required to mature a new model.
+        first_=s;
+      }
+    }
     if(ready()) {auto p=predict(s);if(p.valid&&(std::abs(d-p.d)>.2+3*p.d_sigma||std::abs(v-p.v)>.5+3*p.v_sigma))clear();}
     if(stamp_<0)first_=s;
     stamp_=time;last_=s;

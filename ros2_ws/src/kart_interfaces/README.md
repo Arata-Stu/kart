@@ -149,6 +149,23 @@ seen_maskは同じstampでここまで観測したstreamのビット集合。
 `OpponentGroundPoint[] tracks`（string track_id、geometry_msgs/Point point、単位m）。
 平坦路仮定の可視接地点。空配列は推定点なし。
 
+`GroundDetections`はRCカー・障害物の推定接地点。既定は表示用で、単体既定topicは`/map_points`、
+bringupでは`/racing/map_points`、publisherは`kart_opponent_tracker/perception_ground`、
+consumerはFoxgloveと`kart_hdmap/hdmap_server`のStudio bridge、明示したlive behaviorの
+`kart_racing/racing_behavior`。best effort / volatile / depth 1。
+`header`は有効結果では元画像の撮影時刻と変換済みframe（既定`map`）。watchdogの無効な消去通知は
+通知時刻を使う。`GroundDetection[] objects`の各要素は
+`string detection_id`（画像内識別子であり永続trackではない）、元の`string class_id`、
+profileで確定した`string class_name`（`rc_car` / `obstacle`）、`float32 score`（0..1）、
+`geometry_msgs/Point point`（単位m）を持つ。bbox下端中央と平坦路からの概算であり、物体中心・
+3D寸法・占有領域・安全な自由空間を表さない。配列全体の`bool valid`と`string reason`で、
+正常な空結果（`zero_detections` / `zero_selected`）と失敗・timeout消去を同じメッセージ内で区別する。
+`valid=false`の空配列を0件と表示しない。詳細は投影診断で確認する。
+既存の`OpponentGroundPoints`とは確認状態・IDの意味を分ける。通常の認識起動だけで制御へ接続せず、
+明示的な`overtake_mode=active`ではbehaviorの観測入力となる。接地点を3D寸法・自由空間の証明とせず、
+behavior側の鮮度・map/frame・占有仮定・停止条件の検証を省略しない。新型を使うpublisher/consumerは
+同じworkspaceで再ビルド・source・再起動する。型生成とROS結合確認はROS環境で別途必要。
+
 PassingCorridor は直線区間の実測/外部認定。地図frame・時刻・参照revision・対象ID、unwrapped sの
 開始/終了[m]、区間全体の左右空き幅[m]、速度上限[m/s]、clearを持つ。側方・合流まで観測可能な場合だけclear=true。
 

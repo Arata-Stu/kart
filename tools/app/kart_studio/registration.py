@@ -7,6 +7,7 @@ import uuid
 
 from .geometry import number
 from .storage import atomic_json, fingerprint, within
+from .passing_zones import clear_transformed
 
 
 def preview(maps, target, body):
@@ -61,6 +62,7 @@ def preview(maps, target, body):
                     for k in ("left", "right", "closed", "custom", "custom_speeds", "custom_speed_mode")
                 }
             )
+        clear_transformed(lane)
     provenance = dict(
         source=source, source_revision=src["revision"], transform=transform
     )

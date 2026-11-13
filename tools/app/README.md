@@ -3,15 +3,27 @@
 Notebookでbagを受信し、Isaac ROS cuVSLAMの地図・点群からHDMapと走行ラインを作成する。
 地図・転送・学習・解析・分布解析に加え、**Jetson起動 / ESC試験**から起動管理・試験を操作できる。
 学習画面からデータセット作成・DINOv3学習・ONNX export・オフライン評価・RGB特徴量確認・Jetsonモデル転送を実行できる。
-「RCカー検出」ではRCカー専用YOLOv8sの追加学習を扱う。RGB rosbagから画像を抽出し、
-bboxの作成・移動・サイズ変更、対象なしの確認、候補bboxの修正、学習、kart用ONNX exportまでUIで操作する。
+「RCカー・障害物」ではRCカー（rc_car=0）・障害物（obstacle=1）の2クラスYOLOv8s追加学習を扱う。
+RGB rosbagから画像を抽出し、bboxのクラス指定・作成・移動・サイズ変更、対象なしの確認、
+候補bboxの修正、学習、kart用ONNX exportまでUIで操作する。
+障害物は走路上の静止ダンボールや落とし物等。背景ダクト・常設境界を一律に障害物にせず、
+RCカーと対象の障害物の両方がない画像だけをnegativeと確認する。
 完成ONNXのJetson転送と、YOLO／DINOv3による未確認train画像の選定も扱う。
 YOLO選定では多検出・大きな枠を要確認候補にし、score下限0.10・想定最大3件・画像内の面積比0.40をUIで調整できる。
 件数は想定値超、面積比は設定値以上で判定し、通常・背景・探索の候補も混ぜる。正解やnegativeは手動で確認する。
 転送は既存SCPキューを共用し、SHA256検証後に新規directoryへ公開する。buildはJetsonで手動実行する。
-学習と検証は別bag、確認済み画像だけを固定snapshotにして使う。
-手順・既定値・保存場所・APIは[RCカー検出の追加学習](../../docs/perception_training.md)を参照。
+学習と検証は別bag、両splitに両クラスの確認済みbboxを要求し、確認済み画像だけを固定snapshotにして使う。
+旧1クラスprojectの枠はRCカーとして保持するが、障害物も含めて再確認するまで学習対象にしない。
+exportはracing profileのopponent.onnx（出力[1,6,6300]）。旧opponent 1クラス・COCO80は別に保持する。
+認識時は両クラスを検出し、RCカーだけを追跡する。モデルの選択だけで停止・回避制御は有効化しない。
+手順・既定値・保存場所・APIは[RCカー・障害物検出の追加学習](../../docs/perception_training.md)を参照。
 [設計方針](../../docs/policies/ui_app.md)に対象と座標契約を記載。
+
+Jetson起動のdriveで「追従・追越し」をoff（既定）/shadow（候補表示）/active（実行）から選べる。
+ONは認識trackへ連動し、認識OFF・検出のみを選ぶと追従・追越しをOFFへ戻す。
+active選択は自動復帰をOFFにし、2クラスracing engine・通常AUTO・parking等との非併用を設定確認で検査する。
+shadowはCOCO・旧1クラスも使えるが障害物クラスはない。起動だけではAUTO・録画を開始しない。
+参照の単一配信とactive専用timeout、ROS／実機の検証範囲は[起動設定](../../ros2_ws/src/kart_bringup/config/racing/README.md)を参照。
 
 ## 起動
 
@@ -1046,6 +1058,25 @@ class IDはモデルの出力文字列のまま表示し、クラス名を推測
 「Jetson受信後」はROSメッセージをJetson側で受けてからの経過時間で、センサからの処理遅延ではない。
 この表示から認識ノードの起動・設定変更・走行指令の送信は行わない。
 
+同じパネルの「地図上の接地点」は、投影済みの`map`座標を最大100点まで地図へ重ねる。
+RCカーは緑（`#39dcb0`）の丸と「RC」、障害物は桃色（`#d16ba5`）のひし形と「障」で区別し、
+凡例・両クラスの件数・frame/stamp・投影診断を表示する。明示されたkindを使い、数値class IDだけではクラス名を決めない。
+点はbbox下端を路面へ投影した**接地点の概算**であり、物体中心・bbox・物理寸法ではない。
+車両の現在姿勢による再変換はせず、受信したmap座標をそのまま地図の表示へ使う。
+点の有効期限は最大1秒で、HTTP応答間も残り時間を確認して消去・再描画する。
+投影失敗の新鮮な診断（撮影時刻のTF不足など）、不正な座標、map以外のframeも表示から除外する。
+「両クラス0件」は新鮮なvalid=trueの空メッセージだけとし、配信なし・受信待ち・受信停止・失効を区別する。
+map_pointsのvalid=falseは同梱reasonで直ちに投影失敗・表示消去と扱い、1Hz診断の到着前も0件と表示しない。
+投影診断の有効期限は2.5秒（1 Hz配信）で、状態キーを持たない旧bridgeは「未対応・状態未取得」と表示する。
+切断・通信停止時には地図上の点も消える。画像転送や走行・停止・回避指令は追加しない。
+
+型は`/racing/map_points`のkart_interfaces/msg/GroundDetectionsで、元class IDとclass_nameを保持する。
+認識ONで起動する表示専用`perception_ground`が検出とCameraInfoを完全同期し、路面投影と撮影時刻TFの変換を行う。
+CameraInfo・取付校正・map TF・実測路面高さが必要で、初期値-0.033 mは取付設定に基づく暫定値。
+未受信・期限切れ・投影できない点は表示せず、`/racing/map_diagnostics`の理由を確認する。
+これは検出位置の表示で、継続した追跡ID・障害物地図への保存・停止や回避の制御を追加するものではない。
+Foxgloveの設定と路面高さの調整は[認識設定](../../ros2_ws/src/kart_bringup/config/racing/README.md)を参照。
+
 検証コマンド:
 
 ```bash
@@ -1054,6 +1085,8 @@ PYTHONPATH=tools/app:ros2_ws/src/kart_mapping:ros2_ws/src/kart_bringup:ros2_ws/s
 PYTHONPATH=ros2_ws/src/kart_hdmap python3 -m unittest discover -s ros2_ws/src/kart_hdmap/test -v
 node --test tools/app/tests/test_tuning.mjs
 node --test tools/app/tests/test_perception_status.mjs
+node --test tools/app/tests/test_ground_perception.mjs
+node --test tools/app/tests/test_racing_behavior.mjs
 ```
 
 ROS結合・Jetsonの負荷・実車動作の確認は別途必要。
@@ -1083,13 +1116,17 @@ Foxgloveでは3Dパネルの`/control/tracking_markers`で同じ参照点を表�
 | 参照ライン・Center速度 | Center / Race / Custom、Centerの一定速度 |
 | 速度PID | kp / ki / kd / kff、積分上限、微分filter、前進／ブレーキ出力上限、スロットル増加／減少速度 |
 | 復帰モジュール | 履歴・スタック閾値・停車確認・ブレーキ／後退出力と時間・後退操舵・回数等 |
+| 追従・追越し | 速度上限、自車/RCカー/障害物の寸法仮定、後車軸から後端までの距離、余裕・車間、速度分類・観察時間、左右優先、経路検査間隔・曲率・予測範囲・欠測予測等（33項目） |
 
 追従・速度PID・参照ラインはAUTO/MANUAL走行中も「一括適用」できる。
-車両補正・復帰はSTOPかつ1秒以上の停車を要求する。同じノードの変更だけをまとめて検証・適用し、
+車両補正・復帰・追従／追越しはSTOPかつ1秒以上の停車を要求する。同じノードの変更だけをまとめて検証・適用し、
 適用後の現在値を再取得する。既に他の操作で値が変わった場合は再取得を要求する。
 通信timeoutでは適用済みか不明なことがあるため自動再送しない。現在値を再取得して確認する。
 ノード未起動は未起動表示。起動時固定の項目は表示のみ。復帰の動的変更時は履歴・phaseをresetし、
 次のAUTOで新しい値を使う。変更はメモリ上のみで、再起動後は起動YAMLへ戻る。
+追従・追越しの対象ノードは`racing_behavior`。現在値の読取りは走行中も可能で、
+`mode`（off / shadow / active）・`map_file`は表示のみ。これらの起動時固定項目はUIから変更しない。
+STOP条件は要求受付時とROS parameter送信直前の両方で検査し、ノード側でも再検証する。
 
 同じパネルの「実車ラインを切替」は、選択したCenter / Race / CustomへAUTO/MANUAL走行中も切り替える。
 対象はJetsonの適用済みlaneの生成ラインで、地図全体を再転送しない。
@@ -1098,6 +1135,67 @@ Centerの速度も変える場合はパラメータ調整の「参照ライン�
 
 検証: `test_tuning_parameters.mjs`、`test_parameter_bridge.py`、復帰adapter test。
 実ROS parameter service、Jetson上の追従と復帰、実車は別途確認が必要。
+
+### 追従・追越しのライブ表示
+
+「地図 → 実車調整 → 自己位置を接続」で、`/racing/behavior_status`の判断を表示する。
+offは無効、shadowは観察のみ、activeは実車の参照経路へ反映するモードとして区別する。
+状態は`CLEAR / FOLLOW / OBSERVE / PASS_MOVING / AVOID_SLOW / AVOID_OBSTACLE / MERGE / COAST_PASS / HOLD_SIDE / BLOCKED / FAULT`を
+日本語説明とともに表示し、理由、対象kind/ID/推定速度、目標速度、選択側、左右候補の成立・不成立理由と最小余裕を確認できる。
+計画方式（simple / learned / follow）、学習の利用可否・準備状況・coverage、使用中の許可区間と残り距離、
+対象位置が観測か予測保持か・観測後の秒数・位置の不確かさも表示する。これらがない旧状態は従来表示を維持する。
+`COAST_PASS`は欠測中の並走継続、`HOLD_SIDE`は合流待ちとして区別する。計画方式は診断表示でありUIから切り替えない。
+
+地図では青が選択経路（shadowは破線）、緑が左候補、橙が右候補。不成立候補は破線とし、
+復帰区間の端点・結線と、自車・対象の寸法に基づく占有矩形を重ねる。
+各経路は最大300点のmap座標をそのまま描き、ブラウザでは経路の再計画や車両姿勢による変換を行わない。
+矩形は選択経路方向に沿う寸法仮定で、実測の物体形状ではない。パネルには寸法仮定・復帰余裕もm単位で表示する。
+自車は経路先頭の後車軸から前端まで全長−後端距離、後端まで`rear_axle_to_rear_m`とする。
+対象は中心を仮定する。旧状態で後端距離が未取得なら自車矩形を描かず、仮定未取得と表示する。
+
+状態はJetson側の受信後0.5秒とROS stampの両方で検証し、HTTP応答間も残り有効時間で失効する。
+shadow/activeの配信中だけ状態取得を250 ms間隔にし、表示の失効も250 msごとに確認する。
+受信途絶・切断・不正な座標・map以外のframeでは古い経路を消し、状態キーを持たない旧bridgeは未対応と示す。
+この監視UIから動作モード・AUTO/STOPを変更しない。動的パラメータは上記STOP・停車条件で変更する。
+調整値や基準経路の変更でリセットが必要になった場合は「行動計画をリセット」を明示的に押す。
+STOP・1秒停車・地図/適用版一致・新鮮な状態を確認し、ノード側でも基準ラインから0.15 m以内を検査する。
+この操作は`/racing/behavior/reset`を1回呼び出し、AUTOを変更しない。応答が不明なら自動再送せず状態を確認する。
+FAULT時は最新の異常理由を表示し、以前の候補経路は隠す。主要な理由は日本語説明と元の診断コードを併記する。
+
+検証: `test_racing_behavior.mjs`、`test_tuning.mjs`、`test_tuning_parameters.mjs`、`test_parameter_bridge.py`。
+resetのexecutor窓口は`test_behavior_bridge.py`、実ノードのコールバック境界は`test_behavior_node.py`で検証する。
+ROS結合・Jetson実行・実車での追従／追越しは別途確認が必要。
+
+### 地図の追越し許可区間
+
+「地図 → ライン」内の「追越し許可区間を設定」で、生成済みのCenter / Race / Customごとに設定する。
+初期状態と旧地図は許可0件で、区間を設定しただけでは追越し実行・AUTOへの切替は行わない。
+
+1. 対象ラインを選ぶ。WP番号は画面では1から始まる。
+2. 開始・終了WPを番号で入力するか「地図で開始を選ぶ」から点付近をクリックする。開始を選ぶと終了の選択へ進む。Alt＋ドラッグで移動、Escで選択終了。
+3. 左右／左のみ／右のみを選び「区間を追加」。必要な区間を追加し、一覧で編集・削除する。閉路は開始WPより小さい終了WPで始点跨ぎを表す。開始と終了が同じ区間は不可。
+4. 上部の「保存」で地図へ保存する。保存前はUndo/Redoで戻せる。書き出し・転送・動的プレビューにも同じ保存内容を使う。
+
+地図の色帯は紫＝左右、緑＝左、橙＝右。破線と開始・終了の黄色い点は未追加の下書きで、許可そのものではない。
+「許可帯を表示」と既存のライン表示切替で表示を変えられる。許可は追越し開始から合流完了までを収める範囲として使い、
+実際の経路・占有範囲・速度・観測品質の検査は実行側が別に行う。
+
+各生成ラインの`passing_zones`へ最大64区間を保存する。
+行は`{id,start_index,end_index,side,geometry_revision}`、indexは保存上0からの両端WPを指す。
+`side`は`both / left / right`。閉路だけ`start_index > end_index`を許し、点0を跨ぐ。
+`geometry_revision`は点の順序・XY座標・開閉路のSHA256で、サーバーが算出・検証する。速度profileだけの変更では変わらない。
+クライアントから生成済みラインの点を上書きすることはできず、既存の保存APIで許可注釈だけを取り込む。
+
+再生成の点列が完全一致すれば許可を保持する。再サンプリング・境界/Custom編集・進行方向の変更などで形状が変われば、
+旧許可は0件へ失効し、画面に再設定の案内を出す。位置合わせで座標が変わった場合も同様で、旧WP番号を新しい場所へ黙って移さない。
+形状が同じ地図の複製は許可を保持する。外部編集などでhash不一致になった許可は色帯に使わず、書き出しも拒否する。
+一覧の削除または「全区間を削除」で修正し、再設定できる。
+
+exportの`hd_map.yaml`はlaneごとの`line_passing_zones: {centerline: [...], raceline: [...], customline: [...]}`として同梱し、
+`metadata.json`にも生成ライン単位で保持する。CSVの列形式は変更せず、既存の地図転送は`map.json`とexport一式を同じバンドルで送る。
+
+検証: `test_passing_zones.mjs`、`test_passing_zones.py`、`test_lanes.py`、`test_transfers.py`。
+転送テストは一時ディレクトリへのSCP代替処理であり、Jetsonとの実通信・実車での追越し許可反映は別途確認が必要。
 
 
 ### ステア補正と車両状態パネル
@@ -1109,7 +1207,7 @@ D-pad trimとは補正位置・符号が異なるので、パネルには別々�
 復帰の監視・接触/スタック疑い・制動・後退・再開待ち・中断と試行回数/理由を表示する。
 疑いは画像/IMUによる推定であり衝突の確定ではない。ESC表示も指令履歴のモデルである。
 接続やtopicが途絶した場合は状態を不明/受信停止に変え、古い正常表示を維持しない。
-表示は既存の約1 Hzの状態取得に相乗りし、Jetson側に新しい画像処理を追加しない。
+表示は既存の状態取得（通常約1 Hz、追従・追越しのshadow/active配信中は250 ms間隔）に相乗りし、Jetson側に新しい画像処理を追加しない。
 
 ### Section headの学習UI
 
