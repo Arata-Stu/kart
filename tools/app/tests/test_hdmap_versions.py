@@ -7,7 +7,7 @@ import pytest
 
 from kart_studio.copies import copy_map
 from kart_studio.hdmap_versions import HDMapVersions
-from kart_studio.storage import atomic_json, read_json
+from kart_studio.storage import atomic_json
 from kart_studio.tuning import Tuning
 from test_custom_versions import setup_map
 
@@ -28,6 +28,9 @@ def test_whole_map_snapshots_restore_all_lanes_and_preserve_localization(tmp_pat
     doc = maps.load('course')
     doc['lanes'].append(dict(copy.deepcopy(doc['lanes'][0]), id='secondary'))
     doc['obstacles'] = [dict(id='wall', polygon=[[10, 10], [11, 10], [11, 11]])]
+    doc.update(parking_drivable=[[-1, -2], [6, -2], [6, 2], [-1, 2]], parking_areas=[dict(
+        id='P1', polygon=[[1, -1.5], [2, -1.5], [2, -.5], [1, -.5]],
+        goal_pose=[1.5, -1, 0], entrance=[[1, -.5], [2, -.5]])])
     # Valid server-owned input also includes generated lines for both lanes.
     atomic_json(maps.root / 'course/map.json', doc)
     original = maps.load('course')
@@ -38,13 +41,16 @@ def test_whole_map_snapshots_restore_all_lanes_and_preserve_localization(tmp_pat
     changed['lanes'] = [changed['lanes'][0]]
     changed['lanes'][0]['custom'][0][1] = .2
     changed['obstacles'] = []
+    changed.update(parking_areas=[], parking_drivable=[])
     changed = maps.save('course', changed)
     attack = create(versions, '攻め')
     result = restore(versions, normal['id'])
     assert result['document']['revision'] == changed['revision'] + 1
     assert result['document']['lanes'] == original['lanes']
     assert result['document']['obstacles'] == original['obstacles']
-    assert result['document']['title'] == original.get('title') if 'title' in original else 'title' not in result['document']
+    assert result['document']['parking_areas'] == original['parking_areas']
+    assert result['document']['parking_drivable'] == original['parking_drivable']
+    assert result['document'].get('title') == original.get('title')
     assert (maps.root / 'course/snapshot.json').read_bytes() == snapshot_bytes
     assert {p.suffix for p in versions.folder('course').iterdir()} == {'.json'}
     previous = versions.read('course', 'previous')

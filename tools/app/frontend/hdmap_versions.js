@@ -75,6 +75,9 @@ async function restore(select, preview) {
     emit('document'); fit();
     await refreshMaps(); await refresh();
     if (state.id !== id) return;
+    $('hdmap-version-select').value = version.id;
+    $('tuning-hdmap-version').value = version.id;
+    render();
     if (preview) {
       await prepareTuningPreview();
       document.querySelector('.tuning-panel').open = true;

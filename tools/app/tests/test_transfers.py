@@ -167,6 +167,10 @@ class TransferTests(unittest.TestCase):
         doc=self.maps.save('course',doc)
         folder.mkdir()
         (folder / "map.db").write_bytes(b"map")
+        from kart_studio.hdmap_versions import HDMapVersions
+        from kart_studio.tuning import Tuning
+        version = HDMapVersions(self.maps, Tuning(self.maps).identity).create(dict(
+            id='course', name='通常', revision=doc['revision'], lane_id='lane_001', line_type='centerline'))
         result = self.transfer.push(LocalScpJob(), self.profile, "course")
         target = Path(result["path"])
         self.assertTrue((target / "export/hd_map.yaml").is_file())
@@ -182,6 +186,7 @@ class TransferTests(unittest.TestCase):
         self.assertEqual(transferred['lanes'][0]['line_passing_zones']['centerline'],doc['lanes'][0]['lines']['centerline']['passing_zones'])
         self.assertEqual(read_json(target/'map.json')['lanes'][0]['lines']['centerline']['passing_zones'],doc['lanes'][0]['lines']['centerline']['passing_zones'])
         self.assertEqual((target / "cuvslam_map/map.db").read_bytes(), b"map")
+        self.assertEqual(read_json(target / '.hdmap-versions' / (version['id'] + '.json'))['name'], '通常')
         self.assertFalse(
             any(
                 p.name.startswith(".kart-upload-")
