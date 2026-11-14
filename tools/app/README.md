@@ -426,6 +426,10 @@ python3 tools/app/make_demo.py --data-root /tmp/kart-studio-demo
 元地図と独立したファイルなので、一方の編集・削除はもう一方へ影響しない。
 新しい地図はrevision 1から開始し、元地図IDとrevisionを記録する。書き出しキャッシュは複製せず再生成する。
 複製は中止可能なファイルコピーのみで、ROS・GPU処理やbag再生は行わない。コピー分のディスク容量は必要。
+公式地図の`official/latest`等、地図内を指すリンクは複製先内の相対リンクへ作り直す。
+元が絶対リンクでも元地図を参照し続けず、複製後は元地図を移動しても利用できる。
+地図外・リンク切れ・循環・再生成対象exportsへのリンク、および特殊ファイルは複製を拒否し、
+ジョブログへ対象パスを表示する。失敗・中止時は途中の複製先を残さない。
 
 既定の地図生成は公式 `create_map_offline.py --steps_to_run edex compute_poses`。
 平坦路向けにworkflowの`ground_constraint=true`を既定とし、`--override cuvslam.cfg_planar=true`を渡す。

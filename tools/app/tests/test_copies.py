@@ -1,4 +1,5 @@
 import tempfile
+import os
 import unittest
 from pathlib import Path
 
@@ -83,16 +84,62 @@ class CopyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.copy()
 
-    def test_cancel_and_symlink_leave_no_partial_map(self):
+    def test_cancel_and_external_symlink_leave_no_partial_map(self):
         self.job.cancel.set()
         with self.assertRaises(Cancelled):
             self.copy()
         self.job.cancel.clear()
-        (self.maps.folder("course") / "cuvslam_map/link").symlink_to("data")
-        with self.assertRaises(ValueError):
+        (self.maps.folder("course") / "cuvslam_map/link").symlink_to(self.maps.root.parent)
+        with self.assertRaisesRegex(ValueError, 'cuvslam_map/link'):
             self.copy()
         self.assertFalse((self.maps.root / "course_v2").exists())
         self.assertEqual(list(self.maps.root.glob(".copy-*")), [])
+
+    def test_official_latest_and_absolute_internal_links_are_independent(self):
+        source = self.maps.folder('course')
+        run = source / 'official/2026-11-15-run'
+        run.mkdir(parents=True)
+        (run / 'run.log').write_text('official run')
+        (run.parent / 'latest').symlink_to(run.name, target_is_directory=True)
+        (run.parent / 'absolute_alias').symlink_to(run, target_is_directory=True)
+        (source / 'cuvslam_map/data_alias').symlink_to('data')
+        (source / 'map_alias.json').symlink_to(source / 'map.json')
+        self.copy()
+        clone = self.maps.folder('course_v2')
+        for path in ('official/latest', 'official/absolute_alias', 'cuvslam_map/data_alias', 'map_alias.json'):
+            link = clone / path
+            self.assertTrue(link.is_symlink())
+            self.assertFalse(Path(os.readlink(link)).is_absolute())
+            self.assertTrue(link.resolve(strict=True).is_relative_to(clone))
+        self.maps.trash('course', 7)
+        self.assertEqual((clone / 'official/latest/run.log').read_text(), 'official run')
+        self.assertEqual((clone / 'official/absolute_alias/run.log').read_text(), 'official run')
+        self.assertEqual((clone / 'cuvslam_map/data_alias').read_bytes(), b'vslam')
+        from kart_studio.storage import read_json
+        self.assertEqual(read_json(clone / 'map_alias.json')['revision'], 1)
+
+    def test_broken_cyclic_and_excluded_links_report_paths_and_clean_up(self):
+        source = self.maps.folder('course')
+        for target in ('missing', 'alias', '.', 'exports/old'):
+            with self.subTest(target=target):
+                link = source / 'alias'
+                link.symlink_to(target)
+                try:
+                    with self.assertRaisesRegex(ValueError, 'alias'):
+                        self.copy()
+                    self.assertFalse((self.maps.root / 'course_v2').exists())
+                    self.assertEqual(list(self.maps.root.glob('.copy-*')), [])
+                finally:
+                    link.unlink()
+
+    @unittest.skipUnless(hasattr(os, 'mkfifo'), 'POSIX named pipe required')
+    def test_special_file_reports_its_path_and_cleans_up(self):
+        pipe = self.maps.folder('course') / 'official_pipe'
+        os.mkfifo(pipe)
+        with self.assertRaisesRegex(ValueError, 'official_pipe'):
+            self.copy()
+        self.assertFalse((self.maps.root / 'course_v2').exists())
+        self.assertEqual(list(self.maps.root.glob('.copy-*')), [])
 
     def test_api_locks_both_source_and_destination(self):
         studio = Studio.__new__(Studio)
