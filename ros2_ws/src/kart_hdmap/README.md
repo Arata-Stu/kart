@@ -417,6 +417,29 @@ reliable/volatile/depth10）を購読する。speed_controller自身のtarget_mp
 activeかつROS stampが0.5秒以内の有限値のみ描画対象。非active・不正値は欠測、時計巻戻りで履歴をリセットする。
 これは表示専用で制御・適用条件には使わない。
 
+### Lookahead・横制御速度のライブ履歴
+
+既存の`hdmap_server`内の`tuning_bridge`が`/control/lateral_diagnostics`
+（`diagnostic_msgs/msg/DiagnosticArray`、reliable / volatile / depth 10、相対名
+`control/lateral_diagnostics`）から、`name=lateral_controller`・`hardware_id=kart_control`の
+診断を採用する。既存status HTTPの`lookahead_history`は`stream`・受信単調時刻の`now`・
+`samples`を返す。各sampleは`t`、`controller`（`pure_pursuit` / `mpc`）、
+`lookahead_mode`（`fixed` / `speed_interpolated`、不明はnull）、`lookahead_m`、
+`target_distance_m`（m）、`measured_speed_mps`、`target_speed_mps`（m/s）を持つ。
+Pure Pursuitのlookaheadは実際の計算で使った経路長、target_distanceは車両から参照点への直線距離。
+MPCでは終端参照点への直線距離を使用する。測定速度はその横制御tickが使用した後車軸の符号付きVO速度で、
+固定lookaheadなどで速度を使用していないときはnullになる。目標速度は横制御が出力した値であり、実測値ではない。
+
+ROS stampが0.5秒以内・正常level=0の診断だけ採用し、各欠落・非有限・負の距離／目標速度はnullとする。
+表示用の異常値除外上限は距離1000 m、速度100 m/s（測定速度は絶対値）。lookaheadは正値のみ。
+旧診断にキーがなければ補完せずnullとし、controllerが不明な診断から数値を推測しない。
+約10 Hzで最大650件・直近60秒を保持し、無効・mode・controller変更は間引かない。
+同一stampを新しい測定と扱わず、stamp巻戻りではstreamと履歴を更新する。
+受信停止から0.5秒後に欠測を入れ、古い値を新しい値へつながない。
+新規ROSノード・topic・service・ROSパラメータはない。表示専用で制御・適用条件には使用しない。
+`test_lookahead_history.py`と`test_tuning.py`で履歴とcallback/status接続を検証する。
+ROS結合・Jetson実機での配信／負荷確認は別途必要。
+
 ### 制御周期の変更
 
 パラメータ調整の「横制御」と「速度PID」に`control_rate_hz`（既定100.0、10〜100 Hz）を表示する。

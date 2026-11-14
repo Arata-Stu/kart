@@ -132,6 +132,51 @@ class TransactionTests(unittest.TestCase):
         import time
         return self.bridge.handle(action, {'map_id':'map-a', **body}, time.monotonic()+4)
 
+    def test_lateral_callback_exposes_display_history_without_changing_active_map(self):
+        from types import SimpleNamespace as NS
+        from unittest.mock import Mock, patch
+        from kart_hdmap.lookahead_history import LookaheadHistory
+        from kart_hdmap.timing_history import TimingHistory
+        b = self.bridge
+        b.lookahead_history = LookaheadHistory()
+        b.timing_history = {'tracking': TimingHistory('lateral_controller', 'kart_control', ('pose_age_ms',))}
+        b.fresh = Mock(return_value=True)
+        values = dict(controller='pure_pursuit', lookahead_mode='fixed', lookahead_m=.8,
+                      target_distance_m=.7, measured_speed_mps='nan', target_speed_mps=1.2,
+                      processing_ms=2.3, pose_age_ms=8)
+        diagnostic = NS(name='lateral_controller', hardware_id='kart_control', level=0,
+                        values=[NS(key=k, value=str(v)) for k, v in values.items()])
+        msg = NS(header=NS(stamp=NS(sec=1, nanosec=0)), status=[diagnostic])
+        revision, active = b.revision(), copy.deepcopy(b.active())
+        with patch('kart_hdmap.tuning_bridge.time.monotonic', return_value=10):
+            b.lateral_diagnostics(msg)
+            result = self.call('/status', known_revision=revision)
+        b.fresh.assert_called_with(msg.header.stamp, .5)
+        history = result['lookahead_history']
+        self.assertEqual(history['now'], 10)
+        self.assertTrue(history['stream'])
+        self.assertEqual(history['samples'][0]['lookahead_m'], .8)
+        self.assertEqual(history['samples'][0]['target_speed_mps'], 1.2)
+        self.assertIsNone(history['samples'][0]['measured_speed_mps'])
+        self.assertEqual(result['timing_history']['tracking']['samples'][0]['processing_ms'], 2.3)
+        self.assertNotIn('active', result)
+        json.dumps(result, allow_nan=False)
+        with patch('kart_hdmap.tuning_bridge.time.monotonic', return_value=10.6):
+            # A duplicate publication cannot extend the lifetime of the measurement.
+            b.lateral_diagnostics(msg)
+            expired = self.call('/status', known_revision=revision)['lookahead_history']
+        self.assertIsNone(expired['samples'][-1]['lookahead_m'])
+        self.assertEqual(expired['stream'], history['stream'])
+        msg.header.stamp.sec = 2
+        diagnostic.values = [NS(key='processing_ms', value='3')]
+        with patch('kart_hdmap.tuning_bridge.time.monotonic', return_value=10.7):
+            b.lateral_diagnostics(msg)
+            legacy = self.call('/status', known_revision=revision)['lookahead_history']['samples'][-1]
+        self.assertTrue(all(legacy[key] is None for key in LookaheadHistory.FIELDS))
+        self.assertEqual(b.active(), active)
+        self.assertEqual(b.revision(), revision)
+        b.replace.assert_not_called()
+
     def test_running_apply_and_rollback_keep_mode_and_revision_checks(self):
         b = self.bridge
         del b.issue

@@ -1,4 +1,5 @@
 """Real Pure Pursuit + delayed TF regression; no vehicle or hardware nodes."""
+import math
 import os
 import shutil
 import signal
@@ -10,12 +11,14 @@ try:
     import rclpy
     from rclpy.node import Node
     from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
+    from rclpy.parameter import Parameter
+    from rcl_interfaces.srv import SetParametersAtomically
     from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
     from geometry_msgs.msg import Point, TransformStamped
     from nav_msgs.msg import Odometry
     from std_msgs.msg import String
     from tf2_ros import TransformBroadcaster
-    from kart_interfaces.msg import ReferenceLine, TrackingReference
+    from kart_interfaces.msg import OperationModeState, ReferenceLine, TrackingReference
 except ImportError as error:
     raise unittest.SkipTest(f'ROS/generated interfaces unavailable: {error}') from error
 
@@ -31,7 +34,7 @@ class TrackingTfWaitTest(unittest.TestCase):
             '-r', f'__ns:={namespace}', '-p', f'map_frame:={map_frame}',
             '-p', f'tracking_frame:={rear_frame}', '-p', 'wheelbase_m:=0.257',
             '-p', 'max_steering_rad:=0.38', '-p', 'tf_lookup_timeout_s:=0.05',
-            '-p', 'lookahead_mode:=speed_interpolated'],
+            '-p', 'lookahead_mode:=speed_interpolated', '-p', 'lookahead_high_speed_m:=2.0'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
         def cleanup():
@@ -51,10 +54,18 @@ class TrackingTfWaitTest(unittest.TestCase):
             QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         odom_pub = node.create_publisher(Odometry, 'visual_slam/tracking/odometry', qos_profile_sensor_data)
         diag_pub = node.create_publisher(DiagnosticArray, 'localization/vslam/diagnostics', 10)
+        mode_pub = node.create_publisher(OperationModeState, 'operation_mode/state', 1)
         broadcaster = TransformBroadcaster(node)
-        statuses, pending, references = [], [], []
+        statuses, pending, references, lateral = [], [], [], []
         node.create_subscription(String, 'control/tracking_status', lambda m: statuses.append(m.data), 100)
         node.create_subscription(TrackingReference, 'control/tracking_reference', lambda m: references.append(m), 100)
+        def receive_lateral(message):
+            for status in message.status:
+                if status.name == 'lateral_controller' and status.hardware_id == 'kart_control':
+                    lateral.append((status.level, {v.key: v.value for v in status.values}))
+        node.create_subscription(DiagnosticArray, 'control/lateral_diagnostics', receive_lateral, 100)
+        setter = node.create_client(SetParametersAtomically, 'pure_pursuit/set_parameters_atomically')
+        self.assertTrue(setter.wait_for_service(timeout_sec=5))
         enabled = [True]
         speed = [1.5]
 
@@ -77,6 +88,9 @@ class TrackingTfWaitTest(unittest.TestCase):
                              KeyValue(key='vo_status', value='OK')]
             diag.status = [status]
             diag_pub.publish(diag)
+            mode = OperationModeState()
+            mode.header.stamp, mode.mode = stamp, OperationModeState.STOP
+            mode_pub.publish(mode)
             if enabled[0]:
                 tf = TransformStamped()
                 tf.header.stamp, tf.header.frame_id, tf.child_frame_id = stamp, map_frame, rear_frame
@@ -96,6 +110,26 @@ class TrackingTfWaitTest(unittest.TestCase):
                 rclpy.spin_once(node, timeout_sec=.005)
             self.assertIsNone(process.poll(), 'Pure Pursuit exited unexpectedly')
 
+        def change(values):
+            request = SetParametersAtomically.Request()
+            request.parameters = [Parameter(name, value=value).to_parameter_msg()
+                                  for name, value in values.items()]
+            future = setter.call_async(request)
+            rclpy.spin_until_future_complete(node, future, timeout_sec=3)
+            self.assertTrue(future.done())
+            self.assertTrue(future.result().result.successful, future.result().result.reason)
+
+        def telemetry():
+            self.assertTrue(lateral)
+            self.assertEqual(lateral[-1][0], DiagnosticStatus.OK)
+            return lateral[-1][1]
+
+        def assert_unavailable():
+            self.assertTrue(lateral)
+            self.assertEqual(lateral[-1][0], DiagnosticStatus.ERROR)
+            for key in ('lookahead_m', 'target_distance_m', 'measured_speed_mps'):
+                self.assertTrue(math.isnan(float(lateral[-1][1][key])), key)
+
         spin(2)  # Discovery and initial TF history.
         statuses.clear()
         spin(2)
@@ -109,11 +143,43 @@ class TrackingTfWaitTest(unittest.TestCase):
             self.assertTrue(references[-1].valid)
             self.assertAlmostEqual(references[-1].lookahead_m,distance)
             self.assertAlmostEqual(references[-1].target.x,1.+distance)
+            sample = telemetry()
+            self.assertEqual(sample['controller'], 'pure_pursuit')
+            self.assertEqual(sample['lookahead_mode'], 'speed_interpolated')
+            self.assertAlmostEqual(float(sample['measured_speed_mps']), velocity)
+            self.assertAlmostEqual(float(sample['lookahead_m']), distance)
+            self.assertAlmostEqual(float(sample['target_distance_m']), distance)
+            # Target profile speed is deliberately independent of VO speed.
+            self.assertAlmostEqual(float(sample['target_speed_mps']), .5)
         speed[0] = float('nan')
         statuses.clear()
         spin(.4)
         self.assertIn('speed_unavailable',statuses)
         self.assertFalse(references[-1].valid)
+        assert_unavailable()
+
+        # Fixed mode still works without twist; it does not claim a used speed.
+        change({'lookahead_mode': 'fixed'})
+        spin(.4)
+        sample = telemetry()
+        self.assertEqual(sample['lookahead_mode'], 'fixed')
+        self.assertAlmostEqual(float(sample['lookahead_m']), .8)
+        self.assertTrue(math.isnan(float(sample['measured_speed_mps'])))
+
+        # MPC must report its prediction input and endpoint, not a PP setting.
+        speed[0] = 0.
+        spin(.4)
+        change({'lateral_controller': 'mpc'})
+        speed[0] = 1.5
+        spin(.4)
+        sample = telemetry()
+        self.assertEqual(sample['controller'], 'mpc')
+        self.assertAlmostEqual(float(sample['measured_speed_mps']), 1.5)
+        self.assertAlmostEqual(float(sample['lookahead_m']), float(sample['target_distance_m']))
+        self.assertAlmostEqual(float(sample['target_distance_m']), references[-1].target_distance_m, places=5)
+        speed[0] = 0.
+        spin(.4)
+        change({'lateral_controller': 'pure_pursuit', 'lookahead_mode': 'speed_interpolated'})
         speed[0] = 1.5
         spin(.4)
         self.assertEqual(statuses[-1],'tracking')
@@ -123,3 +189,4 @@ class TrackingTfWaitTest(unittest.TestCase):
         spin(.4)
         self.assertIn('tf_unavailable', statuses)
         self.assertEqual(statuses[-1], 'tf_unavailable')
+        assert_unavailable()

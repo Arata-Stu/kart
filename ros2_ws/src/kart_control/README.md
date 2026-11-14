@@ -100,6 +100,7 @@ AUTO/MANUALの指令選択は既存muxが担当し、このpackageからAUTOへ�
 | 入力 | /tf, /tf_static | tf2_msgs/msg/TFMessage | tf2標準、map→tracking_frameを取得 |
 | 出力 | /control/tracking_cmd | ackermann_msgs/msg/AckermannDriveStamped | reliable/volatile/depth1、100 Hz、舵角rad左正・速度m/s前進のみ |
 | 出力 | /control/tracking_status | std_msgs/msg/String | reliable/volatile/depth1、100 Hz、trackingまたは無効理由 |
+| 出力 | /control/lateral_diagnostics | diagnostic_msgs/msg/DiagnosticArray | reliable/volatile/depth10、制御出力ごと（既定100 Hz）とwatchdog無効通知。制御方式・実効先読み・使用速度・処理時間・異常理由 |
 | 出力 | /control/lookahead | geometry_msgs/msg/PointStamped | reliable/volatile/depth1、計算成功時、map座標の追従点 |
 | 出力 | /control/tracking_reference | kart_interfaces/msg/TrackingReference | reliable/volatile/depth1、100 Hzとwatchdog無効通知。実参照点・計測時の車両位置・設定lookahead・直線距離・valid |
 | 出力 | /control/tracking_markers | visualization_msgs/msg/MarkerArray | reliable/volatile/depth1、同周期。参照点・車両→参照点の矢印・L/pathと直線距離dのラベル |
@@ -143,6 +144,26 @@ ROS時刻の経過とsteady受信時間の両方でfreshnessを判定し、bag�
 最近傍投影は自己交差で別区間を選ぶ可能性がある。選択lane内の単純なコースで評価する。
 舵角飽和時の横加速度制約・タイヤ限界・全区間の最適な速度計画も扱わない。
 ライン切替は即時で、走行中切替の連続性を保証しない。下流adapterでモード/有効状態を扱うこと。
+
+### 先読み・速度の時系列診断
+
+`/control/lateral_diagnostics`の`name=lateral_controller`、`hardware_id=kart_control`に以下を出す。
+追加parameterはなく、制御出力と同じ周期（`control_rate_hz`、既定100 Hz）で配信する。
+header stampは指令作成時のROS時刻。`level=OK`は計算成功を示し、AUTO制御権の取得確認ではない。
+
+| キー | 値・意味 |
+| --- | --- |
+| controller | `pure_pursuit` / `mpc`、その計算に用いた横制御方式 |
+| lookahead_mode | `fixed` / `speed_interpolated`、現在の設定。MPCはこの設定を使わない |
+| lookahead_m | m、Pure Pursuitは速度補間・駐車上限適用後の実効先読み弧長。MPCは予測区間終端までの直線距離 |
+| target_distance_m | m、同じ計算の車両位置から選択targetまでのXY直線距離。カーブ・横ずれ・開路終端ではPure Pursuitの弧長と異なる |
+| measured_speed_mps | m/s、速度補間またはMPCへ実際に渡した、同じodom stampの後輪軸前後速度（前進正）。固定Pure Pursuitは速度を使用しないため`nan` |
+| target_speed_mps | m/s、既存の追従目標速度。実測速度ではなく`tracking_cmd.drive.speed`と同じ |
+
+無効計算・入力欠落・TF失敗・watchdog出力では、上の距離2項目と`measured_speed_mps`を`nan`にする。
+直前の成功値を引き継がず、診断配信のために速度TFを再取得しない。`target_speed_mps`は従来どおり無効時0。
+Studioはこれらを同じ受信時系列で比較する。速度はmap座標の差分から求めていないため、
+map上の位置補正と実速度推定の変化は区別して確認する。
 
 ## 全parameter
 
@@ -211,6 +232,8 @@ ROS testは実効距離の配信、速度NaNの無効化、方式/低速距離/�
 ROS Componentのbuild/load、TF通信、bag上の追従と実車制御は未確認。
 `test_tracking_tf_wait.py`はROS環境で実Pure Pursuitを起動し、15 ms遅れで届く同時刻TFでは
 trackingを維持し、TF配信を止めるとtf_unavailableになることを検証する。
+同じテストで正負の実速度と先読み距離の対応、目標速度との分離、固定モードの速度未使用、
+MPCへの入力速度・終端距離、速度不正・TF欠落後に診断の前回値が残らないことも検証する。
 本変更時のmacOSではROS未導入のためskip。設定parityテストとROS非依存の追従計算テストのみ実行済み。
 `colcon test --packages-select kart_control kart_hdmap`で計算・メッセージテストを実行する。
 

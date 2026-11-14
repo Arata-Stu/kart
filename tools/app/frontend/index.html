@@ -1653,6 +1653,15 @@
     <svg id="tuning-speed-chart" viewBox="0 0 760 170" role="img" aria-label="直近60秒の目標速度と現在速度、単位m/s"></svg>
     <p id="tuning-speed-note" class="help">速度診断を待っています</p>
   </section>
+  <section id="tuning-lookahead-panel" hidden>
+    <div class="actions"><strong>Lookahead・参照点距離 · 直近60秒</strong><span id="tuning-lookahead-mode" class="small"></span></div>
+    <div class="plot-legend"><span class="plot-key plot-blue">実効lookahead / MPC終端距離（青） <b id="tuning-lookahead-value">—</b> m</span><span class="plot-key plot-orange">参照点までの直線距離（橙） <b id="target-distance-value">—</b> m</span></div>
+    <svg id="tuning-lookahead-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="直近60秒の制御で使用したlookaheadと参照点までの直線距離、単位m"></svg>
+    <strong>横制御の速度 · 同じ時間軸</strong>
+    <div class="plot-legend"><span class="plot-key plot-blue">目標速度（青） <b id="lookahead-target-speed">—</b> m/s</span><span class="plot-key plot-orange">計算に使った後輪軸の推定速度（橙） <b id="lookahead-measured-speed">—</b> m/s</span></div>
+    <svg id="tuning-lookahead-speed-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="直近60秒の横制御目標速度と計算に使った後輪軸の推定前後速度、単位m/s"></svg>
+    <p id="tuning-lookahead-note" class="help" role="status">横制御の診断を待っています</p>
+  </section>
   <section id="tuning-timing-panel" hidden>
     <strong>処理時間 · 直近60秒</strong>
     <div id="tuning-processing-legend" class="plot-legend"></div>

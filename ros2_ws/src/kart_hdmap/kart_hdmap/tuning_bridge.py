@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .pose_history import PoseHistory
 from .speed_history import SpeedHistory
 from .timing_history import TimingHistory
+from .lookahead_history import LookaheadHistory
 from .perception_status import PerceptionStatus
 from .ground_perception import GroundPerception
 from .behavior_status import BehaviorStatus
@@ -52,6 +53,7 @@ class TuningBridge:
         self.requests = queue.Queue(maxsize=4)
         self.pose_history = PoseHistory()
         self.speed_history = SpeedHistory()
+        self.lookahead_history = LookaheadHistory()
         self.perception = {name: PerceptionStatus() for name in ('detections', 'tracks')}
         self.ground_perception = GroundPerception()
         self.behavior = BehaviorStatus()
@@ -176,7 +178,9 @@ class TuningBridge:
 
     def lateral_diagnostics(self, msg):
         stamp = msg.header.stamp.sec + msg.header.stamp.nanosec / 1e9
-        self.timing_history['tracking'].capture(stamp, msg.status, self.fresh(msg.header.stamp, .5))
+        fresh = self.fresh(msg.header.stamp, .5)
+        self.timing_history['tracking'].capture(stamp, msg.status, fresh)
+        self.lookahead_history.capture(stamp, msg.status, fresh)
 
     def capture_perception(self, channel, msg):
         self.perception[channel].capture(msg, self.fresh(msg.header.stamp, PerceptionStatus.MAX_AGE_S))
@@ -229,6 +233,8 @@ class TuningBridge:
                       can_rollback=self.previous is not None)
         if hasattr(self, 'speed_history'):
             result['speed_history'] = self.speed_history.view(now)
+        if hasattr(self, 'lookahead_history'):
+            result['lookahead_history'] = self.lookahead_history.view(now)
         if hasattr(self, 'timing_history'):
             result['timing_history'] = {k: h.view(now) for k, h in self.timing_history.items()}
         if hasattr(self, 'perception'):

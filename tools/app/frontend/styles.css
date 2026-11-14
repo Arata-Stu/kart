@@ -1600,10 +1600,10 @@ header .local-tag { white-space: nowrap; }
 .plot-orange { color: #d97706; }
 .plot-steering { color: #2870be; }
 
-#tuning-timing-panel { flex: none; }
-#tuning-timing-panel[hidden] { display: none; }
+#tuning-timing-panel, #tuning-lookahead-panel { flex: none; }
+#tuning-timing-panel[hidden], #tuning-lookahead-panel[hidden] { display: none; }
 .timing-chart { display: block; width: 100%; height: clamp(100px, 20vh, 170px); }
-/* Three live charts must not squeeze the parameter table or hide Apply. */
+/* Live charts must not squeeze the parameter table or hide Apply. */
 .tuning-parameters-dialog[open] { overflow-y: auto; }
 #tuning-parameters-form { flex: none; }
 .tuning-parameter-scroll { flex: none; max-height: 48dvh; }

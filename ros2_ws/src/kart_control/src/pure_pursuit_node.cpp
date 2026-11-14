@@ -22,6 +22,7 @@
 #include "tf2_ros/buffer.hpp"
 #include "tf2_ros/transform_listener.hpp"
 #include <chrono>
+#include <limits>
 #include <memory>
 #include <string>
 
@@ -247,7 +248,8 @@ private:
     return stamp.nanoseconds() > 0 && age >= -0.05 && age <= limit &&
            steady() - received <= receive_limit(limit, wall_timeout_);
   }
-  void publish(const Result &r, const std::string &reason, Pose pose = {}) {
+  void publish(const Result &r, const std::string &reason, Pose pose = {},
+               double measured_speed = std::numeric_limits<double>::quiet_NaN()) {
     ackermann_msgs::msg::AckermannDriveStamped cmd;
     cmd.header.stamp = now();
     cmd.header.frame_id = frame_;
@@ -255,6 +257,12 @@ private:
     cmd.drive.speed = r.valid ? r.speed : 0;
     const double processing = processing_ms(tick_started_, steady());
     const double pose_age = r.valid ? (rclcpp::Time(cmd.header.stamp)-pose_stamp_).seconds()*1000 : -1;
+    const double unavailable = std::numeric_limits<double>::quiet_NaN();
+    const double lookahead = r.valid && std::isfinite(c_.lookahead) ? c_.lookahead : unavailable;
+    const double distance = r.valid ? std::hypot(r.target_x-pose.x,r.target_y-pose.y) : unavailable;
+    // Only this calculation's caller supplies speed. Failed ticks and watchdog
+    // output must not reuse a previous sample or perform a velocity TF lookup.
+    if (!r.valid || !std::isfinite(measured_speed)) measured_speed = unavailable;
     command_->publish(cmd);
     diagnostic_msgs::msg::DiagnosticArray diagnostics;
     diagnostics.header.stamp=cmd.header.stamp;
@@ -263,6 +271,10 @@ private:
     d.level=r.valid ? 0 : 2;d.message=reason;
     for(const auto &entry: std::vector<std::pair<std::string,std::string>>{
       {"controller",get_parameter("lateral_controller").as_string()},
+      {"lookahead_mode",get_parameter("lookahead_mode").as_string()},
+      {"lookahead_m",std::to_string(lookahead)},
+      {"target_distance_m",std::to_string(std::isfinite(distance) ? distance : unavailable)},
+      {"measured_speed_mps",std::to_string(measured_speed)},
       {"mpc_horizon_s",std::to_string(get_parameter("mpc_horizon_s").as_double())},
       {"mpc_tracking_weight",std::to_string(get_parameter("mpc_tracking_weight").as_double())},
       {"mpc_smoothness_weight",std::to_string(get_parameter("mpc_smoothness_weight").as_double())},
@@ -422,9 +434,11 @@ private:
                                         rclcpp::Duration::from_seconds(wait));
       if (!inputs_ready()) return; // Waiting must not rejuvenate expired inputs.
       const bool use_mpc=get_parameter("lateral_controller").as_string()=="mpc";
+      double measured_speed = std::numeric_limits<double>::quiet_NaN();
       if (adaptive_.interpolated && !use_mpc) {
         try {
-          auto distance = lookahead_distance(c_.lookahead, rear_axle_speed(), adaptive_);
+          measured_speed = rear_axle_speed();
+          auto distance = lookahead_distance(c_.lookahead, measured_speed, adaptive_);
           if (!distance) throw std::invalid_argument("Invalid speed-scaled lookahead");
           c_.lookahead = *distance;
         } catch (const std::exception &error) {
@@ -454,11 +468,12 @@ private:
         double current=now().seconds();
         double interval=last_mpc_tick_>0 ? std::min(control_dt_,current-last_mpc_tick_) : control_dt_;
         last_mpc_tick_=current;
-        auto solution=lateral_mpc(line_,closed_,pose,c_,m,rear_axle_speed(),previous_steering_,interval);
+        measured_speed=rear_axle_speed();
+        auto solution=lateral_mpc(line_,closed_,pose,c_,m,measured_speed,previous_steering_,interval);
         solver_ms_=solution.elapsed_ms;solver_iterations_=solution.iterations;
         if(!inputs_ready()) return;
         c_.lookahead=std::hypot(solution.command.target_x-pose.x,solution.command.target_y-pose.y);
-        publish(solution.command,solution.reason,pose);
+        publish(solution.command,solution.reason,pose,measured_speed);
         return;
       }
       auto result = pursue(
@@ -467,7 +482,7 @@ private:
       publish(result, result.valid ? (result.speed > 0 ? "tracking"
                                                        : "zero_speed_target")
                                    : "invalid_geometry_or_off_path",
-              {t.transform.translation.x, t.transform.translation.y, yaw});
+              {t.transform.translation.x, t.transform.translation.y, yaw}, measured_speed);
     } catch (const tf2::TransformException &error) {
       RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 1000,
