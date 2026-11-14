@@ -17,6 +17,9 @@
 .perception-card .actions input{flex:1;width:auto;min-width:140px}
 .perception-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
 .perception-fields label:first-child{grid-column:1/-1}
+#perception-bag-choose{width:100%;text-align:left;white-space:normal;overflow-wrap:anywhere;font-size:16px}
+#perception-bag-tree{max-height:58vh;overflow:auto}
+#perception-bag-tree .remote-tree-row{font-size:16px;padding:10px 12px}
 .perception-card summary{font-weight:600;cursor:pointer}
 .perception-frame-controls label{display:flex;align-items:center;gap:6px}
 .perception-frame-controls select{width:auto;min-width:120px}

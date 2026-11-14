@@ -19,6 +19,7 @@ import "./bringup.js";
 import "./tuning_parameters.js";
 import "./live_plots.js";
 import "./plots_map.js";
+import "./map_layout.js";
 import "./tuning_speed.js";
 import "./tuning_lookahead.js";
 import "./tuning_timing.js";

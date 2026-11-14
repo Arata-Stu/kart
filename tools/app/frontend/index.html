@@ -41,7 +41,7 @@
         </section>
         <section class="perception-card">
           <h2>bagから画像を取り出す</h2>
-          <div class="perception-fields"><label>Notebookのbag<select id="perception-bag"></select></label><label>用途<select id="perception-extract-split"><option value="train">学習用（train）</option><option value="val">検証用（val）</option></select></label><label>画像topic<input id="perception-topic" value="/realsense/color/image_raw" /></label><label>抽出頻度（Hz）<input id="perception-sample-hz" type="number" min="0.1" max="30" step="0.1" value="2" /></label><label>最大画像数<input id="perception-max-frames" type="number" min="1" max="500" value="500" /></label></div>
+          <div class="perception-fields"><label>Notebookのbag（record配下）<button type="button" id="perception-bag-choose">bagを階層から選択</button></label><input type="hidden" id="perception-bag" /><label>用途<select id="perception-extract-split"><option value="train">学習用（train）</option><option value="val">検証用（val）</option></select></label><label>画像topic<input id="perception-topic" value="/realsense/color/image_raw" /></label><label>抽出頻度（Hz）<input id="perception-sample-hz" type="number" min="0.1" max="30" step="0.1" value="2" /></label><label>最大画像数<input id="perception-max-frames" type="number" min="1" max="500" value="500" /></label></div>
           <button id="perception-extract" class="primary">選択bagの画像を抽出</button>
           <p class="small">学習用と検証用には別のbagを使います。RCカーとコース上のダンボール・落とし物などの障害物、両方ともない背景を含めます。同じ走行の似た画像をtrain/valへ混ぜないでください。</p>
         </section>
@@ -238,8 +238,53 @@
             ><button id="save" class="primary" disabled>保存</button>
           </div>
         </div>
-        <details class="tuning-panel">
-          <summary>実車調整 · HDMapと自己位置</summary>
+        <div class="map-stage" id="map-stage">
+          <div class="map-view">
+            <div class="map-view-controls" aria-label="地図の表示操作">
+              <button id="map-zoom-out" type="button" aria-label="地図を縮小">−</button>
+              <button id="map-zoom-in" type="button" aria-label="地図を拡大">＋</button>
+              <button id="map-view-fit" type="button">コース全体</button>
+              <button id="map-wide" type="button" aria-pressed="false">地図を広く</button>
+              <button id="map-only" type="button" aria-pressed="false">地図だけ</button>
+            </div>
+        <div class="canvas-wrap" id="map-canvas-wrap">
+          <canvas
+            id="map-canvas"
+            aria-label="点群とHDMap編集キャンバス"
+            tabindex="0"
+          ></canvas>
+          <div id="empty-canvas" class="canvas-empty">
+            <div class="empty-symbol">⌖</div>
+            <h1>点群から、走れる地図へ。</h1>
+            <p>左から地図を開くか、走行記録から作成してください。</p>
+            <p class="muted">
+              点群の高さを絞り、左右の境界を描いてラインを生成します。
+            </p>
+          </div>
+          <div class="canvas-legend">
+            <span class="dot cloud"></span>点群
+            <span class="dot left"></span>左境界
+            <span class="dot right"></span>右境界
+            <label><input id="show-centerline" type="checkbox" checked /><span class="dot center"></span>Center</label>
+            <label><input id="show-raceline" type="checkbox" checked /><span class="dot race"></span>Race</label>
+            <label><input id="show-customline" type="checkbox" checked /><span class="dot custom"></span>Custom</label>
+            <label><input id="show-line-speeds" type="checkbox" checked />速度色</label>
+          </div>
+          <div id="line-speed-legend" class="line-speed-legend" hidden title="表示中ライン共通の目標速度スケール。実測速度ではありません。速度データがないラインは単色で表示します。">
+            <span>目標速度</span><span>0</span><span class="line-speed-ramp" aria-hidden="true"></span><span id="line-speed-max"></span>
+          </div>
+        </div>
+        <div class="canvas-status">
+          <label><input id="show-occupancy" type="checkbox" disabled />占有地図</label>
+          <input id="occupancy-opacity" type="range" min="0" max="1" step="0.05" value="0.45" aria-label="占有地図の不透明度" disabled />
+          <span id="occupancy-note" title="黒:占有・白:空き・灰:不明。高さフィルタは点群のみ。自動衝突判定は行いません。"></span>
+          <span id="canvas-hint">ホイール: 拡大 · 右ドラッグ: 移動</span
+          ><span id="coordinates">map · m</span>
+        </div>
+          </div>
+          <div id="tuning-divider" class="view-divider" role="separator" tabindex="0" aria-label="地図と実車調整の幅" aria-orientation="vertical" aria-valuemin="240" aria-valuemax="600" aria-valuenow="340" title="ドラッグまたは左右キーで幅を調整"></div>
+        <details class="tuning-panel" id="tuning-panel">
+          <summary title="実車調整パネルを開閉">実車調整 · HDMapと自己位置</summary>
           <div class="tuning-controls">
             <span id="tuning-target" class="small"></span>
             <button id="tuning-connect" disabled>自己位置を接続</button>
@@ -305,39 +350,6 @@
           <div class="small" id="tuning-lookahead" role="status">横制御の参照点: 未受信</div>
           <p class="small">既存の編集・区間速度・ライン生成後に保存してプレビュー。白＝実車、青＝地図の候補ライン、橙＝自己位置、黄＝横制御の参照点。ライン・速度・横制御調整はAUTO/MANUAL走行中も適用可能。画面切断は走行を停止しません。</p>
         </details>
-        <div class="canvas-wrap" id="map-canvas-wrap">
-          <canvas
-            id="map-canvas"
-            aria-label="点群とHDMap編集キャンバス"
-            tabindex="0"
-          ></canvas>
-          <div id="empty-canvas" class="canvas-empty">
-            <div class="empty-symbol">⌖</div>
-            <h1>点群から、走れる地図へ。</h1>
-            <p>左から地図を開くか、走行記録から作成してください。</p>
-            <p class="muted">
-              点群の高さを絞り、左右の境界を描いてラインを生成します。
-            </p>
-          </div>
-          <div class="canvas-legend">
-            <span class="dot cloud"></span>点群
-            <span class="dot left"></span>左境界
-            <span class="dot right"></span>右境界
-            <label><input id="show-centerline" type="checkbox" checked /><span class="dot center"></span>Center</label>
-            <label><input id="show-raceline" type="checkbox" checked /><span class="dot race"></span>Race</label>
-            <label><input id="show-customline" type="checkbox" checked /><span class="dot custom"></span>Custom</label>
-            <label><input id="show-line-speeds" type="checkbox" checked />速度色</label>
-          </div>
-          <div id="line-speed-legend" class="line-speed-legend" hidden title="表示中ライン共通の目標速度スケール。実測速度ではありません。速度データがないラインは単色で表示します。">
-            <span>目標速度</span><span>0</span><span class="line-speed-ramp" aria-hidden="true"></span><span id="line-speed-max"></span>
-          </div>
-        </div>
-        <div class="canvas-status">
-          <label><input id="show-occupancy" type="checkbox" disabled />占有地図</label>
-          <input id="occupancy-opacity" type="range" min="0" max="1" step="0.05" value="0.45" aria-label="占有地図の不透明度" disabled />
-          <span id="occupancy-note" title="黒:占有・白:空き・灰:不明。高さフィルタは点群のみ。自動衝突判定は行いません。"></span>
-          <span id="canvas-hint">ホイール: 拡大 · 右ドラッグ: 移動</span
-          ><span id="coordinates">map · m</span>
         </div>
       </section>
       <aside class="inspector">
@@ -1426,14 +1438,21 @@
           <h2>Customlineの区間速度</h2>
           <button type="button" data-close="speed-dialog">×</button>
         </div>
-        <p id="speed-length" class="help"></p>
-        <label>速度の扱い<select id="custom-speed-mode"><option value="profile">上限（曲率・加減速から生成）</option><option value="step">区間目標を即時切替</option></select></label>
-        <p class="help">即時切替は区間内の指定速度を目標にし、曲率減速・境界手前の減速を使いません。実速度はPIDと車体応答に従います。走行側の速度上限と開路終点の停止は維持します。</p>
-        <label>区間の作り方<select id="speed-mode"><option value="split">境界をクリックして分割</option><option value="ranges">開始・終了を指定（詳細）</option></select></label>
-        <p id="speed-mode-help" class="help"></p>
+        <div class="speed-editor-layout">
+          <section class="speed-map-pane" aria-label="区間の図と一覧">
+            <div class="speed-view-controls">
+              <button id="speed-zoom-out" type="button" aria-label="区間図を縮小">−</button>
+              <button id="speed-zoom-in" type="button" aria-label="区間図を拡大">＋</button>
+              <button id="speed-view-fit" type="button">全体</button>
+              <button id="speed-view-selected" type="button">選択区間を拡大</button>
+              <button id="speed-view-expand" type="button" aria-pressed="false">図を広く</button>
+              <label><input id="speed-show-waypoints" type="checkbox" />WP</label>
+              <label><input id="speed-show-numbers" type="checkbox" />WP番号</label>
+            </div>
+            <p class="help">ホイール／＋−で拡大、ドラッグで移動。線付近をクリックすると最寄りWPを選択します。各行の「表示」で区間へ拡大できます。</p>
         <svg
           id="speed-waypoints"
-          viewBox="0 0 520 240"
+          viewBox="0 0 800 480" tabindex="0"
           aria-label="Customlineのwaypoint区間選択"
         ></svg>
         <p id="speed-pick-status" class="help"></p>
@@ -1443,6 +1462,25 @@
           ><span></span>
         </div>
         <div id="speed-rows" class="scroll"></div>
+          </section>
+          <section class="speed-settings-pane" aria-label="区間の設定">
+        <p id="speed-length" class="help"></p>
+        <label>速度の扱い<select id="custom-speed-mode"><option value="profile">上限（曲率・加減速から生成）</option><option value="step">区間目標を即時切替</option></select></label>
+        <p class="help">即時切替は区間内の指定速度を目標にし、曲率減速・境界手前の減速を使いません。実速度はPIDと車体応答に従います。走行側の速度上限と開路終点の停止は維持します。</p>
+        <label>区間の作り方<select id="speed-mode"><option value="split">境界をクリックして分割</option><option value="ranges">開始・終了を指定（詳細）</option></select></label>
+        <p id="speed-mode-help" class="help"></p>
+        <details class="section-assist">
+          <summary>形状から区間分けを補助</summary>
+          <div class="form-grid">
+            <label>カーブ判定の曲率 [1/m]<input id="speed-curve-threshold" type="number" min="0.001" step="any" value="0.15" /></label>
+            <label>判定距離 [m]<input id="speed-curve-window" type="number" min="0.01" step="any" value="2" /></label>
+            <label>最小区間長の目安 [m]<input id="speed-section-min" type="number" min="0.01" step="any" value="1" /></label>
+          </div>
+          <p class="help">しきい値を小さくすると緩いカーブも検出します（0.15は半径約6.7 m）。判定距離で細かな凹凸をならし、短い区間は隣へまとめます。編集点が粗い場合は点を増やすか判定距離を大きくしてください。境界は既存WPに置きます。閉路の始点を跨ぐ同種区間は先頭と末尾に分かれます。</p>
+          <div class="actions"><button id="speed-suggest" type="button">区間候補を作成</button><button id="speed-suggest-reset" type="button" hidden>候補作成前へ戻す</button></div>
+          <p id="speed-suggest-status" class="help" role="status"></p>
+          <p class="help">候補作成で編集中の区間境界を置き換えます。推定種別は今回の編集用の目安です。「区間設定を適用」まで地図は変わりません。</p>
+        </details>
         <button id="speed-add" type="button" class="quiet">
           ＋ 区間を追加
         </button>
@@ -1451,6 +1489,8 @@
           「上限」方式では曲率・加減速制約によって速度が下がります。「即時切替」方式では区間の指定値を使います。「削除」はその区間の速度指定を解除し、隣の区間は維持します。未指定部分は生成設定の最高速度・曲率・加減速制約を使います。
           同じ色の線と行が同じ区間です。「結合」は隣の区間と低い方の速度でまとめます。詳細指定では開始・終了欄を選んで図の点をクリックします。上限方式では区間の前から減速します。点列の編集後は区間を確認し、適用後にCustomlineを再生成してください。
         </p>
+          </section>
+        </div>
         <button type="submit" class="primary full">区間設定を適用</button>
       </form>
     </dialog>
@@ -1724,6 +1764,11 @@
   <p class="help">PCAの色は特徴の違いを表します。同じ結果内で基準を共有します。赤はステア出力の局所的な入力感度です。注意領域や走行の正しさを保証する表示ではありません。</p>
   <label>フレーム<input id="e2e-features-slider" type="range" min="0" value="0" /></label>
   <p id="e2e-features-info"></p><div id="e2e-features-images" class="feature-images"></div>
+</dialog>
+<dialog id="perception-bag-dialog" class="bag-picker-dialog">
+  <div class="actions"><h2>Notebookのrosbagを選択</h2><button id="perception-bag-close">閉じる</button></div>
+  <p class="help">record配下のフォルダを展開してbagを選択してください。▣がbagです。</p>
+  <ul id="perception-bag-tree" class="remote-tree" aria-label="Notebookのrecordフォルダ"></ul>
 </dialog>
 <dialog id="e2e-bag-dialog" class="bag-picker-dialog">
   <div class="actions"><h2>Notebookのrosbagを選択</h2><button id="e2e-bag-close">閉じる</button></div>

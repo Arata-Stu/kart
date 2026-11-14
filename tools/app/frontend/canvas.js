@@ -179,6 +179,10 @@ export function fit(all = false) {
   );
   invalidate();
 }
+export function zoom(factor) {
+  scale=Math.max(.01,Math.min(3000,scale*factor));
+  invalidate();
+}
 function line(points, color, closed = false, dashed = false, lineWidth = 2) {
   if (!points?.length) return;
   ctx.beginPath();
@@ -456,7 +460,6 @@ export function draw() {
     ctx.fillText(`${spacing.toPrecision(1)} m`, width - 25, height - 36);
   });
 }
-let tuningPanelOpen = false;
 new ResizeObserver(() => {
   const r = canvas.getBoundingClientRect(),
     dpr = devicePixelRatio || 1;
@@ -465,11 +468,6 @@ new ResizeObserver(() => {
   canvas.width = width * dpr;
   canvas.height = height * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const opened = document.querySelector('.tuning-panel').open;
-  if (opened !== tuningPanelOpen) {
-    tuningPanelOpen = opened;
-    fit();
-  }
   invalidate();
 }).observe(canvas);
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());

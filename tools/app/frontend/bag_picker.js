@@ -1,11 +1,11 @@
 import { $, action } from './api.js';
 
 // Keep full relative paths as identities, including bags with repeated leaf names.
-export function installBagPicker() {
+export function installBagPicker({ targetIds = ['e2e-bag','e2e-eval-bag','section-bag'], prefix = 'e2e-bag' } = {}) {
   let records = [], target = null;
   const expanded = new Set(['']);
-  const dialog = $('e2e-bag-dialog');
-  const targets = ['e2e-bag','e2e-eval-bag','section-bag'].filter(id => $(id));
+  const dialog = $(prefix + '-dialog');
+  const targets = targetIds.filter(id => $(id));
   function caption(id) {
     $(id + '-choose').textContent = $(id).value || 'bagを階層から選択';
   }
@@ -22,7 +22,7 @@ export function installBagPicker() {
       });
       node.bag = true;
     }
-    const list = $('e2e-bag-tree'); list.replaceChildren();
+    const list = $(prefix + '-tree'); list.replaceChildren();
     function branch(node,parent) {
       const li = document.createElement('li'), button = document.createElement('button');
       button.type = 'button'; button.className = 'remote-tree-row';
@@ -60,7 +60,7 @@ export function installBagPicker() {
     for (let i=0;i<parts.length;i++) expanded.add(parts.slice(0,i).join('/'));
     render(); dialog.showModal();
   });
-  action('e2e-bag-close', () => dialog.close());
+  action(prefix + '-close', () => dialog.close());
   return function refresh(rows) {
     records = rows;
     for (const id of targets) {

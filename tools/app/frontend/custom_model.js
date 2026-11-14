@@ -73,7 +73,8 @@ export function mergeSection(rows, index) {
   const left = index === 0 ? 0 : index - 1;
   // The lower limit survives a merge; no implicit speed increase.
   return rows.flatMap((r, i) => i === left
-    ? [{start: r.start, end: rows[i + 1].end, speed: Math.min(r.speed, rows[i + 1].speed)}]
+    ? [{start: r.start, end: rows[i + 1].end, speed: Math.min(r.speed, rows[i + 1].speed),
+        ...(r.kind && r.kind === rows[i + 1].kind ? {kind:r.kind} : {})}]
     : i === left + 1 ? [] : [{...r}]);
 }
 

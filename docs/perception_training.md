@@ -25,6 +25,8 @@ Studioの「Jetson起動」から通常の「データ記録」を選び、RGB�
 
 `tools/app/start.sh`でStudioを起動し、「RCカー・障害物」を開く。
 プロジェクト名を付け、bag・RGB topic・学習用/検証用・間引きHz・最大枚数を選んで抽出する。
+bagは「bagを階層から選択」でNotebookの`record/`配下をツリー表示し、フォルダを展開して▣のbagを選ぶ。
+選択後も`日付/セッション/bag名`の相対パスを表示するため、別フォルダにある同名bagを区別できる。
 既定topicは`/realsense/color/image_raw`、2Hz、最大500枚/回、プロジェクト全体は5000枚まで。
 RGB/BGR/monoのImageとJPEG/PNGのCompressedImageに対応する。
 画像の撮影stampとbagの記録stampは区別して保持する。間引きにはbag記録時刻を使う。

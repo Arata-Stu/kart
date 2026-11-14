@@ -1,4 +1,5 @@
 import { $, state, api, on, emit, toast } from './api.js';
+import { installBagPicker } from './bag_picker.js';
 import { AnnotationDraft, MAX_BOXES, CLASS_NAMES, CLASS_LABELS, copyBoxes, normalizeBox, fitView, imagePoint,
   screenPoint, zoomView, boxHandles, hitBox, moveBox, resizeBox, filteredFrames, orderedFrames, projectProgress } from './perception_model.js';
 
@@ -12,6 +13,7 @@ let selection=null, selectionOrder=false, selectionEpoch=0, lastPushJob=null;
 const pushButtons=new Set(), toolEdits=new Set();
 const toolFields={model_root:'model-root',container_model_root:'container-model-root',encoder_repo:'encoder-repo',encoder_weights:'encoder-weights'};
 const canvas=$('perception-canvas'), ctx=canvas.getContext('2d');
+const refreshBagPicker=installBagPicker({targetIds:['perception-bag'],prefix:'perception-bag'});
 const frame=()=>project?.frames.find(value=>value.id===frameId);
 const visibleFrames=()=>orderedFrames(filteredFrames(project?.frames,$('perception-filter').value,$('perception-filter-split').value),selection,selectionOrder);
 const number=id=>Number($(id).value);
@@ -38,7 +40,7 @@ function controls() {
   $('perception-selected-class').value=draft?.boxes[selected]?String(draft.class_ids[selected]):'';
   for(const name of ['edit','box'])$('perception-tool-'+name).setAttribute('aria-pressed',String(tool===name));
   for(const button of $('perception-boxes').children)button.disabled=busy;
-  for(const id of ['project-name','bag','extract-split','topic','sample-hz','max-frames','confidence',
+  for(const id of ['project-name','bag-choose','extract-split','topic','sample-hz','max-frames','confidence',
     'python','weights','device','train-name','epochs','batch','imgsz','lr0','run','export-name',
     'selection-method','selection-limit','selection-max-images','model-root','container-model-root'])$('perception-'+id).disabled=busy;
   const dino=$('perception-selection-method').value==='dinov3';
@@ -75,7 +77,7 @@ function options(id,rows,selectedValue,empty='選択してください') {
 function renderCatalog() {
   options('perception-project',(catalog.projects || []).map(p=>[p.id,
     `${p.name} · ${p.reviewed_count ?? p.reviewed ?? 0}/${p.frames_count ?? p.frames ?? 0}確認済み`]),project?.id);
-  options('perception-bag',(catalog.records || []).map(record=>[record.key || record.id,record.name]),$('perception-bag').value,'Notebookへ転送したbagを選択');
+  refreshBagPicker((catalog.records || []).map(record=>({...record,id:record.key || record.id})));
   options('perception-run',(catalog.runs || []).map(run=>[run.id,`${run.name || run.title || run.id} · ${jobLabels[run.status] || run.status}`]),$('perception-run').value || catalog.runs?.[0]?.id,'学習実験なし');
   options('perception-selection-weights-source',[
     ['official','公式YOLOv8sの重み'],...(catalog.runs || []).filter(run=>run.status==='succeeded').map(run=>[run.id,run.name || run.title || run.id]),
