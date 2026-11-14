@@ -1,0 +1,18 @@
+[project]
+name = "kart-perception-env"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "ultralytics==8.4.209",
+    "torch==2.15.0",
+    "torchvision==0.29.2",
+    "rosbags==0.11.9",
+    "Pillow==13.0.0",
+    "onnx==1.21.0",
+    "onnxruntime==1.27.0",
+    "numpy==2.4.6",
+    "PyYAML==6.0.3",
+]
+
+[tool.uv]
+package = false

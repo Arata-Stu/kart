@@ -229,12 +229,21 @@ Jetson（arm64）の記録・推論ではこの専用venvを作らず、NumPy/h5
 | `/usr/bin/python3` | ROS / TensorRTはAPT、jtopは`docker/jetson-stats.env` | ROSノード・jtop。jtopの導入には`uv pip`を使用 |
 | `/opt/inference` | `docker/python/inference/{pyproject.toml,uv.lock}` | ONNX、ONNX Runtime CPU、ONNX Slim、Polygraphy、OpenCV、量子化・校正 |
 | `/opt/env`（Notebook / amd64のみ） | `docker/python/raceline/{pyproject.toml,uv.lock}` | NumPy、SciPy、Matplotlib、quadprog、trajectory helper |
+| `/opt/perception`（Notebook / amd64のみ） | `docker/python/perception/{pyproject.toml,uv.lock}` | YOLO追加学習、DINOv3画像選定、RGB抽出、ONNX export |
 
 `/opt/inference`のみ`--system-site-packages`でAPT版TensorRTを参照する。
 この環境のNumPy/OpenCV等はROSと別バージョンになり得るため、ROSノード起動には使わない。
 TensorRT/CUDAをPyPIから重複インストールせず、GPU推論はTensorRT、ONNX校正はCPUで行う。
 INT8は代表データで校正したQ/DQ ONNXを作り、対象JetsonでTensorRTエンジンへ変換する想定。
-モデル固有の校正データ読み込み・前処理・精度評価は未実装。PyTorch学習・QAT環境は含めない。
+モデル固有の校正データ読み込み・前処理・精度評価は未実装。推論環境にはPyTorch学習・QAT環境を含めない。
+
+障害物検知用の`/opt/perception`は、amd64イメージのビルド時に`uv sync --locked`で作成する。
+ROS・推論とは独立したPython 3.12環境で、固定版Ultralytics・PyTorch・torchvision等を導入する。
+公式YOLOv8s重みも`/opt/kart/models/yolov8s.pt`へ取得し、SHA256とライブラリimport・CPU演算子を検査する。
+`dpkg --print-architecture`がarm64の場合は環境作成・依存導入・重み取得を全てスキップする。
+NotebookのStudioはこの環境と重みを自動利用するため、通常はUIでのセットアップが不要。
+`/workspaces`のbind mountに隠れず、コンテナ再作成後も同じイメージから利用できる。
+DINOv3のソースと公式重みは従来どおり別途指定する。ビルドではGPU実行・学習・TensorRT生成を行わない。
 
 Raceline用の`/opt/env`は**NotebookのLinux x86_64（Debian名: amd64）イメージだけ**に導入する。
 Docker内の`dpkg --print-architecture`で判定し、Jetson（arm64）ではRacelineの`uv sync`とimport検査をスキップする。
@@ -254,6 +263,7 @@ uv --version
 /opt/inference/bin/python -c 'from onnxruntime.quantization import quantize_static, CalibrationDataReader'
 # 以下のRaceline確認はNotebook / amd64のみ
 /opt/env/bin/python -c 'import trajectory_planning_helpers, quadprog'
+/opt/perception/bin/python -c 'import torch, torchvision, ultralytics; print(torch.__version__)'
 trtexec --help
 
 # Notebook / amd64ではuv経由でも実行可能。起動時に依存を更新しない。
@@ -267,6 +277,8 @@ UV_PROJECT_ENVIRONMENT=/opt/env uv run --no-sync \
 uv lock --python 3.12 --project docker/python/raceline
 # 推論側を変更した場合:
 uv lock --python 3.12 --project docker/python/inference
+# 障害物検知の学習環境を変更した場合:
+uv lock --python 3.12 --project docker/python/perception
 ```
 
 `pyproject.toml`と`uv.lock`をセットで管理する。Dockerは`uv sync --locked`を使うため、

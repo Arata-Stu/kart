@@ -28,7 +28,8 @@ function controls() {
     $('perception-'+id).disabled=busy || (['extract','prelabel','train','select','selection-refresh'].includes(id) && !project);
   $('perception-export').disabled=busy || !(catalog?.runs || []).some(run=>run.id===$('perception-run').value && run.status==='succeeded');
   for(const id of ['save','save-next'])$('perception-'+id).disabled=busy || !available || !draft.boxes.length;
-  for(const id of ['negative','fit','tool-edit','tool-box'])$('perception-'+id).disabled=busy || !available;
+  for(const id of ['negative','negative-next','fit','tool-edit','tool-box'])$('perception-'+id).disabled=busy || !available;
+  $('perception-selection-environment').disabled=busy;
   for(const id of ['prev','next','frame','filter','filter-split'])$('perception-'+id).disabled=busy || !project?.frames.length;
   $('perception-discard').disabled=busy || !dirty;
   $('perception-delete').disabled=busy || !draft?.boxes[selected];
@@ -420,6 +421,8 @@ bind('settings-save',async()=>{await saveSettings();await refreshPerception();me
 bind('setup',async()=>{await saveSettings();await startJob('setup',{});});
 bind('prev',()=>navigateFrame(-1));bind('next',()=>navigateFrame(1));
 bind('save',()=>saveReviewed());bind('save-next',()=>saveReviewed(false,true));bind('negative',()=>saveReviewed(true));
+bind('negative-next',()=>saveReviewed(true,true));
+bind('selection-environment',()=>{showStep('train');$('perception-environment-details').open=true;$('perception-python').focus();});
 bind('discard',()=>{draft?.discard();selected=-1;renderBoxes();controls();draw();message('この画像の編集を保存済みの状態へ戻しました。');});
 bind('accept',()=>{
   const boxes=copyBoxes(frame().suggestions),kind=Number($('perception-new-class').value);

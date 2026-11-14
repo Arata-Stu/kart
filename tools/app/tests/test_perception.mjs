@@ -182,6 +182,11 @@ assert.equal(el('perception-selection-dino-fields').hidden,false);assert.equal(e
 assert.equal(el('perception-selection-yolo-details').hidden,true);
 for(const key of ['review-confidence','expected-max-detections','large-bbox-area-ratio'])assert.equal(el('perception-selection-'+key).disabled,true);
 for(const [key,value] of [['encoder-repo','/models/dinov3'],['encoder-weights','/weights/dinov3.pth']]){el('perception-'+key).value=value;await el('perception-'+key).trigger('input');}
+await el('perception-selection-environment').click();
+assert.equal(el('perception-pane-train').hidden,false);
+assert.equal(el('perception-environment-details').open,true,'DINO selection opens the environment setup controls');
+assert.equal(el('perception-encoder-repo').value,'/models/dinov3','opening settings preserves DINO inputs');
+await el('perception-tab-data').click();
 await el('perception-select').click();assert.deepEqual(calls.at(-1).body,{id:'project-a',method:'dinov3',limit:20,max_images:100,encoder_repo:'/models/dinov3',encoder_weights:'/weights/dinov3.pth'});
 // Transfer uses the shared SSH connection and only shows the returned build command.
 for(const [key,value] of [['model-root','/host/custom'],['container-model-root','/workspaces/custom']]){el('perception-'+key).value=value;await el('perception-'+key).trigger('input');}
@@ -208,4 +213,18 @@ assert.equal(el('perception-push-build-command').value,'');assert.equal(el('perc
 state.jobs=[{id:'restored-host-only',status:'succeeded',result:{...hostOnly,host_path:'/restored/host-only/opponent.onnx'}}];emit('status');await flush();
 assert.equal(el('perception-push-host-path').textContent,'/restored/host-only/opponent.onnx','host-only durable results are also restored after reconnecting');
 assert.equal(el('perception-push-build-command').value,'');assert.equal(el('perception-push-copy').disabled,true);
-console.log('RC-car UI keeps drafts across navigation/conflicts, sends pixel boxes with both revisions, separates negatives/suggestions and starts local learning/export jobs');
+// Negative-and-next only navigates after a successful save, preserving the last image.
+el('perception-frame').value='f1';await el('perception-frame').trigger('change');await flush();
+failSave=true;await el('perception-negative-next').click();
+assert.match(el('perception-frame-info').textContent,/record-a.*111/,'failed negative save stays on the same image');
+assert.equal(el('perception-draft-warning').hidden,false);
+failSave=false;await el('perception-discard').click();await el('perception-refresh').click();await flush();
+await el('perception-negative-next').click();await flush();
+annotation=calls.filter(call=>call.url==='/api/perception/annotate').at(-1).body;
+assert.equal(annotation.frame,'f1');assert.deepEqual(annotation.boxes,[]);assert.deepEqual(annotation.class_ids,[]);assert.equal(annotation.reviewed,true);
+assert.match(el('perception-frame-info').textContent,/record-b.*222/,'successful negative save advances to the next image');
+await el('perception-negative-next').click();await flush();
+assert.match(el('perception-frame-info').textContent,/record-c.*333/,'negative-and-next follows the current image order');
+await el('perception-negative-next').click();await flush();
+assert.match(el('perception-frame-info').textContent,/record-c.*333/,'last image stays selected after negative-and-next');
+console.log('RC-car UI: drafts, class labels, negative-and-next, environment navigation, selection, learning/export and transfer passed');

@@ -1,5 +1,6 @@
 """UI service contracts and durable task routing, without GPU or ROS."""
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -86,6 +87,45 @@ class ServiceTests(unittest.TestCase):
                        dict(python=sys.executable, weights=str(self.weights), device='cpu', extra=True)):
             with self.subTest(values=values), self.assertRaises(ValueError):
                 self.service.save_settings(values)
+
+    def test_image_runtime_is_default_and_repairs_only_missing_legacy_defaults(self):
+        executable = self.base / 'image/bin/python'
+        executable.parent.mkdir(parents=True)
+        executable.write_text('#!/bin/sh\nexit 0\n')
+        executable.chmod(0o755)
+        weights = self.base / 'image/yolov8s.pt'
+        weights.write_bytes(b'baked weights fixture')
+        self.service.settings_file.unlink()
+        with patch('kart_studio.perception.IMAGE_PYTHON', executable), \
+                patch('kart_studio.perception.IMAGE_WEIGHTS', weights), \
+                patch.object(self.service, 'repo', self.base / 'repo'), \
+                patch.dict(os.environ, {}, clear=True):
+            defaults = self.service.settings()
+            self.assertEqual(defaults['python'], str(executable))
+            self.assertEqual(defaults['weights'], str(weights))
+            legacy = dict(python=str(self.service.repo / '.venv/perception/bin/python'),
+                          weights=str(self.service.repo / 'weights/racing/yolov8s/yolov8s.pt'), device='cuda:1')
+            self.service.save_settings(legacy)
+            original = self.service.settings_file.read_bytes()
+            values = self.service.settings()
+            self.assertEqual(values['python'], str(executable))
+            self.assertEqual(values['weights'], str(weights))
+            self.assertEqual(values['device'], 'cuda:1')
+            self.assertEqual(self.service.settings_file.read_bytes(), original, 'read-only migration does not rewrite settings')
+            custom = dict(python='/custom/missing/python', weights='/custom/missing.pt', device='cpu')
+            self.service.save_settings(custom)
+            self.assertEqual(self.service.settings(), custom, 'explicit custom paths stay authoritative')
+            self.service.settings_file.unlink()
+            with patch.dict(os.environ, KART_PERCEPTION_PYTHON='/explicit/python'):
+                self.assertEqual(self.service.settings()['python'], '/explicit/python')
+
+    def test_setup_keeps_the_image_interpreter_selected(self):
+        plan = self.service.prepare('setup', {})
+        job = Mock()
+        with patch.object(self.service, 'managed_python', return_value='/opt/perception/bin/python'), \
+                patch.object(self.service, 'environment', return_value=dict(ready=True)):
+            self.assertEqual(self.service.execute(job, plan), dict(ready=True))
+        self.assertEqual(self.service.settings()['python'], '/opt/perception/bin/python')
 
     def test_extract_rejects_paths_and_limits_before_starting_a_job(self):
         for body in (dict(bag='../elsewhere'), dict(bag='/absolute'), dict(bag='missing')):

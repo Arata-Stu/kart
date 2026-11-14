@@ -11,6 +11,12 @@ Jetsonのbringup起動・終了をUIから扱う。通常走行のモード操�
 RGB画像抽出はrosbags・Pillowを読み込めるPythonで実行し、学習専用環境やYOLO重みの作成を前提にしない。
 設定したPythonが抽出に使えない場合はStudioの実行Pythonを確認して使用し、保存済みの学習設定は変更しない。
 双方に抽出用依存がなければ、環境設定・セットアップ画面への手順をエラーに表示する。
+障害物検知の学習・DINOv3選定環境はDockerのamd64ビルド時に`/opt/perception`へ作成し、
+公式YOLO重みは`/opt/kart/models/yolov8s.pt`へ固定hashで配置する。依存はPython 3.12の専用uv project/lockで管理する。
+判定にはイメージ内の`dpkg --print-architecture`を使い、arm64では環境作成・依存導入・重み取得をスキップする。
+Studioは同梱環境を既定にし、使用可能な保存済み設定や明示的な独自パスは保持する。
+失効した従来のproject-local既定パスだけは同梱環境へ読み替える。起動時にインストールはしない。
+イメージに環境がある場合の明示setupは検査・再利用とし、Docker外の明示setupは同じlockからproject-local環境を作成する。
 class 0はrc_car、class 1はobstacle。障害物は走路上の静止ダンボールや落とし物等とし、
 背景ダクト・常設コース境界を一律に障害物へ分類しない。
 未確認画像と明示確認したnegativeを区別し、前者を学習へ含めない。

@@ -184,3 +184,18 @@ RUN git init /tmp/bytetrack \
     && install -Dm644 /tmp/bytetrack/LICENSE /usr/local/share/licenses/bytetrack/LICENSE \
     && ldconfig \
     && rm -rf /tmp/bytetrack
+
+# Notebook object-detection training and DINOv3 image selection. Keep this
+# isolated from ROS/inference and outside the bind-mounted /workspaces tree.
+# arm64/Jetson must skip venv creation, dependency installs and model downloads.
+COPY python/perception/pyproject.toml python/perception/uv.lock python/perception/prepare.py /opt/kart/python/perception/
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    set -eux; \
+    if [ "$(dpkg --print-architecture)" = amd64 ]; then \
+        UV_PROJECT_ENVIRONMENT=/opt/perception uv sync \
+            --project /opt/kart/python/perception --python /usr/bin/python3 --locked --no-dev; \
+        /opt/perception/bin/python /opt/kart/python/perception/prepare.py /opt/kart/models/yolov8s.pt; \
+        chmod -R a+rX /opt/perception /opt/kart/models; \
+    else \
+        echo "Skipping notebook-only perception setup on $(dpkg --print-architecture)"; \
+    fi

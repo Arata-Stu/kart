@@ -43,6 +43,8 @@ RGB/BGR/monoのImageとJPEG/PNGのCompressedImageに対応する。
 オレンジダクト、路面、人だけなど、RCカーも対象の障害物もない画像は、
 枠を消して「対象なし」と確認して保存する。障害物だけの画像は負例にしない。
 未確認の空画像は負例と区別し、学習には使わない。
+「対象なしとして保存」は現在の画像に留まり、「対象なしとして保存して次へ →」は保存成功後に現在の表示順の次画像へ進む。
+保存失敗時と最終画像では次へ進まない。どちらもその画像の枠・クラスを全て消して対象なしと確定する。
 
 旧1クラスprojectの枠はRCカー（class 0）として保持するが、旧「確認済み」も未確認へ戻す。
 障害物の付け忘れがないか2クラスで再確認して保存する。読み込みだけでは元のproject.jsonを書き換えない。
@@ -93,10 +95,22 @@ DINOv3は既存E2Eと同じ、cleanな`e2e.repos`固定commitのソースと公�
 
 ## 4. 学習環境と実行
 
-「学習環境をセットアップ」はStudio実行PCの`.venv/perception`にPython 3.11と固定版の
-Ultralytics等を導入する。初回はネット接続が必要。公式YOLOv8sの重みがなければ
-固定URLから取得し、SHA256を照合する。既存の重みは書き換えない。
+amd64（x86_64）のkart Dockerでは、ビルド時に`/opt/perception`へPython 3.12の専用環境と
+固定版Ultralytics・PyTorch等を導入する。公式YOLOv8sの重みは`/opt/kart/models/yolov8s.pt`に配置し、
+SHA256とライブラリのimport・CPU演算子を検査する。arm64/Jetsonではこのセットアップ全体をスキップする。
+環境と重みは`/workspaces`のbind mount外にあり、Studioが自動選択するためUIでの初回setupは不要。
+既存イメージには`./scripts/dev.sh --build-local`で再ビルド・コンテナ再作成が必要。
+保存済みの独自Python・重みパスは保持し、失効した従来の既定パスだけ同梱先に読み替える。
+
+「学習環境をセットアップ」は、Docker同梱環境があれば検査して再利用する。
+Docker外ではStudio実行PCの`.venv/perception`へ、同じ`docker/python/perception`のuv lockから環境を作る。
+初回はネット接続が必要。公式YOLOv8sの重みがなければprojectの`weights/racing/yolov8s/yolov8s.pt`へ
+取得してSHA256を照合する。既存の重みは書き換えない。
 既存環境を使う場合はUIでPythonの絶対パス・重みの絶対パス・deviceを設定する。
+DINOv3選定もPyTorch等を使用するため、このPython環境が必要。画像選定欄の「学習環境の設定へ」で
+「3 学習・ONNX」の「Notebookの学習環境」を開き、セットアップまたは既存Pythonの指定を行う。
+新しいamd64 Dockerでは同梱環境をそのまま使用できる。
+DINOv3のソース・重みは別途ローカルパスを指定する。セットアップ操作だけでは選定や学習を開始しない。
 `auto`はCUDA→MPS→CPUの順に利用可能なdeviceを選ぶ。GPUを使うならStudioをそのPC上で実行する。
 ブラウザを開いているだけでは別PCのGPUで学習しない。
 

@@ -18,6 +18,10 @@ from .perception_dataset import DatasetStore
 from .perception_selection_store import SelectionStore, image_signature
 
 
+IMAGE_PYTHON = Path('/opt/perception/bin/python')
+IMAGE_WEIGHTS = Path('/opt/kart/models/yolov8s.pt')
+
+
 class Perception:
     def __init__(self, repo, base, records, state):
         self.repo, self.base, self.records = Path(repo).resolve(), Path(base).resolve(), Path(records).resolve()
@@ -29,11 +33,23 @@ class Perception:
         for kind in ('runs', 'models'):
             (self.root / kind).mkdir(parents=True, exist_ok=True)
 
+    def managed_python(self):
+        return str(IMAGE_PYTHON) if shutil.which(str(IMAGE_PYTHON)) else str(self.repo / '.venv/perception/bin/python')
+
     def settings(self):
-        values = dict(python=os.environ.get('KART_PERCEPTION_PYTHON', str(self.repo / '.venv/perception/bin/python')),
-                      weights=str(self.repo / 'weights/racing/yolov8s/yolov8s.pt'), device='auto')
+        local_python = str(self.repo / '.venv/perception/bin/python')
+        local_weights = self.repo / 'weights/racing/yolov8s/yolov8s.pt'
+        values = dict(python=os.environ.get('KART_PERCEPTION_PYTHON', self.managed_python()),
+                      weights=str(local_weights if local_weights.is_file() or not IMAGE_WEIGHTS.is_file() else IMAGE_WEIGHTS),
+                      device='auto')
         if self.settings_file.exists():
             values.update(read_json(self.settings_file))
+        # Repair only obsolete project-local defaults. Explicit custom paths and
+        # still-usable local environments remain authoritative; reads do not save.
+        if values['python'] == local_python and not shutil.which(local_python):
+            values['python'] = self.managed_python()
+        if values['weights'] == str(local_weights) and not local_weights.is_file() and IMAGE_WEIGHTS.is_file():
+            values['weights'] = str(IMAGE_WEIGHTS)
         return values
 
     def save_settings(self, values):
@@ -186,7 +202,10 @@ class Perception:
             plan['resources'] = ['perception:environment']
             return plan
         if action != 'extract' and not shutil.which(plan['settings']['python']):
-            raise ValueError('先に「学習環境をセットアップ」を実行してください')
+            raise ValueError('指定した学習用Pythonが見つかりません: ' + plan['settings']['python'] + '。'
+                             '「3 学習・ONNX」→「Notebookの学習環境」から「学習環境をセットアップ」を実行するか、'
+                             '既存の対応Pythonを指定して「設定を保存」してください。'
+                             'DINOv3選定画面の「学習環境の設定へ」からも移動できます')
         if action in ('train', 'prelabel') and not Path(plan['settings']['weights']).is_file():
             raise ValueError('YOLOv8sの重みがありません。学習環境の重みパスを確認してください')
         if action in ('extract', 'prelabel', 'select', 'train'):
@@ -284,7 +303,7 @@ class Perception:
             raise ValueError('ジョブの保存先が変わりました')
         if plan['action'] == 'setup':
             job.run(['bash', str(self.repo / 'scripts/perception_setup.sh')])
-            self.save_settings(dict(self.settings(), python=str(self.repo / '.venv/perception/bin/python')))
+            self.save_settings(dict(self.settings(), python=self.managed_python()))
             return self.environment()
         request = self.root / ('.request-' + uuid.uuid4().hex + '.json')
         atomic_json(request, plan)
