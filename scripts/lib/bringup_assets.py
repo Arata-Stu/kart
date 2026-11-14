@@ -78,13 +78,16 @@ def matching_resolution(candidates, infra_profile):
 
 
 def select_runtime_model(bundle, candidates, choose):
-    matched = paired_models(bundle, candidates)
     # A source engine may have been built on another GPU. Prefer the runtime
     # export, but retain source-only installations and explicit CLI overrides.
+    runtime_candidates = [p for p in candidates if Path(p).name == 'runtime_models']
+    runtime = paired_models(bundle, runtime_candidates)
+    if len(runtime) == 1:
+        # No source candidate can change this choice. Avoid reading their ONNX
+        # files; launch still validates the selected bundle/model independently.
+        return select_related('VGL runtimeモデル', runtime_candidates, runtime, choose)
+    matched = runtime + paired_models(bundle, [p for p in candidates if p not in runtime_candidates])
     ordered = sorted(matched or candidates,
                      key=lambda p: (Path(p).name != 'runtime_models', str(p)))
-    runtime = [p for p in matched if Path(p).name == 'runtime_models']
-    if len(runtime) == 1:
-        return select_related('VGL runtimeモデル', ordered, runtime, choose)
     return select_related('VGLモデル（実行GPU用engine）', ordered,
                           ordered if matched else [], choose)

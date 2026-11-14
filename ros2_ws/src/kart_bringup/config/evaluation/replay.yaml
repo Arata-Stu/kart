@@ -6,6 +6,7 @@ read_ahead_queue_size: 1000
 # odometry, actuator/mode commands, or old localization outputs.
 extra_topics: [/tf_static]
 rviz: true
+lap_vgl: false  # Saved-map + VGL only: request localization after each verified full lap.
 
 # Offline camera-only bags need no uncalibrated vehicle mount TF.
 base_frame: camera_link

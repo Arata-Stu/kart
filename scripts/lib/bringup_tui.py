@@ -225,6 +225,8 @@ class Editor:
             active = a.eval_record or str(yaml.safe_load((self.config / 'evaluation/recording.yaml').read_text())['enabled']).lower()
             rows['eval_record'] = f'評価結果rosbag記録: {active} / {a.eval_output or "自動保存先"}'
             rows['tracking'] = f'追跡方式: {"VIO" if a.tracking_mode == "1" else "VO"}'
+            if a.eval_localization == 'vgl':
+                rows['lap_vgl'] = f'補助 / 周回VGL補正: {"ON（各周に要求）" if self.lap_enabled("lap_vgl") else "OFF"}'
         if a.mode in ('drive', 'eval'):
             from kart_bringup.multicam import LABELS
             preset = 'sim/vslam.yaml' if a.mode == 'eval' and a.eval_localization == 'fresh' else 'localization/cuvslam.yaml'
@@ -265,6 +267,11 @@ class Editor:
 
     def lap_enabled(self, key):
         value = getattr(self.args, key)
+        if self.args.mode == 'eval' and key == 'lap_vgl':
+            value = yaml.safe_load((self.config / 'evaluation/replay.yaml').read_text())[key] if value is None else value
+            if type(value) is not bool:
+                raise ValueError('evaluation/replay.yamlのlap_vglはtrue/falseで指定してください')
+            return value
         return mission.composition(self.config / 'mission.yaml', self.args.mode)[key] if value is None else value
 
     def evs_values(self):
@@ -315,11 +322,19 @@ class Editor:
         elif action == 'evaluation':
             choice = self.pick('オフライン解析', EVALUATIONS, a.eval_localization, EVALUATIONS.__getitem__)
             if choice != a.eval_localization:
+                lap_was_enabled = a.mode == 'eval' and self.lap_enabled('lap_vgl')
                 for key in ('map_file', 'map_dir', 'model_dir', 'lane_id', 'line_type', 'e2e_model_dir',
                             'tracking_mode', 'multicam_mode', 'base_frame', 'imu_frame', 'latency_output'):
                     setattr(a, key, '')
                 a.eval_localization = choice
                 a.mode = 'e2e-latency' if choice == 'e2e_latency' else 'eval'
+                if choice != 'vgl' and (lap_was_enabled
+                        or (a.mode == 'eval' and self.lap_enabled('lap_vgl'))
+                        or (a.mode == 'e2e-latency' and a.lap_vgl is not None)):
+                    a.lap_vgl = None if a.mode == 'e2e-latency' else False
+                    notice = '選択した評価方式はVGLを使用しないため、周回VGL補正をOFFにしました'
+                    self.adjustments.append(notice)
+                    print('連動変更:', notice)
                 if a.mode == 'eval':
                     self.edit('tracking')
                 self.assets()
@@ -465,6 +480,8 @@ class Editor:
             a.perception_debug_image = self.pick('bbox付きデバッグ画像（JPEG・最大5Hz）', [False, True], current,
                 lambda value: '有効' if value else '無効')
         elif action in ('lap_vgl', 'lap_cache_clear'):
+            if a.mode != 'drive' and not (action == 'lap_vgl' and a.mode == 'eval' and a.eval_localization == 'vgl'):
+                raise ValueError('周回VGL補正はdriveまたはVGL評価、周回キャッシュ解放はdriveで使用してください')
             title = {'lap_vgl': '周回VGL補正', 'lap_cache_clear': '周回Jetsonキャッシュ解放'}[action]
             value = self.pick(title, [False, True], self.lap_enabled(action),
                               lambda enabled: 'ON（各周に要求）' if enabled else 'OFF')

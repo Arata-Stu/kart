@@ -112,6 +112,10 @@ odom→camera_linkを重複配信しないこと。車体では既定のbase_lin
 VGLのpose covarianceは現上流では既定ゼロであり、精度保証・確信度として使用しない。
 Joyボタン割当・再局在中の走行制御は未接続。再要求serviceを後でJoy managerから呼べる構成とした。
 driveの任意機能として、[周回VGL要求](../../README.md#周回ごとのvgljetsonキャッシュ解放)を追加した。
+保存地図＋VGLの[offline評価](../evaluation/README.md#保存地図の周回vgl任意)でも`lap_vgl:=true`で利用できる。
+offlineの未指定値はevaluation/replay.yamlのlap_vgl=false。選択した閉じた参照ラインを使い、
+lap_managerだけ追加する。localizationのuse_sim_time=true・実効base_frame/odom_frameに合わせ、
+cache_clear_enabled=falseとする。VSLAM単独・地図なし・開路の評価では有効化しない。
 `lap_manager.yaml`が実運用parameterの正本で、全一覧と判定・要求状態の仕様は
 [kart_lap_manager](../../../kart_lap_manager/README.md)を参照。
 VSLAM hint失敗→VGL再要求は接続したが、あらゆるtracking lossからの自動回復を保証するものではない。

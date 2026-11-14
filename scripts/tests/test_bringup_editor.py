@@ -47,7 +47,7 @@ def test_record_defaults_only_ask_purpose_and_review():
     out, err = run_tui([('用途', 'record'), (REVIEW, 'start')])
     assert not err
     assert 'mode:=collect' in out
-    assert 'run_name:=collect_rgb30fps_infra90fps_evsOFF_depthOFF_imuA200-G400Hz' in out
+    assert 'run_name:=collect_rgb640x480x30fps_infra640x480x90fps_evsOFF_depthOFF_imuA200-G400Hz' in out
     assert 'rgb_profile:=' not in out  # YAML preserved, not copied into overrides.
     assert 'auto_fixed_throttle:=' not in out
 
@@ -129,7 +129,7 @@ def make_editor(*options, choose=None):
     return Editor(args, CONFIG, entry.ROOT, choose or scripted([]))
 
 
-def test_lap_switches_are_independent_and_only_visible_for_drive():
+def test_lap_switches_are_independent_and_drive_defaults_remain_unchanged():
     editor = make_editor(choose=scripted([('周回VGL補正', True), ('周回Jetsonキャッシュ解放', True),
                                          ('周回VGL補正', False)]))
     rows = editor.rows()
@@ -146,6 +146,48 @@ def test_lap_switches_are_independent_and_only_visible_for_drive():
     for mode in ('collect', 'environment', 'eval'):
         rows = make_editor('--mode', mode).rows()
         assert 'lap_vgl' not in rows and 'lap_cache_clear' not in rows
+
+
+def test_eval_vgl_lap_switch_uses_replay_default_and_does_not_offer_cache(tmp_path):
+    editor = make_editor('--mode', 'eval', '--eval-localization', 'vgl',
+                         choose=scripted([('周回VGL補正', True), ('周回VGL補正', False)]))
+    assert editor.rows()['lap_vgl'].endswith('OFF')
+    assert 'lap_cache_clear' not in editor.rows()
+    editor.edit('lap_vgl')
+    assert editor.args.lap_vgl is True
+    editor.edit('lap_vgl')
+    assert editor.args.lap_vgl is False
+    (tmp_path / 'evaluation').mkdir()
+    (tmp_path / 'evaluation/replay.yaml').write_text('lap_vgl: true\n')
+    editor.config = tmp_path
+    editor.args.lap_vgl = None
+    assert editor.lap_enabled('lap_vgl') is True, 'eval uses replay.yaml rather than the drive mission default'
+    editor.args.lap_vgl = False
+    assert editor.lap_enabled('lap_vgl') is False
+    for kind in ('vslam', 'fresh'):
+        editor = make_editor('--mode', 'eval', '--eval-localization', kind)
+        assert 'lap_vgl' not in editor.rows()
+        with pytest.raises(ValueError, match='VGL評価'):
+            editor.edit('lap_vgl')
+
+
+def test_tui_eval_lap_on_reaches_evaluation_launch():
+    steps = [('用途', 'eval'), ('オフライン解析', 'vgl'), ('追跡方式', '0'),
+             (REVIEW, 'lap_vgl'), ('周回VGL補正', True), (REVIEW, 'start')]
+    with (patch('kart_bringup.mission.hdmap_choices', return_value=[('main', 'raceline')]),
+          patch('kart_bringup.localization.resolve', return_value=(
+              {'cuvslam': {'tracking_mode': 0, 'base_frame': 'camera_link', 'odom_frame': 'odom', 'map_frame': 'map'}},
+              {}, {}, {'input_shape': [1, 3, 480, 640]})),
+          patch('kart_bringup.replay.validate_bag_shape', return_value={}),
+          patch('kart_bringup.replay.playback'),
+          patch('kart_bringup.lap_maintenance.evaluation_lap_parameters') as preflight):
+        out, err = run_tui(steps, '--map-file', '/map', '--map-dir', '/bundle', '--model-dir', '/model',
+                           '--lane-id', 'main', '--line-type', 'raceline', '--bag', '/bag', '--eval-record', 'false')
+    assert not err
+    command = next(line for line in out.splitlines() if line.startswith('ros2 launch'))
+    assert 'evaluation.launch.py' in command and 'lap_vgl:=true' in command and 'enable_vgl:=true' in command
+    assert 'lap_cache_clear:=' not in command
+    preflight.assert_called_once()
 
 
 def test_tui_lap_switches_reach_launch_after_reediting():
@@ -235,16 +277,54 @@ def test_changed_bundle_updates_only_inferred_camera_values(tmp_path):
         assert editor.args.map_dir == str(bundles[1])
 
 
-def test_evaluation_can_switch_without_retaining_incompatible_options():
+def test_evaluation_can_switch_without_retaining_incompatible_options(capsys):
     editor = make_editor('--mode', 'eval', '--eval-localization', 'vgl', '--map-file', '/hdmap',
-                         '--map-dir', '/bundle', '--model-dir', '/model', '--bag', '/bag',
+                         '--map-dir', '/bundle', '--model-dir', '/model', '--bag', '/bag', '--lap-vgl',
                          choose=scripted([('オフライン解析', 'fresh'), ('追跡方式', '1')]))
     editor.edit('evaluation')
     assert editor.args.eval_localization == 'fresh' and editor.args.tracking_mode == '1'
     assert editor.args.bag == '/bag'
     assert not editor.args.map_file and not editor.args.map_dir and not editor.args.model_dir
+    assert editor.args.lap_vgl is False
+    assert '周回VGL補正をOFF' in capsys.readouterr().out
     rows = editor.rows()
     assert 'assets' not in rows and 'rgb' not in rows and 'control' not in rows
+
+
+@pytest.mark.parametrize('kind', ['vslam', 'e2e_latency'])
+def test_switching_away_from_vgl_explicitly_disables_lap_request(kind, capsys):
+    steps = [('オフライン解析', kind)] + ([] if kind == 'e2e_latency' else [('追跡方式', '0')])
+    editor = make_editor('--mode', 'eval', '--eval-localization', 'vgl', '--lap-vgl', choose=scripted(steps))
+    with patch.object(editor, 'assets'):
+        editor.edit('evaluation')
+    assert editor.args.lap_vgl is (None if kind == 'e2e_latency' else False)
+    assert '周回VGL補正をOFF' in capsys.readouterr().out
+    assert 'lap_vgl' not in editor.rows()
+
+
+@pytest.mark.parametrize('kind', ['vslam', 'fresh'])
+def test_returning_from_latency_disables_an_enabled_eval_yaml_default(kind, tmp_path, capsys):
+    (tmp_path / 'evaluation').mkdir()
+    (tmp_path / 'evaluation/replay.yaml').write_text('lap_vgl: true\n')
+    editor = make_editor('--mode', 'e2e-latency', '--eval-localization', 'e2e_latency',
+                         choose=scripted([('オフライン解析', kind), ('追跡方式', '0')]))
+    editor.config = tmp_path
+    with patch.object(editor, 'assets'):
+        editor.edit('evaluation')
+    assert editor.args.mode == 'eval'
+    assert editor.args.lap_vgl is False
+    assert editor.lap_enabled('lap_vgl') is False
+    assert '周回VGL補正をOFF' in capsys.readouterr().out
+
+
+def test_switching_to_latency_clears_an_explicit_off_option(capsys):
+    editor = make_editor('--mode', 'eval', '--eval-localization', 'vgl', '--no-lap-vgl',
+                         choose=scripted([('オフライン解析', 'e2e_latency')]))
+    with patch.object(editor, 'assets'):
+        editor.edit('evaluation')
+    assert editor.args.lap_vgl is None
+    assert '周回VGL補正をOFF' in capsys.readouterr().out
+    entry.validate_mode_options(editor.args)
 
 
 def test_record_joy_limit_input_reaches_launch():

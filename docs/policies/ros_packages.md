@@ -282,7 +282,7 @@ VGL併用のoffline評価は実カメラ設定ではなく、bagの先頭の左�
 不一致時は記録側とモデル側のサイズを表示する。先頭検査と全区間の整合性検証は区別する。
 
 E2Eはlocalizationを起動せず、実行時throttleと前処理の正本はモデルmetadata。
-evalは再生・localization・HDMap・RVizに限定し、古い動的TFや制御指令を再生しない。
+evalは再生・localization・HDMap・RVizと任意の周回VGL判定に限定し、古い動的TFや制御指令を再生しない。
 mapなし診断ではsim_vslam launchで新規SLAM・RVizを起動し、地図・HDMap・VGLを要求しない。
 VOはstereo画像・CameraInfo・固定TF、VIOは加えてIMUだけを再生する。
 録画のsession directoryは最初のSTARTで作成し、run_nameを起動時に選ぶ。
@@ -296,6 +296,10 @@ VGLは既存Trigger/pose_hint経路を使用し、受付応答と再局在完了
 探索中・結果不明時に自動再送を重ねず、上流にcancelがない状態でtimeoutを完了と扱わない。
 VGL hintの撮影stampと推論終了時刻を区別し、現在のodometryの鮮度期限をhintへ流用しない。
 起動構成の`lap_vgl`・`lap_cache_clear`はmission.yamlに既定OFF、TUIから独立に明示選択する。
+offline保存地図＋VGL評価ではevaluation/replay.yamlのlap_vglを別の既定OFFとし、
+評価のuse_sim_time=true・base/odom frameを同じ周回判定ノードへ適用する。
+制御ノード・実センサ・車両を起動せず、閉じた参照ラインとVGL有効化を起動前に検証する。
+評価結果記録には周回状態・イベント・採用パラメータを含める。キャッシュ解放はdrive専用。
 
 Jetsonキャッシュ解放は明示opt-inのLinux clean page cache解放に限る。
 地図・モデル・engine・ユーザーファイルを削除せず、CUDA内部の資源解放と混同しない。

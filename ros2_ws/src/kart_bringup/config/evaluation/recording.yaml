@@ -16,6 +16,8 @@ topics:
   - /localization/vgl/diagnostics
   - /diagnostics
   - /localization/pose_hint
+  - /localization/lap_events
+  - /localization/lap_status
   - /visual_localization/trigger_localization
   - /rosout
   - /parameter_events

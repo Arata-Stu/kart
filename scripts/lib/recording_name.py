@@ -1,14 +1,14 @@
-"""Human-readable planned sensor rates; not evidence of recorded delivery."""
+"""Human-readable planned camera profiles and sensor rates; not recorded delivery."""
 import yaml
 
 
 def sensor_recording_name(mode, sensors, evs_paths=None, evs_overrides=None):
-    def camera(label, enabled, profile):
-        rate = sensors[profile].split('x')[-1]
-        return label + (rate + 'fps' if enabled else 'OFF')
+    def camera(label, enabled, profile, resolution=False):
+        value = sensors[profile] if resolution else sensors[profile].split('x')[-1]
+        return label + (value + 'fps' if enabled else 'OFF')
 
-    parts = [mode, camera('rgb', sensors['enable_color'], 'rgb_camera.color_profile'),
-             camera('infra', sensors['enable_infra1'] or sensors['enable_infra2'], 'depth_module.infra_profile')]
+    parts = [mode, camera('rgb', sensors['enable_color'], 'rgb_camera.color_profile', resolution=True),
+             camera('infra', sensors['enable_infra1'] or sensors['enable_infra2'], 'depth_module.infra_profile', resolution=True)]
     if evs_paths:
         tensor = yaml.safe_load(evs_paths[1].read_text())['/**/event_tensor']['ros__parameters']
         image = yaml.safe_load(evs_paths[2].read_text())['/**/event_preprocessor']['ros__parameters']

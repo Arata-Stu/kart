@@ -50,7 +50,13 @@ portable testで選択順序・再編集・エラー修正・引数伝播・キ�
 地図走行の「周回VGL補正」「周回Jetsonキャッシュ解放」は別々にON/OFFでき、既定は両方OFF。
 CLIでは通常のdrive引数へ`--lap-vgl`、`--lap-cache-clear`を追加する。
 `--no-lap-vgl`、`--no-lap-cache-clear`は明示OFF、未指定は`mission.yaml`を保持する。
-どちらもdrive専用で、閉じた参照ラインの正方向の周回を判定して要求する。起動直後は要求しない。
+閉じた参照ラインの正方向の周回を判定して要求する。起動直後は要求しない。
+offline bag評価の「VSLAM＋VGL」でも「周回VGL補正」をON/OFFできる。
+CLIは`--mode eval --eval-localization vgl`の通常引数へ`--lap-vgl`を追加する。
+未指定は`kart_bringup/config/evaluation/replay.yaml`の`lap_vgl: false`、明示OFFは`--no-lap-vgl`。
+VSLAM単独・地図なしVO/VIO・E2E遅延ではONを拒否する。評価ではbag時計と採用base frameに揃えて
+lapノードを起動し、ノードの購読準備後に再生する。再生倍率で周回時間の意味を変更しない。
+周回キャッシュ解放はdrive専用で、offline評価では起動しない。
 VGLのservice受付とVSLAMの補正完了は別に扱う。キャッシュ解放はJetsonホスト側の設定が必要で、
 Linuxページキャッシュだけを対象とし、地図・モデル・TensorRT engine等のファイルは削除しない。
 詳しい動作・設定・制約は[kart_lap_manager](../ros2_ws/src/kart_lap_manager/README.md)を参照する。
@@ -620,7 +626,8 @@ Ctrl+C/TERM/HUPをROS launchのprocess groupへ転送し、終了までロック
 運用時は`bringup.sh`またはUIを使用してください。通常走行は既存Joy契約のままです。録画はJoyとStudioの録画ボタンから共通managerを操作できます。
 
 bringupの`--run-name`未指定時は、解決済みセンサー設定から記録名を自動生成します。
-例: `collect_rgb30fps_infra90fps_evsT250Hz-I25fps_depth90fps_imuA100-G200Hz`。
+例: `collect_rgb640x480x30fps_infra640x480x90fps_evsT250Hz-I25fps_depth90fps_imuA100-G200Hz`。
+RGB・Infraは解像度（幅x高さ）とFPSを含み、YAMLと明示overrideを反映した起動時の設定を示します。
 無効は`OFF`、EVSはTensor出力Hzと画像FPS、IMUは加速度A/ジャイロGのHzを示します。
 EVSの非同期イベント自体にFPSは付けません。値は設定値で、実測やbagの受信保証ではありません。
 明示した名前は維持し、日付/起動時刻の親ディレクトリと重複時の連番は従来通りです。
@@ -631,3 +638,6 @@ EVS有効時の既定はcuda_async＋evt3_runs_gpu_direct（集計方式一覧�
 
 通常bringupの `--perception ENGINE|off` は相手車の2D認識（640×480 RGB）を選ぶ。
 既定OFF。RealSenseと同じcontainerで実行する。[認識手順](../ros2_ws/src/kart_bringup/config/racing/README.md)。
+
+地図走行のVGLモデル自動選択は`runtime_models`のONNXハッシュを先に照合します。
+一致が1候補なら他モデルのハッシュ計算を省略して選択し、起動前には従来どおり整合性を検証します。

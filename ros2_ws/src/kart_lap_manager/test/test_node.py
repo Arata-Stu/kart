@@ -84,6 +84,11 @@ class NodeDouble:
         return NS(info=self.log_messages.append)
 
 
+class BufferDouble:
+    def __init__(self, *, node=None):
+        self.node = node
+
+
 stubs = {
     'rclpy': module('rclpy'),
     'rclpy.node': module('rclpy.node', Node=NodeDouble),
@@ -92,7 +97,7 @@ stubs = {
     'rclpy.qos': module('rclpy.qos', DurabilityPolicy=NS(TRANSIENT_LOCAL='transient_local'),
                         QoSProfile=Message, ReliabilityPolicy=NS(RELIABLE='reliable'),
                         qos_profile_sensor_data=object()),
-    'tf2_ros': module('tf2_ros', Buffer=object, TransformListener=lambda *_args: NS(),
+    'tf2_ros': module('tf2_ros', Buffer=BufferDouble, TransformListener=lambda *_args: NS(),
                      TransformException=TransformError),
 }
 for package, symbols in {
@@ -158,6 +163,7 @@ class AdapterTests(unittest.TestCase):
             self.assertEqual(len(list(node.subscriptions)), 4)
             self.assertEqual(len(list(node.publishers)), 2)
             self.assertEqual(len(list(node.timers)), 1)
+            self.assertIs(node.buffer.node, node, 'TF buffer must use the node ROS clock')
             for key, enabled, service in (
                 ('vgl', vgl, '/visual_localization/trigger_localization'),
                 ('cache', cache, '/kart/cache/clear'),
@@ -198,7 +204,7 @@ class AdapterTests(unittest.TestCase):
                 raise TransformError()
             return tf(*(n.position if source == 'base_link' else n.correction))
 
-        n.buffer = NS(lookup_transform=lookup)
+        n.buffer = NS(lookup_transform=lookup, clear=lambda: None)
         return n
 
     def diagnostic(self, n, good=True):
@@ -337,6 +343,83 @@ class AdapterTests(unittest.TestCase):
             n.tick()
             self.assertIsNone(n.detector.armed_at)
             self.assertIsNone(n.last_odom_stamp)
+            self.assertEqual(n.vgl.state, 'suppressed_unknown_result')
+            self.assertEqual(n.events, [])
+
+    def test_rewind_clears_old_epoch_tf_before_accepting_new_poses(self):
+        n = self.node()
+        # A sub-second rewind must clear even if tf2's one-second jump callback
+        # would not fire. An old run has transforms for the repeated stamp.
+        cached = {'base_link': tf(0., 0.), 'odom': tf(0., 0.)}
+        clears = []
+
+        def lookup(_target, source, _stamp):
+            if source not in cached:
+                raise TransformError()
+            return cached[source]
+
+        def clear():
+            clears.append(True)
+            cached.clear()
+
+        n.buffer = NS(lookup_transform=lookup, clear=clear)
+        n.last_clock = 10.
+        n.detector.sample(0., .2, 9.9)
+        n.detector.count = 2
+        n.now = 9.8
+        with patch.object(adapter.time, 'monotonic', lambda: 100.):
+            n.tick()
+            self.assertEqual(len(clears), 1)
+            self.diagnostic(n)
+            n.on_odometry(NS(header=header(n.now)))
+            self.assertIsNotNone(n.pending, 'wait for TF from the new playback epoch')
+            self.assertIsNone(n.detector.last, 'old same-stamp TF must not seed a lap')
+            self.assertEqual(n.detector.count, 2)
+            self.assertEqual(n.events, [])
+            cached.update(base_link=tf(1., 0.), odom=tf(0., 0.))
+            n.retry_pose()
+            self.assertIsNone(n.pending)
+            self.assertEqual(n.detector.last[:2], (1., 0.))
+            self.assertEqual(n.detector.count, 2)
+
+    def test_lap_time_uses_bag_stamps_at_half_normal_and_double_playback_rate(self):
+        for rate in (.5, 1., 2.):
+            with self.subTest(rate=rate):
+                n = self.node()
+                n.settings['base_frame'] = 'camera_link'
+                n.maintenance_clients = dict(vgl=None, cache=None)
+                n.buffer = NS(lookup_transform=lambda _target, source, _stamp:
+                              tf(*(n.position if source == 'camera_link' else n.correction)))
+                wall = [100.]
+                with patch.object(adapter.time, 'monotonic', lambda: wall[0]):
+                    for i in range(401):
+                        n.now, n.position = 10.+i*.1, position(i*.2)
+                        wall[0] = 100.+i*.1/rate
+                        self.diagnostic(n)
+                        n.on_odometry(NS(header=header(n.now)))
+                        n.tick()
+                import json
+                events = [json.loads(message.data) for message in n.events]
+                self.assertEqual(len(events), 2)
+                self.assertTrue(all(abs(event['lap_time_s']-20.) < 1e-9 for event in events))
+
+    def test_paused_ros_clock_discards_partial_lap_and_keeps_steady_request_deadline(self):
+        n = self.node()
+        wall = [100.]
+        with patch.object(adapter.time, 'monotonic', lambda: wall[0]):
+            self.diagnostic(n)
+            n.on_odometry(NS(header=header(n.now)))
+            self.assertIsNotNone(n.detector.armed_at)
+            n.request('vgl', wall[0])
+            n.poll_requests(wall[0])
+            self.assertEqual(n.vgl.state, 'searching')
+            wall[0] += .6  # ROS time and all measurement stamps remain paused.
+            n.tick()
+            self.assertIsNone(n.detector.armed_at)
+            self.assertEqual(n.detector.reason, 'pose_stale')
+            self.assertEqual(n.vgl.state, 'searching')
+            wall[0] = 131.
+            n.tick()
             self.assertEqual(n.vgl.state, 'suppressed_unknown_result')
             self.assertEqual(n.events, [])
 

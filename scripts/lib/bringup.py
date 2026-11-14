@@ -115,7 +115,8 @@ def validate_mode_options(args):
         (("foxglove",), not offline),
         (("perception", "perception_mode", "perception_debug_image"), not offline),
         (("overtake",), args.mode == 'drive'),
-        (("lap_vgl", "lap_cache_clear"), args.mode == 'drive'),
+        (("lap_vgl",), args.mode in ('drive', 'eval')),
+        (("lap_cache_clear",), args.mode == 'drive'),
     ]
     for keys, allowed in groups:
         if allowed:
@@ -131,6 +132,8 @@ def validate_mode_options(args):
     if (args.mode == "eval" and args.eval_localization not in ("vgl", "fresh")
             and args.model_dir):
         raise ValueError("VSLAM単独評価では--model-dirを使用しません（VGLは--eval-localization vgl）")
+    if args.mode == 'eval' and args.lap_vgl and args.eval_localization != 'vgl':
+        raise ValueError('--lap-vglのONには--eval-localization vglが必要です')
 
 
 def argument_parser():
@@ -176,7 +179,7 @@ def argument_parser():
     parser.add_argument('--overtake', choices=('off', 'shadow', 'active'), default='',
                         help='drive追従・追越し: off（既定）/ shadow候補表示 / active実行。認識track必須、activeはracing2クラス・復帰OFF・通常AUTOのみ')
     parser.add_argument('--lap-vgl', action=argparse.BooleanOptionalAction, default=None,
-                        help='drive: 周回ごとにVGL補正を要求（--no-lap-vglでOFF、未指定はmission YAML・既定OFF）')
+                        help='drive / eval: 周回ごとにVGL補正を要求（evalのONは--eval-localization vglのみ。--no-lap-vglでOFF、未指定はdrive=mission.yaml / eval=evaluation/replay.yaml・既定OFF）')
     parser.add_argument('--lap-cache-clear', action=argparse.BooleanOptionalAction, default=None,
                         help='drive: 周回ごとにJetsonのLinuxページキャッシュ解放を要求（--no-lap-cache-clearでOFF、既定OFF・ホスト側設定が必要）')
     parser.add_argument("--foxglove", action=argparse.BooleanOptionalAction, default=None, help="Foxglove。未指定は用途のYAML既定（地図走行はON）")
@@ -220,6 +223,15 @@ def build_command(args, config):
     if args.mode == "eval" and args.eval_localization == "e2e_latency":
         args.mode = "e2e-latency"
     validate_mode_options(args)
+    eval_lap_vgl = False
+    if args.mode == 'eval':
+        import yaml
+        replay_settings = yaml.safe_load((config / 'evaluation/replay.yaml').read_text())
+        eval_lap_vgl = replay_settings['lap_vgl'] if args.lap_vgl is None else args.lap_vgl
+        if type(eval_lap_vgl) is not bool:
+            raise ValueError('evaluation/replay.yamlのlap_vglはtrue/falseで指定してください')
+        if eval_lap_vgl and args.eval_localization != 'vgl':
+            raise ValueError('周回VGL補正のONには--eval-localization vglが必要です（--no-lap-vglでOFF）')
     from kart_bringup.configuration import collection_r2_gate
     gate_value = getattr(args, 'auto_fixed_throttle_r2_gate', None)
     r2_gate = collection_r2_gate(args.mode, '' if gate_value is None else str(gate_value).lower())
@@ -352,6 +364,13 @@ def build_command(args, config):
             from kart_bringup.mission import validate_localization_imu
             validate_localization_imu(parameters, sensors)
         if args.mode=="eval":args.tracking_mode=str(parameters['cuvslam']['tracking_mode'])
+        if args.mode == 'eval' and eval_lap_vgl:
+            from kart_bringup.lap_maintenance import evaluation_lap_parameters
+            evaluation_lap_parameters(config, args.map_file, args.lane_id, args.line_type,
+                                      enabled=eval_lap_vgl, enable_vgl=not vslam_only,
+                                      base_frame=parameters['cuvslam']['base_frame'],
+                                      odom_frame=parameters['cuvslam']['odom_frame'],
+                                      map_frame=parameters['cuvslam']['map_frame'])
         if not vslam_only:
             if args.mode == "eval":
                 from kart_bringup.replay import validate_bag_shape
@@ -522,6 +541,9 @@ def build_command(args, config):
         record = recording_plan(config, args.eval_record, args.eval_output)
         values.update(eval_record=str(record is not None).lower(), eval_output=record["output"] if record else "")
         print("評価結果記録:", record["output"] if record else "OFF")
+        if not fresh:
+            values['lap_vgl'] = str(eval_lap_vgl).lower()
+        print('周回VGL補正: ' + ('ON（再生bagの各周に探索を要求。受付と補正完了は別）' if eval_lap_vgl else 'OFF'))
     command = ["ros2", "launch", "kart_bringup", launch] + [
         f"{k}:={v}" for k, v in values.items() if v is not None and v != ""
     ]

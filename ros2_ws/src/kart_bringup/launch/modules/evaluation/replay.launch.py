@@ -22,6 +22,10 @@ def add_replay(args):
     import json
     overrides["recorder_node"] = getattr(args, "recorder_node", "")
     overrides["record_topics"] = json.loads(getattr(args, "record_topics_json", "[]")) or ["/clock"]
+    if getattr(args, 'lap_node', ''):
+        overrides.update(lap_node=args.lap_node,
+                         lap_input_topics=json.loads(args.lap_input_topics_json),
+                         lap_status_topic=args.lap_status_topic)
     if imu:overrides['imu_topic']=imu[0]
     player=ExecuteProcess(cmd=command,output="screen")
     completion=[]
@@ -55,6 +59,9 @@ def generate_launch_description():
     args.add_arg("completion_file", "", cli=True)
     args.add_arg("recorder_node", "", cli=True)
     args.add_arg("record_topics_json", "[]", cli=True)
+    args.add_arg('lap_node', '', cli=True)
+    args.add_arg('lap_input_topics_json', '', cli=True)
+    args.add_arg('lap_status_topic', '', cli=True)
     args.add_arg("bag", cli=True)
     args.add_arg("enable_vgl", "true", cli=True)
     args.add_arg("rate", "", cli=True)

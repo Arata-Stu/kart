@@ -102,7 +102,8 @@ class LapManager(Node):
         self.vgl = RequestState(needs_hint=True)
         self.cache = RequestState()
         self.futures = {'vgl': None, 'cache': None}
-        self.buffer = Buffer()
+        # Use the same ROS clock as the measurements so bag time jumps clear TF.
+        self.buffer = Buffer(node=self)
         self.listener = TransformListener(self.buffer, self)
         latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
@@ -302,6 +303,9 @@ class LapManager(Node):
     def tick(self):
         now, wall = self.now_s(), time.monotonic()
         if self.last_clock is not None and now < self.last_clock:
+            # Also clear on our explicit rewind path, including sub-second
+            # jumps below tf2's own jump-callback threshold.
+            self.buffer.clear()
             self.pending = None
             self.diag_stamp = self.diag_at = None
             self.diag_good = False

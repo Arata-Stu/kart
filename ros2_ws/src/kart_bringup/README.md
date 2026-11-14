@@ -10,7 +10,8 @@ CLI・launch引数・ノード・topic・ROS parameterは従来どおり。
 独立にON/OFFできる。どちらも既定OFF。CLIは`--lap-vgl` / `--no-lap-vgl`、
 `--lap-cache-clear` / `--no-lap-cache-clear`。missionの`lap_vgl` / `lap_cache_clear`引数は
 空文字が既定で`config/mission.yaml`のfalseを保持し、明示true/falseだけ上書きする。
-collect・E2E・offline評価では使用しない。開いた参照ライン・駐車との併用は起動前に拒否する。
+collect・E2Eでは使用しない。開いた参照ライン・駐車との併用は起動前に拒否する。
+offline評価の周回VGLは、下記の「offline評価の周回VGL補正」で扱う。キャッシュ解放はdrive専用。
 
 いずれかONで独立processの`/lap_manager`（[kart_lap_manager](../kart_lap_manager/README.md)、
 実行ファイル`lap_manager`）を起動する。閉参照ライン先頭がスタート／フィニッシュ。
@@ -70,6 +71,45 @@ source /workspaces/ros2_ws/install/setup.bash
 
 修正後の周回・mission接続・TUI/CLI関連テストは65件成功。実ROSの起動smoke testは、
 このMacにrclpyがないため1件skipしており、Jetsonでの実起動確認は残る。
+
+### offline評価の周回VGL補正
+
+`bash scripts/bringup.sh` → **offline bag評価 → VSLAM＋VGL → 設定一覧 → 周回VGL補正: ON**。
+既定OFFで、`config/evaluation/replay.yaml`の`lap_vgl: false`が正本。
+CLIの`--lap-vgl` / `--no-lap-vgl`、`evaluation.launch.py`の`lap_vgl:=true|false`で明示上書きできる。
+launch引数未指定（空文字）はYAMLを保持する。保存地図VSLAM単独・地図なしVO/VIO・E2E遅延ではONを拒否する。
+選択HDMapの閉じた参照ラインが必須。VGL地図bundle・モデル・bagの整合性検査は従来どおり行う。
+
+```bash
+bash scripts/bringup.sh --mode eval --eval-localization vgl \
+  --map-dir /workspaces/map/<map>/vgl/<bundle> \
+  --model-dir /workspaces/models/vgl/<resolution>/runtime_models \
+  --map-file /workspaces/map/<map>/export/hd_map.yaml \
+  --lane-id lane_001 --line-type centerline \
+  --bag /workspaces/record/<bag-directory> --lap-vgl
+```
+
+独立ノード`/lap_manager`をbagの`/clock`（`use_sim_time=true`）で動かし、
+`base_frame`は評価の採用値（既定`camera_link`）、`odom_frame`はVSLAMと揃える。
+参照ラインはHDMapの同じmap座標。周回時間・速度・サンプル間隔はbagの計測stamp基準なので、
+再生倍率だけで周回時間を短縮・延長しない。受信途絶の監視と要求期限は実経過時間を使い、
+長いpauseや追跡不良では部分周を破棄する。再生再開位置から一周を再確認する。
+lapノードの入出力準備を確認してからbagを再生し、車両・センサ・追従制御は起動しない。
+評価結果の記録をONにすると`/localization/lap_events`・`/localization/lap_status`も保存し、
+manifestに周回補正の採用値を残す。VGL受付は補正完了ではなく、探索中・結果不明では要求を重ねない。
+キャッシュ解放はoffline評価で起動しない。ROS/GPUでの実bag再生・実機の補正精度は別途検証が必要。
+
+### 特徴点の可視化について
+
+offline評価は`enable_slam_visualization`・`enable_landmarks_view`・`enable_observations_view`を有効にする。
+ただし、topic宣言と実際のメッセージ配信は別。NVIDIAの公開`release-5.0`実装では
+`visual_slam/vis/observations_cloud`（`sensor_msgs/msg/PointCloud2`）のpublisherは宣言される一方、
+observations用helperの初期化がコメントアウトされ、配信経路が接続されていない。
+[公式実装](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_visual_slam/blob/release-5.0/isaac_ros_cuvslam/src/impl/visual_slam_impl.cpp#L335)
+（2026-11-14確認。導入済みAPTバイナリとの完全一致は未確認）。
+可視化ONや`ros2 topic list`に名前が出ることだけで2D観測点が配信されるとは判断しない。
+`ros2 topic hz /visual_slam/vis/observations_cloud`で実配信を確認する。
+既存のCamera表示で画像へ重ねる点は3Dランドマークの再投影で、全2D検出点そのものではない。
 
 
 平坦路を走行するRCカー向けに、`enable_ground_constraint_in_odometry`と
@@ -1793,6 +1833,12 @@ shadowでは通常のplanning/reference_lineを保持し、behavior出力はraci
 設定・topic・検証範囲は[認識・live behavior設定](config/racing/README.md)参照。ROS結合・実車動作は未確認。
 
 ## Offline localization結果の記録と定量解析
+
+RVizのoffline表示は参照ライン=灰色、SLAM軌跡=緑、VO軌跡=青。
+独自色の参照ラインを含むHDMap MarkerArrayは重複表示を避けて既定OFF。
+表示の切替、位置・向き／追跡の連続性／周回／補正の確認手順は
+[offline評価の見方](config/evaluation/README.md#offline評価の見方)を参照。
+参照ラインは正解軌跡ではなく、RVizのStatus=OKも推定精度の保証ではない。
 
 `bash scripts/bringup.sh` → オフライン評価（保存地図VSLAM / VSLAM＋VGL / 新規SLAM）→
 設定一覧の **評価結果rosbag記録** で「記録する」を選択できる。E2E latencyは従来の専用出力を使う。

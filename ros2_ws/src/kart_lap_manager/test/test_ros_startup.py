@@ -25,6 +25,7 @@ class RosStartupTests(unittest.TestCase):
                         Parameter('cache_clear_enabled', value=cache),
                     ])
                     self.assertEqual(node.get_name(), 'lap_manager')
+                    self.assertIs(node.buffer.clock, node.get_clock())
                     self.assertEqual(len(list(node.clients)), int(vgl) + int(cache))
                     for key, enabled in (('vgl', vgl), ('cache', cache)):
                         client = node.maintenance_clients[key]

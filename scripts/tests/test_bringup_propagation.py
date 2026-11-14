@@ -35,11 +35,93 @@ class PropagationTests(unittest.TestCase):
                     key = flag.removeprefix('--no-').removeprefix('--').replace('-', '_')
                     self.assertIn(key + ':=' + value, output)
 
-    def test_lap_options_reject_non_drive_before_reading_assets(self):
-        for mode in ('collect', 'environment', 'e2e', 'eval', 'e2e-latency'):
+    def test_lap_options_reject_incompatible_modes_before_reading_assets(self):
+        for mode in ('collect', 'environment', 'e2e', 'e2e-latency'):
             for flag in ('--lap-vgl', '--no-lap-vgl', '--lap-cache-clear', '--no-lap-cache-clear'):
                 with self.subTest(mode=mode, flag=flag), self.assertRaisesRegex(ValueError, 'lap-'):
                     self.run_cli('--mode', mode, flag)
+        for flag in ('--lap-cache-clear', '--no-lap-cache-clear'):
+            with self.subTest(flag=flag), self.assertRaisesRegex(ValueError, 'lap-cache-clear'):
+                self.run_cli('--mode', 'eval', flag)
+        for kind in ('vslam', 'fresh', 'e2e_latency'):
+            with self.subTest(kind=kind), self.assertRaisesRegex(ValueError, 'lap-vgl'):
+                self.run_cli('--mode', 'eval', '--eval-localization', kind, '--lap-vgl')
+
+    def test_eval_lap_vgl_reaches_launch_and_shared_preflight(self):
+        base = ['--mode', 'eval', '--map-file', '/map/hd_map.yaml', '--map-dir', '/map/vslam',
+                '--model-dir', '/model/vgl', '--lane-id', 'main', '--line-type', 'raceline',
+                '--bag', '/bag', '--eval-localization', 'vgl', '--eval-record', 'false']
+        parameters = {'cuvslam': {'tracking_mode': 0, 'base_frame': 'camera_link',
+                                  'odom_frame': 'odom', 'map_frame': 'map'}}
+        with (patch('kart_bringup.mission.hdmap_choices', return_value=[('main', 'raceline')]),
+              patch('kart_bringup.localization.resolve', return_value=(parameters, {}, {}, {'input_shape': [1, 3, 480, 640]})),
+              patch('kart_bringup.replay.validate_bag_shape', return_value={}),
+              patch('kart_bringup.replay.playback'),
+              patch('kart_bringup.lap_maintenance.evaluation_lap_parameters') as preflight):
+            for flag, value in ((None, 'false'), ('--lap-vgl', 'true'), ('--no-lap-vgl', 'false')):
+                with self.subTest(flag=flag):
+                    preflight.reset_mock()
+                    output = self.run_cli(*base, *([flag] if flag else []))
+                    self.assertIn('evaluation.launch.py', output)
+                    self.assertIn('lap_vgl:=' + value, output)
+                    self.assertIn('enable_vgl:=true', output)
+                    self.assertNotIn('lap_cache_clear:=', output)
+                    self.assertIn('周回VGL補正: ' + ('ON' if value == 'true' else 'OFF'), output)
+                    if value == 'true':
+                        preflight.assert_called_once_with(
+                            ROOT / 'ros2_ws/src/kart_bringup/config', '/map/hd_map.yaml', 'main', 'raceline',
+                            enabled=True, enable_vgl=True, base_frame='camera_link', odom_frame='odom', map_frame='map')
+                    else:
+                        preflight.assert_not_called()
+            preflight.side_effect = ValueError('selected closed reference line required')
+            with self.assertRaisesRegex(ValueError, 'closed reference line'):
+                self.run_cli(*base, '--lap-vgl')
+
+    def test_eval_off_is_accepted_for_vslam_and_fresh(self):
+        with (patch('kart_bringup.mission.hdmap_choices', return_value=[('main', 'raceline')]),
+              patch('kart_bringup.localization.resolve', return_value=({'cuvslam': {'tracking_mode': 0}}, {}, {}, {})),
+              patch('kart_bringup.replay.playback')):
+            output = self.run_cli('--mode', 'eval', '--eval-localization', 'vslam', '--no-lap-vgl',
+                                  '--map-file', '/map', '--map-dir', '/vslam', '--lane-id', 'main',
+                                  '--line-type', 'raceline', '--bag', '/bag', '--eval-record', 'false')
+            self.assertIn('evaluation.launch.py', output)
+            self.assertIn('lap_vgl:=false', output)
+            self.assertIn('enable_vgl:=false', output)
+            output = self.run_cli('--mode', 'eval', '--eval-localization', 'fresh', '--no-lap-vgl',
+                                  '--bag', '/bag', '--eval-record', 'false')
+            self.assertIn('sim_vslam.launch.py', output)
+            self.assertIn('周回VGL補正: OFF', output)
+            self.assertNotIn('lap_vgl:=', output, 'fresh SLAM has no lap maintenance launch argument')
+
+    def test_eval_lap_default_comes_from_replay_yaml_and_explicit_off_wins(self):
+        import yaml
+        config = ROOT / 'ros2_ws/src/kart_bringup/config'
+        original_read = Path.read_text
+        def replay_enabled(path, *args, **kwargs):
+            content = original_read(path, *args, **kwargs)
+            if path == config / 'evaluation/replay.yaml':
+                settings = yaml.safe_load(content)
+                settings['lap_vgl'] = True
+                return yaml.safe_dump(settings)
+            return content
+        with (patch.object(Path, 'read_text', replay_enabled),
+              patch('kart_bringup.mission.hdmap_choices', return_value=[('main', 'raceline')]),
+              patch('kart_bringup.localization.resolve', return_value=(
+                  {'cuvslam': {'tracking_mode': 0, 'base_frame': 'camera_link', 'odom_frame': 'odom', 'map_frame': 'map'}},
+                  {}, {}, {'input_shape': [1, 3, 480, 640]})),
+              patch('kart_bringup.replay.validate_bag_shape', return_value={}),
+              patch('kart_bringup.replay.playback'),
+              patch('kart_bringup.lap_maintenance.evaluation_lap_parameters') as preflight):
+            base = ['--mode', 'eval', '--eval-localization', 'vgl', '--map-file', '/map', '--map-dir', '/vslam',
+                    '--model-dir', '/model', '--lane-id', 'main', '--line-type', 'raceline', '--bag', '/bag', '--eval-record', 'false']
+            self.assertIn('lap_vgl:=true', self.run_cli(*base))
+            preflight.assert_called_once()
+            preflight.reset_mock()
+            self.assertIn('lap_vgl:=false', self.run_cli(*base, '--no-lap-vgl'))
+            preflight.assert_not_called()
+            for kind in ('vslam', 'fresh'):
+                with self.subTest(kind=kind), self.assertRaisesRegex(ValueError, 'eval-localization vgl'):
+                    self.run_cli('--mode', 'eval', '--eval-localization', kind)
 
     def test_map_profile_cli_and_conflicts(self):
         out = self.run_cli('--mode', 'collect', '--record-profile', 'vslam-map', '--infra-profile', '424x240x60')

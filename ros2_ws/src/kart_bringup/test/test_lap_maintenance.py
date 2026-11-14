@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import yaml
 
-from kart_bringup.lap_maintenance import maintenance_parameters
+from kart_bringup.lap_maintenance import maintenance_parameters, evaluation_lap_parameters
 from kart_bringup.mission import composition
 
 PACKAGE = Path(__file__).resolve().parents[1]
@@ -95,6 +95,32 @@ class LapMaintenanceTests(unittest.TestCase):
             topics = yaml.safe_load(path.read_text())["/**/kart_bag_manager"]["ros__parameters"]["topics"]
             for topic in ("/localization/lap_events", "/localization/lap_status"):
                 self.assertEqual(topics.count(topic), 1)
+
+    def test_offline_parameters_use_clock_and_effective_frames_without_drive_tracking(self):
+        def resolve(**changes):
+            options = dict(enabled=True, enable_vgl=True, base_frame='camera_link',
+                           odom_frame='replay_odom', map_frame='map')
+            with patch('kart_hdmap.document.load', return_value=self.doc):
+                return evaluation_lap_parameters(self.root, '/map', 'main', 'centerline',
+                                                 **(options | changes))
+        self.params['cache_clear_enabled'] = True
+        self.write_params()
+        with patch.object(Path, 'is_socket', side_effect=AssertionError('offline must not check host cache')):
+            result = resolve()
+        self.assertTrue(result['use_sim_time'])
+        self.assertTrue(result['vgl_enabled'])
+        self.assertFalse(result['cache_clear_enabled'])
+        self.assertEqual((result['base_frame'], result['odom_frame']), ('camera_link', 'replay_odom'))
+        self.assertIsNone(resolve(enabled=False, enable_vgl=False))
+        with self.assertRaisesRegex(ValueError, 'enable_vgl'):
+            resolve(enable_vgl=False)
+        for changes in ({'map_frame': 'other'}, {'odom_frame': 'map'}, {'base_frame': '/camera_link'},
+                        {'base_frame': ''}, {'odom_frame': None}):
+            with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, 'frame'):
+                resolve(**changes)
+        self.doc['lanes'][0]['closed'] = False
+        with self.assertRaisesRegex(ValueError, 'closed'):
+            resolve()
 
 
 if __name__ == "__main__":

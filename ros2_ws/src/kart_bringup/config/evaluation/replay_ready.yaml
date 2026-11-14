@@ -8,3 +8,6 @@
     timeout_s: 120.0
     recorder_node: ''  # Optional offline recorder; wait for its subscriptions before resume
     record_topics: [/clock]  # Launch passes selected recording topics; wait for advertised topics
+    lap_node: ''  # Empty disables lap readiness; offline lap VGL sets lap_manager
+    lap_input_topics: [/planning/reference_line, /visual_slam/tracking/odometry, /localization/vslam/diagnostics]
+    lap_status_topic: /localization/lap_status  # Require this node's publisher before resume

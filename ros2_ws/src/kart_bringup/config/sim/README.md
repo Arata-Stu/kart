@@ -35,6 +35,9 @@ launch直接指定なら `ros2 launch kart_bringup sim_vslam.launch.py bag:=/abs
 enable_landmarks_view / enable_observations_viewを有効化する。
 `rviz`既定空は可視化設定に追従、true/falseでRViz起動だけ明示変更できる。
 `vslam.rviz`に左右raw画像、observations/landmarks/loop closure PointCloud2、VO/SLAM Pathを表示する。
+表示項目の存在は配信を保証しない。公開Isaac ROS `release-5.0`ではobservations用helperの
+初期化がコメントアウトされており、observations_cloudが空のままの場合がある。
+導入APTでの実配信は`ros2 topic hz /visual_slam/vis/observations_cloud`で確認する。
 左右CameraビューではCameraInfo・TFを用いて3Dランドマークを画像へ再投影する。
 全2D検出pixelではなく追跡・三角測量済み点の投影であり、時刻・TF・校正が必要。
 左右mono8のImage表示はTFなしでも入力画像を確認できる。topic型はlocalization READMEを参照。

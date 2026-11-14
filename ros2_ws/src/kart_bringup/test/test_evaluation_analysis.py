@@ -29,6 +29,8 @@ class EvaluationTests(unittest.TestCase):
             plan = recording_plan(CONFIG,'true',output)
             self.assertFalse(Path(output).exists())
             self.assertIn('/visual_slam/vis/slam_odometry',plan['topics'])
+            self.assertIn('/localization/lap_events',plan['topics'])
+            self.assertIn('/localization/lap_status',plan['topics'])
             self.assertNotIn('/realsense/infra1/image_rect_raw',plan['topics'])
 
     def test_lost_durations_do_not_bridge_missing_diagnostics(self):

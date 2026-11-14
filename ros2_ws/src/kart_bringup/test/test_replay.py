@@ -202,6 +202,34 @@ class ReplayTests(unittest.TestCase):
             subscribed.add('/result')
             ready.check(); ready.client.call_async.assert_called_once()
 
+            # Lap readiness is required even without recording. A publisher
+            # being absent must not make its optional record topic skippable.
+            ready.future=None;ready.client.reset_mock();ready.recorder_node=''
+            ready.lap_node='lap_manager'
+            ready.lap_input_topics=['/reference','/odom','/diagnostics']
+            ready.lap_status_topic='/lap_status'
+            lap_subscribed=set()
+            status_publishers=[]
+            ready.get_publishers_info_by_topic=lambda topic: status_publishers if topic=='/lap_status' else []
+            def subscriptions(topic):
+                names = ready.nodes if topic in ready.topics else set()
+                if topic in lap_subscribed:names = names | {'lap_manager'}
+                if topic in subscribed:names = names | {'offline_eval_recorder'}
+                return [SimpleNamespace(node_name=name) for name in names]
+            ready.get_subscriptions_info_by_topic=subscriptions
+            ready.check();ready.client.call_async.assert_not_called()
+            lap_subscribed.update(ready.lap_input_topics)
+            ready.check();ready.client.call_async.assert_not_called()
+            status_publishers.append(SimpleNamespace(node_name='other_node'))
+            ready.check();ready.client.call_async.assert_not_called()
+            status_publishers.append(SimpleNamespace(node_name='lap_manager'))
+            ready.check();ready.client.call_async.assert_called_once()
+            ready.future=None;ready.client.reset_mock()
+            ready.recorder_node='offline_eval_recorder';ready.record_topics=['/clock','/lap_status']
+            ready.check();ready.client.call_async.assert_not_called()
+            subscribed.add('/lap_status')
+            ready.check();ready.client.call_async.assert_called_once()
+
 
     def test_runtime_metadata_exact_and_legacy_rejected(self):
         settings = {"fixed_throttle": 0.12, "max_throttle": 0.2}

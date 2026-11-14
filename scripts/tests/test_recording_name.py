@@ -10,9 +10,9 @@ ROOT = Path(__file__).parents[2] / 'ros2_ws/src/kart_bringup/config'
 
 
 def test_profiles_and_disabled_sensors():
-    sensors = sensor_parameters(camera_config(ROOT, 'collect'), rgb_profile='640x480x30',
+    sensors = sensor_parameters(camera_config(ROOT, 'collect'), rgb_profile='1280x720x30',
                                 infra_profile='640x480x90', depth_profile='640x480x90', imu_profile='low')
-    assert sensor_recording_name('collect', sensors) == 'collect_rgb30fps_infra90fps_evsOFF_depth90fps_imuA100-G200Hz'
+    assert sensor_recording_name('collect', sensors) == 'collect_rgb1280x720x30fps_infra640x480x90fps_evsOFF_depth90fps_imuA100-G200Hz'
     sensors = sensor_parameters(camera_config(ROOT, 'collect'), rgb_profile='0',
                                 infra_profile='0', depth_profile='0', imu_profile='off')
     assert sensor_recording_name('collect', sensors) == 'collect_rgbOFF_infraOFF_evsOFF_depthOFF_imuOFF'

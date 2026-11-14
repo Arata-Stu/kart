@@ -17,6 +17,11 @@ class ReplayReady(Node):
         ).value
         self.recorder_node = self.declare_parameter("recorder_node", "").value
         self.record_topics = self.declare_parameter("record_topics", ["/clock"]).value
+        self.lap_node = self.declare_parameter('lap_node', '').value
+        self.lap_input_topics = self.declare_parameter('lap_input_topics', [
+            '/planning/reference_line', '/visual_slam/tracking/odometry',
+            '/localization/vslam/diagnostics']).value
+        self.lap_status_topic = self.declare_parameter('lap_status_topic', '/localization/lap_status').value
         self.imu_topic=self.declare_parameter("imu_topic", "").value
         self.nodes = set(
             self.declare_parameter(
@@ -32,6 +37,9 @@ class ReplayReady(Node):
             or not self.nodes
             or not math.isfinite(timeout)
             or timeout <= 0
+            or (self.lap_node and (not self.lap_node.strip() or not self.lap_input_topics
+                or any(not isinstance(topic, str) or not topic.startswith('/')
+                       for topic in [*self.lap_input_topics, self.lap_status_topic])))
         ):
             raise ValueError(
                 "Require nonempty readiness topics/nodes and positive finite timeout_s"
@@ -68,7 +76,13 @@ class ReplayReady(Node):
                 any(s.node_name == recorder for s in self.get_subscriptions_info_by_topic(t))
                 for t in self.record_topics
                 if t == "/clock" or self.get_publishers_info_by_topic(t))
-            if record_ready and imu_ready and all(
+            lap = getattr(self, 'lap_node', '')
+            lap_ready = not lap or (all(
+                any(s.node_name == lap for s in self.get_subscriptions_info_by_topic(topic))
+                for topic in self.lap_input_topics) and any(
+                publisher.node_name == lap
+                for publisher in self.get_publishers_info_by_topic(self.lap_status_topic)))
+            if lap_ready and record_ready and imu_ready and all(
                 self.nodes
                 <= {s.node_name for s in self.get_subscriptions_info_by_topic(topic)}
                 for topic in self.topics

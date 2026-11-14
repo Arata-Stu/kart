@@ -56,14 +56,26 @@ def test_bundle_resolution_and_runtime_preference(tmp_path):
     runtime = tmp_path / 'runtime_models'
     unrelated = tmp_path / 'other/runtime_models'
     chooser = Mock()
-    with patch.object(a, 'paired_models', return_value=[source, runtime]):
+    with patch.object(a, 'paired_models', return_value=[runtime]) as paired:
         assert a.select_runtime_model(bundles[0], [source, unrelated, runtime], chooser) == runtime
         chooser.assert_not_called()
+        paired.assert_called_once_with(bundles[0], [unrelated, runtime])
     with patch.object(a, 'paired_models', return_value=[]):
         a.select_runtime_model(bundles[0], [source, runtime], chooser)
         chooser.assert_called_with('VGLモデル（実行GPU用engine）', [runtime, source])
-    with patch.object(a, 'paired_models', return_value=[source]):
+    with patch.object(a, 'paired_models', side_effect=[[], [source]]):
         assert a.select_runtime_model(bundles[0], [source, unrelated], chooser) == source
+
+
+def test_ambiguous_runtime_models_still_require_selection(tmp_path):
+    source = tmp_path / 'source_models'
+    runtime = tmp_path / 'runtime_models'
+    other_runtime = tmp_path / 'other/runtime_models'
+    chooser = Mock(return_value=other_runtime)
+    with patch.object(a, 'paired_models', side_effect=[[runtime, other_runtime], [source]]) as paired:
+        assert a.select_runtime_model('bundle', [source, runtime, other_runtime], chooser) == other_runtime
+        assert paired.call_count == 2
+    chooser.assert_called_once_with('VGLモデル（実行GPU用engine）', [other_runtime, runtime, source])
 
 
 def test_drive_one_map_prompt_selects_matching_bundle_and_runtime(tmp_path):
@@ -105,7 +117,7 @@ def test_drive_one_map_prompt_selects_matching_bundle_and_runtime(tmp_path):
           patch.object(ui, 'choose', side_effect=choose),
           patch('kart_bringup.mission.discover', side_effect=discover),
           patch('kart_bringup.mission.hdmap_choices', return_value=[('lane', 'centerline')]),
-          patch('bringup_assets.paired_models', return_value=[source, runtime]),
+          patch('bringup_assets.paired_models', return_value=[runtime]),
           patch('kart_bringup.localization.resolve', return_value=(
               {'cuvslam': {'tracking_mode': 0}}, {}, {}, {'input_shape': [1, 3, 480, 640]})),
           contextlib.redirect_stdout(output)):

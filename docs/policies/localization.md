@@ -5,7 +5,7 @@
 - VGL地図生成は元の保存画像/posesを再利用する。cuVSLAM地図と対応づけた別bundleへ保存し、
   元地図を上書きしない。モデル/設定/座標系が異なる地図を暗黙に混用しない。
 - Jetsonの可視化はpose/odometry/Path/診断を基本とし、画像・特徴点表示は無効化する。
-  offlineのHDMap用点群captureのみlandmark可視化を有効にする。
+  offlineのHDMap用点群captureとbag評価ではlandmark可視化を有効にする。
 - 走行時の動的TFはVSLAMがmap→odom→base_linkを専有し、VGLはpose hintを供給する。
   カメラ取付TFは実校正値を外部供給し、仮のidentityで補わない。
 - VGLの探索受付、VGL pose算出、VSLAM地図への再局在成功、走行許可は別状態。
@@ -51,6 +51,18 @@ evaluation.launch.pyはsensor/vehicle/controlを起動せず、左右画像・Ca
 /clockでlocalization/HDMap/RVizの時間を統一し、入力購読準備後に1倍速開始。
 過去の/tf（動的TF）は使わずVSLAMがTFを所有する。校正TFが必要。
 Notebookのみvisualize=true。RVizは公式cuVSLAM設定をベースとする。正解軌跡なしに精度値は主張しない。
+
+保存地図＋VGLのoffline評価は明示opt-inで周回VGL補正を使える。既定はevaluation/replay.yamlの
+lap_vgl=falseとし、CLI/TUI/直接launchで同じ閉路・VGL有効・地図整合性の検証を適用する。
+周回判定ノードはuse_sim_time=trueと評価のbase/odom/map frameに揃える。制御ノードの起動を
+周回判定の前提にしない。bag開始前にlapノードの入出力準備を待ち、結果記録ON時は
+周回イベントと状態、採用パラメータを保存する。キャッシュ解放はofflineで使用しない。
+計測stamp上の周回時間と、steady clockによる受信監視・VGL応答期限を区別する。
+pause・時刻巻戻り・追跡不良は部分周を破棄し、古いTFで別epochの周回を継続しない。
+
+可視化topicの宣言と配信を区別する。公開Isaac ROS 5.0実装ではobservations helperの初期化が
+コメントアウトされているため、enable_observations_view=trueだけで2D観測点の配信を保証しない。
+画像への3Dランドマーク再投影を、生の全2D特徴点表示と呼ばない。
 
 ## Studioへの自己位置表示
 

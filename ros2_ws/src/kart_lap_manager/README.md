@@ -25,6 +25,26 @@ odometryのstampに対応する`map←base_link`をTFで取得する。TF欠落�
 時計逆行、参照線変更、大きな`map→odom`補正では部分周を破棄し、次の健全姿勢から再計測する。
 同一の参照線が再配信されても進捗は維持する。累積周回数はノード終了まで保持する。
 
+### Offline再生の時計・TF
+
+`use_sim_time=true`では姿勢・診断のageは`/clock`、周回時間と連続sample間隔は
+odometryの元stampで判定する。`min_lap_time_s=5.0`と`max_sample_gap_s=0.5`はbag時間であり、
+再生rateを0.5/1/2倍へ変えても元走行の時間条件は変えない。例えば元の20秒周回は常に20秒として記録する。
+位置jumpの速度上限も同じstamp差を使う。`base_frame=camera_link`を明示する評価では、
+`map←camera_link`をそのstampで取得し、`odom_frame`はVSLAMの出力frameと揃える。
+
+TF BufferはノードのROS時計へ結び付け、時計逆行時にはpending姿勢・品質・部分周とTF履歴を破棄する。
+1秒未満の逆行でもwatchdogがTFを明示clearする。次の周回判定には新しい再生区間のTFが必要で、
+同stampの旧TFを引き継がない。累積周回数は保持するため、bagを繰り返した場合のcountは再生全体の累積になる。
+これはlap managerの保護であり、VSLAM/VGL自体が巻戻しへ対応する保証ではない。
+
+姿勢・診断はROS ageだけでなくsteady受信ageも検査する。rateに合わせて期限を自動拡大しない。
+pause中も100msのsteady watchdogは動き、入力停止が姿勢の0.5秒または診断の1秒を超えると部分周を破棄する。
+再開後は新しい健全姿勢から再計測するため、pauseを挟んだ周回は完成済み周回として扱わない。
+VGLの受付3秒・結果30秒とcache結果15秒の要求期限も実時間で進み、pause中でもtimeoutで要求抑止になり得る。
+一方、hint撮影時刻のage上限と`own_hint_grace_s`はROS時間で検査する。結果待ちのsteady期限とは別の条件である。
+再生を速めると処理遅れのROS ageも増えるため、rate間のイベント数の違いを機能不良だけから断定しない。
+
 VGL要求後も健全かつ連続した姿勢から次周の進捗を計測する。自分のVGL要求がpendingであり、
 dispatch時に保存したfinishの開始境界をそのまま計測中、かつfinish通過から3秒以内の場合に限り、
 到着したfresh hintで次周の開始境界を保持する。これにより通常の小補正のたびに1周飛ばす動作を避ける。
@@ -53,6 +73,7 @@ VGLの状態とcache要求は独立であり、片方の不在／失敗でも他
 ## 入出力
 
 topic/service名は起動時parameterで変更できる。既定名は全て絶対名なのでnamespaceでは変わらない。
+例外としてTF Buffer標準の`tf2_frames` serviceは相対名で、namespaceに従う。
 ROS標準`/rosout`、`/parameter_events`は省略。
 
 | 方向 | 既定topic名 | 型 | QoS | 内容 |
@@ -69,6 +90,7 @@ ROS標準`/rosout`、`/parameter_events`は省略。
 |---|---|---|---|
 | client | `/visual_localization/trigger_localization` | `std_srvs/srv/Trigger` | `vgl_enabled=true`のみ |
 | client | `/kart/cache/clear` | `std_srvs/srv/Trigger` | `cache_clear_enabled=true`のみ |
+| server | `/tf2_frames` | `tf2_msgs/srv/FrameGraph` | TF Buffer標準の読取専用frame一覧、root namespace時 |
 
 JSONは`lap`、`course_length_m`、進捗、要求状態を含む。イベントには`stamp_s`と`lap_time_s`も含む。
 statusの`reason`は部分周の未計測理由、`armed`は健全姿勢から進捗を計測中かを示す。
@@ -94,23 +116,23 @@ statusの`reason`は部分周の未計測理由、`armed`は健全姿勢から�
 | vgl_trigger_service | `/visual_localization/trigger_localization` | VGL client |
 | cache_clear_service | `/kart/cache/clear` | cache client |
 | map_frame / odom_frame / base_frame | map / odom / base_link | TF/入力frame、空文字不可 |
-| pose_timeout_s | 0.5 | 姿勢stamp・受信鮮度、秒・正有限 |
-| diagnostics_timeout_s | 1.0 | 診断stamp・受信鮮度、秒・正有限 |
+| pose_timeout_s | 0.5 | 姿勢のROS stamp ageとsteady受信ageの両方の上限、秒・正有限 |
+| diagnostics_timeout_s | 1.0 | 診断のROS stamp ageとsteady受信ageの両方の上限、秒・正有限 |
 | map_correction_translation_m | 0.15 | 連続sample間のmap→odom位置変化で部分周を破棄、m・正有限 |
 | map_correction_yaw_rad | 0.15 | 同yaw変化閾値、rad・正有限 |
 | service_timeout_s | 3.0 | VGL探索受付応答期限、秒・正有限 |
-| vgl_result_timeout_s | 30.0 | VGL dispatchからのhint/健全診断待ちとhint撮影時刻age上限、秒・正有限 |
+| vgl_result_timeout_s | 30.0 | VGL dispatchからのhint/健全診断待ちはsteady秒、hint撮影時刻age上限はROS秒。正有限 |
 | cache_result_timeout_s | 15.0 | cache dispatchから実処理完了のTrigger応答期限、秒・正有限 |
-| status_period_s | 1.0 | status出力間隔、秒・正有限。内部watchdogは固定0.1秒 |
-| own_hint_grace_s | 3.0 | 自分のVGL hintによる次周境界保持のfinish後上限、秒・正有限 |
-| min_lap_time_s | 5.0 | 1周の最小観測時間、秒・正有限 |
+| status_period_s | 1.0 | status出力間隔、steady秒・正有限。内部watchdogは固定0.1秒 |
+| own_hint_grace_s | 3.0 | 自分のVGL hintによる次周境界保持のfinish後上限、ROS秒・正有限 |
+| min_lap_time_s | 5.0 | 1周の最小観測時間、odometry stamp差の秒・正有限 |
 | min_lap_fraction | 0.9 | finish間の必要な正味進捗／周長、0.5..1.0 |
 | max_lateral_distance_m | 1.0 | 参照線からの最大許容投影距離、m・正有限 |
 | max_pose_speed_mps | 12.0 | 位置差jump判定の速度上限、m/s・正有限 |
 | max_progress_speed_mps | 12.0 | arc進捗jump判定の速度上限、m/s・正有限 |
 | jump_tolerance_m | 0.15 | jump許容=`上限速度×dt+本値`、m・正有限 |
 | reverse_tolerance_m | 0.2 | 後退による進捗減少の許容、m・正有限。前進で相殺 |
-| max_sample_gap_s | 0.5 | 連続した姿勢の最大stamp間隔、秒・正有限 |
+| max_sample_gap_s | 0.5 | 連続した姿勢の最大odometry stamp間隔、秒・正有限 |
 | finish_zone_fraction | 0.15 | finish直前／直後zone／周長、0より大きく0.25未満 |
 
 ## 起動・検証
@@ -138,6 +160,8 @@ PYTHONPATH=ros2_ws/src/kart_lap_manager python3 -m unittest discover \
 サービス重複防止／timeout抑止、撮影stampが0.8秒古いVGL hint後の毎周要求、
 8秒周回・VGL hint1.5秒遅延での3周連続要求、hint前の品質喪失での開始境界差替え、
 TF補正差分、品質喪失、遅延TF、時計逆行を含む。ROS adapterはmockを使う。
+独立したROS/steady時計のmockで0.5/1/2倍相当の周回時刻、pause時の部分周破棄と要求期限、
+1秒未満の巻戻しで旧TFを破棄して新しいTFを待つことも確認する。実bag再生やGPU推論の検証とは別である。
 起動回帰では、Lyricalの`Node.clients`が読取専用であるAPIも再現したmockで、
 実際のconstructorとVGL/cacheの全ON/OFF組合せを確認する。
 保守サービスの参照は`maintenance_clients`へ保持し、ROS executorが使う`Node.clients`を上書きしない。
