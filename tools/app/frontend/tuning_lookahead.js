@@ -1,6 +1,7 @@
 import { $, on } from './api.js';
 import { tuning } from './tuning.js';
 import { lookaheadPlot, lookaheadSupported, lookaheadValue } from './lookahead_plot.js';
+import { plotVisible } from './live_plots.js';
 
 let history=null,received=0,epoch=tuning.epoch;
 const series={
@@ -23,8 +24,8 @@ function reset() {history=null;received=0;epoch=tuning.epoch;}
 function render() {
   if(epoch!==tuning.epoch)reset();
   const panel=$('tuning-lookahead-panel');
-  panel.hidden=$('tuning-parameters-target').value!=='tracking';
-  if(panel.hidden || !$('tuning-parameters-dialog').open)return;
+  panel.hidden=!plotVisible('lookahead');
+  if(panel.hidden)return;
   const connected=tuning.connected && Date.now()-tuning.received<3000;
   const now=history ? history.now+(performance.now()-received)/1000 : 0;
   const plot=lookaheadPlot(history?.samples || [],now),last=plot.last;
@@ -67,8 +68,7 @@ function update() {
 }
 on('tuning',update);
 on('status',render);
+on('plots-view',render);
 on('loaded',()=>{reset();render();});
 on('connection',()=>{reset();render();});
-$('tuning-parameters-target').addEventListener('change',render);
-$('tuning-parameters-open').addEventListener('click',render);
 setInterval(render,250);

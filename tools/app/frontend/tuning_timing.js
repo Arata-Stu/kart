@@ -1,6 +1,7 @@
 import { $, on } from './api.js';
 import { tuning } from './tuning.js';
 import { timingPlot } from './timing_plot.js';
+import { plotVisible } from './live_plots.js';
 
 let histories=null, received=0, epoch=tuning.epoch;
 const series={
@@ -26,14 +27,16 @@ function chart(id, history, keys, connected) {
   }));
 }
 function render() {
-  const target=$('tuning-parameters-target').value,panel=$('tuning-timing-panel');
-  panel.hidden=!['tracking','speed'].includes(target);
-  if(panel.hidden||!$('tuning-parameters-dialog').open)return;
   const connected=tuning.connected&&Date.now()-tuning.received<3000;
-  const history=histories?.[target];
-  chart('tuning-processing',history,['processing_ms'],connected);
-  chart('tuning-age',history,target==='tracking'?['pose_age_ms']:['target_age_ms','measurement_age_ms'],connected);
-  $('tuning-timing-status').textContent=!connected?'未接続・受信停止':!history?.samples.length?'診断未受信・未対応（Jetson側の更新とノード起動を確認）':'約10 Hzの表示用サンプル。未計測・無効・欠測区間は線をつなぎません。全制御周期のピークは保証しません。';
+  for(const target of ['tracking','speed']) {
+    const prefix='tuning-'+target,panel=$(prefix+'-timing-panel');
+    panel.hidden=!plotVisible(target+'-timing');
+    if(panel.hidden)continue;
+    const history=histories?.[target];
+    chart(prefix+'-processing',history,['processing_ms'],connected);
+    chart(prefix+'-age',history,target==='tracking'?['pose_age_ms']:['target_age_ms','measurement_age_ms'],connected);
+    $(prefix+'-timing-status').textContent=!connected?'未接続・受信停止':!history?.samples.length?'診断未受信・未対応（Jetson側の更新とノード起動を確認）':'約10 Hzの表示用サンプル。未計測・無効・欠測区間は線をつなぎません。全制御周期のピークは保証しません。';
+  }
 }
 function update() {
   if(epoch!==tuning.epoch){epoch=tuning.epoch;histories=null;}
@@ -43,8 +46,7 @@ function update() {
 }
 on('tuning',update);
 on('status',render);
+on('plots-view',render);
 on('loaded',()=>{histories=null;render();});
 on('connection',()=>{histories=null;render();});
-$('tuning-parameters-target').addEventListener('change',render);
-$('tuning-parameters-open').addEventListener('click',render);
 setInterval(render,250);

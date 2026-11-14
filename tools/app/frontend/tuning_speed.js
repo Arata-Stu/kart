@@ -1,12 +1,13 @@
 import { $, on } from './api.js';
 import { tuning } from './tuning.js';
 import { speedPlot } from './speed_plot.js';
+import { plotVisible } from './live_plots.js';
 
 let history=null, received=0, epoch=tuning.epoch;
 function render() {
   const panel=$('tuning-speed-panel');
-  panel.hidden=$('tuning-parameters-target').value!=='speed';
-  if(panel.hidden || !$('tuning-parameters-dialog').open)return;
+  panel.hidden=!plotVisible('speed');
+  if(panel.hidden)return;
   const connected=tuning.connected && Date.now()-tuning.received<3000;
   const now=history ? history.now+(performance.now()-received)/1000 : 0;
   const plot=speedPlot(history?.samples || [],now);
@@ -36,8 +37,7 @@ function update() {
 }
 on('tuning',update);
 on('status',render);
+on('plots-view',render);
 on('loaded',()=>{history=null;render();});
 on('connection',()=>{history=null;render();});
-$('tuning-parameters-target').addEventListener('change',render);
-$('tuning-parameters-open').addEventListener('click',render);
 setInterval(render,250);
