@@ -10,6 +10,7 @@ import threading
 from pathlib import Path
 
 from .transfers import profile, SSH_OPTIONS
+from .custom_versions import live_document
 
 # Import the ROS-free protocol directly from this checkout; no ROS install on Mac.
 _source = Path(__file__).resolve().parents[3] / 'ros2_ws/src/kart_hdmap/kart_hdmap'
@@ -84,7 +85,7 @@ class Tuning:
         # Reuse footprint/corridor checks and generated-line freshness validation.
         self.maps.export(key)
         candidate = dict(map_id=self.identity(key),
-                         document=document, lane_id=body['lane_id'],
+                         document=live_document(document), lane_id=body['lane_id'],
                          line_type=body['line_type'], centerline_speed_mps=body['centerline_speed_mps'])
         candidate['revision'] = _protocol.digest(candidate)
         _protocol.validate(candidate, candidate['map_id'])
@@ -106,7 +107,7 @@ class Tuning:
             if not isinstance(candidate, dict):
                 raise ValueError('候補データが不正です。プレビューを作り直してください')
             _protocol.validate(candidate, identity)
-            if candidate['document'] != self.maps.load(body['id']):
+            if candidate['document'] != live_document(self.maps.load(body['id'])):
                 raise ValueError('プレビュー後に地図が変わりました。作り直してください')
             payload['snapshot'] = candidate
         if action in ('apply', 'rollback', 'parameters_set', 'parking_start', 'parking_reset', 'behavior_reset'):

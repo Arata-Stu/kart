@@ -22,6 +22,7 @@ from .maps import Maps
 from .storage import atomic_json, name, read_json, within
 from .transfers import Transfers, profile
 from .tuning import MAX_APPLY_BYTES, Tuning, remote
+from .hdmap_versions import HDMapVersions
 from .bringup import Bringup, preview_catalog
 from .audit import Audit, FILES as AUDIT_FILES
 
@@ -47,6 +48,7 @@ class Studio:
         self.transfers = Transfers(self.records, self.maps)
         self.learning = Learning(repo, base, self.records, self.state)
         self.tuning = Tuning(self.maps)
+        self.hdmap_versions = HDMapVersions(self.maps, self.tuning.identity)
         self.bringup = Bringup(self.state)
         self.audit = Audit(repo, base, self.records)
         self.coverage = Coverage(repo, base, self.records)
@@ -77,6 +79,8 @@ class Studio:
         if path == '/api/bringup/preview':
             return preview_catalog(self.repo)
         key = q.get("id", "")
+        if path == '/api/hdmap/versions':
+            return self.hdmap_versions.list(key)
         if path == '/api/audits':
             result = self.audit.catalog()
             with self.jobs.lock:
@@ -207,6 +211,10 @@ class Studio:
         if path in ("/api/tuning/status", "/api/tuning/apply", "/api/tuning/rollback", "/api/tuning/parameters_get", "/api/tuning/parameters_set", "/api/tuning/parking_start", "/api/tuning/parking_reset", "/api/tuning/behavior_reset"):
             return self.tuning.request(b, path.rsplit("/", 1)[1])
         key = b.get("id", "")
+        if path in ('/api/hdmap/version-create', '/api/hdmap/version-restore'):
+            with self.jobs.guard('map:' + name(key)):
+                fn = self.hdmap_versions.create if path.endswith('create') else self.hdmap_versions.restore
+                return fn(b)
         if path in ("/api/e2e/trash", "/api/e2e/restore"):
             from . import e2e_trash
             if path.endswith('/restore'):

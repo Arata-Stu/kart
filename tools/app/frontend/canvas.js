@@ -169,11 +169,13 @@ function invalidate() {
 export function fit(all = false) {
   const bounds = viewBounds(state.doc, state.cloud?.points, all);
   if (!bounds) return;
+  // A tab change can move the canvas before ResizeObserver updates width/height.
+  const rect = canvas.getBoundingClientRect();
   const [x0, y0, x1, y1] = bounds;
   origin = [(x0 + x1) / 2, (y0 + y1) / 2];
   scale = Math.min(
-    Math.max(1, width - 100) / Math.max(1, x1 - x0),
-    Math.max(1, height - 100) / Math.max(1, y1 - y0),
+    Math.max(1, rect.width - 100) / Math.max(1, x1 - x0),
+    Math.max(1, rect.height - 100) / Math.max(1, y1 - y0),
   );
   invalidate();
 }

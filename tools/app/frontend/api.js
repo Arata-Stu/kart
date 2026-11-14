@@ -31,9 +31,9 @@ export const state = {
   jobs: [],
   settings: {
     spacing: 0.10,
-    centerline_method: "paired",
+    centerline_method: "region",
     region_resolution: 0.02,
-    centerline_max_points: 600,
+    centerline_max_points: 800,
     vehicle_width: 0.19,
     vehicle_length: 0.35,
     rear_axle_to_rear: 0.1065,
@@ -43,7 +43,7 @@ export const state = {
     accel: 1.5,
     decel: 2.5,
     curvature_limit: 1,
-    optimizer: "local",
+    optimizer: "mincurv",
   },
 };
 export const events = new EventTarget();
@@ -125,17 +125,21 @@ export function remember() {
   if (state.undo.length > 60) state.undo.shift();
   state.redo = [];
 }
+export function invalidateLines(lane) {
+  lane.lines = {};
+  for (const version of lane.custom_versions || []) delete version.line;
+}
 export function edited() {
   state.diagnostic = null;
   state.dirty = true;
   if (state.target === "obstacle") {
-    for (const lane of state.doc.lanes) lane.lines = {};
+    for (const lane of state.doc.lanes) invalidateLines(lane);
   } else if (state.target === "custom") {
     delete state.lane.lines.customline;
     const previous=state.undo.at(-1)?.lanes.find(lane=>lane.id===state.laneId);
     if(previous) state.lane.custom_speeds=reanchorSections(previous.custom,state.lane.custom,state.lane.closed,previous.custom_speeds || []);
     else if (state.lane.custom.length < (state.lane.closed ? 3 : 2)) state.lane.custom_speeds = [];
-  } else state.lane.lines = {};
+  } else invalidateLines(state.lane);
   emit("document");
 }
 export function undo(redo = false) {

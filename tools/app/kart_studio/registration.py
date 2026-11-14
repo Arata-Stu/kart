@@ -49,6 +49,9 @@ def preview(maps, target, body):
         area['goal_pose'] = xy(goal) + [math.atan2(math.sin(goal[2]+angle), math.cos(goal[2]+angle))]
         if 'forward_yaw' in area: area['forward_yaw'] = math.atan2(math.sin(area['forward_yaw']+angle), math.cos(area['forward_yaw']+angle))
     for lane in result["lanes"]:
+        for version in lane.get('custom_versions', []):
+            version['custom'] = [xy(p) for p in version['custom']]
+            version.pop('line', None)
         for key in ("left", "right", "custom"):
             lane[key] = [xy(p) for p in lane[key]]
         for line in lane["lines"].values():

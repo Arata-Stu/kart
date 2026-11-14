@@ -6,6 +6,7 @@ from .geometry import points, number
 from .speed_sections import sections
 from .storage import name
 from .passing_zones import save_annotations
+from .custom_versions import validate as validate_versions, generated as update_version
 
 FIELDS = ("closed", "left", "right", "custom", "custom_speeds", "custom_speed_mode", "centerline_speed_mps", "lines")
 
@@ -78,9 +79,14 @@ def validate(raw, existing):
         lane["centerline_speed_mps"] = number(speed, 0, 20, "Center速度 m/s")
         # Generated results are server-owned; never trust client-provided lines.
         lane["lines"] = copy.deepcopy(old["lines"])
-        if any(lane[k] != old[k] for k in ("left", "right", "closed")):
+        geometry_changed = any(lane[k] != old[k] for k in ("left", "right", "closed"))
+        if geometry_changed:
             lane["lines"] = {}
         elif lane["custom_speed_mode"] != old.get("custom_speed_mode", "profile") or any(lane[k] != old.get(k, []) for k in ("custom", "custom_speeds")):
             lane["lines"].pop("customline", None)
-        result.append(save_annotations(lane, row, old))
+        validate_versions(row, old, lane, geometry_changed)
+        lane = save_annotations(lane, row, old)
+        if 'customline' in lane['lines']:
+            update_version(lane)
+        result.append(lane)
     return result

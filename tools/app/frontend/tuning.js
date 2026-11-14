@@ -99,6 +99,8 @@ function render() {
     ? `${mode} · ${s.localized?'自己位置確定':'自己位置未確定'} · ${s.speed_mps==null?'速度不明':s.speed_mps.toFixed(2)+' m/s'} · ${s.apply_issue || '適用可能'}`
     : '未接続・受信停止');
   $('tuning-revision').textContent=`実車 ${s?.revision?.slice(0,10) || '—'} / 候補 ${previewValid()?tuning.preview.revision.slice(0,10):'—'}`;
+  if (previewValid() && tuning.preview.document.hdmap_version)
+    $('tuning-revision').textContent += ` · HDMap: ${tuning.preview.document.hdmap_version.name}`;
   const ref = fresh() ? s?.tracking_reference : null;
   $('tuning-lookahead').textContent=ref
     ? `Pure Pursuit: lookahead ${ref.lookahead_m.toFixed(2)} m（経路長） / 参照点まで ${ref.target_distance_m.toFixed(2)} m（直線）`
@@ -123,7 +125,7 @@ export async function toggleTuningConnection() {
   finally {tuning.busy=false;render();emit('tuning');}
 }
 action('tuning-connect', toggleTuningConnection);
-action('tuning-preview', async()=> {
+export async function prepareTuningPreview() {
   if(state.dirty)throw new Error('編集を保存し、必要なラインを生成してください');
   const epoch=tuning.epoch, id=state.id, revision=state.doc.revision, lane=state.laneId;
   const kind=$('tuning-line').value, speed=Number($('tuning-speed').value);
@@ -139,7 +141,8 @@ action('tuning-preview', async()=> {
     // Parse only for display; send the original Python JSON back unchanged.
     tuning.preview=candidate; tuning.previewJson=result.snapshot_json; emit('tuning');
   } finally {tuning.busy=false;render();}
-});
+}
+action('tuning-preview', prepareTuningPreview);
 for(const [id, actionName] of [['tuning-apply','apply'],['tuning-rollback','rollback']]) {
   action(id, async()=> {
     if(applyIssue())throw new Error(applyIssue());

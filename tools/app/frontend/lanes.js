@@ -1,4 +1,5 @@
-import { $, state, action, on, emit, remember, toast } from "./api.js";
+import { $, state, action, on, emit, remember, toast, invalidateLines } from "./api.js";
+import { restoreLineSettings } from './line_settings.js';
 
 function update() {
   const speed = $("centerline-speed");
@@ -45,13 +46,7 @@ $("centerline-speed").addEventListener("change", () => changeCenterSpeed(true));
 $("lane-select").addEventListener("change", () => {
   state.laneId = $("lane-select").value;
   state.selected = -1;
-  Object.assign(state.settings, state.lane.lines.centerline?.settings || {},
-    state.lane.lines.customline?.settings || {}, state.lane.lines.raceline?.settings || {});
-  $("raceline-method").value = state.settings.optimizer;
-  state.settings.centerline_method = state.lane.lines.centerline?.settings?.centerline_method || "paired";
-  state.settings.region_resolution = state.lane.lines.centerline?.settings?.region_resolution ?? 0.02;
-  state.settings.centerline_max_points = state.lane.lines.centerline?.settings?.centerline_max_points ?? 600;
-  $("centerline-method").value = state.settings.centerline_method;
+  restoreLineSettings(state.lane);
   emit("document");
 });
 action("lane-add", () => {
@@ -76,10 +71,11 @@ $("lane-form").addEventListener("submit", (event) => {
     ? structuredClone(state.lane)
     : { closed: true, left: [], right: [], custom: [], custom_speeds: [], centerline_speed_mps: 1.5 };
   lane.id = id;
-  lane.lines = {};
+  invalidateLines(lane);
   remember();
   state.doc.lanes.push(lane);
   state.laneId = id;
+  restoreLineSettings(state.lane);
   state.selected = -1;
   state.dirty = true;
   $("lane-dialog").close();
@@ -136,6 +132,7 @@ action("hdmap-reset-confirm", () => {
     },
   ];
   state.doc.obstacles = [];
+  restoreLineSettings(state.lane);
   state.doc.parking_areas = [];
   state.doc.parking_drivable = [];
   emit("parking-reset-editor");

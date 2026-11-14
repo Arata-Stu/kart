@@ -247,6 +247,10 @@
             <select id="tuning-line" aria-label="適用するライン"><option value="centerline">Center</option><option value="raceline">Race</option><option value="customline">Custom</option></select>
             <label>Center速度 <input id="tuning-speed" type="number" min="0" step="0.05" value="1.5" aria-label="Center速度 m/s" /> m/s</label>
             <button id="tuning-line-switch" disabled>実車ラインを切替</button>
+            <select id="tuning-hdmap-version" aria-label="実車へ適用するHDMap全体の版"><option value="">HDMap全体の版を選択</option></select>
+            <button id="tuning-hdmap-preview" disabled>HDMap版をプレビュー</button>
+            <select id="tuning-custom-version" aria-label="実車へ適用するCustom戦略"><option value="">Customの戦略を選択</option></select>
+            <button id="tuning-custom-preview" disabled>戦略をプレビュー</button>
             <button id="tuning-offset-open" disabled>ステア補正</button>
             <button id="tuning-parameters-open" disabled>パラメータ調整</button>
             <button id="tuning-plots-open" type="button">ライブプロット</button>
@@ -301,7 +305,7 @@
           <div class="small" id="tuning-lookahead" role="status">横制御の参照点: 未受信</div>
           <p class="small">既存の編集・区間速度・ライン生成後に保存してプレビュー。白＝実車、青＝地図の候補ライン、橙＝自己位置、黄＝横制御の参照点。ライン・速度・横制御調整はAUTO/MANUAL走行中も適用可能。画面切断は走行を停止しません。</p>
         </details>
-        <div class="canvas-wrap">
+        <div class="canvas-wrap" id="map-canvas-wrap">
           <canvas
             id="map-canvas"
             aria-label="点群とHDMap編集キャンバス"
@@ -348,6 +352,17 @@
           ><button id="step-lines">3 ライン</button>
         </div>
         <div id="inspector-body" class="scroll">
+          <details id="hdmap-versions-panel" class="hdmap-versions">
+            <summary>HDMap全体の版</summary>
+            <p class="help">全lane・左右境界・ライン・禁止領域・駐車設定をまとめて保存。点群・自己位置推定用地図は共用します。</p>
+            <label>版名<input id="hdmap-version-name" maxlength="64" placeholder="例: 通常・攻め・守り" /></label>
+            <button id="hdmap-version-create" class="full">現在のHDMapを版として保存</button>
+            <select id="hdmap-version-select" aria-label="保存したHDMap全体の版"><option value="">HDMap全体の版を選択</option></select>
+            <div class="actions"><button id="hdmap-version-load">作業用へ読み込む</button><button id="hdmap-version-refresh">一覧を更新</button></div>
+            <button id="hdmap-version-preview" class="full">このHDMap版をプレビュー</button>
+            <p id="hdmap-version-state" class="help"></p>
+            <p class="help">読み込みは保存済みの作業用HDMapを置き換えます。「直前の作業用HDMap」で戻せます。プレビュー後の「適用」まで実車は変わりません。</p>
+          </details>
           <details id="parking-editor">
             <summary>駐車 P1・P2・P3 <span id="parking-defined">未定義</span></summary>
             <p class="help">地図上で作ります。緑＝車を収める枠、水色＝入口、紫＝任意の経路制限、ピンク＝停車時の車体。赤い領域は実際の壁・障害物です。</p>
@@ -504,7 +519,7 @@
               </div>
               <select id="centerline-method" aria-label="Centerline生成方式">
                 <option value="paired">従来・境界中点</option>
-                <option value="region">領域・等距離線（実験／閉路）</option>
+                <option value="region" selected>領域・等距離線（実験／閉路）</option>
               </select>
               <p class="help">生成すると現在のCenterを更新します。方式を比較する場合は地図を複製してください。</p>
               <button id="centerline-settings-open" class="full">生成設定（点間隔・点数上限）</button>
@@ -521,7 +536,7 @@
               </div>
               <select id="raceline-method" aria-label="Raceline最適化方式">
                 <option value="local">簡易・局所曲率低減</option>
-                <option value="mincurv">最小曲率（helper・閉路）</option>
+                <option value="mincurv" selected>最小曲率（helper・閉路）</option>
                 <option value="mincurv_iqp">
                   反復最小曲率（helper・閉路）
                 </option>
@@ -543,6 +558,15 @@
                 ><span id="customline-status">未生成</span>
               </div>
               <label>作成方法<select id="custom-source"><option value="manual">手動で新規作成</option><option value="centerline">Centerをベースに作成</option><option value="raceline">Raceをベースに作成</option></select></label>
+              <div class="custom-versions">
+                <strong>戦略ごとの版</strong>
+                <select id="custom-version-select" aria-label="保存したCustomの版"><option value="">保存した版を選択</option></select>
+                <div class="actions"><button id="custom-version-load">読み込む</button><button id="custom-version-update">選択版を更新</button><button id="custom-version-delete">版を削除</button></div>
+                <label>新しい版名<input id="custom-version-name" maxlength="64" placeholder="例: 攻め・守り・追越し準備" /></label>
+                <button id="custom-version-new" class="full">現在のCustomを別名で保存</button>
+                <p id="custom-version-status" class="help"></p>
+                <p class="help">形状・区間速度・生成結果をまとめて保存。点の編集後は「選択版を更新」し、必要に応じて再生成してください。地図の保存で確定します。</p>
+              </div>
               <label>編集点の目安間隔 (m)<input id="custom-spacing" type="number" min="0" max="100" step="0.1" value="1.0" /></label>
               <p id="custom-point-preview" class="help"></p>
               <button id="custom-start" class="full">空の点列で作成</button>
@@ -586,7 +610,8 @@
     </main>
     <main id="plots-page" hidden>
       <section class="plots-heading">
-        <div><h1>ライブプロット</h1><p>Jetsonの直近60秒の制御データ。パラメータの選択に関係なく一覧で確認できます。</p></div>
+        <div><h1>ライブプロット</h1><p>地図・自己位置・直近60秒の制御データを一画面で表示。</p></div>
+        <button id="plots-fullscreen" type="button" aria-pressed="false">録画表示</button>
         <button id="plots-connect" type="button" disabled>Jetsonに接続</button>
         <p id="plots-connection-status" role="status">未接続。地図タブで使用する地図を開いてください。</p>
       </section>
@@ -603,6 +628,11 @@
           <div class="plots-map"><span class="small">使用する地図</span><strong id="plots-map-name">未選択</strong><button id="plots-open-map" type="button">地図を開く・実車調整へ</button></div>
           <p class="help">接続は地図の「実車調整」と共通です。地図とこのタブの移動中も更新を続けます。各グラフの凡例に最新値を表示します。</p>
         </aside>
+        <section class="plots-map-view" aria-label="ラインと自己位置の地図">
+          <div class="actions"><strong>ライン・自己位置・軌跡</strong><button id="plots-map-fit" type="button">地図をフィット</button></div>
+          <div id="plots-map-slot"></div>
+          <p class="help">橙＝自己位置 · 軌跡＝推定速度 · 白＝実車の参照ライン · 青＝プレビュー</p>
+        </section>
         <section class="plots-content" aria-label="制御のライブグラフ">
           <div class="plots-grid">
             <section id="tuning-lookahead-panel" class="plots-card" hidden>
@@ -612,12 +642,16 @@
               <strong>横制御の速度 · 同じ時間軸</strong>
               <div class="plot-legend"><span class="plot-key plot-blue">目標速度（青） <b id="lookahead-target-speed">—</b> m/s</span><span class="plot-key plot-orange">計算に使った後輪軸の推定速度（橙） <b id="lookahead-measured-speed">—</b> m/s</span></div>
               <svg id="tuning-lookahead-speed-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="直近60秒の横制御目標速度と計算に使った後輪軸の推定前後速度、単位m/s"></svg>
+              <details class="plots-notes"><summary>説明・診断の状態</summary>
               <p id="tuning-lookahead-note" class="help" role="status">横制御の診断を待っています</p>
+              </details>
             </section>
             <section id="tuning-speed-panel" class="plots-card" hidden>
               <div class="actions"><h2>速度PID · 直近60秒</h2><span id="tuning-speed-values" class="plot-legend"><span class="plot-key plot-blue">目標速度（青） <b id="tuning-speed-target">—</b> m/s</span><span class="plot-key plot-orange">現在速度（橙） <b id="tuning-speed-measured">—</b> m/s</span></span></div>
               <svg id="tuning-speed-chart" viewBox="0 0 760 170" role="img" aria-label="直近60秒の目標速度と現在速度、単位m/s"></svg>
+              <details class="plots-notes"><summary>説明・診断の状態</summary>
               <p id="tuning-speed-note" class="help">速度診断を待っています</p>
+              </details>
             </section>
             <section id="tuning-tracking-timing-panel" class="plots-card" hidden>
               <h2>横制御の処理時間・入力データの古さ</h2>
@@ -627,8 +661,10 @@
               <strong>入力データの古さ · 直近60秒</strong>
               <div id="tuning-tracking-age-legend" class="plot-legend"></div>
               <svg id="tuning-tracking-age-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="制御が使用した入力データの古さ、ms"></svg>
+              <details class="plots-notes"><summary>説明・診断の状態</summary>
               <p id="tuning-tracking-timing-status" class="help">診断を待っています</p>
               <p class="help">古さは指令作成時刻と入力stampとの差です。自己位置は横制御で使用したデータ、速度計測・目標指令はPIDで使用したデータです。現在までの経過時間ではありません。ROS時刻の差なので未来stampは負値になります。処理時間は実経過時間でTF待機を含み、通信・基板・実際の車体応答は含みません。</p>
+              </details>
             </section>
             <section id="tuning-speed-timing-panel" class="plots-card" hidden>
               <h2>速度PIDの処理時間・入力データの古さ</h2>
@@ -638,8 +674,10 @@
               <strong>入力データの古さ · 直近60秒</strong>
               <div id="tuning-speed-age-legend" class="plot-legend"></div>
               <svg id="tuning-speed-age-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="制御が使用した入力データの古さ、ms"></svg>
+              <details class="plots-notes"><summary>説明・診断の状態</summary>
               <p id="tuning-speed-timing-status" class="help">診断を待っています</p>
               <p class="help">古さは指令作成時刻と入力stampとの差です。自己位置は横制御で使用したデータ、速度計測・目標指令はPIDで使用したデータです。現在までの経過時間ではありません。ROS時刻の差なので未来stampは負値になります。処理時間は実経過時間でTF待機を含み、通信・基板・実際の車体応答は含みません。</p>
+              </details>
             </section>
           </div>
         </section>
@@ -1374,7 +1412,7 @@
         </details>
         <p class="help">
           余裕は車体の前後左右へ加えます。適用後の設定で再生成するとラインを更新します。
-          Centerlineの点数上限は12〜1500点（既定600点）。領域方式で上限を超えた場合は生成を停止します。点数を増やすと処理時間が延びます。
+          Centerlineの点数上限は12〜1500点（UI初期値800点）。領域方式で上限を超えた場合は生成を停止します。点数を増やすと処理時間が延びます。
         </p>
         <div class="dialog-actions">
           <button type="submit" value="apply">設定のみ適用</button>

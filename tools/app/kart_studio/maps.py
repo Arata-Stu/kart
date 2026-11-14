@@ -5,7 +5,7 @@ import shutil
 import time
 import uuid
 
-from . import footprint, lanes, obstacles, parking, passing_zones
+from . import footprint, lanes, obstacles, parking, passing_zones, custom_versions
 from .exports import export_map
 from .lines import generate
 from .snapshots import normalize
@@ -179,6 +179,7 @@ class Maps:
                 count=sum(len(line.get('passing_zones', [])) for line in lane['lines'].values())
                 if count: lane['passing_zones_notice']=f'禁止領域の変更により追越し許可{count}区間が失効しました。再生成後に設定してください。'
                 lane["lines"] = {}
+                custom_versions.invalidate(lane)
         parking_fields = parking.validate(dict(current, **dict(body, obstacles=regions)))
         current.update(
             **parking_fields,
@@ -219,6 +220,8 @@ class Maps:
             }
         )
         lane["lines"][kind] = passing_zones.regenerated(result, lane['lines'].get(kind), lane['closed'])
+        if kind == 'customline':
+            custom_versions.generated(lane)
         document.update(revision=document["revision"] + 1, updated=time.time())
         atomic_json(self.folder(key) / "map.json", document)
         return dict(map=key, lane_id=lane["id"], revision=document["revision"])

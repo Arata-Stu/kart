@@ -36,7 +36,7 @@ class CopyTests(unittest.TestCase):
                         "closed": False,
                         "custom": [],
                         "custom_speeds": [],
-                        "lines": {"centerline": {"points": [[1, 2]]}},
+                        "lines": {"centerline": {"points": [[1, 2], [2, 2]]}},
                     }
                     for key in ("main", "shortcut")
                 ],

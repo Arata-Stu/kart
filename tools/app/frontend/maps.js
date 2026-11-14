@@ -1,6 +1,7 @@
 import { parkingWarnings } from "./parking_model.js";
 import { compatible, resizePairs, alignPairs } from "./paired.js";
 import { showLine } from "./line_visibility.js";
+import { restoreLineSettings } from './line_settings.js';
 import {
   $,
   state,
@@ -11,6 +12,7 @@ import {
   item,
   toast,
   remember,
+  invalidateLines,
   edited,
   undo,
   fmt,
@@ -65,13 +67,7 @@ export async function loadMap(id, preserve = false) {
   state.laneId = doc.lanes.some((lane) => lane.id === state.laneId)
     ? state.laneId
     : doc.lanes[0].id;
-  Object.assign(state.settings, state.lane.lines.centerline?.settings || {},
-    state.lane.lines.customline?.settings || {}, state.lane.lines.raceline?.settings || {});
-  $("raceline-method").value = state.settings.optimizer;
-  state.settings.centerline_method = state.lane.lines.centerline?.settings?.centerline_method || "paired";
-  state.settings.region_resolution = state.lane.lines.centerline?.settings?.region_resolution ?? 0.02;
-  state.settings.centerline_max_points = state.lane.lines.centerline?.settings?.centerline_max_points ?? 600;
-  $("centerline-method").value = state.settings.centerline_method;
+  restoreLineSettings(state.lane);
   let min = Infinity,
     max = -Infinity;
   for (const p of cloud.points) {
@@ -111,7 +107,12 @@ export async function loadMap(id, preserve = false) {
 }
 export async function save() {
   if (!state.doc || !state.dirty) return;
-  state.doc = await api("save", { id: state.id, document: state.doc });
+  const document = structuredClone(state.doc);
+  // Version geometry is server-owned; sending every generated profile back
+  // needlessly multiplies the save payload as the strategy library grows.
+  for (const lane of document.lanes)
+    for (const version of lane.custom_versions || []) delete version.line;
+  state.doc = await api("save", { id: state.id, document });
   state.dirty = false;
   emit("document");
   await refreshMaps();
@@ -241,7 +242,7 @@ for (const t of ["left", "right", "custom", "pair"])
       remember();
       state.lane.left = candidate.left;
       state.lane.right = candidate.right;
-      state.lane.lines = {};
+      invalidateLines(state.lane);
       state.dirty = true;
     }
     state.target = t;
@@ -284,7 +285,7 @@ action("clear-line", () => {
 $("closed").addEventListener("change", () => {
   remember();
   state.lane.closed = $("closed").checked;
-  state.lane.lines = {};
+  invalidateLines(state.lane);
   state.dirty = true;
   emit("document");
 });

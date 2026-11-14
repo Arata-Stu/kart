@@ -168,6 +168,10 @@ class Transfers:
             atomic_json(bundle / "map.json", self.maps.load(key))
             for filename in ("snapshot.json", "cloud.json"):
                 shutil.copyfile(within(source, filename), bundle / filename)
+            if (source / '.hdmap-versions').exists():
+                versions = within(source, '.hdmap-versions')
+                signature(versions)
+                shutil.copytree(versions, bundle / '.hdmap-versions')
             if (source / "cuvslam_map").is_dir():
                 signature(source / "cuvslam_map")  # Refuse links before copy.
                 shutil.copytree(source / "cuvslam_map", bundle / "cuvslam_map")

@@ -1608,25 +1608,50 @@ header .local-tag { white-space: nowrap; }
 .plots-heading p { margin: 0; color: var(--muted); }
 .plots-heading > button { margin-left: auto; }
 #plots-connection-status { flex-basis: 100%; color: var(--ink); overflow-wrap: anywhere; }
-.plots-workspace { display: grid; grid-template-columns: 210px minmax(0, 1fr); min-height: 0; flex: 1; }
-.plots-sidebar { padding: 20px 16px; background: white; border-right: 1px solid var(--line); overflow-y: auto; }
-.plots-filters { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin: 14px 0 24px; }
-.plots-filters button { text-align: left; white-space: normal; }
-.plots-map { display: grid; gap: 8px; }
-#plots-map-name { overflow-wrap: anywhere; }
-.plots-content { min-width: 0; overflow-y: auto; padding: 20px; }
-.plots-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr)); gap: 16px; align-items: start; }
-.plots-card { min-width: 0; padding: 16px; background: white; border: 1px solid var(--line); border-radius: 10px; }
-.plots-card h2 { margin: 0 0 14px; font-size: 16px; }
-.plots-card .actions { align-items: center; }
+/* Recording dashboard: a map and all seven charts fit at 1920 × 1080. */
+.plots-workspace { display: grid; grid-template-columns: minmax(300px, .85fr) minmax(0, 2fr); grid-template-rows: auto minmax(0, 1fr); gap: 12px; padding: 12px; min-height: 0; flex: 1; }
+.plots-sidebar { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; min-width: 0; }
+.plots-sidebar > strong, .plots-sidebar > .help, .plots-map > .small { display: none; }
+.plots-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.plots-filters button { padding: 6px 10px; }
+.plots-map { display: flex; gap: 8px; align-items: center; margin-left: auto; min-width: 0; }
+#plots-map-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plots-map-view { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: white; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.plots-map-view > .actions { padding: 10px; justify-content: space-between; flex: none; }
+#plots-map-slot { display: flex; flex: 1; min-height: 0; }
+#plots-map-slot .canvas-wrap { width: 100%; }
+#plots-map-slot .canvas-legend { flex-wrap: wrap; max-width: calc(100% - 20px); padding: 8px; gap: 5px 8px; }
+.plots-map-view > .help { margin: 0; padding: 8px 10px; }
+.plots-content { min-width: 0; min-height: 0; overflow: hidden; }
+.plots-grid { display: grid; height: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.plots-card { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow-y: auto; padding: 12px; background: white; border: 1px solid var(--line); border-radius: 10px; }
+.plots-card h2 { margin: 0 0 8px; font-size: 14px; }
+.plots-card .actions { align-items: center; flex-wrap: wrap; gap: 4px; }
 .plots-card .actions h2 { margin: 0; }
-.plots-card .plot-legend { margin: 8px 0; font-size: 12px; }
-.plots-card .help { margin: 8px 0 0; line-height: 1.7; }
-.plots-card svg, #plots-page #tuning-speed-chart { display: block; width: 100%; height: auto; max-height: 220px; }
-/* Keep paired distance/speed charts together when one plot is selected. */
-#plots-page:has(#plots-filter-all[aria-pressed="false"]) .plots-card svg { height: clamp(110px, 19vh, 170px); }
-@media (max-width: 900px) {
-  .plots-workspace { grid-template-columns: 180px minmax(0, 1fr); }
-  .plots-heading { padding-inline: 16px; }
-  .plots-content { padding: 12px; }
+.plots-card .plot-legend { margin: 6px 0; font-size: 11px; flex: none; }
+.plots-card .help { margin: 6px 0 0; line-height: 1.6; }
+.plots-card svg, #plots-page #tuning-speed-chart { display: block; width: 100%; height: 0; min-height: 65px; max-height: none; flex: 1 1 0; }
+.plots-notes { flex: none; font-size: 11px; margin-top: 5px; }
+.plots-notes summary { color: var(--muted); cursor: pointer; }
+#plots-page:has(#plots-filter-all[aria-pressed="false"]) .plots-grid { grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
+body.plots-recording > header, body.plots-recording > footer { display: none; }
+.custom-versions { display: grid; gap: 7px; padding: 10px; margin: 10px 0; border: 1px solid var(--line); border-radius: 7px; background: #f4f8f8; }
+.custom-versions .actions { flex-wrap: wrap; gap: 5px; }
+.custom-versions button { padding: 6px 8px; }
+.custom-versions select, .custom-versions input { min-width: 0; width: 100%; }
+.hdmap-versions { padding: 10px 0; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+.hdmap-versions summary { cursor: pointer; font-weight: 600; }
+.hdmap-versions label { display: grid; gap: 6px; margin: 10px 0; }
+.hdmap-versions input, .hdmap-versions select { width: 100%; min-width: 0; }
+.hdmap-versions .actions { flex-wrap: wrap; gap: 5px; margin: 8px 0; }
+@media (max-width: 1350px), (max-height: 800px) {
+  .plots-workspace { overflow-y: auto; grid-template-rows: auto minmax(600px, 1fr); grid-template-columns: minmax(260px, .8fr) minmax(0, 2fr); }
+  .plots-heading { padding: 10px 16px; }
+}
+@media (max-width: 950px) {
+  .plots-workspace { display: flex; flex-direction: column; overflow-y: auto; }
+  .plots-map-view { min-height: 360px; }
+  .plots-content { overflow: visible; flex: none; }
+  .plots-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+  .plots-card { min-height: 360px; }
 }

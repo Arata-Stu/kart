@@ -12,4 +12,11 @@ export function reverseLane(lane) {
   lane.custom_speeds = (lane.custom_speeds || []).map(({start, end, speed}) => ({start: total - end, end: total - start, speed}));
   // Headings, speeds (asymmetric accel/decel), and swept footprints must be recomputed.
   lane.lines = {};
+  for (const version of lane.custom_versions || []) {
+    const working = {custom:version.custom, custom_speeds:version.custom_speeds,
+      closed:lane.closed, left:[], right:[], lines:{}};
+    reverseLane(working);
+    version.custom = working.custom; version.custom_speeds = working.custom_speeds;
+    delete version.line;
+  }
 }
