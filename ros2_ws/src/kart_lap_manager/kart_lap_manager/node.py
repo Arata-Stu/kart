@@ -71,8 +71,8 @@ def transform_pose(transform):
 
 
 class LapManager(Node):
-    def __init__(self):
-        super().__init__('lap_manager')
+    def __init__(self, **node_options):
+        super().__init__('lap_manager', **node_options)
         fixed = ParameterDescriptor(read_only=True)
         self.settings = {key: self.declare_parameter(key, value, fixed).value
                          for key, value in DEFAULTS.items()}
@@ -113,7 +113,8 @@ class LapManager(Node):
         self.create_subscription(PoseWithCovarianceStamped, self.settings['pose_hint_topic'], self.on_hint, 10)
         self.event_pub = self.create_publisher(String, self.settings['lap_events_topic'], 10)
         self.status_pub = self.create_publisher(String, self.settings['lap_status_topic'], 1)
-        self.clients = {
+        # Node.clients is rclpy's read-only registry used by its executor.
+        self.maintenance_clients = {
             'vgl': self.create_client(Trigger, self.settings['vgl_trigger_service'])
                    if self.settings['vgl_enabled'] else None,
             'cache': self.create_client(Trigger, self.settings['cache_clear_service'])
@@ -258,7 +259,7 @@ class LapManager(Node):
                                    f'VGL={self.vgl.state}; cache={self.cache.state}')
 
     def request(self, key, wall):
-        client = self.clients[key]
+        client = self.maintenance_clients[key]
         if client is None:
             return
         state = self.vgl if key == 'vgl' else self.cache

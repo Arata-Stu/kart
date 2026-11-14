@@ -57,6 +57,20 @@ bringup全体の追加回帰では、このMacのplotly／parking package解決�
 sim HDMap設定のparameter欠落で未通過の項目がある。ROS build・DDS/TF・systemd・Docker helper接続・
 Jetson実機・実車は未確認。実機への適用前にworkspaceを再ビルド・sourceする。
 
+周回機能ON時のノード初期化で、独自の`clients`属性がrclpy Nodeの読み取り専用属性と
+衝突する不具合を修正した。既存の構成テストはROS Nodeを単純なstubに置き換えていたため
+この初期化例外を検出できていなかった。属性衝突を再現するconstructor回帰テストと、
+ROS環境で実Nodeを生成・破棄するsmoke testを追加した。修正の反映には少なくとも
+`kart_lap_manager`の再ビルドとworkspaceの再sourceが必要。手順例:
+
+```bash
+bash /workspaces/scripts/build.sh --profile jetson --packages-up-to kart_bringup
+source /workspaces/ros2_ws/install/setup.bash
+```
+
+修正後の周回・mission接続・TUI/CLI関連テストは65件成功。実ROSの起動smoke testは、
+このMacにrclpyがないため1件skipしており、Jetsonでの実起動確認は残る。
+
 
 平坦路を走行するRCカー向けに、`enable_ground_constraint_in_odometry`と
 `enable_ground_constraint_in_slam`はともに既定`true`（平面制約ON）。

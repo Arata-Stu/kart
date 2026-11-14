@@ -25,14 +25,75 @@ class Message:
         self.__dict__.update(values)
 
 
+class NodeDouble:
+    """Keep rclpy's read-only client registry while exercising the constructor.
+
+    Lyrical Node.clients is a read-only property. A plain object stub and
+    __new__ callback tests cannot catch accidental replacement of that API.
+    """
+    parameter_overrides = {}
+
+    def __init__(self, name, **_node_options):
+        self.node_name = name
+        self._created_clients = []
+        self._created_publishers = []
+        self._created_subscriptions = []
+        self._created_timers = []
+        self.log_messages = []
+
+    @property
+    def clients(self):
+        yield from self._created_clients
+
+    @property
+    def publishers(self):
+        yield from self._created_publishers
+
+    @property
+    def subscriptions(self):
+        yield from self._created_subscriptions
+
+    @property
+    def timers(self):
+        yield from self._created_timers
+
+    def declare_parameter(self, name, default, _descriptor):
+        return NS(value=self.parameter_overrides.get(name, default))
+
+    def create_subscription(self, msg_type, topic, callback, qos):
+        subscription = NS(msg_type=msg_type, topic=topic, callback=callback, qos=qos)
+        self._created_subscriptions.append(subscription)
+        return subscription
+
+    def create_publisher(self, msg_type, topic, qos):
+        publisher = NS(msg_type=msg_type, topic=topic, qos=qos, publish=lambda _message: None)
+        self._created_publishers.append(publisher)
+        return publisher
+
+    def create_client(self, srv_type, service):
+        client = NS(srv_type=srv_type, srv_name=service, service_is_ready=lambda: False)
+        self._created_clients.append(client)
+        return client
+
+    def create_timer(self, period, callback, *, clock):
+        timer = NS(period=period, callback=callback, clock=clock)
+        self._created_timers.append(timer)
+        return timer
+
+    def get_logger(self):
+        return NS(info=self.log_messages.append)
+
+
 stubs = {
     'rclpy': module('rclpy'),
-    'rclpy.node': module('rclpy.node', Node=object),
-    'rclpy.clock': module('rclpy.clock', Clock=object, ClockType=object),
+    'rclpy.node': module('rclpy.node', Node=NodeDouble),
+    'rclpy.clock': module('rclpy.clock', Clock=Message, ClockType=NS(STEADY_TIME='steady')),
     'rclpy.time': module('rclpy.time', Time=NS(from_msg=lambda value: value)),
-    'rclpy.qos': module('rclpy.qos', DurabilityPolicy=object, QoSProfile=object,
-                        ReliabilityPolicy=object, qos_profile_sensor_data=object()),
-    'tf2_ros': module('tf2_ros', Buffer=object, TransformListener=object, TransformException=TransformError),
+    'rclpy.qos': module('rclpy.qos', DurabilityPolicy=NS(TRANSIENT_LOCAL='transient_local'),
+                        QoSProfile=Message, ReliabilityPolicy=NS(RELIABLE='reliable'),
+                        qos_profile_sensor_data=object()),
+    'tf2_ros': module('tf2_ros', Buffer=object, TransformListener=lambda *_args: NS(),
+                     TransformException=TransformError),
 }
 for package, symbols in {
     'diagnostic_msgs.msg': ['DiagnosticArray'], 'geometry_msgs.msg': ['PoseWithCovarianceStamped'],
@@ -88,6 +149,26 @@ class Client:
 
 
 class AdapterTests(unittest.TestCase):
+    def test_constructor_preserves_ros_client_registry_for_each_feature_selection(self):
+        for vgl, cache in ((False, False), (True, False), (False, True), (True, True)):
+            with self.subTest(vgl=vgl, cache=cache), patch.object(NodeDouble, 'parameter_overrides',
+                    {'vgl_enabled': vgl, 'cache_clear_enabled': cache}):
+                node = adapter.LapManager()
+            self.assertEqual(len(list(node.clients)), int(vgl) + int(cache))
+            self.assertEqual(len(list(node.subscriptions)), 4)
+            self.assertEqual(len(list(node.publishers)), 2)
+            self.assertEqual(len(list(node.timers)), 1)
+            for key, enabled, service in (
+                ('vgl', vgl, '/visual_localization/trigger_localization'),
+                ('cache', cache, '/kart/cache/clear'),
+            ):
+                client = node.maintenance_clients[key]
+                if enabled:
+                    self.assertIn(client, list(node.clients))
+                    self.assertEqual(client.srv_name, service)
+                else:
+                    self.assertIsNone(client)
+
     def node(self):
         n = adapter.LapManager.__new__(adapter.LapManager)
         n.settings = dict(adapter.DEFAULTS, vgl_enabled=True, cache_clear_enabled=True)
@@ -101,7 +182,7 @@ class AdapterTests(unittest.TestCase):
         n.last_status = -1e9
         n.vgl, n.cache = RequestState(True), RequestState()
         n.futures = dict(vgl=None,cache=None)
-        n.clients = dict(vgl=Client(),cache=Client())
+        n.maintenance_clients = dict(vgl=Client(),cache=Client())
         n.events, n.statuses, n.logs = [], [], []
         n.event_pub = NS(publish=n.events.append)
         n.status_pub = NS(publish=n.statuses.append)
@@ -147,8 +228,8 @@ class AdapterTests(unittest.TestCase):
                     observed = len(n.events)
                     hint_at = i+8
         self.assertEqual(len(n.events), 2)
-        self.assertEqual(n.clients['vgl'].calls, 2)
-        self.assertEqual(n.clients['cache'].calls, 2)
+        self.assertEqual(n.maintenance_clients['vgl'].calls, 2)
+        self.assertEqual(n.maintenance_clients['cache'].calls, 2)
         self.assertEqual(n.vgl.completed, 2)
 
     def test_external_or_late_hint_discards_partial_lap(self):
@@ -180,8 +261,8 @@ class AdapterTests(unittest.TestCase):
                     observed = len(n.events)
                     hint_at = i+15
         self.assertEqual(len(n.events), 3)
-        self.assertEqual(n.clients['vgl'].calls, 3)
-        self.assertEqual(n.clients['cache'].calls, 3)
+        self.assertEqual(n.maintenance_clients['vgl'].calls, 3)
+        self.assertEqual(n.maintenance_clients['cache'].calls, 3)
         self.assertEqual(n.vgl.completed, 3)
 
     def test_own_hint_cannot_preserve_an_anchor_replaced_by_a_quality_reset(self):
@@ -230,7 +311,7 @@ class AdapterTests(unittest.TestCase):
 
     def test_cache_timeout_uses_result_budget_and_requests_do_not_overlap(self):
         n = self.node()
-        n.clients['cache'] = NS(service_is_ready=lambda: True,
+        n.maintenance_clients['cache'] = NS(service_is_ready=lambda: True,
                                call_async=lambda _: NS(done=lambda: False))
         n.request('cache', 1.)
         n.poll_requests(5.)

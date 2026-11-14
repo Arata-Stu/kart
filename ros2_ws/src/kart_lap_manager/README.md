@@ -138,4 +138,9 @@ PYTHONPATH=ros2_ws/src/kart_lap_manager python3 -m unittest discover \
 サービス重複防止／timeout抑止、撮影stampが0.8秒古いVGL hint後の毎周要求、
 8秒周回・VGL hint1.5秒遅延での3周連続要求、hint前の品質喪失での開始境界差替え、
 TF補正差分、品質喪失、遅延TF、時計逆行を含む。ROS adapterはmockを使う。
+起動回帰では、Lyricalの`Node.clients`が読取専用であるAPIも再現したmockで、
+実際のconstructorとVGL/cacheの全ON/OFF組合せを確認する。
+保守サービスの参照は`maintenance_clients`へ保持し、ROS executorが使う`Node.clients`を上書きしない。
+ROS依存が導入された環境では`test_ros_startup.py`が独立contextで実際のノードを生成・破棄する。
+このテストはspinせず、VGL要求・cache解放・車両指令を送らない。ROSがない環境ではskipする。
 ROS colcon build・DDS/TF結合・Jetson負荷・実車周回判定・再局在精度は未確認。
