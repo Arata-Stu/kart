@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 const elements=new Map();
 function element(id) {
   if(!elements.has(id))elements.set(id,{id,value:'',hidden:false,open:false,disabled:false,
-    textContent:'',innerHTML:'',dataset:{},addEventListener(name,fn){this[name]=fn;}});
+    textContent:'',innerHTML:'',dataset:{},classList:{toggle(){}},
+    addEventListener(name,fn){this[name]=fn;},setAttribute(name,value){this[name]=value;}});
   return elements.get(id);
 }
 globalThis.document={getElementById:element};
@@ -27,11 +28,12 @@ async function receive(now,samples,stream='first') {
   tuning.status={lookahead_history:{stream,now,samples}};
   emit('tuning');await flush();
 }
-element('tuning-parameters-target').value='tracking';
-element('tuning-parameters-dialog').open=true;
+element('plots-page').hidden=false;
+element('tuning-parameters-target').value='vehicle';
+element('tuning-parameters-dialog').open=false;
 tuning.connected=true;
 await receive(100,[row(99.9)]);
-assert.equal(element('tuning-lookahead-panel').hidden,false);
+assert.equal(element('tuning-lookahead-panel').hidden,false,'the plot is independent of the parameter target and closed dialog');
 assert.equal(element('tuning-lookahead-value').textContent,'0.80');
 assert.equal(element('lookahead-measured-speed').textContent,'-0.40');
 assert.match(element('tuning-lookahead-mode').textContent,/Pure Pursuit.*速度補間/);
@@ -82,6 +84,16 @@ assert.match(element('tuning-lookahead-note').textContent,/横制御が非active
 assert.ok(!element('tuning-lookahead-note').textContent.includes('未対応'),'a STOP or invalid sample after valid tracking is not called unsupported');
 await receive(4.2,[invalid]);
 assert.match(element('tuning-lookahead-note').textContent,/未対応・未受信.*または横制御が非active/,'an initial invalid sample does not prove an unsupported controller');
-element('tuning-parameters-target').value='speed';element('tuning-parameters-target').change();
-assert.equal(element('tuning-lookahead-panel').hidden,true);
+await element('plots-filter-speed').click();await flush();
+assert.equal(element('tuning-lookahead-panel').hidden,true,'another plot filter hides lookahead');
+const hiddenChart=element('tuning-lookahead-chart').innerHTML;
+await receive(5,[row(4.9,{lookahead_m:1.7})]);
+assert.equal(element('tuning-lookahead-chart').innerHTML,hiddenChart,'hidden cards do not redraw');
+await element('plots-filter-lookahead').click();await flush();
+assert.equal(element('tuning-lookahead-panel').hidden,false);
+assert.equal(element('tuning-lookahead-value').textContent,'1.70','reopening uses the latest received history');
+element('plots-page').hidden=true;emit('plots-view');await flush();
+assert.equal(element('tuning-lookahead-panel').hidden,true,'leaving the live plots page hides the card');
+element('plots-page').hidden=false;emit('plots-view');await flush();
+assert.equal(element('tuning-lookahead-panel').hidden,false);
 console.log('Live lookahead UI distinguishes controller semantics, stale values, unsupported nodes and connection/map/stream resets');

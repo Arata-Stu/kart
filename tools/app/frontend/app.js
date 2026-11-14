@@ -15,6 +15,7 @@ import "./tuning.js";
 import "./esc_trial.js";
 import "./bringup.js";
 import "./tuning_parameters.js";
+import "./live_plots.js";
 import "./tuning_speed.js";
 import "./tuning_lookahead.js";
 import "./tuning_timing.js";
@@ -26,11 +27,12 @@ import "./capture.js";
 import "./vgl.js";
 import "./mesh_view.js";
 function page(name) {
-  for (const p of ["map", "transfer", "learning", "perception", "audit", "coverage", "esc", "bringup"]) {
+  for (const p of ["map", "plots", "transfer", "learning", "perception", "audit", "coverage", "esc", "bringup"]) {
     $(p + "-page").hidden = p !== name;
     $("nav-" + p).classList.toggle("active", p === name);
   }
   $("jobs-drawer").hidden = true;
+  emit("page", name);
   if (name === "learning")
     refreshLearning().catch((e) => toast(e.message, true));
   if (name === "perception") refreshPerception().catch((e) => toast(e.message, true));
@@ -41,6 +43,12 @@ function page(name) {
     refreshRecords().catch((e) => toast(e.message, true));
 }
 action("nav-map", () => page("map"));
+action("nav-plots", () => page("plots"));
+action("tuning-plots-open", () => page("plots"));
+action("tuning-parameters-plots-open", () => {
+  $("tuning-parameters-dialog").close();
+  page("plots");
+});
 action("nav-transfer", () => page("transfer"));
 action("nav-learning", () => page("learning"));
 action("nav-perception", () => page("perception"));

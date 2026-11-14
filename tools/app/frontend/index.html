@@ -13,6 +13,7 @@
       <a class="brand" href="/">kart<span>MAP STUDIO</span></a>
       <nav aria-label="作業">
         <button class="nav active" id="nav-map">地図</button
+        ><button class="nav" id="nav-plots">ライブプロット</button
         ><button class="nav" id="nav-transfer">転送</button
         ><button class="nav" id="nav-learning">学習</button
         ><button class="nav" id="nav-perception">RCカー・障害物</button
@@ -248,6 +249,7 @@
             <button id="tuning-line-switch" disabled>実車ラインを切替</button>
             <button id="tuning-offset-open" disabled>ステア補正</button>
             <button id="tuning-parameters-open" disabled>パラメータ調整</button>
+            <button id="tuning-plots-open" type="button">ライブプロット</button>
             <button id="tuning-preview" disabled>保存済み編集をプレビュー</button>
             <button id="tuning-apply" disabled>適用（走行中も可）</button>
             <button id="tuning-rollback" disabled>直前の版へ</button>
@@ -581,6 +583,67 @@
           </section>
         </div>
       </aside>
+    </main>
+    <main id="plots-page" hidden>
+      <section class="plots-heading">
+        <div><h1>ライブプロット</h1><p>Jetsonの直近60秒の制御データ。パラメータの選択に関係なく一覧で確認できます。</p></div>
+        <button id="plots-connect" type="button" disabled>Jetsonに接続</button>
+        <p id="plots-connection-status" role="status">未接続。地図タブで使用する地図を開いてください。</p>
+      </section>
+      <div class="plots-workspace">
+        <aside class="plots-sidebar">
+          <strong>プロット一覧</strong>
+          <nav class="plots-filters" aria-label="表示するライブプロット">
+            <button id="plots-filter-all" type="button" class="active" aria-pressed="true">すべて</button>
+            <button id="plots-filter-lookahead" type="button" aria-pressed="false">Lookahead・横制御速度</button>
+            <button id="plots-filter-speed" type="button" aria-pressed="false">速度PID</button>
+            <button id="plots-filter-tracking-timing" type="button" aria-pressed="false">横制御の時間・古さ</button>
+            <button id="plots-filter-speed-timing" type="button" aria-pressed="false">速度PIDの時間・古さ</button>
+          </nav>
+          <div class="plots-map"><span class="small">使用する地図</span><strong id="plots-map-name">未選択</strong><button id="plots-open-map" type="button">地図を開く・実車調整へ</button></div>
+          <p class="help">接続は地図の「実車調整」と共通です。地図とこのタブの移動中も更新を続けます。各グラフの凡例に最新値を表示します。</p>
+        </aside>
+        <section class="plots-content" aria-label="制御のライブグラフ">
+          <div class="plots-grid">
+            <section id="tuning-lookahead-panel" class="plots-card" hidden>
+              <div class="actions"><h2>Lookahead・参照点距離 · 直近60秒</h2><span id="tuning-lookahead-mode" class="small"></span></div>
+              <div class="plot-legend"><span class="plot-key plot-blue">実効lookahead / MPC終端距離（青） <b id="tuning-lookahead-value">—</b> m</span><span class="plot-key plot-orange">参照点までの直線距離（橙） <b id="target-distance-value">—</b> m</span></div>
+              <svg id="tuning-lookahead-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="直近60秒の制御で使用したlookaheadと参照点までの直線距離、単位m"></svg>
+              <strong>横制御の速度 · 同じ時間軸</strong>
+              <div class="plot-legend"><span class="plot-key plot-blue">目標速度（青） <b id="lookahead-target-speed">—</b> m/s</span><span class="plot-key plot-orange">計算に使った後輪軸の推定速度（橙） <b id="lookahead-measured-speed">—</b> m/s</span></div>
+              <svg id="tuning-lookahead-speed-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="直近60秒の横制御目標速度と計算に使った後輪軸の推定前後速度、単位m/s"></svg>
+              <p id="tuning-lookahead-note" class="help" role="status">横制御の診断を待っています</p>
+            </section>
+            <section id="tuning-speed-panel" class="plots-card" hidden>
+              <div class="actions"><h2>速度PID · 直近60秒</h2><span id="tuning-speed-values" class="plot-legend"><span class="plot-key plot-blue">目標速度（青） <b id="tuning-speed-target">—</b> m/s</span><span class="plot-key plot-orange">現在速度（橙） <b id="tuning-speed-measured">—</b> m/s</span></span></div>
+              <svg id="tuning-speed-chart" viewBox="0 0 760 170" role="img" aria-label="直近60秒の目標速度と現在速度、単位m/s"></svg>
+              <p id="tuning-speed-note" class="help">速度診断を待っています</p>
+            </section>
+            <section id="tuning-tracking-timing-panel" class="plots-card" hidden>
+              <h2>横制御の処理時間・入力データの古さ</h2>
+              <strong>処理時間 · 直近60秒</strong>
+              <div id="tuning-tracking-processing-legend" class="plot-legend"></div>
+              <svg id="tuning-tracking-processing-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="制御処理開始から指令publish直前までの時間、ms"></svg>
+              <strong>入力データの古さ · 直近60秒</strong>
+              <div id="tuning-tracking-age-legend" class="plot-legend"></div>
+              <svg id="tuning-tracking-age-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="制御が使用した入力データの古さ、ms"></svg>
+              <p id="tuning-tracking-timing-status" class="help">診断を待っています</p>
+              <p class="help">古さは指令作成時刻と入力stampとの差です。自己位置は横制御で使用したデータ、速度計測・目標指令はPIDで使用したデータです。現在までの経過時間ではありません。ROS時刻の差なので未来stampは負値になります。処理時間は実経過時間でTF待機を含み、通信・基板・実際の車体応答は含みません。</p>
+            </section>
+            <section id="tuning-speed-timing-panel" class="plots-card" hidden>
+              <h2>速度PIDの処理時間・入力データの古さ</h2>
+              <strong>処理時間 · 直近60秒</strong>
+              <div id="tuning-speed-processing-legend" class="plot-legend"></div>
+              <svg id="tuning-speed-processing-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="制御処理開始から指令publish直前までの時間、ms"></svg>
+              <strong>入力データの古さ · 直近60秒</strong>
+              <div id="tuning-speed-age-legend" class="plot-legend"></div>
+              <svg id="tuning-speed-age-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="制御が使用した入力データの古さ、ms"></svg>
+              <p id="tuning-speed-timing-status" class="help">診断を待っています</p>
+              <p class="help">古さは指令作成時刻と入力stampとの差です。自己位置は横制御で使用したデータ、速度計測・目標指令はPIDで使用したデータです。現在までの経過時間ではありません。ROS時刻の差なので未来stampは負値になります。処理時間は実経過時間でTF待機を含み、通信・基板・実際の車体応答は含みません。</p>
+            </section>
+          </div>
+        </section>
+      </div>
     </main>
     <main id="audit-page" hidden>
       <aside class="library audit-library">
@@ -1647,31 +1710,7 @@
     <option value="speed">速度PID</option><option value="recovery">復帰モジュール</option>
     <option value="behavior">追従・追越し（STOP・停車中のみ変更）</option>
   </select></label><button id="tuning-parameters-refresh" type="button">現在値を再取得</button></div>
-  <p id="tuning-parameters-status" role="status"></p>
-  <section id="tuning-speed-panel" hidden>
-    <div class="actions"><strong>速度 · 直近60秒</strong><span id="tuning-speed-values" class="plot-legend"><span class="plot-key plot-blue">目標速度（青） <b id="tuning-speed-target">—</b> m/s</span><span class="plot-key plot-orange">現在速度（橙） <b id="tuning-speed-measured">—</b> m/s</span></span></div>
-    <svg id="tuning-speed-chart" viewBox="0 0 760 170" role="img" aria-label="直近60秒の目標速度と現在速度、単位m/s"></svg>
-    <p id="tuning-speed-note" class="help">速度診断を待っています</p>
-  </section>
-  <section id="tuning-lookahead-panel" hidden>
-    <div class="actions"><strong>Lookahead・参照点距離 · 直近60秒</strong><span id="tuning-lookahead-mode" class="small"></span></div>
-    <div class="plot-legend"><span class="plot-key plot-blue">実効lookahead / MPC終端距離（青） <b id="tuning-lookahead-value">—</b> m</span><span class="plot-key plot-orange">参照点までの直線距離（橙） <b id="target-distance-value">—</b> m</span></div>
-    <svg id="tuning-lookahead-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="直近60秒の制御で使用したlookaheadと参照点までの直線距離、単位m"></svg>
-    <strong>横制御の速度 · 同じ時間軸</strong>
-    <div class="plot-legend"><span class="plot-key plot-blue">目標速度（青） <b id="lookahead-target-speed">—</b> m/s</span><span class="plot-key plot-orange">計算に使った後輪軸の推定速度（橙） <b id="lookahead-measured-speed">—</b> m/s</span></div>
-    <svg id="tuning-lookahead-speed-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="直近60秒の横制御目標速度と計算に使った後輪軸の推定前後速度、単位m/s"></svg>
-    <p id="tuning-lookahead-note" class="help" role="status">横制御の診断を待っています</p>
-  </section>
-  <section id="tuning-timing-panel" hidden>
-    <strong>処理時間 · 直近60秒</strong>
-    <div id="tuning-processing-legend" class="plot-legend"></div>
-    <svg id="tuning-processing-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="制御処理開始から指令publish直前までの時間、ms"></svg>
-    <strong>入力データの古さ · 直近60秒</strong>
-    <div id="tuning-age-legend" class="plot-legend"></div>
-    <svg id="tuning-age-chart" class="timing-chart" viewBox="0 0 760 170" role="img" aria-label="制御が使用した入力データの古さ、ms"></svg>
-    <p id="tuning-timing-status" class="help">診断を待っています</p>
-    <p class="help">古さは指令作成時刻と入力stampとの差です。自己位置は横制御で使用したデータ、速度計測・目標指令はPIDで使用したデータです。現在までの経過時間ではありません。ROS時刻の差なので未来stampは負値になります。処理時間は実経過時間でTF待機を含み、通信・基板・実際の車体応答は含みません。</p>
-  </section>
+  <div class="actions"><p id="tuning-parameters-status" role="status"></p><button id="tuning-parameters-plots-open" type="button">ライブプロットを開く</button></div>
   <form id="tuning-parameters-form">
     <div class="tuning-parameter-scroll"><table><thead><tr><th>項目</th><th>現在値</th><th>変更値</th></tr></thead><tbody id="tuning-parameter-rows"></tbody></table></div>
     <div class="actions"><button id="tuning-parameters-apply" class="primary" type="submit" disabled>一括適用</button></div>

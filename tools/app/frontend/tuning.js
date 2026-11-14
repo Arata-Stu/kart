@@ -8,6 +8,7 @@ import { $, state, api, action, on, emit, toast } from './api.js';
 export const tuning = {connected:false, busy:false, epoch:0, received:0, status:null,
   poseStream:null, poseCursor:0, active:null, preview:null, previewJson:null, trail:[], timer:null, id:null, error:''};
 const fresh = () => tuning.connected && Date.now() - tuning.received < 3000;
+const displayPageVisible = () => !$('map-page').hidden || !!$('plots-page') && !$('plots-page').hidden;
 let groundDrawn=false, behaviorDrawn=false;
 const pollDelay=()=>tuning.status?.behavior?.available && ['shadow','active'].includes(tuning.status.behavior.status?.mode) ? 250 : 1000;
 function invalidatePreview() { tuning.preview=null; tuning.previewJson=null; render(); }
@@ -46,11 +47,12 @@ function update(result) {
 }
 async function poll(epoch) {
   if(epoch!==tuning.epoch || !tuning.connected) return;
-  // Leaving the map page disconnects display only; driving remains independent.
-  if($('map-page').hidden || state.id!==tuning.id) { stop(); return; }
+  // Map and live plots share one display connection; driving remains independent.
+  if(!displayPageVisible() || state.id!==tuning.id) { stop(); return; }
   try {
     const result=await request('status');
     if(epoch!==tuning.epoch)return;
+    if(!displayPageVisible() || state.id!==tuning.id){stop();return;}
     update(result);
   } catch(error) {
     if(epoch!==tuning.epoch)return;
@@ -103,19 +105,24 @@ function render() {
     : '横制御の参照点: 未受信・無効・受信停止';
 
 }
-action('tuning-connect', async()=> {
+export async function toggleTuningConnection() {
+  if(tuning.busy)return;
   if(tuning.connected){stop();return;}
+  if(!state.doc || !state.id)throw new Error('地図画面で対象の地図を選択してください');
   tuning.id=state.id; tuning.busy=true; tuning.error='';
-  const epoch=++tuning.epoch;
-  render();
+  const epoch=++tuning.epoch, id=state.id;
+  clearTimeout(tuning.timer);tuning.timer=null;
+  render();emit('tuning');
   try {
     const result=await request('status');
     if(epoch!==tuning.epoch)return;
+    if(state.id!==id || !displayPageVisible()){stop();return;}
     tuning.connected=true; update(result);
     tuning.timer=setTimeout(()=>poll(epoch),pollDelay());
   } catch(error) { if(epoch===tuning.epoch)tuning.error=error.message; throw error; }
-  finally {tuning.busy=false;render();}
-});
+  finally {tuning.busy=false;render();emit('tuning');}
+}
+action('tuning-connect', toggleTuningConnection);
 action('tuning-preview', async()=> {
   if(state.dirty)throw new Error('編集を保存し、必要なラインを生成してください');
   const epoch=tuning.epoch, id=state.id, revision=state.doc.revision, lane=state.laneId;
@@ -153,6 +160,7 @@ $('tuning-line').addEventListener('change',invalidatePreview);
 $('tuning-speed').addEventListener('input',invalidatePreview);
 on('loaded',stop);
 on('connection',stop);
+on('page',()=>{if(!displayPageVisible() && (tuning.connected || tuning.busy))stop();});
 on('document',()=> { if(tuning.preview && !previewValid())invalidatePreview(); else render(); });
 on('ready',render);
 on('status',render);
