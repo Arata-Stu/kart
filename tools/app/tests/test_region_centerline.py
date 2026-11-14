@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from kart_studio.geometry import centerline, edges
-from kart_studio.lines import generate
+from kart_studio.lines import generate, settings
 from kart_studio.maps import Maps
 from kart_studio.storage import atomic_json
 
@@ -29,6 +29,29 @@ def traced_course():
              [720,476],[731,486],[881,494],[962,561],[959,653],[875,709],[610,706],[519,631]]
     return dict(left=[[x/100, -y/100] for x,y in inner],
                 right=[[x/100, -y/100] for x,y in outer], closed=True)
+
+
+class CenterlinePointLimitTests(unittest.TestCase):
+    def test_limit_is_a_bounded_integer_and_defaults_to_600(self):
+        self.assertEqual(settings({})['centerline_max_points'], 600)
+        for value in (12, 800, 1500, '800'):
+            with self.subTest(value=value):
+                result = settings(dict(centerline_max_points=value))
+                self.assertEqual(result['centerline_max_points'], int(value))
+                self.assertIsInstance(result['centerline_max_points'], int)
+        for value in (True, False, 11, 1501, 600.5, '600.5', float('inf'), float('nan')):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    settings(dict(centerline_max_points=value))
+
+    def test_paired_center_uses_selected_limit_without_changing_default(self):
+        doc = ring()
+        expected, _, _ = centerline(doc['left'], doc['right'], True, .1)
+        default = generate(doc, 'centerline', {})
+        self.assertEqual(default['points'], expected)
+        limited = generate(doc, 'centerline', dict(centerline_max_points=32))
+        self.assertEqual(len(limited['points']), 32)
+        self.assertEqual(limited['settings']['centerline_max_points'], 32)
 
 
 @unittest.skipUnless(importlib.util.find_spec("numpy"), "region method requires NumPy")
@@ -172,3 +195,40 @@ class RegionCenterlineTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     maps.generate('course', 'centerline', dict(centerline_method='region'), before['revision'], lambda: None)
             self.assertEqual(maps.load('course'), before)
+
+    def test_region_limit_can_be_raised_and_survives_publication_and_export(self):
+        # 1.3x this synthetic ring gives roughly 650 samples at 5 cm spacing.
+        doc = ring()
+        for side in ('left', 'right'):
+            doc[side] = [[1.3 * x, 1.3 * y] for x, y in doc[side]]
+        options = dict(centerline_method='region', spacing=.05)
+        with tempfile.TemporaryDirectory() as tmp:
+            maps = Maps(Path(tmp) / 'maps')
+            folder = maps.root / 'course'
+            folder.mkdir()
+            atomic_json(folder / 'snapshot.json', dict(schema='kart.snapshot.v1', frame='map',
+                points=[[0,0,0]], trajectory=[], provenance={}))
+            maps.initialize(folder, 'course')
+            original = maps.load('course')
+            original['lanes'][0].update(doc)
+            original = maps.save('course', original)
+            with self.assertRaisesRegex(ValueError, '600'):
+                maps.generate('course', 'centerline', options, original['revision'], lambda: None)
+            self.assertEqual(maps.load('course'), original)
+            maps.generate('course', 'centerline', dict(options, centerline_max_points=800),
+                          original['revision'], lambda: None)
+            saved = maps.load('course')
+            lane = saved['lanes'][0]
+            line = lane['lines']['centerline']
+            self.assertGreater(len(line['points']), 600)
+            self.assertLessEqual(len(line['points']), 800)
+            self.assertEqual(line['settings']['centerline_max_points'], 800)
+            self.assertEqual(lane['left'], doc['left'])
+            self.assertEqual(lane['right'], doc['right'])
+            exported = maps.export('course')
+            self.assertEqual(len((exported / 'centerline.csv').read_text().splitlines()) - 1,
+                             len(line['points']))
+            metadata = json.loads((exported / 'metadata.json').read_text())
+            published = metadata['lanes'][lane['id']]['lines']['centerline']
+            self.assertEqual(published['settings']['centerline_max_points'], 800)
+            self.assertEqual(published['method'], 'region_equal_distance_v1')

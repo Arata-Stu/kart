@@ -209,6 +209,9 @@ class Editor:
             if a.mode == 'drive':
                 overtake = getattr(a, 'overtake', '') or mission.composition(self.config / 'mission.yaml', a.mode)['overtake_mode']
                 rows['overtake'] = '走行 / 追従・追越し: ' + OVERTAKE_LABELS[overtake]
+                for key, title in (('lap_vgl', '周回VGL補正'), ('lap_cache_clear', '周回Jetsonキャッシュ解放')):
+                    value = self.lap_enabled(key)
+                    rows[key] = f'補助 / {title}: {"ON（各周に要求）" if value else "OFF"}'
                 for notice in self.adjustments:
                     print('連動変更:', notice)
                 enabled = self.params('hdmap/hdmap.yaml', 'hdmap_server')['tuning_enabled'] if a.tuning is None else a.tuning
@@ -259,6 +262,10 @@ class Editor:
         from kart_bringup.mission import composition
         return (composition(self.config / 'mission.yaml', self.args.mode)['enable_foxglove']
                 if self.args.foxglove is None else self.args.foxglove)
+
+    def lap_enabled(self, key):
+        value = getattr(self.args, key)
+        return mission.composition(self.config / 'mission.yaml', self.args.mode)[key] if value is None else value
 
     def evs_values(self):
         a = self.args
@@ -457,6 +464,14 @@ class Editor:
                 current = mission.composition(self.config / 'mission.yaml', a.mode)['perception_debug_image']
             a.perception_debug_image = self.pick('bbox付きデバッグ画像（JPEG・最大5Hz）', [False, True], current,
                 lambda value: '有効' if value else '無効')
+        elif action in ('lap_vgl', 'lap_cache_clear'):
+            title = {'lap_vgl': '周回VGL補正', 'lap_cache_clear': '周回Jetsonキャッシュ解放'}[action]
+            value = self.pick(title, [False, True], self.lap_enabled(action),
+                              lambda enabled: 'ON（各周に要求）' if enabled else 'OFF')
+            setattr(a, action, value)
+            if value:
+                print('VGLの要求受付と補正完了は別です。' if action == 'lap_vgl' else
+                      '解放対象はLinuxページキャッシュです。Jetsonホスト側の設定が必要です。地図・モデル・engineは削除しません。')
         elif action == 'control':
             self.edit_control()
         elif action == 'recovery':

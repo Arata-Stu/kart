@@ -6,6 +6,8 @@ perception_engine: ""  # Empty disables racing perception; otherwise local YOLOv
 perception_mode: track  # detect: all detections only; track: also track the model's vehicle class.
 perception_debug_image: false  # Optional bounded-rate JPEG with detection/tracking boxes.
 overtake_mode: "off"  # drive only: off / shadow (candidate only) / active (owns reference_line).
+lap_vgl: false  # drive only: request VGL after each verified full lap.
+lap_cache_clear: false  # drive only: release Jetson host clean page cache per lap; needs host helper.
 enable_evs: false
 enable_foxglove: false
 enable_bridge: true

@@ -115,6 +115,7 @@ def validate_mode_options(args):
         (("foxglove",), not offline),
         (("perception", "perception_mode", "perception_debug_image"), not offline),
         (("overtake",), args.mode == 'drive'),
+        (("lap_vgl", "lap_cache_clear"), args.mode == 'drive'),
     ]
     for keys, allowed in groups:
         if allowed:
@@ -174,6 +175,10 @@ def argument_parser():
                         help="bbox付きJPEGをデバッグ配信（既定OFF、5Hz）。未指定はmission YAML")
     parser.add_argument('--overtake', choices=('off', 'shadow', 'active'), default='',
                         help='drive追従・追越し: off（既定）/ shadow候補表示 / active実行。認識track必須、activeはracing2クラス・復帰OFF・通常AUTOのみ')
+    parser.add_argument('--lap-vgl', action=argparse.BooleanOptionalAction, default=None,
+                        help='drive: 周回ごとにVGL補正を要求（--no-lap-vglでOFF、未指定はmission YAML・既定OFF）')
+    parser.add_argument('--lap-cache-clear', action=argparse.BooleanOptionalAction, default=None,
+                        help='drive: 周回ごとにJetsonのLinuxページキャッシュ解放を要求（--no-lap-cache-clearでOFF、既定OFF・ホスト側設定が必要）')
     parser.add_argument("--foxglove", action=argparse.BooleanOptionalAction, default=None, help="Foxglove。未指定は用途のYAML既定（地図走行はON）")
     parser.add_argument("--no-bridge", action="store_true", help="車両基板なしの確認用")
     parser.add_argument(
@@ -293,6 +298,8 @@ def build_command(args, config):
         perception = composition(config / "mission.yaml", args.mode,
                                  {"perception_engine": args.perception, "perception_mode": args.perception_mode,
                                   "overtake_mode": args.overtake,
+                                  "lap_vgl": "" if args.lap_vgl is None else args.lap_vgl,
+                                  "lap_cache_clear": "" if args.lap_cache_clear is None else args.lap_cache_clear,
                                   "perception_debug_image": "" if args.perception_debug_image is None else args.perception_debug_image})
         engine = perception_engine(perception["perception_engine"], sensors)
         if perception["perception_debug_image"] and not engine:
@@ -389,6 +396,9 @@ def build_command(args, config):
                           parking=bool(parking_site or parking_slot), fixed_throttle=fixed,
                           recovery_enabled=recovery_enabled if args.mode in ('drive', 'e2e') else False)
         print('追従・追越し: ' + perception['overtake_mode'])
+        if args.mode == 'drive':
+            print('周回VGL補正: ' + ('ON（各周に探索を要求。受付と補正完了は別）' if perception['lap_vgl'] else 'OFF'))
+            print('周回Jetsonキャッシュ解放: ' + ('ON（Linuxページキャッシュのみ・ホスト側設定が必要）' if perception['lap_cache_clear'] else 'OFF'))
         if perception['overtake_mode'] == 'shadow':
             from kart_bringup.racing_models import engine_profile
             if engine_profile(Path(engine))['name'] != 'racing':
@@ -460,6 +470,8 @@ def build_command(args, config):
         "perception_mode": args.perception_mode if args.mode != "eval" else "",
         "perception_debug_image": "" if args.perception_debug_image is None else str(args.perception_debug_image).lower(),
         "overtake_mode": args.overtake if args.mode == 'drive' else '',
+        "lap_vgl": "" if args.lap_vgl is None else str(args.lap_vgl).lower(),
+        "lap_cache_clear": "" if args.lap_cache_clear is None else str(args.lap_cache_clear).lower(),
         "enable_foxglove": "" if args.foxglove is None else str(args.foxglove).lower(),
         "record_dir": args.record_dir,
         "run_name": recording_name if args.mode != "eval" else "",

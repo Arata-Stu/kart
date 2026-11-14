@@ -19,6 +19,8 @@ OVERRIDES = (
     "perception_mode",
     "perception_debug_image",
     "overtake_mode",
+    "lap_vgl",
+    "lap_cache_clear",
     "enable_foxglove",
     "enable_bridge",
 )
@@ -131,6 +133,20 @@ def add_mission(args):
         args.map_file
     ):
         raise ValueError("Choose a generated line from the selected HDMap/lane")
+    lap_actions = []
+    if cfg["lap_vgl"] or cfg["lap_cache_clear"]:
+        from launch_ros.actions import Node
+        from kart_bringup.lap_maintenance import maintenance_parameters
+        lap_parameters = maintenance_parameters(root, cfg, args.map_file, args.lane_id,
+                                                args.line_type, parking=bool(parking_site))
+        get_package_share_directory("kart_lap_manager")
+        lap_actions.append(Node(package="kart_lap_manager", executable="lap_manager",
+                                name="lap_manager", parameters=[lap_parameters], output="screen"))
+        if cfg["lap_cache_clear"]:
+            get_package_share_directory("kart_jetson_cache")
+            lap_actions.append(Node(package="kart_jetson_cache", executable="jetson_cache_service",
+                                    name="jetson_cache_service", parameters=[str(root / "system/jetson_cache.yaml")],
+                                    output="screen"))
     if cfg["e2e"]:
         from kart_e2e.contract import model_contract, runtime_settings, input_contract, validate_runtime
 
@@ -160,6 +176,10 @@ def add_mission(args):
             f"Mission: {args.mode}; config: {cfg}; recording/AUTO require Joy operation"
         )
     ]
+    if lap_actions:
+        actions.append(lu.log_info(f"Lap maintenance config: {root / 'localization/lap_manager.yaml'}; "
+                                   f"effective parameters: {lap_parameters}; cache config: {root / 'system/jetson_cache.yaml'}"))
+        actions.extend(lap_actions)
     if mapless is not None:
         mapless_params, mapless_remaps = mapless
         actions.append(lu.log_info(

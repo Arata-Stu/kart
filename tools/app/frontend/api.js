@@ -33,6 +33,7 @@ export const state = {
     spacing: 0.10,
     centerline_method: "paired",
     region_resolution: 0.02,
+    centerline_max_points: 600,
     vehicle_width: 0.19,
     vehicle_length: 0.35,
     rear_axle_to_rear: 0.1065,

@@ -9,6 +9,7 @@ from .speed_sections import sample, sections, speed_cap
 DEFAULTS = dict(
     spacing=0.10,
     region_resolution=0.02,
+    centerline_max_points=600,
     vehicle_width=0.19,
     vehicle_length=0.35,
     rear_axle_to_rear=0.1065,
@@ -25,6 +26,7 @@ def settings(raw):
     ranges = dict(
         spacing=(0.05, 1),
         region_resolution=(0.005, 0.25),
+        centerline_max_points=(12, 1500),
         vehicle_width=(0.05, 2),
         vehicle_length=(0.1, 5),
         rear_axle_to_rear=(0, 2),
@@ -36,6 +38,9 @@ def settings(raw):
         curvature_limit=(0.01, 20),
     )
     p = {k: number(raw.get(k, v), *ranges[k], k) for k, v in DEFAULTS.items()}
+    if isinstance(raw.get("centerline_max_points"), bool) or not p["centerline_max_points"].is_integer():
+        raise ValueError("Centerlineの点数上限は12〜1500の整数で指定してください")
+    p["centerline_max_points"] = int(p["centerline_max_points"])
     if p["rear_axle_to_rear"] >= p["vehicle_length"]:
         raise ValueError("後輪軸から後端までの距離は全長未満にしてください")
     p["collision_model"] = footprint.MODEL
@@ -134,11 +139,13 @@ def generate(document, kind, raw, check=lambda: None):
         from .region_centerline import extract
 
         center, widths, corridor, region_info = extract(
-            document["left"], document["right"], closed, p["spacing"], p["region_resolution"], check
+            document["left"], document["right"], closed, p["spacing"], p["region_resolution"], check,
+            max_points=p["centerline_max_points"],
         )
     else:
         center, widths, corridor = centerline(
-            document["left"], document["right"], closed, p["spacing"]
+            document["left"], document["right"], closed, p["spacing"],
+            max_points=p["centerline_max_points"] if kind == "centerline" else 600,
         )
     clearance = p["vehicle_width"] / 2 + p["margin"]
     footprint_corridor = footprint.corridor_for(

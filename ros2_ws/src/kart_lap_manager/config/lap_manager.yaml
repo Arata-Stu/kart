@@ -1,0 +1,34 @@
+/**/lap_manager:
+  ros__parameters:
+    use_sim_time: false
+    vgl_enabled: false
+    cache_clear_enabled: false
+    reference_topic: /planning/reference_line
+    odometry_topic: /visual_slam/tracking/odometry
+    diagnostics_topic: /localization/vslam/diagnostics
+    pose_hint_topic: /localization/pose_hint
+    lap_events_topic: /localization/lap_events
+    lap_status_topic: /localization/lap_status
+    vgl_trigger_service: /visual_localization/trigger_localization
+    cache_clear_service: /kart/cache/clear
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_link
+    pose_timeout_s: 0.5
+    diagnostics_timeout_s: 1.0
+    map_correction_translation_m: 0.15
+    map_correction_yaw_rad: 0.15
+    service_timeout_s: 3.0
+    vgl_result_timeout_s: 30.0
+    cache_result_timeout_s: 15.0
+    status_period_s: 1.0
+    own_hint_grace_s: 3.0
+    min_lap_time_s: 5.0
+    min_lap_fraction: 0.9
+    max_lateral_distance_m: 1.0
+    max_pose_speed_mps: 12.0
+    max_progress_speed_mps: 12.0
+    jump_tolerance_m: 0.15
+    reverse_tolerance_m: 0.2
+    max_sample_gap_s: 0.5
+    finish_zone_fraction: 0.15

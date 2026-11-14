@@ -94,7 +94,7 @@ def _trace(np, field, mask, origin, resolution, check):
     return route
 
 
-def extract(left, right, closed, spacing, resolution, check=lambda: None):
+def extract(left, right, closed, spacing, resolution, check=lambda: None, max_points=MAX_SAMPLES):
     if not closed:
         raise ValueError('領域方式は現在閉路専用です。開路は従来の境界中点方式を使用してください')
     try:
@@ -131,8 +131,9 @@ def extract(left, right, closed, spacing, resolution, check=lambda: None):
     route = route[seam:] + route[:seam]
     length = sum(math.dist(a, b) for a, b in edges(route, True))
     count = max(12, math.ceil(length / spacing))
-    if count > MAX_SAMPLES:
-        raise ValueError(f'中心線が{MAX_SAMPLES}点を超えます。点間隔を大きくしてください')
+    if count > max_points:
+        raise ValueError(f'中心線には{count}点必要です（設定上限{max_points}点）。'
+                         'Centerlineの「生成設定」で点数上限を増やすか、点間隔を大きくしてください')
     route = resample(route, count, True)
     check()
     corridor.validate(route)

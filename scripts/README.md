@@ -16,7 +16,7 @@ CLIの`--mode collect|environment`と各モードのセンサ・録画設定は�
   地図・モデル／追従ライン
   センサ：RGB、Infra、IMU、EVS詳細
   制御：AUTOスロットル
-  補助：自動復帰、Foxglove、Studio調整、driveの任意追従・追越し
+  補助：自動復帰、Foxglove、Studio調整、driveの任意追従・追越し、周回VGL補正、周回Jetsonキャッシュ解放
   記録：保存先、記録名
   車両基板／VSLAM速度・精度
   終了
@@ -46,6 +46,14 @@ Esc/Ctrl-Cまたは「終了」は起動せず終了する。ESC信号列試験�
 既存CLI・launch・ノード・topic・ROS parameterは変更しない。
 portable testで選択順序・再編集・エラー修正・引数伝播・キャンセルを検証する。
 実端末のfzf表示、ROS結合、Jetson・カメラ・実車動作は別途確認する。
+
+地図走行の「周回VGL補正」「周回Jetsonキャッシュ解放」は別々にON/OFFでき、既定は両方OFF。
+CLIでは通常のdrive引数へ`--lap-vgl`、`--lap-cache-clear`を追加する。
+`--no-lap-vgl`、`--no-lap-cache-clear`は明示OFF、未指定は`mission.yaml`を保持する。
+どちらもdrive専用で、閉じた参照ラインの正方向の周回を判定して要求する。起動直後は要求しない。
+VGLのservice受付とVSLAMの補正完了は別に扱う。キャッシュ解放はJetsonホスト側の設定が必要で、
+Linuxページキャッシュだけを対象とし、地図・モデル・TensorRT engine等のファイルは削除しない。
+詳しい動作・設定・制約は[kart_lap_manager](../ros2_ws/src/kart_lap_manager/README.md)を参照する。
 
 ## センサ・E2E・制御遅延のオフライン時系列解析
 

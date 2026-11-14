@@ -16,6 +16,31 @@ spec.loader.exec_module(module)
 
 
 class PropagationTests(unittest.TestCase):
+    def test_lap_options_preserve_defaults_and_explicit_on_off(self):
+        base = ['--mode', 'drive', '--no-tuning', '--recovery', 'off',
+                '--map-file', '/map/hd_map.yaml', '--map-dir', '/map/vslam', '--model-dir', '/model/vgl',
+                '--lane-id', 'main', '--line-type', 'raceline', '--infra-profile', '640x480x60']
+        with (patch('kart_bringup.mission.hdmap_choices', return_value=[('main', 'raceline')]),
+              patch('kart_bringup.localization.resolve', return_value=(
+                  {'cuvslam': {'tracking_mode': 0}}, {}, {}, {'input_shape': [1, 3, 480, 640]}))):
+            output = self.run_cli(*base)
+            self.assertNotIn('lap_vgl:=', output)
+            self.assertNotIn('lap_cache_clear:=', output)
+            self.assertIn('周回VGL補正: OFF', output)
+            self.assertIn('周回Jetsonキャッシュ解放: OFF', output)
+            for flag, value in (('--lap-vgl', 'true'), ('--no-lap-vgl', 'false'),
+                                ('--lap-cache-clear', 'true'), ('--no-lap-cache-clear', 'false')):
+                with self.subTest(flag=flag):
+                    output = self.run_cli(*base, flag)
+                    key = flag.removeprefix('--no-').removeprefix('--').replace('-', '_')
+                    self.assertIn(key + ':=' + value, output)
+
+    def test_lap_options_reject_non_drive_before_reading_assets(self):
+        for mode in ('collect', 'environment', 'e2e', 'eval', 'e2e-latency'):
+            for flag in ('--lap-vgl', '--no-lap-vgl', '--lap-cache-clear', '--no-lap-cache-clear'):
+                with self.subTest(mode=mode, flag=flag), self.assertRaisesRegex(ValueError, 'lap-'):
+                    self.run_cli('--mode', mode, flag)
+
     def test_map_profile_cli_and_conflicts(self):
         out = self.run_cli('--mode', 'collect', '--record-profile', 'vslam-map', '--infra-profile', '424x240x60')
         self.assertIn('record_profile:=vslam-map', out)
@@ -217,7 +242,7 @@ class PropagationTests(unittest.TestCase):
             self.run_cli('--mode', 'collect')
         # Search roots and dry_run are local selector behavior, not ROS parameters.
         selector = {'help', 'map_root', 'model_root', 'bias_root', 'dry_run'}
-        forwarded = {'perception', 'perception_mode', 'perception_debug_image', 'overtake', 'record_profile', 'mode', 'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
+        forwarded = {'perception', 'perception_mode', 'perception_debug_image', 'overtake', 'lap_vgl', 'lap_cache_clear', 'record_profile', 'mode', 'rgb_fps', 'infra_fps', 'rgb_profile', 'infra_profile', 'depth_profile', 'imu_profile',
                      'device', 'map_file', 'map_dir', 'model_dir', 'lane_id', 'line_type',
                      'tuning', 'record_dir', 'evs', 'no_evs', 'evs_backend', 'evs_aggregation',
                      'evs_image', 'evs_serial', 'evs_tensor_config', 'evs_bias_file', 'foxglove',

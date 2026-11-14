@@ -9,7 +9,29 @@ import stat
 import sys
 
 
-def write_args(base, output, input_dir=Path('/dev/input'), dev_dir=Path('/dev'), ssh_dir=None):
+def cache_helper_mount(directory):
+    """Share only the explicitly installed, root-owned fixed-operation helper."""
+    directory = Path(directory)
+    try:
+        info = directory.lstat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+        raise ValueError('Jetson cache helper directory must be root-owned and not writable by group/others')
+    try:
+        socket_info = (directory / 'cache.sock').lstat()
+    except FileNotFoundError:
+        return None
+    if (not stat.S_ISSOCK(socket_info.st_mode) or socket_info.st_uid != 0
+            or socket_info.st_gid == 0 or stat.S_IMODE(socket_info.st_mode) != 0o660):
+        raise ValueError('Jetson cache helper socket must be root-owned, non-root group, mode 0660')
+    if any(c in str(directory) for c in (',', '\n', '\r')):
+        raise ValueError('Jetson cache helper path contains unsupported Docker mount characters')
+    return socket_info.st_gid, f'type=bind,source={directory},target=/run/kart-cache,readonly'
+
+
+def write_args(base, output, input_dir=Path('/dev/input'), dev_dir=Path('/dev'), ssh_dir=None,
+               cache_dir=Path('/run/kart-cache')):
     text = Path(base).read_text()
     gids = set()
     # Include standard device groups before pairing/plugging in devices.
@@ -27,7 +49,13 @@ def write_args(base, output, input_dir=Path('/dev/input'), dev_dir=Path('/dev'),
             continue
         if stat.S_ISCHR(info.st_mode):
             gids.add(info.st_gid)
+    cache_helper = cache_helper_mount(cache_dir)
+    if cache_helper:
+        gids.add(cache_helper[0])
     additions = [f'--group-add {gid}' for gid in sorted(gids)]
+    if cache_helper:
+        additions.append('--mount ' + shlex.quote(cache_helper[1]))
+        print('Jetson cache helper: sharing fixed-operation socket (cache clearing remains opt-in)', flush=True)
     # The CLI already mounts this directory on Jetson, but not on x86_64.
     if input_dir.is_dir() and platform.machine() != 'aarch64':
         additions.append(f'-v {input_dir}:/dev/input')

@@ -4,6 +4,59 @@
 手順は[scriptsの設定一覧](../../../scripts/README.md#bringupの設定一覧)を参照。
 CLI・launch引数・ノード・topic・ROS parameterは従来どおり。
 
+## 周回ごとのVGL・Jetsonキャッシュ解放
+
+`scripts/bringup.sh`の「地図走行」設定一覧で「周回VGL補正」「周回Jetsonキャッシュ解放」を
+独立にON/OFFできる。どちらも既定OFF。CLIは`--lap-vgl` / `--no-lap-vgl`、
+`--lap-cache-clear` / `--no-lap-cache-clear`。missionの`lap_vgl` / `lap_cache_clear`引数は
+空文字が既定で`config/mission.yaml`のfalseを保持し、明示true/falseだけ上書きする。
+collect・E2E・offline評価では使用しない。開いた参照ライン・駐車との併用は起動前に拒否する。
+
+いずれかONで独立processの`/lap_manager`（[kart_lap_manager](../kart_lap_manager/README.md)、
+実行ファイル`lap_manager`）を起動する。閉参照ライン先頭がスタート／フィニッシュ。
+最初の健全な姿勢から進捗を測り、一周分の進行（既定90%以上）と正方向のfinish通過が揃った場合だけカウントする。
+finish付近からの起動なら最初の1周から動作する。距離不足の部分周、逆走、位置飛び、追跡不良・古い入力による周回は数えない。
+VGL ON時は各周`/visual_localization/trigger_localization`（std_srvs/srv/Trigger）へ1回要求し、
+受付・pose hint・健全診断を区別して記録する。探索中・結果不明のtimeoutでは要求を重ねない。
+VGL出力は上流の既存pose_hint経路でcuVSLAMへ入る。走行モードや車両指令は変更しない。
+大きな再局在補正後は部分周を破棄するため、次の有効周回まで待つ。
+
+入出力は参照`/planning/reference_line`（kart_interfaces/msg/ReferenceLine）、
+`/visual_slam/tracking/odometry`（nav_msgs/msg/Odometry）、`/tf`・`/tf_static`（tf2_msgs/msg/TFMessage）、
+`/localization/vslam/diagnostics`（diagnostic_msgs/msg/DiagnosticArray）、
+`/localization/pose_hint`（geometry_msgs/msg/PoseWithCovarianceStamped）。
+出力`/localization/lap_events`・`/localization/lap_status`はstd_msgs/msg/StringのJSON。
+標準bag設定に含める。全parameter・既定値・QoS・判定条件は上記package README、
+実運用値は`config/localization/lap_manager.yaml`。起動時に採用値を表示する。
+
+キャッシュON時だけ`/jetson_cache_service`（[kart_jetson_cache](../kart_jetson_cache/README.md)、
+実行ファイル`jetson_cache_service`）を追加し、`/kart/cache/clear`（std_srvs/srv/Trigger）へ周回ごとに要求する。
+実運用parameterは`config/system/jetson_cache.yaml`：`use_sim_time=false`、
+`service_name=/kart/cache/clear`、`socket_path=/run/kart-cache/cache.sock`、`request_timeout_s=3.0`秒。
+ホストhelperをJetsonホストへ明示インストールし、`scripts/dev.sh`でcontainerを作り直す必要がある。
+helper socketがない場合はONでのmission起動を拒否する。Dockerへの全体特権や実行時sudoは追加しない。
+
+```bash
+# Jetsonホスト上で一度だけ実行。サービス設定をインストールする。
+sudo bash ros2_ws/src/kart_jetson_cache/host/install.sh
+# その後scripts/dev.shでcontainerを作り直し、通常どおりビルド・sourceする。
+bash scripts/bringup.sh
+```
+
+解放対象はホスト全体の**clean Linux page cache**（drop_caches=1）のみ。
+dirty pageの強制syncや地図・モデル・TensorRT engine・CUDA内部メモリの削除は行わない。
+再読込に伴うI/O・CPU負荷が増える可能性があり、エラー解消は保証しない。
+画像の`Failed to reindex pose graph ...`はcuVSLAM内部のエラーで、
+[NVIDIA公式issueの類似報告](https://github.com/NVIDIA-ISAAC-ROS/isaac_ros_visual_slam/issues/182)にも
+公開された原因・修正は確認できない（2026-11-14調査）。キャッシュ蓄積が原因とは未確認。
+[Linux公式仕様](https://docs.kernel.org/admin-guide/sysctl/vm.html#drop-caches)も参照。
+PortableテストとROS結合・Jetson実機・走行中の負荷／補正精度の検証は区別する。
+2026-11-14の関連検証は154件成功（周回判定・要求状態・cache helperのmock・mission構成・
+TUI/CLI・既存設定の回帰）。Python/XML/shell構文、実行bit、package/bringupの全parameter一致も確認。
+bringup全体の追加回帰では、このMacのplotly／parking package解決不足と、変更対象外の
+sim HDMap設定のparameter欠落で未通過の項目がある。ROS build・DDS/TF・systemd・Docker helper接続・
+Jetson実機・実車は未確認。実機への適用前にworkspaceを再ビルド・sourceする。
+
 
 平坦路を走行するRCカー向けに、`enable_ground_constraint_in_odometry`と
 `enable_ground_constraint_in_slam`はともに既定`true`（平面制約ON）。

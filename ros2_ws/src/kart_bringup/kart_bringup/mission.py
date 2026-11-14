@@ -192,6 +192,8 @@ def composition(path, mode, overrides=None):
         "perception_mode",
         "perception_debug_image",
         "overtake_mode",
+        "lap_vgl",
+        "lap_cache_clear",
         "enable_evs",
         "enable_foxglove",
         "enable_bridge",
@@ -217,6 +219,10 @@ def composition(path, mode, overrides=None):
         "e2e_drive_enabled",
     ):
         cfg[key] = boolean(cfg[key])
+    for key in ("lap_vgl", "lap_cache_clear"):
+        cfg[key] = boolean(cfg[key])
+        if cfg[key] and mode != "drive":
+            raise ValueError(f"{key} is drive-only")
     if cfg["perception_mode"] not in ("detect", "track"):
         raise ValueError("perception_mode must be detect or track")
     if cfg['overtake_mode'] not in ('off', 'shadow', 'active'):

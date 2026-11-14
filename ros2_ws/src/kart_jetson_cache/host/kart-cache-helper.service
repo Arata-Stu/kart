@@ -1,0 +1,26 @@
+[Unit]
+Description=Kart opt-in Jetson clean page cache release helper
+After=local-fs.target
+
+[Service]
+Type=simple
+User=root
+Group=kart-cache
+UMask=0007
+RuntimeDirectory=kart-cache
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/python3 -I /usr/local/libexec/kart-cache-helper/cache_helper.py
+ExecStopPost=/usr/bin/rm -f /run/kart-cache/cache.sock
+Restart=no
+TimeoutStopSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/proc/sys/vm/drop_caches /run/kart-cache
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

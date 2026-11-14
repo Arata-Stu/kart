@@ -45,10 +45,12 @@ $("centerline-speed").addEventListener("change", () => changeCenterSpeed(true));
 $("lane-select").addEventListener("change", () => {
   state.laneId = $("lane-select").value;
   state.selected = -1;
-  Object.assign(state.settings, state.lane.lines.raceline?.settings || {});
+  Object.assign(state.settings, state.lane.lines.centerline?.settings || {},
+    state.lane.lines.customline?.settings || {}, state.lane.lines.raceline?.settings || {});
   $("raceline-method").value = state.settings.optimizer;
   state.settings.centerline_method = state.lane.lines.centerline?.settings?.centerline_method || "paired";
   state.settings.region_resolution = state.lane.lines.centerline?.settings?.region_resolution ?? 0.02;
+  state.settings.centerline_max_points = state.lane.lines.centerline?.settings?.centerline_max_points ?? 600;
   $("centerline-method").value = state.settings.centerline_method;
   emit("document");
 });

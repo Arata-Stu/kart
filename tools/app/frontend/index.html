@@ -505,6 +505,7 @@
                 <option value="region">領域・等距離線（実験／閉路）</option>
               </select>
               <p class="help">生成すると現在のCenterを更新します。方式を比較する場合は地図を複製してください。</p>
+              <button id="centerline-settings-open" class="full">生成設定（点間隔・点数上限）</button>
               <label>走行速度 m/s<input id="centerline-speed" type="number" min="0" max="20" step="0.1" value="1.5" /></label>
               <p class="help">laneごとに保存・書き出し。既定1.5 m/s、0は停止目標。速度変更だけなら再生成不要です。</p>
               <button id="generate-centerline" class="full">
@@ -1310,6 +1311,7 @@
         </details>
         <p class="help">
           余裕は車体の前後左右へ加えます。適用後の設定で再生成するとラインを更新します。
+          Centerlineの点数上限は12〜1500点（既定600点）。領域方式で上限を超えた場合は生成を停止します。点数を増やすと処理時間が延びます。
         </p>
         <div class="dialog-actions">
           <button type="submit" value="apply">設定のみ適用</button>

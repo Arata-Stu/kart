@@ -65,10 +65,12 @@ export async function loadMap(id, preserve = false) {
   state.laneId = doc.lanes.some((lane) => lane.id === state.laneId)
     ? state.laneId
     : doc.lanes[0].id;
-  Object.assign(state.settings, state.lane.lines.raceline?.settings || {});
+  Object.assign(state.settings, state.lane.lines.centerline?.settings || {},
+    state.lane.lines.customline?.settings || {}, state.lane.lines.raceline?.settings || {});
   $("raceline-method").value = state.settings.optimizer;
   state.settings.centerline_method = state.lane.lines.centerline?.settings?.centerline_method || "paired";
   state.settings.region_resolution = state.lane.lines.centerline?.settings?.region_resolution ?? 0.02;
+  state.settings.centerline_max_points = state.lane.lines.centerline?.settings?.centerline_max_points ?? 600;
   $("centerline-method").value = state.settings.centerline_method;
   let min = Infinity,
     max = -Infinity;
@@ -174,6 +176,7 @@ function status() {
     ? `格子 ${regionInfo.resolution_m} m · 最大左右距離差 ${regionInfo.max_distance_imbalance_m.toFixed(4)} m`
     : "従来の境界対応点の中点方式";
   $("centerline-method").disabled = !d || busy;
+  $("centerline-settings-open").disabled = !d || busy;
   const cm = (value) => (value * 100).toLocaleString("ja-JP", { maximumFractionDigits: 2 });
   $("raceline-dimensions").textContent =
     `幅 ${cm(state.settings.vehicle_width)} · 全長 ${cm(state.settings.vehicle_length)} · 余裕 ${cm(state.settings.margin)} cm`;

@@ -111,6 +111,9 @@ odom→camera_linkを重複配信しないこと。車体では既定のbase_lin
 `/localization/vslam/diagnostics`の`localized_in_exist_map=Yes`かつ`vo_status=OK`を確認する。
 VGLのpose covarianceは現上流では既定ゼロであり、精度保証・確信度として使用しない。
 Joyボタン割当・再局在中の走行制御は未接続。再要求serviceを後でJoy managerから呼べる構成とした。
+driveの任意機能として、[周回VGL要求](../../README.md#周回ごとのvgljetsonキャッシュ解放)を追加した。
+`lap_manager.yaml`が実運用parameterの正本で、全一覧と判定・要求状態の仕様は
+[kart_lap_manager](../../../kart_lap_manager/README.md)を参照。
 VSLAM hint失敗→VGL再要求は接続したが、あらゆるtracking lossからの自動回復を保証するものではない。
 
 ## TFとFoxglove

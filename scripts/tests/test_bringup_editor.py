@@ -129,6 +129,40 @@ def make_editor(*options, choose=None):
     return Editor(args, CONFIG, entry.ROOT, choose or scripted([]))
 
 
+def test_lap_switches_are_independent_and_only_visible_for_drive():
+    editor = make_editor(choose=scripted([('周回VGL補正', True), ('周回Jetsonキャッシュ解放', True),
+                                         ('周回VGL補正', False)]))
+    rows = editor.rows()
+    assert rows['lap_vgl'].endswith('OFF')
+    assert rows['lap_cache_clear'].endswith('OFF')
+    assert editor.args.lap_vgl is None and editor.args.lap_cache_clear is None
+    editor.edit('lap_vgl')
+    assert editor.args.lap_vgl is True and editor.args.lap_cache_clear is None
+    editor.edit('lap_cache_clear')
+    editor.edit('lap_vgl')
+    assert editor.args.lap_vgl is False and editor.args.lap_cache_clear is True
+    assert 'OFF' in editor.rows()['lap_vgl']
+    assert 'ON' in editor.rows()['lap_cache_clear']
+    for mode in ('collect', 'environment', 'eval'):
+        rows = make_editor('--mode', mode).rows()
+        assert 'lap_vgl' not in rows and 'lap_cache_clear' not in rows
+
+
+def test_tui_lap_switches_reach_launch_after_reediting():
+    steps = [('用途', 'drive'), (REVIEW, 'lap_vgl'), ('周回VGL補正', True),
+             (REVIEW, 'lap_cache_clear'), ('周回Jetsonキャッシュ解放', True),
+             (REVIEW, 'lap_vgl'), ('周回VGL補正', False), (REVIEW, 'start')]
+    with (patch('kart_bringup.mission.hdmap_choices', return_value=[('main', 'raceline')]),
+          patch('kart_bringup.localization.resolve', return_value=(
+              {'cuvslam': {'tracking_mode': 0}}, {}, {}, {'input_shape': [1, 3, 480, 640]}))):
+        out, err = run_tui(steps, '--no-tuning', '--recovery', 'off',
+                           '--map-file', '/map/hd_map.yaml', '--map-dir', '/map/vslam', '--model-dir', '/model/vgl',
+                           '--lane-id', 'main', '--line-type', 'raceline', '--infra-profile', '640x480x60')
+    assert not err
+    command = next(line for line in out.splitlines() if line.startswith('ros2 launch'))
+    assert 'lap_vgl:=false' in command and 'lap_cache_clear:=true' in command
+
+
 def test_bundle_inference_keeps_fps_and_does_not_override_explicit_camera(tmp_path):
     bundle = tmp_path / 'bundle'
     bundle.mkdir()

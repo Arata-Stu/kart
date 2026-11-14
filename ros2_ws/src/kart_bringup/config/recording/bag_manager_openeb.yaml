@@ -69,6 +69,8 @@
     - /localization/vslam/diagnostics
     - /localization/vgl/diagnostics
     - /localization/pose_hint
+    - /localization/lap_events
+    - /localization/lap_status
     - /parking/status
     - /parking/path
     - /parking/goal

@@ -75,6 +75,39 @@ class DeviceGroupsTests(unittest.TestCase):
                 self.assertEqual(module.write_args(base, output, root / "missing", root, root / "no-ssh"), set())
             self.assertNotIn("--group-add", output.read_text())
 
+    def test_installed_cache_helper_adds_only_socket_group_and_readonly_mount(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            base, output = root / 'base', root / 'output'
+            base.write_text('')
+            with patch.object(module.grp, 'getgrnam', side_effect=KeyError), patch.object(
+                module, 'cache_helper_mount', return_value=(997,
+                    'type=bind,source=/run/kart-cache,target=/run/kart-cache,readonly')):
+                gids = module.write_args(base, output, root / 'missing', root, root / 'no-ssh')
+            self.assertEqual(gids, {997})
+            self.assertIn('--group-add 997', output.read_text())
+            self.assertIn('target=/run/kart-cache,readonly', output.read_text())
+            self.assertNotIn('privileged', output.read_text())
+
+    def test_cache_mount_rejects_untrusted_directory_and_socket(self):
+        directory = SimpleNamespace(st_mode=stat.S_IFDIR | 0o750, st_uid=0)
+        sock = SimpleNamespace(st_mode=stat.S_IFSOCK | 0o660, st_uid=0, st_gid=997)
+        with patch.object(Path, 'lstat', side_effect=[directory, sock]):
+            self.assertEqual(module.cache_helper_mount('/run/kart-cache')[0], 997)
+        for mode, owner in ((stat.S_IFLNK | 0o777, 0), (stat.S_IFDIR | 0o770, 0),
+                            (stat.S_IFDIR | 0o750, 501)):
+            with self.subTest(mode=mode, owner=owner), patch.object(Path, 'lstat', return_value=
+                    SimpleNamespace(st_mode=mode, st_uid=owner)), self.assertRaises(ValueError):
+                module.cache_helper_mount('/run/kart-cache')
+        for mode, owner, group in ((stat.S_IFREG | 0o660, 0, 997),
+                                   (stat.S_IFLNK | 0o660, 0, 997),
+                                   (stat.S_IFSOCK | 0o666, 0, 997),
+                                   (stat.S_IFSOCK | 0o660, 501, 997),
+                                   (stat.S_IFSOCK | 0o660, 0, 0)):
+            with self.subTest(mode=mode, owner=owner, group=group), patch.object(Path, 'lstat',
+                    side_effect=[directory, SimpleNamespace(st_mode=mode, st_uid=owner, st_gid=group)]), self.assertRaises(ValueError):
+                module.cache_helper_mount('/run/kart-cache')
+
 
 if __name__ == "__main__":
     unittest.main()

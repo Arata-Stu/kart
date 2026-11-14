@@ -1,0 +1,6 @@
+/**/jetson_cache_service:
+  ros__parameters:
+    use_sim_time: false
+    service_name: /kart/cache/clear
+    socket_path: /run/kart-cache/cache.sock
+    request_timeout_s: 3.0

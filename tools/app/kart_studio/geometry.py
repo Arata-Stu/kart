@@ -217,7 +217,7 @@ def monotone_midpoints(left, right, closed, corridor):
     raise ValueError("左右境界の対応付けができません。境界の近接・凹部・始点を確認してください")
 
 
-def centerline(left, right, closed, spacing=0.15):
+def centerline(left, right, closed, spacing=0.15, max_points=600):
     minimum = 3 if closed else 2
     left, right = points(left, minimum), points(right, minimum)
     if closed:
@@ -235,7 +235,7 @@ def centerline(left, right, closed, spacing=0.15):
     length = max(
         sum(math.dist(a, b) for a, b in edges(ps, closed)) for ps in (left, right)
     )
-    count = max(12 if closed else 3, min(600, math.ceil(length / spacing)))
+    count = max(12 if closed else 3, min(max_points, math.ceil(length / spacing)))
     left_samples, right_samples = (
         resample(left, count, closed),
         resample(right, count, closed),
@@ -260,7 +260,7 @@ def centerline(left, right, closed, spacing=0.15):
         try:
             line = monotone_midpoints(left_samples,right_samples,closed,corridor)
             length=sum(math.dist(a,b) for a,b in edges(line,closed))
-            line=resample(line,max(12 if closed else 3,min(600,math.ceil(length/spacing))),closed)
+            line=resample(line,max(12 if closed else 3,min(max_points,math.ceil(length/spacing))),closed)
             # Remove station-change kinks without bypassing any geometry/footprint check.
             line=[[(line[(i-1)%len(line)][k]+2*p[k]+line[(i+1)%len(line)][k])/4 for k in range(2)]
                   if closed or 0<i<len(line)-1 else p for i,p in enumerate(line)]

@@ -143,13 +143,14 @@ function lineSettingSummary() {
     ? "後輪軸から後端までの距離は全長未満にしてください" : "");
   const width = value("vehicle_width") + 2 * value("margin");
   const length = value("vehicle_length") + 2 * value("margin");
-  const method = $("raceline-method").selectedOptions[0].textContent.trim();
+  const method = $(lineSettingsTarget?.kind === "centerline"
+    ? "centerline-method" : "raceline-method").selectedOptions[0].textContent.trim();
   $("line-setting-summary").textContent = Number.isFinite(width + length)
     ? `余裕込み：幅 ${(width * 100).toFixed(1)} × 全長 ${(length * 100).toFixed(1)} cm。方式：${method}`
     : "車体寸法と余裕を入力してください。";
 }
-function openLineSettings(details = false, speed = false) {
-  lineSettingsTarget = { map: state.id, lane: state.laneId };
+function openLineSettings(details = false, speed = false, kind = "raceline") {
+  lineSettingsTarget = { map: state.id, lane: state.laneId, kind };
   $("line-setting-fields").replaceChildren();
   $("line-setting-extra-fields").replaceChildren();
   $("line-setting-speed-fields").replaceChildren();
@@ -160,6 +161,7 @@ function openLineSettings(details = false, speed = false) {
     margin: ["前後左右の余裕 (m)", 0, 1, 0.001],
     curvature_limit: ["最適化の曲率上限 (1/m)", 0.01, 20, 0.01],
     spacing: ["点間隔 (m)", 0.05, 1, 0.01],
+    centerline_max_points: ["Centerlineの点数上限", 12, 1500, 1],
     region_resolution: ["領域方式の格子解像度 (m)", 0.005, 0.25, 0.005, true],
     max_speed: ["速度上限 (m/s)", 0.1, 20, 0.01, "speed"],
     lateral_accel: ["横加速度上限 (m/s²)", 0.1, 15, 0.01, "speed"],
@@ -170,24 +172,28 @@ function openLineSettings(details = false, speed = false) {
     field($(extra === "speed" ? "line-setting-speed-fields" : extra ? "line-setting-extra-fields" : "line-setting-fields"), label, key,
       state.settings[key], "number", { min, max, step, required: true });
   $("line-setting-details").open = details;
-  $("line-settings-generate").disabled = $("generate-raceline").disabled;
+  $("line-settings-generate").value = kind;
+  $("line-settings-generate").textContent = kind === "centerline"
+    ? "適用してCenterline生成" : "適用してRaceline生成";
+  $("line-settings-generate").disabled = $("generate-" + kind).disabled;
   lineSettingSummary();
   open("line-settings-dialog");
   if (speed) $("line-setting-speed-fields").querySelector("input").focus();
 }
 action("line-settings-open", () => openLineSettings(true));
+action("centerline-settings-open", () => openLineSettings(true, false, "centerline"));
 action("raceline-settings-open", () => openLineSettings());
 action("raceline-speed-open", () => openLineSettings(false, true));
 $("line-settings-form").addEventListener("input", lineSettingSummary);
 form("line-settings-form", async (data, submitter) => {
-  const generate = submitter?.value === "raceline";
+  const generate = ["centerline", "raceline"].includes(submitter?.value);
   if (generate && (state.id !== lineSettingsTarget.map || state.laneId !== lineSettingsTarget.lane))
     throw Error("地図またはlaneが切り替わりました。設定を開き直してください");
-  if (generate && $("generate-raceline").disabled)
+  if (generate && $("generate-" + lineSettingsTarget.kind).disabled)
     throw Error("生成処理の完了を待ってから実行してください");
   for (const [k, v] of Object.entries(data)) state.settings[k] = Number(v);
   emit("status");
-  if (generate) await generateLine("raceline");
+  if (generate) await generateLine(lineSettingsTarget.kind);
   $("line-settings-dialog").close();
   if (!generate) toast("次回の生成に設定を適用します");
 });

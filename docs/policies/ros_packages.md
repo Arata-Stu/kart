@@ -287,6 +287,22 @@ mapなし診断ではsim_vslam launchで新規SLAM・RVizを起動し、地図�
 VOはstereo画像・CameraInfo・固定TF、VIOは加えてIMUだけを再生する。
 録画のsession directoryは最初のSTARTで作成し、run_nameを起動時に選ぶ。
 
+### 周回に連動したlocalization保守
+
+driveの周回判定は独立した`kart_lap_manager` processで行い、車両指令・モードは生成しない。
+閉じた参照ラインと同じmap座標の、測定stampに対応するTF・健全なVSLAM診断を使う。
+位置飛び・tracking不良・時計逆転・参照変更から周回を推測せず、部分周を破棄する。
+VGLは既存Trigger/pose_hint経路を使用し、受付応答と再局在完了を区別する。
+探索中・結果不明時に自動再送を重ねず、上流にcancelがない状態でtimeoutを完了と扱わない。
+VGL hintの撮影stampと推論終了時刻を区別し、現在のodometryの鮮度期限をhintへ流用しない。
+起動構成の`lap_vgl`・`lap_cache_clear`はmission.yamlに既定OFF、TUIから独立に明示選択する。
+
+Jetsonキャッシュ解放は明示opt-inのLinux clean page cache解放に限る。
+地図・モデル・engine・ユーザーファイルを削除せず、CUDA内部の資源解放と混同しない。
+固定操作だけを行うホストhelperへ権限を限定し、走行containerへ全体特権や汎用rootコマンド実行権を与えない。
+helperのインストールは明示操作、通常bringupは既存socket経由とし、ROS callback内でsync/ファイルI/Oを待たない。
+周回・要求・結果・失敗を標準bagへ記録し、負荷低減やVSLAM障害の解消を未検証で断定しない。
+
 ## 10. EVS direct入力
 
 OpenEB direct tensor pipelineはSDK callbackと3方式のencoder、画像workerを
