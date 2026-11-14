@@ -27,6 +27,11 @@ Studioの「Jetson起動」から通常の「データ記録」を選び、RGB�
 プロジェクト名を付け、bag・RGB topic・学習用/検証用・間引きHz・最大枚数を選んで抽出する。
 bagは「bagを階層から選択」でNotebookの`record/`配下をツリー表示し、フォルダを展開して▣のbagを選ぶ。
 選択後も`日付/セッション/bag名`の相対パスを表示するため、別フォルダにある同名bagを区別できる。
+画像抽出はrosbags・Pillowだけを必要とし、学習環境やYOLOの重みは不要。
+設定した学習用Pythonで抽出用ライブラリを読み込めなければ、Studio実行中のPythonを確認して使用する。
+標準kartコンテナには両ライブラリを同梱している。どちらのPythonにも不足する場合は、
+「3 学習・ONNX」→「Notebookの学習環境」→「学習環境をセットアップ」を実行するか、
+同じ欄でrosbags・Pillow導入済みPythonを指定して設定を保存する。抽出用Pythonの選択で学習設定は書き換えない。
 既定topicは`/realsense/color/image_raw`、2Hz、最大500枚/回、プロジェクト全体は5000枚まで。
 RGB/BGR/monoのImageとJPEG/PNGのCompressedImageに対応する。
 画像の撮影stampとbagの記録stampは区別して保持する。間引きにはbag記録時刻を使う。

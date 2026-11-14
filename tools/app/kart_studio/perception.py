@@ -82,6 +82,26 @@ class Perception:
                     message=('準備完了' if not missing and weights else
                              '不足: ' + ', '.join([*missing, *([] if weights else ['YOLOv8sの重み'])])))
 
+    def extraction_python(self):
+        # Extraction only needs bag/image readers. The Studio interpreter in the
+        # kart container already provides them before the training venv exists.
+        code = ('from rosbags.highlevel import AnyReader; '
+                'from rosbags.typesys import Stores, get_typestore; from PIL import Image')
+        for candidate in dict.fromkeys((self.settings()['python'], sys.executable)):
+            executable = shutil.which(candidate)
+            if not executable:
+                continue
+            try:
+                probe = subprocess.run([executable, '-c', code], capture_output=True, text=True, timeout=8)
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+            if probe.returncode == 0:
+                return executable
+        raise ValueError('画像抽出用のPythonにrosbags・Pillowが必要です。'
+                         '「3 学習・ONNX」→「Notebookの学習環境」→「学習環境をセットアップ」を実行するか、'
+                         '同じ欄でこれらを導入済みのPythonを指定して「設定を保存」してください。'
+                         '画像抽出自体にはYOLOの重みは不要です')
+
     def catalog(self):
         result = dict(settings=self.settings(), tools_settings=self.tools_settings(), environment=self.environment(),
                       projects=self.datasets.catalog(), records=[dict(row, key=row['id']) for row in local_records(self.records)])
@@ -165,7 +185,7 @@ class Perception:
         if action == 'setup':
             plan['resources'] = ['perception:environment']
             return plan
-        if not shutil.which(plan['settings']['python']):
+        if action != 'extract' and not shutil.which(plan['settings']['python']):
             raise ValueError('先に「学習環境をセットアップ」を実行してください')
         if action in ('train', 'prelabel') and not Path(plan['settings']['weights']).is_file():
             raise ValueError('YOLOv8sの重みがありません。学習環境の重みパスを確認してください')
@@ -187,6 +207,7 @@ class Perception:
             plan.update(bag=str(bag), bag_key=bag_key, split=split, topic=topic,
                         sample_hz=self.number(body.get('sample_hz', 2), .1, 30, '抽出Hz'),
                         max_frames=self.number(body.get('max_frames', 500), 1, 500, '最大画像数', True))
+            plan['settings']['python'] = self.extraction_python()
             plan['resources'] = ['read:perception:environment', 'perception:project:' + project['id'], 'read:record:' + bag_key]
         elif action == 'prelabel':
             if len(project['frames']) > 5000:

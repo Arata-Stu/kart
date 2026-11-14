@@ -6,6 +6,8 @@ import json
 import math
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace as NS
 import unittest
@@ -380,6 +382,28 @@ class RealBagTests(unittest.TestCase):
                 self.assertEqual(frames[1]['stamp_ns'], str(HEADER_STAMP+2))
                 self.assertEqual(frames[1]['record_stamp_ns'], '2500000000')
                 self.assertEqual((frames[0]['width'], frames[0]['height']), (10, 20))
+
+    def test_service_extracts_in_worker_before_training_environment_is_created(self):
+        from kart_studio.perception import Perception
+        repo = Path(__file__).resolve().parents[3]
+        service = Perception(repo, self.base, self.records, self.base / '.kart-studio')
+        service.save_settings(dict(python=str(self.base / 'absent/bin/python'),
+                                   weights=str(self.base / 'absent.pt'), device='cpu'))
+        before = service.settings()
+        self.write_bag('raw')
+        plan = service.prepare('extract', dict(id='real-bag', bag='raw', topic='/rgb'))
+        self.assertEqual(Path(plan['settings']['python']).resolve(), Path(sys.executable).resolve())
+
+        class Worker:
+            def run(self, argv, env):
+                subprocess.run(argv, env=env, check=True, capture_output=True, text=True, timeout=30)
+
+        self.assertEqual(service.execute(Worker(), plan), dict(project='real-bag'))
+        project = service.datasets.load('real-bag')
+        self.assertEqual(len(project['frames']), 2)
+        self.assertTrue(all(not frame['reviewed'] for frame in project['frames']))
+        self.assertEqual(service.settings(), before)
+        self.assertEqual(list(service.root.glob('.request-*')), [])
 
     def test_missing_topic_and_zero_selected_frames_leave_project_unchanged(self):
         bag = self.write_bag('raw')

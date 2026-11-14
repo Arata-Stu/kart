@@ -1,4 +1,4 @@
-"""Run dataset and Ultralytics work in the selected learning interpreter."""
+"""Run dataset and Ultralytics work in the interpreter selected for each job."""
 import argparse
 import os
 from pathlib import Path

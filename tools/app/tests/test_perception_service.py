@@ -92,6 +92,48 @@ class ServiceTests(unittest.TestCase):
             with self.subTest(body=body), self.assertRaises(ValueError):
                 self.service.prepare('extract', dict(id=self.project['id'], **body))
 
+    def test_extract_uses_studio_python_without_training_environment_or_weights(self):
+        missing_python = str(self.base / 'not-installed/bin/python')
+        self.service.save_settings(dict(python=missing_python, weights=str(self.base / 'missing.pt'), device='cpu'))
+        before = self.service.settings()
+        bag = self.base / 'record' / 'day' / 'session' / 'bag'
+        bag.mkdir(parents=True)
+        (bag / 'metadata.yaml').write_text('bag path fixture; extraction is not executed')
+        with patch('kart_studio.perception.shutil.which', side_effect=lambda value: None if value == missing_python else sys.executable), \
+                patch('kart_studio.perception.subprocess.run', return_value=Mock(returncode=0)) as probe:
+            plan = self.service.prepare('extract', dict(id=self.project['id'], bag='day/session/bag'))
+        self.assertEqual(plan['settings']['python'], sys.executable)
+        self.assertEqual(plan['bag_key'], 'day/session/bag')
+        self.assertEqual(self.service.settings(), before, 'extract does not rewrite training settings')
+        self.assertIn('rosbags.highlevel', probe.call_args.args[0][-1])
+        self.assertIn('PIL', probe.call_args.args[0][-1])
+        self.assertNotIn('ultralytics', probe.call_args.args[0][-1])
+        job = Mock()
+        self.assertEqual(self.service.execute(job, plan), dict(project=self.project['id']))
+        self.assertEqual(job.run.call_args.args[0][:3], [sys.executable, '-m', 'kart_studio.perception_task'])
+        self.assertFalse(Path(job.run.call_args.args[0][-1]).exists())
+
+    def test_extract_prefers_configured_python_then_falls_back_when_imports_fail(self):
+        configured = str(self.base / 'training/bin/python')
+        self.service.save_settings(dict(self.service.settings(), python=configured))
+        for codes, expected in (([0], configured), ([1, 0], sys.executable)):
+            with self.subTest(codes=codes), \
+                    patch('kart_studio.perception.shutil.which', side_effect=lambda value: value), \
+                    patch('kart_studio.perception.subprocess.run', side_effect=[Mock(returncode=code) for code in codes]) as probe:
+                self.assertEqual(self.service.extraction_python(), expected)
+                self.assertEqual(probe.call_count, len(codes))
+
+    def test_missing_extraction_dependencies_explain_setup_location(self):
+        with patch('kart_studio.perception.shutil.which', side_effect=lambda value: value), \
+                patch('kart_studio.perception.subprocess.run', return_value=Mock(returncode=1)):
+            with self.assertRaisesRegex(ValueError, 'rosbags・Pillow.*3 学習・ONNX.*Notebookの学習環境'):
+                self.service.extraction_python()
+
+    def test_training_still_requires_its_selected_python(self):
+        self.service.save_settings(dict(self.service.settings(), python=str(self.base / 'missing/bin/python')))
+        with self.assertRaisesRegex(ValueError, '学習環境をセットアップ'):
+            self.service.prepare('train', dict(id=self.project['id']))
+
     def test_catalog_only_offers_completed_model_downloads_and_confines_files(self):
         folder = self.service.root / 'models' / 'model-a'
         folder.mkdir()
